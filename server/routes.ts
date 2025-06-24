@@ -97,6 +97,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         const resources = bundle.entry?.map(entry => entry.resource) || [];
         
+        // For servers that don't provide total, estimate based on entries and pagination
+        let total = bundle.total || 0;
+        if (total === 0 && resources.length > 0) {
+          // If we have resources but no total, estimate
+          if (bundle.link?.some(link => link.relation === 'next')) {
+            total = resources.length * 20; // Rough estimate for pagination
+          } else {
+            total = resources.length;
+          }
+        }
+        
         // Store resources locally for validation
         for (const resource of resources) {
           const existing = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
@@ -113,7 +124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         res.json({
           resources,
-          total: bundle.total || 0,
+          total,
         });
       }
     } catch (error: any) {
@@ -155,16 +166,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No active FHIR server configured" });
       }
       
-      const resourceTypes = await fhirClient.getAllResourceTypes();
       const counts: Record<string, number> = {};
       
-      // Get counts for common resource types
-      const commonTypes = ['Patient', 'Observation', 'Encounter', 'Condition'];
-      for (const type of commonTypes) {
-        if (resourceTypes.includes(type)) {
-          counts[type] = await fhirClient.getResourceCount(type);
+      // Get counts for common resource types with parallel requests
+      const commonTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'Practitioner', 'Organization'];
+      const countPromises = commonTypes.map(async (type) => {
+        try {
+          const count = await fhirClient.getResourceCount(type);
+          return { type, count };
+        } catch (error) {
+          console.warn(`Failed to get count for ${type}:`, error);
+          return { type, count: 0 };
         }
-      }
+      });
+      
+      const results = await Promise.all(countPromises);
+      results.forEach(({ type, count }) => {
+        counts[type] = count;
+      });
       
       res.json(counts);
     } catch (error: any) {

@@ -141,9 +141,27 @@ export class FhirClient {
 
   async getResourceCount(resourceType: string): Promise<number> {
     try {
-      const response = await this.searchResources(resourceType, { _summary: 'count' }, 0);
-      return response.total || 0;
-    } catch {
+      // Some FHIR servers don't support total counts, so we'll fetch a small sample
+      // and estimate based on the presence of data
+      const response = await this.searchResources(resourceType, {}, 10);
+      
+      if (response.total !== undefined && response.total !== null) {
+        return response.total;
+      }
+      
+      // If no total is provided, estimate based on entry count and next link
+      if (response.entry && response.entry.length > 0) {
+        // If there are entries and a next link, there are likely more resources
+        if (response.link?.some(link => link.relation === 'next')) {
+          return response.entry.length * 10; // Rough estimate
+        }
+        // If entries but no next link, return the actual count
+        return response.entry.length;
+      }
+      
+      return 0;
+    } catch (error) {
+      console.warn(`Failed to get count for ${resourceType}:`, error);
       return 0;
     }
   }
