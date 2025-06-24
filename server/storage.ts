@@ -17,6 +17,8 @@ import {
   type FhirResourceWithValidation,
   type ResourceStats,
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, desc, and } from "drizzle-orm";
 
 export interface IStorage {
   // FHIR Servers
@@ -52,112 +54,107 @@ export interface IStorage {
   getResourceStats(): Promise<ResourceStats>;
 }
 
-export class MemStorage implements IStorage {
-  private fhirServers: Map<number, FhirServer> = new Map();
-  private fhirResources: Map<number, FhirResource> = new Map();
-  private validationProfiles: Map<number, ValidationProfile> = new Map();
-  private validationResults: Map<number, ValidationResult> = new Map();
-  private dashboardCards: Map<number, DashboardCard> = new Map();
-  private currentId = 1;
-
+export class DatabaseStorage implements IStorage {
   constructor() {
     this.initializeDefaultData();
   }
 
-  private initializeDefaultData() {
-    // Initialize with default FHIR server
-    const defaultServer: FhirServer = {
-      id: this.currentId++,
-      name: "Fire.ly Server",
-      url: "https://server.fire.ly",
-      isActive: true,
-      createdAt: new Date(),
-    };
-    this.fhirServers.set(defaultServer.id, defaultServer);
+  private async initializeDefaultData() {
+    try {
+      // Check if default server exists
+      const existingServers = await this.getFhirServers();
+      if (existingServers.length === 0) {
+        // Initialize with default FHIR server
+        await this.createFhirServer({
+          name: "Fire.ly Server",
+          url: "https://server.fire.ly",
+          isActive: true,
+        });
+      }
 
-    // Initialize default validation profiles
-    const usPatientProfile: ValidationProfile = {
-      id: this.currentId++,
-      name: "US Core Patient",
-      url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient",
-      resourceType: "Patient",
-      profileData: {},
-      isActive: true,
-      createdAt: new Date(),
-    };
-    this.validationProfiles.set(usPatientProfile.id, usPatientProfile);
+      // Check if default validation profile exists
+      const existingProfiles = await this.getValidationProfiles();
+      if (existingProfiles.length === 0) {
+        // Initialize default validation profiles
+        await this.createValidationProfile({
+          name: "US Core Patient",
+          url: "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient",
+          resourceType: "Patient",
+          profileData: {},
+          isActive: true,
+        });
+      }
 
-    // Initialize default dashboard cards
-    const defaultCards: DashboardCard[] = [
-      {
-        id: this.currentId++,
-        title: "Validation Overview",
-        type: "chart",
-        config: { chartType: "donut" },
-        position: 1,
-        isVisible: true,
-      },
-      {
-        id: this.currentId++,
-        title: "Recent Errors",
-        type: "table",
-        config: { showRecent: 5 },
-        position: 2,
-        isVisible: true,
-      },
-    ];
-    
-    defaultCards.forEach(card => {
-      this.dashboardCards.set(card.id, card);
-    });
+      // Check if default dashboard cards exist
+      const existingCards = await this.getDashboardCards();
+      if (existingCards.length === 0) {
+        // Initialize default dashboard cards
+        await this.createDashboardCard({
+          title: "Validation Overview",
+          type: "chart",
+          config: { chartType: "donut" },
+          position: 1,
+          isVisible: true,
+        });
+        
+        await this.createDashboardCard({
+          title: "Recent Errors",
+          type: "table",
+          config: { showRecent: 5 },
+          position: 2,
+          isVisible: true,
+        });
+      }
+    } catch (error) {
+      console.warn("Failed to initialize default data:", error);
+    }
   }
 
   async getFhirServers(): Promise<FhirServer[]> {
-    return Array.from(this.fhirServers.values());
+    return await db.select().from(fhirServers);
   }
 
   async getActiveFhirServer(): Promise<FhirServer | undefined> {
-    return Array.from(this.fhirServers.values()).find(server => server.isActive);
+    const [server] = await db.select().from(fhirServers).where(eq(fhirServers.isActive, true));
+    return server || undefined;
   }
 
   async createFhirServer(server: InsertFhirServer): Promise<FhirServer> {
-    const newServer: FhirServer = {
-      ...server,
-      id: this.currentId++,
-      isActive: server.isActive ?? false,
-      createdAt: new Date(),
-    };
-    this.fhirServers.set(newServer.id, newServer);
+    const [newServer] = await db
+      .insert(fhirServers)
+      .values(server)
+      .returning();
     return newServer;
   }
 
   async updateFhirServerStatus(id: number, isActive: boolean): Promise<void> {
-    const server = this.fhirServers.get(id);
-    if (server) {
-      // Deactivate all other servers if this one is being activated
-      if (isActive) {
-        this.fhirServers.forEach(s => s.isActive = false);
-      }
-      server.isActive = isActive;
+    // Deactivate all other servers if this one is being activated
+    if (isActive) {
+      await db.update(fhirServers).set({ isActive: false });
     }
+    await db.update(fhirServers).set({ isActive }).where(eq(fhirServers.id, id));
   }
 
   async getFhirResources(serverId?: number, resourceType?: string, limit = 50, offset = 0): Promise<FhirResource[]> {
-    let resources = Array.from(this.fhirResources.values());
+    let query = db.select().from(fhirResources);
     
+    const conditions = [];
     if (serverId) {
-      resources = resources.filter(r => r.serverId === serverId);
+      conditions.push(eq(fhirResources.serverId, serverId));
     }
-    
     if (resourceType) {
-      resources = resources.filter(r => r.resourceType === resourceType);
+      conditions.push(eq(fhirResources.resourceType, resourceType));
     }
     
-    return resources.slice(offset, offset + limit);
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    return await query.limit(limit).offset(offset);
   }
 
   async getFhirResourceById(id: number): Promise<FhirResourceWithValidation | undefined> {
-    const resource = this.fhirResources.get(id);
+    const [resource] = await db.select().from(fhirResources).where(eq(fhirResources.id, id));
     if (!resource) return undefined;
 
     const validationResults = await this.getValidationResultsByResourceId(id);
@@ -168,39 +165,35 @@ export class MemStorage implements IStorage {
   }
 
   async getFhirResourceByTypeAndId(resourceType: string, resourceId: string): Promise<FhirResource | undefined> {
-    return Array.from(this.fhirResources.values()).find(
-      r => r.resourceType === resourceType && r.resourceId === resourceId
+    const [resource] = await db.select().from(fhirResources).where(
+      and(
+        eq(fhirResources.resourceType, resourceType),
+        eq(fhirResources.resourceId, resourceId)
+      )
     );
+    return resource || undefined;
   }
 
   async createFhirResource(resource: InsertFhirResource): Promise<FhirResource> {
-    const newResource: FhirResource = {
-      ...resource,
-      id: this.currentId++,
-      serverId: resource.serverId ?? null,
-      versionId: resource.versionId ?? null,
-      lastModified: new Date(),
-    };
-    this.fhirResources.set(newResource.id, newResource);
+    const [newResource] = await db
+      .insert(fhirResources)
+      .values(resource)
+      .returning();
     return newResource;
   }
 
   async updateFhirResource(id: number, data: any): Promise<void> {
-    const resource = this.fhirResources.get(id);
-    if (resource) {
-      resource.data = data;
-      resource.lastModified = new Date();
-    }
+    await db.update(fhirResources)
+      .set({ data, lastModified: new Date() })
+      .where(eq(fhirResources.id, id));
   }
 
   async searchFhirResources(query: string, resourceType?: string): Promise<FhirResource[]> {
-    let resources = Array.from(this.fhirResources.values());
+    // Note: This is a simplified search. In a production system, you'd want to use 
+    // full-text search capabilities or index specific fields
+    const allResources = await this.getFhirResources(undefined, resourceType, 1000, 0);
     
-    if (resourceType) {
-      resources = resources.filter(r => r.resourceType === resourceType);
-    }
-    
-    return resources.filter(resource => {
+    return allResources.filter(resource => {
       const dataStr = JSON.stringify(resource.data).toLowerCase();
       return dataStr.includes(query.toLowerCase()) || 
              resource.resourceId.toLowerCase().includes(query.toLowerCase());
@@ -208,88 +201,80 @@ export class MemStorage implements IStorage {
   }
 
   async getValidationProfiles(resourceType?: string): Promise<ValidationProfile[]> {
-    let profiles = Array.from(this.validationProfiles.values());
+    let query = db.select().from(validationProfiles).where(eq(validationProfiles.isActive, true));
     
     if (resourceType) {
-      profiles = profiles.filter(p => p.resourceType === resourceType);
+      query = query.where(and(
+        eq(validationProfiles.isActive, true),
+        eq(validationProfiles.resourceType, resourceType)
+      ));
     }
     
-    return profiles.filter(p => p.isActive);
+    return await query;
   }
 
   async createValidationProfile(profile: InsertValidationProfile): Promise<ValidationProfile> {
-    const newProfile: ValidationProfile = {
-      ...profile,
-      id: this.currentId++,
-      isActive: profile.isActive ?? true,
-      createdAt: new Date(),
-    };
-    this.validationProfiles.set(newProfile.id, newProfile);
+    const [newProfile] = await db
+      .insert(validationProfiles)
+      .values(profile)
+      .returning();
     return newProfile;
   }
 
   async getValidationProfileById(id: number): Promise<ValidationProfile | undefined> {
-    return this.validationProfiles.get(id);
+    const [profile] = await db.select().from(validationProfiles).where(eq(validationProfiles.id, id));
+    return profile || undefined;
   }
 
   async getValidationResultsByResourceId(resourceId: number): Promise<ValidationResult[]> {
-    return Array.from(this.validationResults.values()).filter(
-      result => result.resourceId === resourceId
-    );
+    return await db.select().from(validationResults).where(eq(validationResults.resourceId, resourceId));
   }
 
   async createValidationResult(result: InsertValidationResult): Promise<ValidationResult> {
-    const newResult: ValidationResult = {
-      ...result,
-      id: this.currentId++,
-      resourceId: result.resourceId ?? null,
-      profileId: result.profileId ?? null,
-      errors: result.errors ?? [],
-      warnings: result.warnings ?? [],
-      validatedAt: new Date(),
-    };
-    this.validationResults.set(newResult.id, newResult);
+    const [newResult] = await db
+      .insert(validationResults)
+      .values(result)
+      .returning();
     return newResult;
   }
 
   async getRecentValidationErrors(limit = 10): Promise<ValidationResult[]> {
-    return Array.from(this.validationResults.values())
-      .filter(result => !result.isValid)
-      .sort((a, b) => new Date(b.validatedAt!).getTime() - new Date(a.validatedAt!).getTime())
-      .slice(0, limit);
+    return await db.select()
+      .from(validationResults)
+      .where(eq(validationResults.isValid, false))
+      .orderBy(desc(validationResults.validatedAt))
+      .limit(limit);
   }
 
   async getDashboardCards(): Promise<DashboardCard[]> {
-    return Array.from(this.dashboardCards.values())
-      .filter(card => card.isVisible)
-      .sort((a, b) => a.position - b.position);
+    return await db.select()
+      .from(dashboardCards)
+      .where(eq(dashboardCards.isVisible, true))
+      .orderBy(dashboardCards.position);
   }
 
   async createDashboardCard(card: InsertDashboardCard): Promise<DashboardCard> {
-    const newCard: DashboardCard = {
-      ...card,
-      id: this.currentId++,
-      isVisible: card.isVisible ?? true,
-    };
-    this.dashboardCards.set(newCard.id, newCard);
+    const [newCard] = await db
+      .insert(dashboardCards)
+      .values(card)
+      .returning();
     return newCard;
   }
 
   async updateDashboardCard(id: number, config: any): Promise<void> {
-    const card = this.dashboardCards.get(id);
-    if (card) {
-      card.config = config;
-    }
+    await db.update(dashboardCards)
+      .set({ config })
+      .where(eq(dashboardCards.id, id));
   }
 
   async getResourceStats(): Promise<ResourceStats> {
-    const resources = Array.from(this.fhirResources.values());
-    const validationResults = Array.from(this.validationResults.values());
+    const resources = await db.select().from(fhirResources);
+    const allValidationResults = await db.select().from(validationResults);
+    const activeProfiles = await db.select().from(validationProfiles).where(eq(validationProfiles.isActive, true));
     
     const totalResources = resources.length;
-    const validResources = validationResults.filter(r => r.isValid).length;
-    const errorResources = validationResults.filter(r => !r.isValid).length;
-    const activeProfiles = Array.from(this.validationProfiles.values()).filter(p => p.isActive).length;
+    const validResources = allValidationResults.filter(r => r.isValid).length;
+    const errorResources = allValidationResults.filter(r => !r.isValid).length;
     
     const resourceBreakdown: Record<string, { total: number; valid: number; validPercent: number }> = {};
     
@@ -302,8 +287,8 @@ export class MemStorage implements IStorage {
     });
     
     // Calculate validation stats per resource type
-    validationResults.forEach(result => {
-      const resource = this.fhirResources.get(result.resourceId!);
+    allValidationResults.forEach(result => {
+      const resource = resources.find(r => r.id === result.resourceId);
       if (resource && resourceBreakdown[resource.resourceType]) {
         if (result.isValid) {
           resourceBreakdown[resource.resourceType].valid++;
@@ -321,10 +306,10 @@ export class MemStorage implements IStorage {
       totalResources,
       validResources,
       errorResources,
-      activeProfiles,
+      activeProfiles: activeProfiles.length,
       resourceBreakdown,
     };
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
