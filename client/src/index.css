@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(0, 0%, 100%);
+  --foreground: hsl(20, 14.3%, 4.1%);
+  --muted: hsl(60, 4.8%, 95.9%);
+  --muted-foreground: hsl(25, 5.3%, 44.7%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(20, 14.3%, 4.1%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(20, 14.3%, 4.1%);
+  --border: hsl(20, 5.9%, 90%);
+  --input: hsl(20, 5.9%, 90%);
+  --primary: hsl(207, 90%, 54%);
+  --primary-foreground: hsl(211, 100%, 99%);
+  --secondary: hsl(60, 4.8%, 95.9%);
+  --secondary-foreground: hsl(24, 9.8%, 10%);
+  --accent: hsl(60, 4.8%, 95.9%);
+  --accent-foreground: hsl(24, 9.8%, 10%);
+  --destructive: hsl(0, 84.2%, 60.2%);
+  --destructive-foreground: hsl(60, 9.1%, 97.8%);
+  --ring: hsl(20, 14.3%, 4.1%);
+  --radius: 0.5rem;
+  
+  /* FHIR specific colors */
+  --fhir-blue: hsl(207, 90%, 54%);
+  --fhir-success: hsl(159, 84%, 35%);
+  --fhir-error: hsl(0, 84%, 55%);
+  --fhir-warning: hsl(35, 91%, 48%);
+  --fhir-gray: hsl(218, 11%, 42%);
+}
+
+.dark {
+  --background: hsl(240, 10%, 3.9%);
+  --foreground: hsl(0, 0%, 98%);
+  --muted: hsl(240, 3.7%, 15.9%);
+  --muted-foreground: hsl(240, 5%, 64.9%);
+  --popover: hsl(240, 10%, 3.9%);
+  --popover-foreground: hsl(0, 0%, 98%);
+  --card: hsl(240, 10%, 3.9%);
+  --card-foreground: hsl(0, 0%, 98%);
+  --border: hsl(240, 3.7%, 15.9%);
+  --input: hsl(240, 3.7%, 15.9%);
+  --primary: hsl(207, 90%, 54%);
+  --primary-foreground: hsl(211, 100%, 99%);
+  --secondary: hsl(240, 3.7%, 15.9%);
+  --secondary-foreground: hsl(0, 0%, 98%);
+  --accent: hsl(240, 3.7%, 15.9%);
+  --accent-foreground: hsl(0, 0%, 98%);
+  --destructive: hsl(0, 62.8%, 30.6%);
+  --destructive-foreground: hsl(0, 0%, 98%);
+  --ring: hsl(240, 4.9%, 83.9%);
+  --radius: 0.5rem;
+  
+  /* FHIR specific colors for dark mode */
+  --fhir-blue: hsl(207, 90%, 64%);
+  --fhir-success: hsl(159, 84%, 45%);
+  --fhir-error: hsl(0, 84%, 65%);
+  --fhir-warning: hsl(35, 91%, 58%);
+  --fhir-gray: hsl(218, 11%, 52%);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .text-fhir-blue {
+    color: var(--fhir-blue);
+  }
+  
+  .text-fhir-success {
+    color: var(--fhir-success);
+  }
+  
+  .text-fhir-error {
+    color: var(--fhir-error);
+  }
+  
+  .text-fhir-warning {
+    color: var(--fhir-warning);
+  }
+  
+  .text-fhir-gray {
+    color: var(--fhir-gray);
+  }
+  
+  .bg-fhir-blue {
+    background-color: var(--fhir-blue);
+  }
+  
+  .bg-fhir-success {
+    background-color: var(--fhir-success);
+  }
+  
+  .bg-fhir-error {
+    background-color: var(--fhir-error);
+  }
+  
+  .bg-fhir-warning {
+    background-color: var(--fhir-warning);
+  }
+  
+  .bg-fhir-gray {
+    background-color: var(--fhir-gray);
+  }
+  
+  .border-fhir-blue {
+    border-color: var(--fhir-blue);
+  }
+  
+  .border-fhir-success {
+    border-color: var(--fhir-success);
+  }
+  
+  .border-fhir-error {
+    border-color: var(--fhir-error);
+  }
+  
+  .border-fhir-warning {
+    border-color: var(--fhir-warning);
+  }
+}

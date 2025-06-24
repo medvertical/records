@@ -1,0 +1,259 @@
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  CheckCircle, 
+  XCircle, 
+  AlertTriangle,
+  Eye 
+} from "lucide-react";
+import { Link } from "wouter";
+import { cn } from "@/lib/utils";
+
+interface ResourceListProps {
+  resources: any[];
+  total: number;
+  page: number;
+  onPageChange: (page: number) => void;
+  pageSize?: number;
+}
+
+export default function ResourceList({
+  resources,
+  total,
+  page,
+  onPageChange,
+  pageSize = 20,
+}: ResourceListProps) {
+  const totalPages = Math.ceil(total / pageSize);
+  const startIndex = page * pageSize + 1;
+  const endIndex = Math.min((page + 1) * pageSize, total);
+
+  const getResourceDisplayName = (resource: any) => {
+    switch (resource.resourceType) {
+      case 'Patient':
+        if (resource.name && resource.name[0]) {
+          const name = resource.name[0];
+          return `${name.given?.[0] || ''} ${name.family || ''}`.trim() || 'Unnamed Patient';
+        }
+        return 'Unnamed Patient';
+      case 'Observation':
+        return resource.code?.text || resource.code?.coding?.[0]?.display || 'Observation';
+      case 'Encounter':
+        return resource.type?.[0]?.text || resource.type?.[0]?.coding?.[0]?.display || 'Encounter';
+      case 'Condition':
+        return resource.code?.text || resource.code?.coding?.[0]?.display || 'Condition';
+      default:
+        return `${resource.resourceType} Resource`;
+    }
+  };
+
+  const getResourceSubtext = (resource: any) => {
+    switch (resource.resourceType) {
+      case 'Patient':
+        const birthDate = resource.birthDate ? new Date(resource.birthDate).toLocaleDateString() : null;
+        const gender = resource.gender ? resource.gender.charAt(0).toUpperCase() + resource.gender.slice(1) : null;
+        return [birthDate && `DOB: ${birthDate}`, gender].filter(Boolean).join(' | ') || 'Patient';
+      case 'Observation':
+        const subject = resource.subject?.reference || '';
+        const date = resource.effectiveDateTime ? new Date(resource.effectiveDateTime).toLocaleDateString() : '';
+        return [subject, date].filter(Boolean).join(' | ') || 'Observation';
+      case 'Encounter':
+        const encounterDate = resource.period?.start ? new Date(resource.period.start).toLocaleDateString() : '';
+        return encounterDate || 'Encounter';
+      default:
+        return resource.id || 'Resource';
+    }
+  };
+
+  const getValidationStatus = (resource: any) => {
+    // TODO: Implement actual validation status based on stored validation results
+    // For now, return a random status for demonstration
+    const statuses = ['valid', 'error', 'warning'];
+    return statuses[Math.floor(Math.random() * statuses.length)];
+  };
+
+  const renderValidationBadge = (status: string) => {
+    switch (status) {
+      case 'valid':
+        return (
+          <Badge className="bg-green-50 text-fhir-success border-green-200 hover:bg-green-50">
+            <CheckCircle className="h-3 w-3 mr-1" />
+            Valid
+          </Badge>
+        );
+      case 'error':
+        return (
+          <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50">
+            <XCircle className="h-3 w-3 mr-1" />
+            Error
+          </Badge>
+        );
+      case 'warning':
+        return (
+          <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            Warning
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="secondary">
+            Not Validated
+          </Badge>
+        );
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Results Header */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-600">
+          Showing {startIndex} to {endIndex} of {total} resources
+        </p>
+        <div className="flex items-center space-x-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(page - 1)}
+            disabled={page === 0}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm text-gray-600">
+            Page {page + 1} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages - 1}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Resource List */}
+      <div className="space-y-3">
+        {resources.length > 0 ? (
+          resources.map((resource, index) => {
+            const validationStatus = getValidationStatus(resource);
+            
+            return (
+              <Card key={resource.id || index} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4 flex-1 min-w-0">
+                      <div className={cn(
+                        "w-3 h-3 rounded-full flex-shrink-0",
+                        validationStatus === 'valid' ? "bg-fhir-success" :
+                        validationStatus === 'error' ? "bg-fhir-error" :
+                        validationStatus === 'warning' ? "bg-fhir-warning" :
+                        "bg-gray-400"
+                      )} />
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-3 mb-1">
+                          <h3 className="text-sm font-semibold text-gray-900 truncate">
+                            {resource.resourceType}/{resource.id}
+                          </h3>
+                          <Badge variant="outline" className="text-xs">
+                            {resource.resourceType}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-gray-600 truncate">
+                          {getResourceDisplayName(resource)}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate mt-1">
+                          {getResourceSubtext(resource)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-3 ml-4">
+                      {renderValidationBadge(validationStatus)}
+                      <Link href={`/resources/${resource.id}`}>
+                        <Button variant="ghost" size="sm" className="text-fhir-blue hover:text-blue-700">
+                          <Eye className="h-4 w-4 mr-1" />
+                          View
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })
+        ) : (
+          <Card>
+            <CardContent className="p-8 text-center">
+              <div className="text-gray-400 mb-4">
+                <XCircle className="h-12 w-12 mx-auto" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Resources Found</h3>
+              <p className="text-gray-600">
+                No resources match your current search criteria. Try adjusting your filters.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Pagination Footer */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center space-x-2 pt-4">
+          <Button
+            variant="outline"
+            onClick={() => onPageChange(0)}
+            disabled={page === 0}
+          >
+            First
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => onPageChange(page - 1)}
+            disabled={page === 0}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Previous
+          </Button>
+          
+          {/* Page numbers */}
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            const pageNum = Math.max(0, Math.min(totalPages - 5, page - 2)) + i;
+            return (
+              <Button
+                key={pageNum}
+                variant={pageNum === page ? "default" : "outline"}
+                onClick={() => onPageChange(pageNum)}
+                className={pageNum === page ? "bg-fhir-blue text-white" : ""}
+              >
+                {pageNum + 1}
+              </Button>
+            );
+          })}
+          
+          <Button
+            variant="outline"
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages - 1}
+          >
+            Next
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => onPageChange(totalPages - 1)}
+            disabled={page >= totalPages - 1}
+          >
+            Last
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
