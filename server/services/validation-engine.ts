@@ -832,9 +832,42 @@ export class ValidationEngine {
   }
 
   private async detectImplicitProfiles(resource: any, config: ValidationConfig): Promise<string[]> {
-    // Disable aggressive profile detection to prevent timeouts
-    // Only use explicitly declared profiles to avoid fetching non-existent profiles
-    return [];
+    const profiles: string[] = [];
+
+    try {
+      // Look for common US Core patterns based on extensions and identifiers
+      if (resource.extension) {
+        for (const ext of resource.extension) {
+          if (ext.url) {
+            // US Core birth place extension
+            if (ext.url.includes('birthPlace')) {
+              profiles.push('http://hl7.org/fhir/us/core/StructureDefinition/us-core-' + resource.resourceType.toLowerCase());
+            }
+            // Other US Core extensions
+            if (ext.url.includes('us-core')) {
+              profiles.push('http://hl7.org/fhir/us/core/StructureDefinition/us-core-' + resource.resourceType.toLowerCase());
+            }
+          }
+        }
+      }
+
+      // Look for identifier systems that suggest US Core profiles
+      if (resource.identifier) {
+        for (const identifier of resource.identifier) {
+          if (identifier.system) {
+            // US Social Security Number suggests US Core
+            if (identifier.system.includes('ssn') || identifier.system.includes('social-security')) {
+              profiles.push('http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient');
+            }
+          }
+        }
+      }
+
+      return [...new Set(profiles)]; // Remove duplicates
+    } catch (error) {
+      console.warn('Error detecting implicit profiles:', error);
+      return [];
+    }
   }
 
   private async fetchProfile(profileUrl: string, config: ValidationConfig): Promise<any> {
@@ -843,28 +876,35 @@ export class ValidationEngine {
       return this.profileCache.get(profileUrl);
     }
 
-    // Skip known problematic profile URLs to prevent timeouts
-    const problematicPatterns = [
-      'us-core',
-      'uk-core', 
-      'ips/',
-      '/uv/',
-      'simplifier.net'
-    ];
-
-    if (problematicPatterns.some(pattern => profileUrl.includes(pattern))) {
-      console.log(`Skipping problematic profile to prevent timeout: ${profileUrl}`);
-      return null;
-    }
-
     let profile = null;
 
     try {
-      // Try FHIR server first if enabled (with shorter timeout)
+      // Try terminology server first for US Core and HL7 profiles
+      if (profileUrl.includes('hl7.org/fhir/us/core') || profileUrl.includes('hl7.org/fhir/')) {
+        profile = await this.fetchProfileFromTerminologyServer(profileUrl);
+        if (profile) {
+          this.profileCache.set(profileUrl, profile);
+          return profile;
+        }
+      }
+
+      // Try FHIR server if enabled
       if (config.fetchFromFhirServer && this.fhirClient) {
         profile = await Promise.race([
           this.fetchProfileFromFhirServer(profileUrl),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout after 3 seconds')), 3000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout after 5 seconds')), 5000))
+        ]);
+        if (profile) {
+          this.profileCache.set(profileUrl, profile);
+          return profile;
+        }
+      }
+
+      // Try Simplifier.net if enabled
+      if (config.fetchFromSimplifier && this.simplifierClient) {
+        profile = await Promise.race([
+          this.fetchProfileFromSimplifier(profileUrl),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout after 5 seconds')), 5000))
         ]);
         if (profile) {
           this.profileCache.set(profileUrl, profile);
@@ -873,9 +913,9 @@ export class ValidationEngine {
       }
 
       return null;
-    } catch (error) {
-      if (error.message === 'Timeout after 3 seconds') {
-        console.log(`Profile fetch timeout (preventing long loading): ${profileUrl}`);
+    } catch (error: any) {
+      if (error.message?.includes('Timeout')) {
+        console.log(`Profile fetch timeout: ${profileUrl}`);
       } else {
         console.warn(`Error fetching profile ${profileUrl}:`, error);
       }
@@ -894,6 +934,31 @@ export class ValidationEngine {
       return response;
     } catch (error) {
       console.warn(`Failed to fetch profile from FHIR server: ${profileUrl}`, error);
+      return null;
+    }
+  }
+
+  private async fetchProfileFromTerminologyServer(profileUrl: string): Promise<any> {
+    try {
+      if (!this.terminologyClient) return null;
+
+      // Try to resolve the profile using terminology server
+      const profile = await this.terminologyClient.resolveExtension(profileUrl);
+      if (profile) {
+        console.log(`Successfully fetched profile from terminology server: ${profileUrl}`);
+        return profile;
+      }
+
+      // Fallback: try searching by URL
+      const searchResults = await this.terminologyClient.searchStructureDefinitions(profileUrl);
+      if (searchResults && searchResults.length > 0) {
+        console.log(`Found profile via search on terminology server: ${profileUrl}`);
+        return searchResults[0];
+      }
+
+      return null;
+    } catch (error) {
+      console.warn(`Could not fetch profile from terminology server: ${profileUrl}`, error);
       return null;
     }
   }

@@ -190,18 +190,18 @@ export default function SettingsPage() {
               </Label>
               <Input
                 id="terminology-url"
-                value={(localSettings as any).terminologyServer?.url || 'https://r4.ontoserver.csiro.au/fhir'}
+                value={(localSettings as any).terminologyServer?.url || 'https://tx.fhir.org/r4'}
                 onChange={(e) => 
                   handleSettingChange('terminologyServer', {
                     ...(localSettings as any).terminologyServer,
                     url: e.target.value
                   })
                 }
-                placeholder="https://r4.ontoserver.csiro.au/fhir"
+                placeholder="https://tx.fhir.org/r4"
                 className="mt-1"
               />
               <p className="text-sm text-muted-foreground mt-1">
-                CSIRO OntoServer provides public access to FHIR terminology services
+                HL7 FHIR Terminology Server hosts US Core profiles and international FHIR standards
               </p>
             </div>
 

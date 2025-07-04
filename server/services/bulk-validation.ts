@@ -241,9 +241,9 @@ export class BulkValidationService {
         customRules: [],
         autoValidate: true,
         profiles: [],
-        fetchFromSimplifier: false, // Disable to prevent timeouts
-        fetchFromFhirServer: false, // Disable to prevent timeouts 
-        autoDetectProfiles: false   // Disable to prevent profile guessing
+        fetchFromSimplifier: true,  // Re-enable for comprehensive validation
+        fetchFromFhirServer: true,  // Re-enable with terminology server support
+        autoDetectProfiles: true    // Re-enable with improved US Core support
       });
 
       // Store validation result

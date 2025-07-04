@@ -219,12 +219,12 @@ export class TerminologyClient {
   }
 }
 
-// Default configuration for HAPI FHIR server
+// Default configuration for HL7 FHIR terminology server (hosts US Core profiles)
 export const defaultTerminologyConfig: TerminologyServerConfig = {
   enabled: true,
-  url: 'http://hapi.fhir.org/baseR4',
+  url: 'https://tx.fhir.org/r4',
   type: 'hapi-fhir',
-  description: 'HAPI FHIR Test Server (Public)'
+  description: 'HL7 FHIR Terminology Server - Hosts US Core and international profiles'
 };
 
 export const terminologyClient = new TerminologyClient(defaultTerminologyConfig);
