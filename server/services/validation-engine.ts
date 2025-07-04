@@ -7,6 +7,9 @@ export interface ValidationConfig {
   customRules: ValidationRule[];
   autoValidate: boolean;
   profiles: string[];
+  fetchFromSimplifier: boolean;
+  fetchFromFhirServer: boolean;
+  autoDetectProfiles: boolean;
 }
 
 export interface ValidationRule {
@@ -55,10 +58,22 @@ export class ValidationEngine {
   private fhirClient: FhirClient;
   private profileCache: Map<string, any> = new Map();
   private humanReadableMessages: Map<string, string> = new Map();
+  private simplifierClient: any;
 
   constructor(fhirClient: FhirClient) {
     this.fhirClient = fhirClient;
     this.initializeHumanReadableMessages();
+    // Import simplifier client dynamically to avoid circular dependencies
+    this.loadSimplifierClient();
+  }
+
+  private async loadSimplifierClient() {
+    try {
+      const { simplifierClient } = await import('./simplifier-client.js');
+      this.simplifierClient = simplifierClient;
+    } catch (error) {
+      console.warn('Simplifier client not available:', error);
+    }
   }
 
   private initializeHumanReadableMessages() {
@@ -82,13 +97,25 @@ export class ValidationEngine {
       requiredFields: [], 
       customRules: [], 
       autoValidate: true, 
-      profiles: [] 
+      profiles: [],
+      fetchFromSimplifier: true,
+      fetchFromFhirServer: true,
+      autoDetectProfiles: true
     }
   ): Promise<DetailedValidationResult> {
     const startTime = new Date();
     const issues: ValidationIssue[] = [];
     
     try {
+      // Auto-detect profiles from resource if enabled
+      let profilesToValidate = [...config.profiles];
+      if (config.autoDetectProfiles) {
+        const detectedProfiles = await this.detectProfilesFromResource(resource, config);
+        profilesToValidate.push(...detectedProfiles);
+        // Remove duplicates
+        profilesToValidate = Array.from(new Set(profilesToValidate));
+      }
+
       // Basic structure validation
       const structureIssues = await this.validateBasicStructureDetailed(resource);
       issues.push(...structureIssues);
@@ -98,8 +125,8 @@ export class ValidationEngine {
       issues.push(...requiredFieldIssues);
       
       // Profile-specific validation
-      for (const profileUrl of config.profiles) {
-        const profileIssues = await this.validateAgainstProfileDetailed(resource, profileUrl);
+      for (const profileUrl of profilesToValidate) {
+        const profileIssues = await this.validateAgainstProfileDetailed(resource, profileUrl, config);
         issues.push(...profileIssues);
       }
       
@@ -108,8 +135,8 @@ export class ValidationEngine {
       issues.push(...customIssues);
       
       // FHIR server validation
-      if (this.fhirClient) {
-        const serverIssues = await this.validateWithFhirServer(resource, config.profiles[0]);
+      if (this.fhirClient && config.fetchFromFhirServer) {
+        const serverIssues = await this.validateWithFhirServer(resource, profilesToValidate[0]);
         issues.push(...serverIssues);
       }
       
@@ -691,5 +718,258 @@ export class ValidationEngine {
     if (code.includes('format')) return 'format';
     
     return 'structure';
+  }
+
+  // Profile detection and fetching methods
+  private async detectProfilesFromResource(resource: any, config: ValidationConfig): Promise<string[]> {
+    const profiles: string[] = [];
+
+    try {
+      // Check meta.profile for explicit profile declarations
+      if (resource.meta?.profile) {
+        const resourceProfiles = Array.isArray(resource.meta.profile) 
+          ? resource.meta.profile 
+          : [resource.meta.profile];
+        
+        for (const profileUrl of resourceProfiles) {
+          if (typeof profileUrl === 'string' && profileUrl.trim()) {
+            profiles.push(profileUrl.trim());
+          }
+        }
+      }
+
+      // Check for implicit profiles based on resource type and extensions
+      const implicitProfiles = await this.detectImplicitProfiles(resource, config);
+      profiles.push(...implicitProfiles);
+
+      return profiles;
+    } catch (error) {
+      console.warn('Error detecting profiles from resource:', error);
+      return [];
+    }
+  }
+
+  private async detectImplicitProfiles(resource: any, config: ValidationConfig): Promise<string[]> {
+    const profiles: string[] = [];
+
+    try {
+      // Look for common profile patterns based on extensions
+      if (resource.extension) {
+        for (const ext of resource.extension) {
+          if (ext.url) {
+            // Common US Core patterns
+            if (ext.url.includes('us-core')) {
+              profiles.push('http://hl7.org/fhir/us/core/StructureDefinition/us-core-' + resource.resourceType.toLowerCase());
+            }
+            // International Patient Summary patterns
+            if (ext.url.includes('ips')) {
+              profiles.push('http://hl7.org/fhir/uv/ips/StructureDefinition/ips-' + resource.resourceType.toLowerCase());
+            }
+          }
+        }
+      }
+
+      // Look for identifier systems that suggest specific profiles
+      if (resource.identifier) {
+        for (const identifier of resource.identifier) {
+          if (identifier.system) {
+            // US Social Security Number suggests US Core
+            if (identifier.system.includes('ssn') || identifier.system.includes('social-security')) {
+              profiles.push('http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient');
+            }
+            // NHS number suggests UK Core
+            if (identifier.system.includes('nhs')) {
+              profiles.push('http://hl7.org/fhir/uk/core/StructureDefinition/uk-core-patient');
+            }
+          }
+        }
+      }
+
+      return [...new Set(profiles)]; // Remove duplicates
+    } catch (error) {
+      console.warn('Error detecting implicit profiles:', error);
+      return [];
+    }
+  }
+
+  private async fetchProfile(profileUrl: string, config: ValidationConfig): Promise<any> {
+    // Check cache first
+    if (this.profileCache.has(profileUrl)) {
+      return this.profileCache.get(profileUrl);
+    }
+
+    let profile = null;
+
+    try {
+      // Try FHIR server first if enabled
+      if (config.fetchFromFhirServer && this.fhirClient) {
+        profile = await this.fetchProfileFromFhirServer(profileUrl);
+        if (profile) {
+          this.profileCache.set(profileUrl, profile);
+          return profile;
+        }
+      }
+
+      // Try Simplifier.net if enabled and FHIR server failed
+      if (config.fetchFromSimplifier && this.simplifierClient) {
+        profile = await this.fetchProfileFromSimplifier(profileUrl);
+        if (profile) {
+          this.profileCache.set(profileUrl, profile);
+          return profile;
+        }
+      }
+
+      console.warn(`Could not fetch profile: ${profileUrl}`);
+      return null;
+    } catch (error) {
+      console.error(`Error fetching profile ${profileUrl}:`, error);
+      return null;
+    }
+  }
+
+  private async fetchProfileFromFhirServer(profileUrl: string): Promise<any> {
+    try {
+      // Extract the profile ID from the URL
+      const profileId = profileUrl.split('/').pop();
+      if (!profileId) return null;
+
+      // Try to fetch as StructureDefinition
+      const response = await this.fhirClient.getResource('StructureDefinition', profileId);
+      return response;
+    } catch (error) {
+      console.warn(`Failed to fetch profile from FHIR server: ${profileUrl}`, error);
+      return null;
+    }
+  }
+
+  private async fetchProfileFromSimplifier(profileUrl: string): Promise<any> {
+    try {
+      if (!this.simplifierClient) return null;
+
+      // Try to get package details if the URL contains package information
+      const urlParts = profileUrl.split('/');
+      const packageId = this.extractPackageIdFromProfileUrl(profileUrl);
+      
+      if (packageId) {
+        const packageDetails = await this.simplifierClient.getPackageDetails(packageId);
+        if (packageDetails) {
+          const profiles = await this.simplifierClient.getPackageProfiles(packageId);
+          const matchingProfile = profiles.find((p: any) => p.url === profileUrl);
+          return matchingProfile;
+        }
+      }
+
+      // Fallback: search for the profile by URL
+      const profiles = await this.simplifierClient.searchProfiles(profileUrl);
+      return profiles.length > 0 ? profiles[0] : null;
+    } catch (error) {
+      console.warn(`Failed to fetch profile from Simplifier: ${profileUrl}`, error);
+      return null;
+    }
+  }
+
+  private extractPackageIdFromProfileUrl(profileUrl: string): string | null {
+    try {
+      // Common patterns for profile URLs:
+      // http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient -> hl7.fhir.us.core
+      // http://hl7.org/fhir/uv/ips/StructureDefinition/ips-patient -> hl7.fhir.uv.ips
+      
+      const url = new URL(profileUrl);
+      const pathParts = url.pathname.split('/').filter(p => p);
+      
+      if (pathParts.length >= 4 && pathParts[0] === 'fhir') {
+        // Extract the package identifier parts
+        const packageParts = ['hl7', 'fhir'];
+        for (let i = 1; i < pathParts.length - 1; i++) {
+          if (pathParts[i] !== 'StructureDefinition') {
+            packageParts.push(pathParts[i]);
+          } else {
+            break;
+          }
+        }
+        return packageParts.join('.');
+      }
+
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  private async validateAgainstProfileDetailed(resource: any, profileUrl: string, config: ValidationConfig): Promise<ValidationIssue[]> {
+    const issues: ValidationIssue[] = [];
+
+    if (!profileUrl) return issues;
+
+    try {
+      // Fetch the profile if we don't have it
+      const profile = await this.fetchProfile(profileUrl, config);
+      
+      if (!profile) {
+        issues.push({
+          severity: 'warning',
+          code: 'profile-not-found',
+          details: `Could not fetch profile: ${profileUrl}`,
+          location: ['meta', 'profile'],
+          humanReadable: `The specified validation profile could not be found or downloaded.`,
+          suggestion: `Check that the profile URL is correct and accessible. The profile may not be available from the current FHIR server or Simplifier.net.`,
+          category: 'structure'
+        });
+        return issues;
+      }
+
+      // Use the original validation method with the fetched profile
+      const originalResult = await this.validateAgainstProfile(resource, profileUrl);
+      
+      // Convert to detailed issues
+      for (const error of originalResult.errors) {
+        issues.push({
+          severity: 'error',
+          code: error.code || 'profile-validation-error',
+          details: error.message,
+          location: [error.path],
+          expression: error.expression ? [error.expression] : undefined,
+          humanReadable: this.makeHumanReadable(error.message, error.code),
+          suggestion: this.getSuggestion(error.code, error.path),
+          category: this.categorizeError(error.code)
+        });
+      }
+
+      for (const warning of originalResult.warnings) {
+        issues.push({
+          severity: 'warning',
+          code: warning.code || 'profile-validation-warning',
+          details: warning.message,
+          location: [warning.path],
+          humanReadable: this.makeHumanReadable(warning.message, warning.code),
+          category: this.categorizeError(warning.code)
+        });
+      }
+
+      // Add profile-specific validation information
+      if (issues.length === 0) {
+        issues.push({
+          severity: 'information',
+          code: 'profile-validation-success',
+          details: `Resource successfully validates against profile: ${profile.title || profile.name || profileUrl}`,
+          location: ['meta', 'profile'],
+          humanReadable: `This resource successfully conforms to the specified profile requirements.`,
+          category: 'structure'
+        });
+      }
+
+    } catch (error: any) {
+      issues.push({
+        severity: 'error',
+        code: 'profile-validation-failed',
+        details: `Profile validation failed: ${error.message}`,
+        location: ['resource'],
+        humanReadable: 'Could not validate against the specified profile due to a technical error.',
+        suggestion: 'Check that the profile is valid and accessible.',
+        category: 'structure'
+      });
+    }
+
+    return issues;
   }
 }

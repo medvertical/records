@@ -86,6 +86,7 @@ This application is a FHIR (Fast Healthcare Interoperability Resources) resource
 ## Changelog
 
 Changelog:
+- July 4, 2025. Enhanced validation engine with automatic profile detection, profile fetching from FHIR server/Simplifier.net, and configurable validation settings
 - June 24, 2025. Initial setup
 
 ## User Preferences

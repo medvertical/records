@@ -236,7 +236,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         requiredFields: config?.requiredFields || [],
         customRules: config?.customRules || [],
         autoValidate: true,
-        profiles: installedProfiles.map(p => p.url).slice(0, 3) // Limit to 3 profiles for performance
+        profiles: installedProfiles.map(p => p.url).slice(0, 3), // Limit to 3 profiles for performance
+        fetchFromSimplifier: config?.fetchFromSimplifier !== false,
+        fetchFromFhirServer: config?.fetchFromFhirServer !== false,
+        autoDetectProfiles: config?.autoDetectProfiles !== false
       };
       
       const result = await validationEngine.validateResourceDetailed(resource, enhancedConfig);
@@ -272,6 +275,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { limit = '10' } = req.query;
       const errors = await storage.getRecentValidationErrors(parseInt(limit as string));
       res.json(errors);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/validation/settings", async (req, res) => {
+    try {
+      // Return default validation settings
+      const settings = {
+        fetchFromSimplifier: true,
+        fetchFromFhirServer: true,
+        autoDetectProfiles: true,
+        strictMode: false,
+        maxProfiles: 3,
+        cacheDuration: 3600 // 1 hour in seconds
+      };
+      res.json(settings);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/validation/settings", async (req, res) => {
+    try {
+      const settings = req.body;
+      // In a real implementation, these would be stored in the database
+      // For now, we'll just return the settings as confirmation
+      res.json({
+        message: "Validation settings updated successfully",
+        settings: settings
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

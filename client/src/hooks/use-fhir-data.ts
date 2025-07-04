@@ -299,3 +299,41 @@ export function useFhirErrorHandler() {
 
   return { handleError };
 }
+
+export function useValidationSettings() {
+  return useQuery({
+    queryKey: ['/api/validation/settings'],
+  });
+}
+
+export function useUpdateValidationSettings() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  
+  return useMutation({
+    mutationFn: async (settings: any) => {
+      const response = await fetch('/api/validation/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings),
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/validation/settings'] });
+      toast({
+        title: 'Settings Updated',
+        description: 'Validation settings have been updated successfully.',
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Update Failed',
+        description: error?.response?.data?.message || 'Failed to update validation settings.',
+        variant: 'destructive'
+      });
+    }
+  });
+}

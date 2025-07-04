@@ -5,10 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Download, Trash2, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
+import { Search, Download, Trash2, RefreshCw, AlertCircle, CheckCircle, Settings } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { useValidationSettings, useUpdateValidationSettings } from '@/hooks/use-fhir-data';
 
 interface SimplifierPackage {
   id: string;
@@ -170,6 +173,105 @@ export function ProfileManagement() {
     updateMutation.mutate(packageId);
   };
 
+  const ValidationSettings = () => {
+    const { data: settings, isLoading } = useValidationSettings();
+    const updateSettings = useUpdateValidationSettings();
+    const [localSettings, setLocalSettings] = useState(settings || {
+      fetchFromSimplifier: true,
+      fetchFromFhirServer: true,
+      autoDetectProfiles: true,
+      strictMode: false
+    });
+
+    const handleSettingChange = (key: string, value: any) => {
+      const newSettings = { ...localSettings, [key]: value };
+      setLocalSettings(newSettings);
+      updateSettings.mutate(newSettings);
+    };
+
+    if (isLoading) {
+      return <div className="text-center py-8">Loading validation settings...</div>;
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label htmlFor="fetch-simplifier" className="text-sm font-medium">
+                Fetch Profiles from Simplifier.net
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Automatically download validation profiles from Simplifier.net when needed
+              </p>
+            </div>
+            <Switch
+              id="fetch-simplifier"
+              checked={(localSettings as any).fetchFromSimplifier !== false}
+              onCheckedChange={(checked) => handleSettingChange('fetchFromSimplifier', checked)}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label htmlFor="fetch-fhir-server" className="text-sm font-medium">
+                Fetch Profiles from FHIR Server
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Try to fetch validation profiles from the connected FHIR server
+              </p>
+            </div>
+            <Switch
+              id="fetch-fhir-server"
+              checked={(localSettings as any).fetchFromFhirServer !== false}
+              onCheckedChange={(checked) => handleSettingChange('fetchFromFhirServer', checked)}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label htmlFor="auto-detect-profiles" className="text-sm font-medium">
+                Auto-detect Resource Profiles
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Automatically detect and validate against profiles specified in resources
+              </p>
+            </div>
+            <Switch
+              id="auto-detect-profiles"
+              checked={(localSettings as any).autoDetectProfiles !== false}
+              onCheckedChange={(checked) => handleSettingChange('autoDetectProfiles', checked)}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label htmlFor="strict-mode" className="text-sm font-medium">
+                Strict Validation Mode
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Enable stricter validation rules and error reporting
+              </p>
+            </div>
+            <Switch
+              id="strict-mode"
+              checked={(localSettings as any).strictMode === true}
+              onCheckedChange={(checked) => handleSettingChange('strictMode', checked)}
+            />
+          </div>
+        </div>
+
+        <Alert>
+          <Settings className="h-4 w-4" />
+          <AlertDescription>
+            Validation settings are applied immediately when changed. Profile fetching from external sources 
+            may take longer depending on network conditions.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -183,6 +285,7 @@ export function ProfileManagement() {
         <TabsList>
           <TabsTrigger value="installed">Installed Packages</TabsTrigger>
           <TabsTrigger value="search">Search & Install</TabsTrigger>
+          <TabsTrigger value="settings">Validation Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="installed" className="space-y-4">
@@ -326,6 +429,20 @@ export function ProfileManagement() {
                   </AlertDescription>
                 </Alert>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="settings" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Validation Settings</CardTitle>
+              <CardDescription>
+                Configure how FHIR resources are validated against profiles
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ValidationSettings />
             </CardContent>
           </Card>
         </TabsContent>
