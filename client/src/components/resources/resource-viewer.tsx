@@ -20,10 +20,20 @@ interface CollapsibleNodeProps {
   keyName: string;
   value: any;
   level?: number;
+  validationIssues?: any[];
+  path?: string;
 }
 
-function CollapsibleNode({ keyName, value, level = 0 }: CollapsibleNodeProps) {
+function CollapsibleNode({ keyName, value, level = 0, validationIssues = [], path = '' }: CollapsibleNodeProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  
+  // Build current path for this node
+  const currentPath = path ? `${path}.${keyName}` : keyName;
+  
+  // Find validation issues for this specific path
+  const nodeIssues = validationIssues.filter(issue => 
+    issue.location?.some((loc: string) => loc === currentPath || loc.startsWith(currentPath + '.') || loc.startsWith(currentPath + '['))
+  );
   
   // Handle null/undefined values
   if (value === null || value === undefined) {
@@ -75,18 +85,38 @@ function CollapsibleNode({ keyName, value, level = 0 }: CollapsibleNodeProps) {
 
   if (isPrimitive) {
     return (
-      <div style={{ paddingLeft }} className="py-1 flex items-center">
-        <span className="font-medium text-gray-700 min-w-0 flex-shrink-0 mr-2">
-          {keyName}:
-        </span>
-        <span className={`text-sm ${
-          typeof value === 'string' ? 'text-green-600' :
-          typeof value === 'number' ? 'text-blue-600' :
-          typeof value === 'boolean' ? 'text-purple-600' :
-          'text-gray-600'
-        }`}>
-          {getSummary(value)}
-        </span>
+      <div style={{ paddingLeft }} className="py-1">
+        <div className="flex items-center">
+          <span className={`font-medium min-w-0 flex-shrink-0 mr-2 ${
+            nodeIssues.length > 0 ? 'text-red-700' : 'text-gray-700'
+          }`}>
+            {keyName}:
+          </span>
+          <span className={`text-sm ${
+            typeof value === 'string' ? 'text-green-600' :
+            typeof value === 'number' ? 'text-blue-600' :
+            typeof value === 'boolean' ? 'text-purple-600' :
+            'text-gray-600'
+          }`}>
+            {getSummary(value)}
+          </span>
+          {nodeIssues.length > 0 && (
+            <div className="ml-2 flex items-center">
+              <AlertTriangle className="h-4 w-4 text-red-500" />
+              <span className="text-xs text-red-600 ml-1">{nodeIssues.length}</span>
+            </div>
+          )}
+        </div>
+        {nodeIssues.length > 0 && (
+          <div className="mt-1 ml-4 space-y-1">
+            {nodeIssues.map((issue, index) => (
+              <div key={index} className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
+                <div className="font-medium">{issue.severity}: {issue.code}</div>
+                <div>{issue.humanReadable || issue.details}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -106,14 +136,35 @@ function CollapsibleNode({ keyName, value, level = 0 }: CollapsibleNodeProps) {
             <ChevronRight className="h-4 w-4" />
           )}
         </Button>
-        <span className="font-medium text-gray-700 mr-2">{keyName}:</span>
+        <span className={`font-medium mr-2 ${
+          nodeIssues.length > 0 ? 'text-red-700' : 'text-gray-700'
+        }`}>
+          {keyName}:
+        </span>
         <span className="text-sm text-gray-500">
           {getSummary(value)}
         </span>
         <span className="text-xs text-gray-400 ml-2 px-1 py-0.5 bg-gray-100 rounded">
           {getValueType(value)}
         </span>
+        {nodeIssues.length > 0 && (
+          <div className="ml-2 flex items-center">
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+            <span className="text-xs text-red-600 ml-1">{nodeIssues.length}</span>
+          </div>
+        )}
       </div>
+      
+      {nodeIssues.length > 0 && (
+        <div className="mt-1 ml-4 space-y-1">
+          {nodeIssues.map((issue, index) => (
+            <div key={index} className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
+              <div className="font-medium">{issue.severity}: {issue.code}</div>
+              <div>{issue.humanReadable || issue.details}</div>
+            </div>
+          ))}
+        </div>
+      )}
       
       {isExpanded && (
         <div className="mt-1">
@@ -124,6 +175,8 @@ function CollapsibleNode({ keyName, value, level = 0 }: CollapsibleNodeProps) {
                 keyName={`[${index}]`}
                 value={item}
                 level={level + 1}
+                validationIssues={validationIssues}
+                path={currentPath}
               />
             ))
           ) : isObject ? (
@@ -133,6 +186,8 @@ function CollapsibleNode({ keyName, value, level = 0 }: CollapsibleNodeProps) {
                 keyName={key}
                 value={val}
                 level={level + 1}
+                validationIssues={validationIssues}
+                path={currentPath}
               />
             ))
           ) : null}
@@ -142,7 +197,7 @@ function CollapsibleNode({ keyName, value, level = 0 }: CollapsibleNodeProps) {
   );
 }
 
-function FormView({ data }: { data: any }) {
+function FormView({ data, validationIssues = [] }: { data: any; validationIssues?: any[] }) {
   if (!data || typeof data !== 'object') {
     return (
       <div className="text-gray-500 italic p-4">
@@ -168,7 +223,13 @@ function FormView({ data }: { data: any }) {
   return (
     <div className="space-y-2 max-h-96 overflow-auto">
       {entries.map(([key, value]) => (
-        <CollapsibleNode key={key} keyName={key} value={value} />
+        <CollapsibleNode 
+          key={key} 
+          keyName={key} 
+          value={value} 
+          validationIssues={validationIssues}
+          path=""
+        />
       ))}
     </div>
   );
@@ -318,7 +379,10 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
             </TabsList>
             
             <TabsContent value="form" className="mt-4">
-              <FormView data={resourceData} />
+              <FormView 
+                data={resourceData} 
+                validationIssues={validationResult?.issues || []}
+              />
             </TabsContent>
             
             <TabsContent value="json" className="mt-4">
