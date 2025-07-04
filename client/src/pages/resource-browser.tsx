@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import Header from "@/components/layout/header";
 import ResourceSearch from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,11 +9,7 @@ interface ResourcesResponse {
   total: number;
 }
 
-interface ResourceBrowserProps {
-  onSidebarToggle?: () => void;
-}
-
-export default function ResourceBrowser({ onSidebarToggle }: ResourceBrowserProps) {
+export default function ResourceBrowser() {
   const [resourceType, setResourceType] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [page, setPage] = useState(0);
@@ -48,36 +43,29 @@ export default function ResourceBrowser({ onSidebarToggle }: ResourceBrowserProp
   };
 
   return (
-    <div className="flex-1 overflow-hidden">
-      <Header 
-        title="Records"
-        onSidebarToggle={onSidebarToggle}
-      />
-      
-      <div className="p-6 h-full overflow-y-auto">
-        <div className="space-y-6">
-          <ResourceSearch 
-            resourceTypes={resourceTypes || []}
-            onSearch={handleSearch}
-            defaultResourceType={resourceType}
-            defaultQuery={searchQuery}
+    <div className="p-6 h-full overflow-y-auto">
+      <div className="space-y-6">
+        <ResourceSearch 
+          resourceTypes={resourceTypes || []}
+          onSearch={handleSearch}
+          defaultResourceType={resourceType}
+          defaultQuery={searchQuery}
+        />
+        
+        {isLoading ? (
+          <div className="space-y-4">
+            {[1, 2, 3, 4, 5].map(i => (
+              <Skeleton key={i} className="h-20 rounded-lg" />
+            ))}
+          </div>
+        ) : (
+          <ResourceList 
+            resources={resourcesData?.resources || []}
+            total={resourcesData?.total || 0}
+            currentPage={page}
+            onPageChange={handlePageChange}
           />
-          
-          {isLoading ? (
-            <div className="space-y-4">
-              {[1, 2, 3, 4, 5].map(i => (
-                <Skeleton key={i} className="h-20 rounded-lg" />
-              ))}
-            </div>
-          ) : (
-            <ResourceList 
-              resources={resourcesData?.resources || []}
-              total={resourcesData?.total || 0}
-              page={page}
-              onPageChange={handlePageChange}
-            />
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
