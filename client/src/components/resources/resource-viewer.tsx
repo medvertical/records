@@ -305,17 +305,9 @@ export default function ResourceViewer({ data, title = "Resource Structure" }: R
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="form" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="form">Form View</TabsTrigger>
             <TabsTrigger value="json">JSON View</TabsTrigger>
-            <TabsTrigger value="validation">
-              Validation
-              {validationResult?.summary?.totalIssues > 0 && (
-                <Badge variant="secondary" className="ml-1 text-xs">
-                  {validationResult.summary.totalIssues}
-                </Badge>
-              )}
-            </TabsTrigger>
           </TabsList>
           
           <TabsContent value="form" className="mt-4">
@@ -325,8 +317,24 @@ export default function ResourceViewer({ data, title = "Resource Structure" }: R
           <TabsContent value="json" className="mt-4">
             <JsonView data={data} />
           </TabsContent>
+        </Tabs>
 
-          <TabsContent value="validation" className="mt-4">
+        {/* Validation Results Section - Always Visible */}
+        <div className="mt-6 border-t pt-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Validation Results</h3>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={validateResource}
+              disabled={isValidating}
+            >
+              <Shield className="w-4 h-4 mr-1" />
+              {isValidating ? 'Validating...' : 'Revalidate'}
+            </Button>
+          </div>
+          
+          <div className="space-y-4">
             {isValidating && (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
@@ -371,8 +379,8 @@ export default function ResourceViewer({ data, title = "Resource Structure" }: R
                 </CardContent>
               </Card>
             )}
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
