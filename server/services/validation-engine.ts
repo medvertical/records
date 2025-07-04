@@ -1,5 +1,6 @@
 import { FhirClient, FhirOperationOutcome } from './fhir-client.js';
 import { ValidationError } from '@shared/schema.js';
+import { TerminologyClient, defaultTerminologyConfig } from './terminology-client.js';
 
 export interface ValidationConfig {
   strictMode: boolean;
@@ -10,6 +11,12 @@ export interface ValidationConfig {
   fetchFromSimplifier: boolean;
   fetchFromFhirServer: boolean;
   autoDetectProfiles: boolean;
+  terminologyServer?: {
+    enabled: boolean;
+    url: string;
+    type: string;
+    description: string;
+  };
 }
 
 export interface ValidationRule {
@@ -59,9 +66,11 @@ export class ValidationEngine {
   private profileCache: Map<string, any> = new Map();
   private humanReadableMessages: Map<string, string> = new Map();
   private simplifierClient: any;
+  private terminologyClient: TerminologyClient;
 
   constructor(fhirClient: FhirClient) {
     this.fhirClient = fhirClient;
+    this.terminologyClient = new TerminologyClient(defaultTerminologyConfig);
     this.initializeHumanReadableMessages();
     // Import simplifier client dynamically to avoid circular dependencies
     this.loadSimplifierClient();
@@ -251,7 +260,9 @@ export class ValidationEngine {
 
       // Use FHIR server validation
       const operationOutcome = await this.fhirClient.validateResource(resource, profileUrl);
-      this.processOperationOutcome(operationOutcome, errors, warnings);
+      
+      // Process operation outcome and attempt to resolve extension references
+      await this.processOperationOutcomeWithExtensionResolution(operationOutcome, errors, warnings);
 
       // Additional profile-specific validation if we have the profile
       if (profile) {
@@ -288,6 +299,77 @@ export class ValidationEngine {
       console.warn(`Could not fetch profile ${profileUrl}:`, error);
     }
     return null;
+  }
+
+  public async processOperationOutcomeWithExtensionResolution(operationOutcome: FhirOperationOutcome, errors: ValidationError[], warnings: ValidationError[]) {
+    for (const issue of operationOutcome.issue) {
+      const isExtensionError = issue.diagnostics?.includes('Unable to resolve reference to extension') || 
+                               issue.details?.text?.includes('Unable to resolve reference to extension');
+      
+      if (isExtensionError && this.terminologyClient) {
+        // Extract extension URL from the error message
+        const extensionUrl = this.extractExtensionUrlFromError(issue.diagnostics || issue.details?.text || '');
+        
+        if (extensionUrl) {
+          try {
+            // Attempt to resolve the extension from terminology server
+            const structureDefinition = await this.terminologyClient.resolveExtension(extensionUrl);
+            
+            if (structureDefinition) {
+              // Convert to warning instead of error since we can resolve it
+              warnings.push({
+                severity: 'warning',
+                message: `Extension '${extensionUrl}' resolved from terminology server: ${structureDefinition.title || structureDefinition.name}`,
+                path: issue.expression?.[0] || issue.location?.[0] || 'unknown',
+                code: issue.code || 'extension-resolved',
+              });
+              continue; // Skip adding as error
+            }
+          } catch (error) {
+            console.warn(`Failed to resolve extension ${extensionUrl}:`, error);
+          }
+        }
+      }
+
+      // Process as normal error/warning
+      if (issue.severity === 'error' || issue.severity === 'fatal') {
+        errors.push({
+          severity: issue.severity as 'error',
+          message: issue.details?.text || issue.diagnostics || 'Validation error',
+          path: issue.expression?.[0] || issue.location?.[0] || 'unknown',
+          code: issue.code || 'validation-error',
+        });
+      } else if (issue.severity === 'warning') {
+        warnings.push({
+          severity: 'warning',
+          message: issue.details?.text || issue.diagnostics || 'Validation warning',
+          path: issue.expression?.[0] || issue.location?.[0] || 'unknown',
+          code: issue.code || 'validation-warning',
+        });
+      }
+    }
+  }
+
+  private extractExtensionUrlFromError(errorMessage: string): string | null {
+    // Extract URL from error messages like "Unable to resolve reference to extension 'http://hl7.org/fhir/StructureDefinition/birthPlace'"
+    const match = errorMessage.match(/Unable to resolve reference to extension '([^']+)'/);
+    if (match) {
+      return match[1];
+    }
+    
+    // Try alternative patterns
+    const match2 = errorMessage.match(/extension["\s]*([http][^\s"']+)/i);
+    if (match2) {
+      return match2[1];
+    }
+    
+    return null;
+  }
+
+  public updateTerminologyConfig(config: ValidationConfig) {
+    if (config.terminologyServer) {
+      this.terminologyClient.updateConfig(config.terminologyServer);
+    }
   }
 
   private processOperationOutcome(

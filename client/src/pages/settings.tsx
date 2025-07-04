@@ -50,7 +50,13 @@ export default function SettingsPage() {
       autoDetectProfiles: true,
       strictMode: false,
       maxProfiles: 3,
-      cacheDuration: 3600
+      cacheDuration: 3600,
+      terminologyServer: {
+        enabled: true,
+        url: 'https://r4.ontoserver.csiro.au/fhir',
+        type: 'ontoserver',
+        description: 'CSIRO OntoServer (Public)'
+      }
     });
 
     const handleSettingChange = (key: string, value: any) => {
@@ -147,6 +153,104 @@ export default function SettingsPage() {
               Limit the number of profiles to validate against for performance
             </p>
           </div>
+        </div>
+
+        {/* Terminology Server Configuration */}
+        <div className="space-y-4 border-t pt-6">
+          <h3 className="text-lg font-medium text-gray-900">Terminology Server</h3>
+          <p className="text-sm text-gray-600">
+            Configure connection to a FHIR terminology server to resolve extension references and perform terminology validation.
+          </p>
+          
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label htmlFor="terminology-enabled" className="text-sm font-medium">
+                Enable Terminology Server
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                Connect to external terminology server for extension resolution
+              </p>
+            </div>
+            <Switch
+              id="terminology-enabled"
+              checked={(localSettings as any).terminologyServer?.enabled !== false}
+              onCheckedChange={(checked) => 
+                handleSettingChange('terminologyServer', {
+                  ...(localSettings as any).terminologyServer,
+                  enabled: checked
+                })
+              }
+            />
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="terminology-url" className="text-sm font-medium">
+                Terminology Server URL
+              </Label>
+              <Input
+                id="terminology-url"
+                value={(localSettings as any).terminologyServer?.url || 'https://r4.ontoserver.csiro.au/fhir'}
+                onChange={(e) => 
+                  handleSettingChange('terminologyServer', {
+                    ...(localSettings as any).terminologyServer,
+                    url: e.target.value
+                  })
+                }
+                placeholder="https://r4.ontoserver.csiro.au/fhir"
+                className="mt-1"
+              />
+              <p className="text-sm text-muted-foreground mt-1">
+                CSIRO OntoServer provides public access to FHIR terminology services
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="terminology-type" className="text-sm font-medium">
+                  Server Type
+                </Label>
+                <Input
+                  id="terminology-type"
+                  value={(localSettings as any).terminologyServer?.type || 'ontoserver'}
+                  onChange={(e) => 
+                    handleSettingChange('terminologyServer', {
+                      ...(localSettings as any).terminologyServer,
+                      type: e.target.value
+                    })
+                  }
+                  placeholder="ontoserver"
+                  className="mt-1"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="terminology-description" className="text-sm font-medium">
+                  Description
+                </Label>
+                <Input
+                  id="terminology-description"
+                  value={(localSettings as any).terminologyServer?.description || 'CSIRO OntoServer (Public)'}
+                  onChange={(e) => 
+                    handleSettingChange('terminologyServer', {
+                      ...(localSettings as any).terminologyServer,
+                      description: e.target.value
+                    })
+                  }
+                  placeholder="CSIRO OntoServer (Public)"
+                  className="mt-1"
+                />
+              </div>
+            </div>
+          </div>
+
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              The CSIRO OntoServer provides free access to FHIR terminology services including common extensions like birthPlace. 
+              This helps resolve "Unable to resolve reference to extension" errors during validation.
+            </AlertDescription>
+          </Alert>
         </div>
 
         <Alert>

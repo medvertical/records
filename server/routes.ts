@@ -319,8 +319,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/validation/settings", async (req, res) => {
     try {
       const settings = req.body;
-      // In a real implementation, these would be stored in the database
-      // For now, we'll just return the settings as confirmation
+      
+      // Update terminology server configuration if provided
+      if (settings.terminologyServer && validationEngine) {
+        validationEngine.updateTerminologyConfig(settings);
+      }
+      
       res.json({
         message: "Validation settings updated successfully",
         settings: settings
