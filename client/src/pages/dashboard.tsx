@@ -39,31 +39,27 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 gap-6 mb-8">
         <StatCard
           title="Total Resources"
-          value={stats?.totalResources || 0}
+          value={resourceCounts ? Object.values(resourceCounts).reduce((sum, count) => sum + count, 0) : 0}
           icon="database"
-          trend={{ value: 12, direction: "up" }}
-          subtitle="vs last week"
+          subtitle="FHIR resources available"
         />
         <StatCard
           title="Valid Resources"
           value={stats?.validResources || 0}
           icon="check-circle"
-          trend={{ value: 8, direction: "up" }}
           subtitle="passing validation"
         />
         <StatCard
           title="Validation Errors"
           value={stats?.errorResources || 0}
           icon="alert-circle"
-          trend={{ value: 3, direction: "down" }}
           subtitle="requiring attention"
         />
         <StatCard
           title="Active Profiles"
           value={stats?.activeProfiles || 0}
           icon="settings"
-          trend={{ value: 2, direction: "up" }}
-          subtitle="in use"
+          subtitle="validation profiles"
         />
       </div>
 
