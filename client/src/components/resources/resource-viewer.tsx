@@ -438,7 +438,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
                 onClick={validateResource}
                 disabled={isValidating}
               >
-                <Shield className="w-4 h-4 sm:mr-1" />
+                <RefreshCw className="w-4 h-4 sm:mr-1" />
                 <span className="hidden sm:inline">Revalidate</span>
               </Button>
             </div>
