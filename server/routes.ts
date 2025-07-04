@@ -404,30 +404,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No FHIR server configured" });
       }
 
-      // Get basic stats from storage
-      const stats = await storage.getResourceStats();
-      
-      // Use known resource counts from FHIR server
-      const totalServerResources = 125957; // Known total from FHIR server
-      
-      const summary = {
-        totalResources: totalServerResources,
-        totalValidated: stats.totalResources,
-        validResources: stats.validResources,
-        resourcesWithErrors: stats.errorResources,
-        validationCoverage: stats.totalResources > 0 ? (stats.totalResources / totalServerResources) * 100 : 0,
-        resourceTypeBreakdown: {
-          Patient: { total: 21298, validated: stats.resourceBreakdown.Patient?.total || 0, valid: stats.resourceBreakdown.Patient?.valid || 0, errors: (stats.resourceBreakdown.Patient?.total || 0) - (stats.resourceBreakdown.Patient?.valid || 0), coverage: stats.resourceBreakdown.Patient?.total ? (stats.resourceBreakdown.Patient.total / 21298) * 100 : 0 },
-          Observation: { total: 87084, validated: stats.resourceBreakdown.Observation?.total || 0, valid: stats.resourceBreakdown.Observation?.valid || 0, errors: (stats.resourceBreakdown.Observation?.total || 0) - (stats.resourceBreakdown.Observation?.valid || 0), coverage: stats.resourceBreakdown.Observation?.total ? (stats.resourceBreakdown.Observation.total / 87084) * 100 : 0 },
-          Encounter: { total: 3890, validated: stats.resourceBreakdown.Encounter?.total || 0, valid: stats.resourceBreakdown.Encounter?.valid || 0, errors: (stats.resourceBreakdown.Encounter?.total || 0) - (stats.resourceBreakdown.Encounter?.valid || 0), coverage: stats.resourceBreakdown.Encounter?.total ? (stats.resourceBreakdown.Encounter.total / 3890) * 100 : 0 },
-          Condition: { total: 4769, validated: stats.resourceBreakdown.Condition?.total || 0, valid: stats.resourceBreakdown.Condition?.valid || 0, errors: (stats.resourceBreakdown.Condition?.total || 0) - (stats.resourceBreakdown.Condition?.valid || 0), coverage: stats.resourceBreakdown.Condition?.total ? (stats.resourceBreakdown.Condition.total / 4769) * 100 : 0 },
-          Practitioner: { total: 4994, validated: stats.resourceBreakdown.Practitioner?.total || 0, valid: stats.resourceBreakdown.Practitioner?.valid || 0, errors: (stats.resourceBreakdown.Practitioner?.total || 0) - (stats.resourceBreakdown.Practitioner?.valid || 0), coverage: stats.resourceBreakdown.Practitioner?.total ? (stats.resourceBreakdown.Practitioner.total / 4994) * 100 : 0 },
-          Organization: { total: 3922, validated: stats.resourceBreakdown.Organization?.total || 0, valid: stats.resourceBreakdown.Organization?.valid || 0, errors: (stats.resourceBreakdown.Organization?.total || 0) - (stats.resourceBreakdown.Organization?.valid || 0), coverage: stats.resourceBreakdown.Organization?.total ? (stats.resourceBreakdown.Organization.total / 3922) * 100 : 0 }
-        }
-      };
-      
+      const summary = await bulkValidationService.getServerValidationSummary();
       res.json(summary);
     } catch (error: any) {
+      console.error('Error getting validation summary:', error);
       res.status(500).json({ message: error.message });
     }
   });

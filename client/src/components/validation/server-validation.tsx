@@ -73,27 +73,15 @@ export default function ServerValidation() {
   // Use WebSocket progress if available, otherwise use fallback
   const progress = wsConnected ? wsProgress : fallbackProgress;
 
-  // Query validation summary - Use hardcoded data for demo
-  const summary: ValidationSummary = {
-    totalResources: 125957,
-    totalValidated: 61, 
-    validResources: 0,
-    resourcesWithErrors: 0,
-    validationCoverage: 0.05, // 61/125957 * 100
-    resourceTypeBreakdown: {
-      Patient: { total: 21298, validated: 41, valid: 0, errors: 0, coverage: 0.19 },
-      Observation: { total: 87084, validated: 0, valid: 0, errors: 0, coverage: 0 },
-      Encounter: { total: 3890, validated: 0, valid: 0, errors: 0, coverage: 0 },
-      Condition: { total: 4769, validated: 0, valid: 0, errors: 0, coverage: 0 },
-      Practitioner: { total: 4994, validated: 0, valid: 0, errors: 0, coverage: 0 },
-      Organization: { total: 3922, validated: 0, valid: 0, errors: 0, coverage: 0 }
-    }
-  };
-
-  const summaryLoading = false;
+  // Query validation summary from backend
+  const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery<ValidationSummary>({
+    queryKey: ['/api/validation/bulk/summary'],
+    refetchInterval: 30000, // Refetch every 30 seconds
+    staleTime: 10000, // Consider data stale after 10 seconds
+  });
 
   // Update summary data with real-time validation progress
-  const updatedSummary = progress ? {
+  const updatedSummary: ValidationSummary | undefined = progress && summary ? {
     ...summary,
     totalValidated: progress.processedResources,
     validResources: progress.validResources,
@@ -165,7 +153,7 @@ export default function ServerValidation() {
     if (validationStatus === 'running' || progress?.status === 'running') return 'Running';
     if (validationStatus === 'completed' || progress?.status === 'completed') return 'Completed';
     if (validationStatus === 'error') return 'Error';
-    if (summary?.totalValidated === 0) return 'Not Started';
+    if (updatedSummary?.totalValidated === 0) return 'Not Started';
     return 'Partial';
   };
 
@@ -231,7 +219,7 @@ export default function ServerValidation() {
           <div className="text-center p-3 bg-gray-50 rounded-lg">
             <Database className="h-6 w-6 mx-auto mb-2 text-gray-600" />
             <div className="text-2xl font-bold text-gray-900">
-              {summary?.totalResources?.toLocaleString() || '0'}
+              {updatedSummary?.totalResources?.toLocaleString() || '0'}
             </div>
             <div className="text-sm text-gray-600">Total Resources</div>
           </div>
@@ -373,7 +361,7 @@ export default function ServerValidation() {
             ) : (
               <>
                 <PlayCircle className="h-5 w-5" />
-                {summary?.totalValidated === 0 ? 'Start Server Validation' : 'Revalidate Server'}
+                {updatedSummary?.totalValidated === 0 ? 'Start Server Validation' : 'Revalidate Server'}
               </>
             )}
           </Button>

@@ -310,18 +310,41 @@ export class BulkValidationService {
     try {
       const stats = await storage.getResourceStats();
       
-      // Use hardcoded values for now to avoid timeouts
-      // These match the actual counts from the FHIR server API
-      const knownResourceCounts = {
-        Patient: 21298,
-        Observation: 87084, 
-        Encounter: 3890,
-        Condition: 4769,
-        Practitioner: 4994,
-        Organization: 3922
-      };
+      // Get actual FHIR server resource counts dynamically
+      let totalServerResources = 129011; // Default fallback
+      const knownResourceCounts: Record<string, number> = {};
       
-      const totalServerResources = Object.values(knownResourceCounts).reduce((sum, count) => sum + count, 0);
+      try {
+        // Try to get actual counts from FHIR server
+        const resourceTypes = await this.fhirClient.getAllResourceTypes();
+        let serverTotal = 0;
+        
+        for (const resourceType of resourceTypes.slice(0, 6)) { // Limit to first 6 types for performance
+          try {
+            const count = await this.fhirClient.getResourceCount(resourceType);
+            knownResourceCounts[resourceType] = count;
+            serverTotal += count;
+          } catch (error) {
+            // Skip failed resource types
+            console.warn(`Could not get count for ${resourceType}:`, error);
+          }
+        }
+        
+        if (serverTotal > 0) {
+          totalServerResources = serverTotal;
+        }
+      } catch (error) {
+        // Use fallback hardcoded values if FHIR server is unreachable
+        Object.assign(knownResourceCounts, {
+          Patient: 21298,
+          Observation: 87084, 
+          Encounter: 3890,
+          Condition: 4769,
+          Practitioner: 4994,
+          Organization: 3922
+        });
+        totalServerResources = Object.values(knownResourceCounts).reduce((sum, count) => sum + count, 0);
+      }
 
       const resourceTypeBreakdown: Record<string, any> = {};
       
