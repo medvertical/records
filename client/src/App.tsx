@@ -45,14 +45,7 @@ function Router() {
     return "Records";
   };
 
-  const getPageSubtitle = () => {
-    if (location === "/" || location === "/dashboard") return "FHIR Resource Management Dashboard";
-    if (location === "/resources") return "Search and explore FHIR resources";
-    if (location.startsWith("/resources/")) return "View detailed resource information";
-    if (location === "/profiles") return "Manage validation profiles and packages";
-    if (location === "/settings") return "Configure application settings";
-    return "";
-  };
+
 
   // Component wrappers for routing
   const DashboardComponent = () => (
@@ -85,7 +78,6 @@ function Router() {
       <main className="flex-1 overflow-hidden flex flex-col">
         <Header 
           title={getPageTitle()}
-          subtitle={getPageSubtitle()}
           connectionStatus={connectionStatus}
           onSidebarToggle={toggleSidebar}
         />
