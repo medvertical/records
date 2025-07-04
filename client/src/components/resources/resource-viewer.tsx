@@ -146,6 +146,16 @@ function FormView({ data }: { data: any }) {
     );
   }
 
+  // Handle error responses
+  if (data.message && typeof data.message === 'string') {
+    return (
+      <div className="text-red-500 p-4 bg-red-50 rounded">
+        <p className="font-medium">Error:</p>
+        <p>{data.message}</p>
+      </div>
+    );
+  }
+
   const entries = Array.isArray(data) 
     ? data.map((item, index) => [`[${index}]`, item])
     : Object.entries(data);
@@ -164,6 +174,16 @@ function JsonView({ data }: { data: any }) {
     return (
       <div className="text-gray-500 italic p-4">
         No data available to display
+      </div>
+    );
+  }
+
+  // Handle error responses
+  if (data.message && typeof data.message === 'string') {
+    return (
+      <div className="text-red-500 p-4 bg-red-50 rounded">
+        <p className="font-medium">Error:</p>
+        <p>{data.message}</p>
       </div>
     );
   }

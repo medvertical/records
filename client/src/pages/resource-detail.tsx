@@ -117,12 +117,12 @@ export default function ResourceDetail({ onSidebarToggle }: ResourceDetailProps)
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Resource Structure with Tabs */}
-          <ResourceViewer data={resource.data} />
+          <ResourceViewer data={resource.data || resource} />
 
           {/* Validation Results */}
           <ValidationErrors 
             validationResults={resource.validationResults || []}
-            resourceData={resource.data}
+            resourceData={resource.data || resource}
           />
         </div>
       </div>
