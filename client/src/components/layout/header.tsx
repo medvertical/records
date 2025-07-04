@@ -54,7 +54,7 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
             </Button>
           )}
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Records</h2>
             {subtitle && <p className="text-gray-600 mt-1">{subtitle}</p>}
           </div>
         </div>
