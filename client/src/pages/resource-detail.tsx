@@ -2,6 +2,7 @@ import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/layout/header";
 import ValidationErrors from "@/components/validation/validation-errors";
+import ResourceViewer from "@/components/resources/resource-viewer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -115,19 +116,8 @@ export default function ResourceDetail({ onSidebarToggle }: ResourceDetailProps)
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Resource JSON Structure */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Resource Structure</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="bg-gray-50 rounded-lg p-4 font-mono text-sm overflow-auto max-h-96">
-                <pre className="text-gray-800 whitespace-pre-wrap">
-                  {JSON.stringify(resource.data, null, 2)}
-                </pre>
-              </div>
-            </CardContent>
-          </Card>
+          {/* Resource Structure with Tabs */}
+          <ResourceViewer data={resource.data} />
 
           {/* Validation Results */}
           <ValidationErrors 
