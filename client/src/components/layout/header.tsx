@@ -13,7 +13,7 @@ interface ConnectionStatus {
 
 interface HeaderProps {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   connectionStatus?: ConnectionStatus;
 }
 
@@ -41,7 +41,7 @@ export default function Header({ title, subtitle, connectionStatus }: HeaderProp
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
-          <p className="text-gray-600 mt-1">{subtitle}</p>
+          {subtitle && <p className="text-gray-600 mt-1">{subtitle}</p>}
         </div>
         <div className="flex items-center space-x-4">
           {/* Server Health Indicator */}

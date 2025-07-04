@@ -1,6 +1,9 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
 import { 
   Database, 
   ChartPie, 
@@ -10,7 +13,9 @@ import {
   Users,
   Activity,
   Calendar,
-  FileText
+  FileText,
+  Menu,
+  X
 } from "lucide-react";
 
 interface ServerStatus {
@@ -35,6 +40,24 @@ const quickAccessItems = [
 
 export default function Sidebar() {
   const [location] = useLocation();
+  const isMobile = useIsMobile();
+  const [isOpen, setIsOpen] = useState(false);
+  
+  // Close sidebar on mobile when location changes
+  useEffect(() => {
+    if (isMobile) {
+      setIsOpen(false);
+    }
+  }, [location, isMobile]);
+
+  // Close sidebar by default on mobile
+  useEffect(() => {
+    if (isMobile) {
+      setIsOpen(false);
+    } else {
+      setIsOpen(true);
+    }
+  }, [isMobile]);
   
   const { data: serverStatus } = useQuery<ServerStatus>({
     queryKey: ["/api/fhir/connection/test"],
@@ -45,8 +68,67 @@ export default function Sidebar() {
     queryKey: ["/api/fhir/resource-counts"],
   });
 
+  if (isMobile) {
+    return (
+      <>
+        {/* Mobile Menu Button */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="fixed top-4 left-4 z-50 md:hidden"
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          {isOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+        </Button>
+
+        {/* Mobile Overlay */}
+        {isOpen && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+            onClick={() => setIsOpen(false)}
+          />
+        )}
+
+        {/* Mobile Sidebar */}
+        <aside className={cn(
+          "fixed left-0 top-0 h-full w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out z-40 md:hidden",
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        )}>
+          <SidebarContent 
+            serverStatus={serverStatus} 
+            resourceCounts={resourceCounts} 
+            location={location}
+            onItemClick={() => setIsOpen(false)}
+          />
+        </aside>
+      </>
+    );
+  }
+
   return (
-    <aside className="w-64 bg-white shadow-lg flex-shrink-0">
+    <aside className="w-64 bg-white shadow-lg flex-shrink-0 hidden md:block">
+      <SidebarContent 
+        serverStatus={serverStatus} 
+        resourceCounts={resourceCounts} 
+        location={location}
+      />
+    </aside>
+  );
+}
+
+function SidebarContent({ 
+  serverStatus, 
+  resourceCounts, 
+  location, 
+  onItemClick 
+}: {
+  serverStatus?: ServerStatus;
+  resourceCounts?: Record<string, number>;
+  location: string;
+  onItemClick?: () => void;
+}) {
+  return (
+    <div className="h-full flex flex-col">
       {/* Header */}
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center space-x-3">
@@ -54,8 +136,7 @@ export default function Sidebar() {
             <HospitalIcon className="text-white text-sm h-4 w-4" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-gray-900">FHIR Browser</h1>
-            <p className="text-xs text-gray-500">Resource Validator</p>
+            <h1 className="text-lg font-semibold text-gray-900">Records</h1>
           </div>
         </div>
       </div>
@@ -96,12 +177,15 @@ export default function Sidebar() {
             return (
               <li key={item.href}>
                 <Link href={item.href}>
-                  <div className={cn(
-                    "flex items-center space-x-3 p-2 rounded-lg font-medium transition-colors cursor-pointer",
-                    isActive 
-                      ? "text-fhir-blue bg-blue-50" 
-                      : "text-gray-700 hover:bg-gray-100"
-                  )}>
+                  <div 
+                    className={cn(
+                      "flex items-center space-x-3 p-2 rounded-lg font-medium transition-colors cursor-pointer",
+                      isActive 
+                        ? "text-fhir-blue bg-blue-50" 
+                        : "text-gray-700 hover:bg-gray-100"
+                    )}
+                    onClick={onItemClick}
+                  >
                     <Icon className="w-4 h-4" />
                     <span>{item.label}</span>
                   </div>
@@ -120,7 +204,10 @@ export default function Sidebar() {
             {quickAccessItems.map((item) => (
               <li key={item.href}>
                 <Link href={item.href}>
-                  <div className="flex items-center justify-between p-2 text-sm text-gray-600 hover:bg-gray-100 rounded transition-colors cursor-pointer">
+                  <div 
+                    className="flex items-center justify-between p-2 text-sm text-gray-600 hover:bg-gray-100 rounded transition-colors cursor-pointer"
+                    onClick={onItemClick}
+                  >
                     <span>{item.label}</span>
                     <span className="text-xs bg-gray-200 px-2 py-1 rounded">
                       {resourceCounts?.[item.resourceType] || 0}
@@ -132,6 +219,6 @@ export default function Sidebar() {
           </ul>
         </div>
       </nav>
-    </aside>
+    </div>
   );
 }

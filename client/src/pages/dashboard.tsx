@@ -32,8 +32,7 @@ export default function Dashboard() {
     return (
       <div className="flex-1 overflow-hidden">
         <Header 
-          title="Dashboard" 
-          subtitle="Monitor resource validation and server health"
+          title="Records"
           connectionStatus={connectionStatus}
         />
         <div className="p-6 space-y-6">
@@ -55,8 +54,7 @@ export default function Dashboard() {
   return (
     <div className="flex-1 overflow-hidden">
       <Header 
-        title="Dashboard" 
-        subtitle="Monitor resource validation and server health"
+        title="Records"
         connectionStatus={connectionStatus}
       />
       

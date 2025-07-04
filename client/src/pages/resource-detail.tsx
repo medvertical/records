@@ -25,7 +25,7 @@ export default function ResourceDetail() {
   if (isLoading) {
     return (
       <div className="flex-1 overflow-hidden">
-        <Header title="Loading Resource..." subtitle="Fetching resource details" />
+        <Header title="Records" />
         <div className="p-6 space-y-6">
           <Skeleton className="h-20 rounded-xl" />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -40,7 +40,7 @@ export default function ResourceDetail() {
   if (!resource) {
     return (
       <div className="flex-1 overflow-hidden">
-        <Header title="Resource Not Found" subtitle="The requested resource could not be found" />
+        <Header title="Records" />
         <div className="p-6">
           <Card>
             <CardContent className="pt-6">
@@ -71,8 +71,7 @@ export default function ResourceDetail() {
   return (
     <div className="flex-1 overflow-hidden">
       <Header 
-        title={`${resource.resourceType}/${resource.resourceId}`}
-        subtitle="Resource Details & Validation Results"
+        title="Records"
       />
       
       <div className="p-6 overflow-y-auto h-full">

@@ -22,12 +22,12 @@ export default function ResourceBrowser() {
   const { data: resourcesData, isLoading } = useQuery<ResourcesResponse>({
     queryKey: ["/api/fhir/resources", { resourceType, search: searchQuery, page }],
     queryFn: ({ queryKey }) => {
-      const [url, params] = queryKey;
+      const [url, params] = queryKey as [string, { resourceType?: string; search?: string; page: number }];
       const searchParams = new URLSearchParams();
       
-      if (params.resourceType) searchParams.set('resourceType', params.resourceType);
-      if (params.search) searchParams.set('search', params.search);
-      searchParams.set('page', params.page.toString());
+      if (params?.resourceType) searchParams.set('resourceType', params.resourceType);
+      if (params?.search) searchParams.set('search', params.search);
+      if (params?.page !== undefined) searchParams.set('page', params.page.toString());
       
       return fetch(`${url}?${searchParams}`).then(res => res.json());
     },
@@ -46,8 +46,7 @@ export default function ResourceBrowser() {
   return (
     <div className="flex-1 overflow-hidden">
       <Header 
-        title="Browse Resources" 
-        subtitle="Search and explore FHIR resources with validation status"
+        title="Records"
       />
       
       <div className="p-6 h-full overflow-y-auto">
