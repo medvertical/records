@@ -10,7 +10,11 @@ interface ResourcesResponse {
   total: number;
 }
 
-export default function ResourceBrowser() {
+interface ResourceBrowserProps {
+  onSidebarToggle?: () => void;
+}
+
+export default function ResourceBrowser({ onSidebarToggle }: ResourceBrowserProps) {
   const [resourceType, setResourceType] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [page, setPage] = useState(0);
@@ -47,6 +51,7 @@ export default function ResourceBrowser() {
     <div className="flex-1 overflow-hidden">
       <Header 
         title="Records"
+        onSidebarToggle={onSidebarToggle}
       />
       
       <div className="p-6 h-full overflow-y-auto">

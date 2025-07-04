@@ -10,7 +10,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle, XCircle, ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
 
-export default function ResourceDetail() {
+interface ResourceDetailProps {
+  onSidebarToggle?: () => void;
+}
+
+export default function ResourceDetail({ onSidebarToggle }: ResourceDetailProps) {
   const { id } = useParams<{ id: string }>();
   
   const { data: resource, isLoading } = useQuery<FhirResourceWithValidation>({
@@ -25,7 +29,7 @@ export default function ResourceDetail() {
   if (isLoading) {
     return (
       <div className="flex-1 overflow-hidden">
-        <Header title="Records" />
+        <Header title="Records" onSidebarToggle={onSidebarToggle} />
         <div className="p-6 space-y-6">
           <Skeleton className="h-20 rounded-xl" />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -40,7 +44,7 @@ export default function ResourceDetail() {
   if (!resource) {
     return (
       <div className="flex-1 overflow-hidden">
-        <Header title="Records" />
+        <Header title="Records" onSidebarToggle={onSidebarToggle} />
         <div className="p-6">
           <Card>
             <CardContent className="pt-6">
@@ -72,6 +76,7 @@ export default function ResourceDetail() {
     <div className="flex-1 overflow-hidden">
       <Header 
         title="Records"
+        onSidebarToggle={onSidebarToggle}
       />
       
       <div className="p-6 overflow-y-auto h-full">

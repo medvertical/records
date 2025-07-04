@@ -1,9 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, PanelLeftOpen } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface ConnectionStatus {
   connected: boolean;
@@ -15,10 +16,12 @@ interface HeaderProps {
   title: string;
   subtitle?: string;
   connectionStatus?: ConnectionStatus;
+  onSidebarToggle?: () => void;
 }
 
-export default function Header({ title, subtitle, connectionStatus }: HeaderProps) {
+export default function Header({ title, subtitle, connectionStatus, onSidebarToggle }: HeaderProps) {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
   const handleRefresh = async () => {
     try {
@@ -39,9 +42,21 @@ export default function Header({ title, subtitle, connectionStatus }: HeaderProp
   return (
     <header className="bg-white shadow-sm border-b border-gray-200 p-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
-          {subtitle && <p className="text-gray-600 mt-1">{subtitle}</p>}
+        <div className="flex items-center space-x-4">
+          {isMobile && onSidebarToggle && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="p-2"
+              onClick={onSidebarToggle}
+            >
+              <PanelLeftOpen className="h-5 w-5 text-gray-600" />
+            </Button>
+          )}
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
+            {subtitle && <p className="text-gray-600 mt-1">{subtitle}</p>}
+          </div>
         </div>
         <div className="flex items-center space-x-4">
           {/* Server Health Indicator */}

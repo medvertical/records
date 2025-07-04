@@ -3,19 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
+
 import { 
   Database, 
   ChartPie, 
   CheckCircle, 
   Settings, 
-  HospitalIcon,
-  Users,
-  Activity,
-  Calendar,
-  FileText,
-  Menu,
-  X
+  HospitalIcon
 } from "lucide-react";
 
 interface ServerStatus {
@@ -38,10 +32,19 @@ const quickAccessItems = [
   { href: "/resources?type=Condition", label: "Conditions", resourceType: "Condition" },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  isOpen?: boolean;
+  onToggle?: () => void;
+}
+
+export default function Sidebar({ isOpen: externalIsOpen, onToggle }: SidebarProps = {}) {
   const [location] = useLocation();
   const isMobile = useIsMobile();
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalIsOpen, setInternalIsOpen] = useState(false);
+  
+  // Use external state if provided, otherwise use internal state
+  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
+  const setIsOpen = onToggle || setInternalIsOpen;
   
   // Close sidebar on mobile when location changes
   useEffect(() => {
@@ -71,16 +74,6 @@ export default function Sidebar() {
   if (isMobile) {
     return (
       <>
-        {/* Mobile Menu Button */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="fixed top-4 left-4 z-50 md:hidden"
-          onClick={() => setIsOpen(!isOpen)}
-        >
-          {isOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-        </Button>
-
         {/* Mobile Overlay */}
         {isOpen && (
           <div 
