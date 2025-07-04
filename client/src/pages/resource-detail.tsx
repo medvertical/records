@@ -59,7 +59,7 @@ export default function ResourceDetail() {
   }
 
   const hasValidationResults = resource.validationResults && resource.validationResults.length > 0;
-  const hasErrors = hasValidationResults && resource.validationResults.some(r => r.severity === 'error');
+  const hasErrors = hasValidationResults && resource.validationResults?.some(r => !r.isValid);
 
   return (
     <div className="p-6 h-full overflow-y-auto">
@@ -117,14 +117,14 @@ export default function ResourceDetail() {
                   <span>Validation Results</span>
                   {hasValidationResults && (
                     <Badge variant={hasErrors ? "destructive" : "secondary"}>
-                      {resource.validationResults.length} result{resource.validationResults.length !== 1 ? 's' : ''}
+                      {resource.validationResults?.length} result{resource.validationResults?.length !== 1 ? 's' : ''}
                     </Badge>
                   )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {hasValidationResults ? (
-                  <ValidationErrors validationResults={resource.validationResults} />
+                  <ValidationErrors validationResults={resource.validationResults || []} />
                 ) : (
                   <div className="text-center py-8">
                     <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />

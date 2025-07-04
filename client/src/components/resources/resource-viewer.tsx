@@ -9,7 +9,10 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ValidationResults } from '@/components/validation/validation-results';
 
 interface ResourceViewerProps {
-  data: any;
+  resource: any;
+  resourceId: string;
+  resourceType: string;
+  data?: any;
   title?: string;
 }
 
@@ -209,27 +212,22 @@ function JsonView({ data }: { data: any }) {
   );
 }
 
-export default function ResourceViewer({ data, title = "Resource Structure" }: ResourceViewerProps) {
+export default function ResourceViewer({ resource, resourceId, resourceType, data, title = "Resource Structure" }: ResourceViewerProps) {
+  // Use data if provided, otherwise use resource.data
+  const resourceData = data || resource?.data;
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Auto-validate when data changes
+  // Auto-validate when resourceData changes
   useEffect(() => {
-    if (data) {
+    if (resourceData) {
       validateResource();
     }
-  }, [data]);
-
-  // Automatically validate resource when it loads
-  useEffect(() => {
-    if (data && data.resourceType) {
-      validateResource();
-    }
-  }, [data]);
+  }, [resourceData]);
 
   const validateResource = async () => {
-    if (!data) return;
+    if (!resourceData) return;
 
     setIsValidating(true);
     setValidationError(null);
@@ -241,7 +239,7 @@ export default function ResourceViewer({ data, title = "Resource Structure" }: R
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          resource: data,
+          resource: resourceData,
           config: {
             strictMode: false,
             requiredFields: ['resourceType'],
@@ -311,11 +309,11 @@ export default function ResourceViewer({ data, title = "Resource Structure" }: R
             </TabsList>
             
             <TabsContent value="form" className="mt-4">
-              <FormView data={data} />
+              <FormView data={resourceData} />
             </TabsContent>
             
             <TabsContent value="json" className="mt-4">
-              <JsonView data={data} />
+              <JsonView data={resourceData} />
             </TabsContent>
           </Tabs>
         </CardContent>

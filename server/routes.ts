@@ -135,8 +135,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/fhir/resources/:id", async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
-      const resource = await storage.getFhirResourceById(id);
+      const resourceId = req.params.id;
+      
+      // Check if it's a numeric ID (database ID) or a UUID (FHIR resource ID)
+      const isNumeric = /^\d+$/.test(resourceId);
+      
+      let resource;
+      if (isNumeric) {
+        const id = parseInt(resourceId);
+        resource = await storage.getFhirResourceById(id);
+      } else {
+        // Look up by FHIR resource ID
+        const resources = await storage.getFhirResources();
+        const foundResource = resources.find(r => r.resourceId === resourceId);
+        if (foundResource) {
+          resource = await storage.getFhirResourceById(foundResource.id);
+        }
+      }
       
       if (!resource) {
         return res.status(404).json({ message: "Resource not found" });

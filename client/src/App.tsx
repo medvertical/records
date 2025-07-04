@@ -33,15 +33,11 @@ function Router() {
   });
 
   const toggleSidebar = () => {
-    console.log('toggleSidebar called, current state:', sidebarOpen);
-    setSidebarOpen(prev => {
-      console.log('Setting sidebar to:', !prev);
-      return !prev;
-    });
+    setSidebarOpen(prev => !prev);
   };
 
   const getPageTitle = () => {
-    if (location === "/" || location === "/dashboard") return "Records";
+    if (location === "/" || location === "/dashboard") return "Dashboard";
     if (location === "/resources") return "Browse Resources";
     if (location.startsWith("/resources/")) return "Resource Details";
     if (location === "/profiles") return "Profile Management";
