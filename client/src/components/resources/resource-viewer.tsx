@@ -285,44 +285,52 @@ export default function ResourceViewer({ data, title = "Resource Structure" }: R
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>{title}</CardTitle>
-          <div className="flex items-center gap-2">
-            {getValidationBadge()}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={validateResource}
-              disabled={isValidating}
-            >
-              <Shield className="w-4 h-4 mr-1" />
-              {isValidating ? 'Validating...' : 'Validate'}
-            </Button>
+    <>
+      {/* Resource Structure Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>{title}</CardTitle>
+            <div className="flex items-center gap-2">
+              {getValidationBadge()}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={validateResource}
+                disabled={isValidating}
+              >
+                <Shield className="w-4 h-4 mr-1" />
+                {isValidating ? 'Validating...' : 'Validate'}
+              </Button>
+            </div>
           </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <Tabs defaultValue="form" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="form">Form View</TabsTrigger>
-            <TabsTrigger value="json">JSON View</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="form" className="mt-4">
-            <FormView data={data} />
-          </TabsContent>
-          
-          <TabsContent value="json" className="mt-4">
-            <JsonView data={data} />
-          </TabsContent>
-        </Tabs>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="form" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="form">Form View</TabsTrigger>
+              <TabsTrigger value="json">JSON View</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="form" className="mt-4">
+              <FormView data={data} />
+            </TabsContent>
+            
+            <TabsContent value="json" className="mt-4">
+              <JsonView data={data} />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
 
-        {/* Validation Results Section - Always Visible */}
-        <div className="mt-6 border-t pt-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Validation Results</h3>
+      {/* Validation Results Card */}
+      <Card className="mt-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5" />
+              Validation Results
+            </CardTitle>
             <Button
               variant="outline"
               size="sm"
@@ -333,55 +341,52 @@ export default function ResourceViewer({ data, title = "Resource Structure" }: R
               {isValidating ? 'Validating...' : 'Revalidate'}
             </Button>
           </div>
+        </CardHeader>
+        <CardContent>
+          {isValidating && (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
+              <p className="text-muted-foreground">Validating resource...</p>
+            </div>
+          )}
           
-          <div className="space-y-4">
-            {isValidating && (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
-                <p className="text-muted-foreground">Validating resource...</p>
-              </div>
-            )}
-            
-            {validationError && (
-              <Card className="border-red-200 bg-red-50">
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-2 text-red-800">
-                    <AlertTriangle className="w-4 h-4" />
-                    <p className="font-medium">Validation Error</p>
-                  </div>
-                  <p className="text-sm text-red-700 mt-1">{validationError}</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={validateResource}
-                    className="mt-3"
-                  >
-                    Try Again
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
+          {validationError && (
+            <Card className="border-red-200 bg-red-50">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-2 text-red-800">
+                  <AlertTriangle className="w-4 h-4" />
+                  <p className="font-medium">Validation Error</p>
+                </div>
+                <p className="text-sm text-red-700 mt-1">{validationError}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={validateResource}
+                  className="mt-3"
+                >
+                  Try Again
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
-            {validationResult && !isValidating && !validationError && (
-              <ValidationResults 
-                result={validationResult} 
-                onRetry={validateResource}
-              />
-            )}
+          {validationResult && !isValidating && !validationError && (
+            <ValidationResults 
+              result={validationResult} 
+              onRetry={validateResource}
+            />
+          )}
 
-            {!validationResult && !isValidating && !validationError && (
-              <Card>
-                <CardContent className="pt-6 text-center">
-                  <Shield className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
-                    Click "Validate" to check this resource against FHIR standards and installed profiles.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+          {!validationResult && !isValidating && !validationError && (
+            <div className="text-center py-8">
+              <Shield className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">
+                Click "Validate" to check this resource against FHIR standards and installed profiles.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </>
   );
 }
