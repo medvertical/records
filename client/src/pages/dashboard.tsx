@@ -407,6 +407,270 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* FHIR Server Details */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="transition-all duration-300 hover:shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Server className="h-5 w-5" />
+              FHIR Server Details
+            </CardTitle>
+            <CardDescription>
+              Server information and capabilities
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-sm font-medium">Version</div>
+                  <div className="text-lg">{connectionStatus.version || 'Unknown'}</div>
+                </div>
+                <div>
+                  <div className="text-sm font-medium">Status</div>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${connectionStatus.connected ? 'bg-green-500' : 'bg-red-500'}`} />
+                    <span className={connectionStatus.connected ? 'text-green-600' : 'text-red-600'}>
+                      {connectionStatus.connected ? 'Connected' : 'Disconnected'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              {resourceCounts && (
+                <div>
+                  <div className="text-sm font-medium mb-2">Resource Distribution</div>
+                  <div className="space-y-2">
+                    {Object.entries(resourceCounts)
+                      .filter(([key]) => key !== 'total')
+                      .sort(([, a], [, b]) => (b as number) - (a as number))
+                      .slice(0, 6)
+                      .map(([type, count]) => (
+                        <div key={type} className="flex justify-between items-center">
+                          <span className="text-sm">{type}</span>
+                          <div className="flex items-center gap-2">
+                            <div className="w-20 bg-muted rounded-full h-1.5">
+                              <div 
+                                className="bg-blue-500 h-1.5 rounded-full transition-all duration-500"
+                                style={{ 
+                                  width: `${((count as number) / Math.max(...Object.values(resourceCounts).filter(v => typeof v === 'number'))) * 100}%` 
+                                }}
+                              />
+                            </div>
+                            <span className="text-sm font-medium w-16 text-right">
+                              {(count as number).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="transition-all duration-300 hover:shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <TrendingUp className="h-5 w-5" />
+              Validation Statistics
+            </CardTitle>
+            <CardDescription>
+              Overall validation performance metrics
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
+                  <div className="text-lg font-bold text-green-600">
+                    {dashboardStats?.validResources || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Valid</div>
+                </div>
+                <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
+                  <div className="text-lg font-bold text-red-600">
+                    {validationSummary?.resourcesWithErrors || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Errors</div>
+                </div>
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                  <div className="text-lg font-bold text-blue-600">
+                    {((validationCoverage || 0) * 100).toFixed(1)}%
+                  </div>
+                  <div className="text-xs text-muted-foreground">Coverage</div>
+                </div>
+              </div>
+
+              {validationSummary?.resourceTypeBreakdown && (
+                <div>
+                  <div className="text-sm font-medium mb-2">Validation by Resource Type</div>
+                  <div className="space-y-2">
+                    {Object.entries(validationSummary.resourceTypeBreakdown)
+                      .sort(([, a], [, b]) => (b as any).total - (a as any).total)
+                      .slice(0, 5)
+                      .map(([type, data]) => {
+                        const percentage = ((data as any).valid / (data as any).total) * 100;
+                        return (
+                          <div key={type} className="flex justify-between items-center">
+                            <span className="text-sm">{type}</span>
+                            <div className="flex items-center gap-2">
+                              <div className="w-16 bg-muted rounded-full h-1.5">
+                                <div 
+                                  className={`h-1.5 rounded-full transition-all duration-500 ${
+                                    percentage > 80 ? 'bg-green-500' : 
+                                    percentage > 60 ? 'bg-yellow-500' : 'bg-red-500'
+                                  }`}
+                                  style={{ width: `${percentage}%` }}
+                                />
+                              </div>
+                              <span className="text-sm font-medium w-12 text-right">
+                                {percentage.toFixed(0)}%
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Server Performance & Data Quality */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="transition-all duration-300 hover:shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              Server Performance
+            </CardTitle>
+            <CardDescription>
+              FHIR server response and validation metrics
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {validationProgress && (
+                <div>
+                  <div className="text-sm font-medium mb-2">Current Processing Rate</div>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {validationProgress.processedResources > 0 
+                      ? Math.round(validationProgress.processedResources / ((Date.now() - new Date(validationProgress.startTime).getTime()) / 1000 / 60))
+                      : 0
+                    } /min
+                  </div>
+                  <div className="text-xs text-muted-foreground">Resources per minute</div>
+                </div>
+              )}
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="text-center p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                  <div className="text-lg font-bold text-blue-600">
+                    {resourceCounts?.total ? (resourceCounts.total / 1000).toFixed(0) + 'K' : '0'}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Total Resources</div>
+                </div>
+                <div className="text-center p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg">
+                  <div className="text-lg font-bold text-purple-600">
+                    {resourceCounts ? Object.keys(resourceCounts).filter(k => k !== 'total').length : 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Resource Types</div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="transition-all duration-300 hover:shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              Data Quality
+            </CardTitle>
+            <CardDescription>
+              FHIR resource compliance and validation quality
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <div className="text-sm font-medium mb-2">Validation Coverage</div>
+                <div className="flex items-center gap-2">
+                  <Progress 
+                    value={(validationCoverage || 0) * 100} 
+                    className="flex-1"
+                  />
+                  <span className="text-sm font-medium w-12">
+                    {((validationCoverage || 0) * 100).toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="text-center p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
+                  <div className="text-lg font-bold text-green-600">
+                    {dashboardStats?.validResources || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Valid Resources</div>
+                </div>
+                <div className="text-center p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
+                  <div className="text-lg font-bold text-red-600">
+                    {validationSummary?.resourcesWithErrors || 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Error Resources</div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="transition-all duration-300 hover:shadow-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wifi className="h-5 w-5" />
+              Connection Status
+            </CardTitle>
+            <CardDescription>
+              Real-time FHIR server connectivity
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">Server Status</div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${connectionStatus.connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                  <span className={`text-sm ${connectionStatus.connected ? 'text-green-600' : 'text-red-600'}`}>
+                    {connectionStatus.connected ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+              </div>
+              
+              <div>
+                <div className="text-sm font-medium">FHIR Version</div>
+                <div className="text-lg font-mono">{connectionStatus.version || 'Unknown'}</div>
+              </div>
+              
+              {validationProgress && (
+                <div>
+                  <div className="text-sm font-medium">Active Process</div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                    <span className="text-sm text-blue-600">
+                      Validating {validationProgress.currentResourceType}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Recent Activity */}
       {recentErrors && recentErrors.length > 0 && (
         <Card className="transition-all duration-300 hover:shadow-lg">
