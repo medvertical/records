@@ -12,8 +12,10 @@ import {
   Lightbulb,
   TrendingUp,
   Target,
-  Clock
+  Clock,
+  Shield
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface ValidationIssue {
@@ -51,9 +53,11 @@ interface DetailedValidationResult {
 interface ValidationResultsProps {
   result: DetailedValidationResult;
   onRetry?: () => void;
+  onRevalidate?: () => void;
+  isValidating?: boolean;
 }
 
-export function ValidationResults({ result, onRetry }: ValidationResultsProps) {
+export function ValidationResults({ result, onRetry, onRevalidate, isValidating }: ValidationResultsProps) {
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
       case 'fatal':
@@ -130,17 +134,31 @@ export function ValidationResults({ result, onRetry }: ValidationResultsProps) {
                   <XCircle className="w-5 h-5 text-red-600" />
                 )}
                 Validation Results
+                {isValidating && <Badge variant="secondary">Validating...</Badge>}
               </CardTitle>
               <CardDescription>
                 {result.resourceType} {result.resourceId && `(${result.resourceId})`}
                 {result.profileName && ` • Validated against ${result.profileName}`}
               </CardDescription>
             </div>
-            <div className="text-right">
-              <div className={cn("text-2xl font-bold", getScoreColor(result.summary.score))}>
-                {result.summary.score}/100
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <div className={cn("text-2xl font-bold", getScoreColor(result.summary.score))}>
+                  {result.summary.score}/100
+                </div>
+                <div className="text-sm text-muted-foreground">Validation Score</div>
               </div>
-              <div className="text-sm text-muted-foreground">Validation Score</div>
+              {onRevalidate && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onRevalidate}
+                  disabled={isValidating}
+                >
+                  <Shield className="w-4 h-4 sm:mr-1" />
+                  <span className="hidden sm:inline">{isValidating ? 'Validating...' : 'Revalidate'}</span>
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
