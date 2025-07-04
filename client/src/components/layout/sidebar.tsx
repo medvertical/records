@@ -9,7 +9,8 @@ import {
   ChartPie, 
   CheckCircle, 
   Settings, 
-  HospitalIcon
+  HospitalIcon,
+  Package
 } from "lucide-react";
 
 interface ServerStatus {
@@ -22,6 +23,7 @@ const navigationItems = [
   { href: "/", label: "Dashboard", icon: ChartPie },
   { href: "/resources", label: "Browse Resources", icon: Database },
   { href: "/validation", label: "Validation Profiles", icon: CheckCircle },
+  { href: "/profiles", label: "Profile Management", icon: Package },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

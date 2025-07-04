@@ -23,9 +23,16 @@ export const fhirResources = pgTable("fhir_resources", {
 export const validationProfiles = pgTable("validation_profiles", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  title: text("title"),
+  description: text("description"),
+  version: text("version"),
   url: text("url").notNull(),
   resourceType: text("resource_type").notNull(),
-  profileData: jsonb("profile_data").notNull(),
+  packageId: text("package_id"),
+  packageVersion: text("package_version"),
+  status: text("status").default("active"),
+  profileData: jsonb("profile_data"),
+  config: jsonb("config"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });

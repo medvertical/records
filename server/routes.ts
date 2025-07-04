@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { FhirClient } from "./services/fhir-client.js";
 import { ValidationEngine } from "./services/validation-engine.js";
+import { profileManager } from "./services/profile-manager.js";
 import { insertFhirServerSchema, insertFhirResourceSchema, insertValidationProfileSchema } from "@shared/schema.js";
 import { z } from "zod";
 
@@ -264,6 +265,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const cards = await storage.getDashboardCards();
       res.json(cards);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Profile Management endpoints
+  app.get("/api/profiles/search", async (req, res) => {
+    try {
+      const { query } = req.query;
+      if (!query) {
+        return res.status(400).json({ message: "Query parameter is required" });
+      }
+      const packages = await profileManager.searchPackages(query as string);
+      res.json(packages);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/profiles/installed", async (req, res) => {
+    try {
+      const packages = await profileManager.getInstalledPackages();
+      res.json(packages);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/profiles/install", async (req, res) => {
+    try {
+      const { packageId, version } = req.body;
+      if (!packageId) {
+        return res.status(400).json({ message: "Package ID is required" });
+      }
+      const result = await profileManager.installPackage(packageId, version);
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(400).json(result);
+      }
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/profiles/uninstall/:packageId", async (req, res) => {
+    try {
+      const { packageId } = req.params;
+      const result = await profileManager.uninstallPackage(packageId);
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(400).json(result);
+      }
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/profiles/update/:packageId", async (req, res) => {
+    try {
+      const { packageId } = req.params;
+      const result = await profileManager.updatePackage(packageId);
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(400).json(result);
+      }
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/profiles/updates", async (req, res) => {
+    try {
+      const updates = await profileManager.checkForUpdates();
+      res.json(updates);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

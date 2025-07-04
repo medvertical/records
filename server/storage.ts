@@ -39,6 +39,8 @@ export interface IStorage {
   getValidationProfiles(resourceType?: string): Promise<ValidationProfile[]>;
   createValidationProfile(profile: InsertValidationProfile): Promise<ValidationProfile>;
   getValidationProfileById(id: number): Promise<ValidationProfile | undefined>;
+  updateValidationProfile(id: number, updates: Partial<ValidationProfile>): Promise<void>;
+  deleteValidationProfile(id: number): Promise<void>;
 
   // Validation Results
   getValidationResultsByResourceId(resourceId: number): Promise<ValidationResult[]>;
@@ -224,6 +226,17 @@ export class DatabaseStorage implements IStorage {
   async getValidationProfileById(id: number): Promise<ValidationProfile | undefined> {
     const [profile] = await db.select().from(validationProfiles).where(eq(validationProfiles.id, id));
     return profile || undefined;
+  }
+
+  async updateValidationProfile(id: number, updates: Partial<ValidationProfile>): Promise<void> {
+    await db.update(validationProfiles)
+      .set(updates)
+      .where(eq(validationProfiles.id, id));
+  }
+
+  async deleteValidationProfile(id: number): Promise<void> {
+    await db.delete(validationProfiles)
+      .where(eq(validationProfiles.id, id));
   }
 
   async getValidationResultsByResourceId(resourceId: number): Promise<ValidationResult[]> {
