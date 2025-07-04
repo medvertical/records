@@ -98,21 +98,13 @@ export default function ResourceDetail() {
           </div>
         </div>
 
-        {/* Main content grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Resource Viewer */}
-          <div>
-            <ResourceViewer 
-              resource={resource} 
-              resourceId={resource.resourceId}
-              resourceType={resource.resourceType}
-            />
-          </div>
-
-          {/* Validation Results */}
-          <div>
-            <ValidationErrors validationResults={resource.validationResults || []} />
-          </div>
+        {/* Main content - single column with integrated validation */}
+        <div>
+          <ResourceViewer 
+            resource={resource} 
+            resourceId={resource.resourceId}
+            resourceType={resource.resourceType}
+          />
         </div>
       </div>
     </div>
