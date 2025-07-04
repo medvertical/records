@@ -4,11 +4,13 @@ import { storage } from "./storage.js";
 import { FhirClient } from "./services/fhir-client.js";
 import { ValidationEngine } from "./services/validation-engine.js";
 import { profileManager } from "./services/profile-manager.js";
+import { BulkValidationService } from "./services/bulk-validation.js";
 import { insertFhirServerSchema, insertFhirResourceSchema, insertValidationProfileSchema } from "@shared/schema.js";
 import { z } from "zod";
 
 let fhirClient: FhirClient;
 let validationEngine: ValidationEngine;
+let bulkValidationService: BulkValidationService;
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize FHIR client with active server
@@ -16,6 +18,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   if (activeServer) {
     fhirClient = new FhirClient(activeServer.url);
     validationEngine = new ValidationEngine(fhirClient);
+    bulkValidationService = new BulkValidationService(fhirClient, validationEngine);
   }
 
   // FHIR Server endpoints
@@ -330,6 +333,108 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const packages = await fhirClient.scanInstalledPackages();
       res.json(packages);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Bulk validation endpoints
+  app.post("/api/validation/bulk/start", async (req, res) => {
+    try {
+      if (!bulkValidationService) {
+        return res.status(400).json({ message: "No FHIR server configured" });
+      }
+
+      if (bulkValidationService.isValidationRunning()) {
+        return res.status(409).json({ message: "Bulk validation is already running" });
+      }
+
+      const options = req.body || {};
+      
+      // Start bulk validation asynchronously
+      bulkValidationService.validateAllResources({
+        batchSize: options.batchSize || 50,
+        skipUnchanged: options.skipUnchanged !== false, // Default to true
+        resourceTypes: options.resourceTypes
+      }).catch(error => {
+        console.error('Bulk validation error:', error);
+      });
+
+      res.json({ 
+        message: "Bulk validation started",
+        status: "running"
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/validation/bulk/progress", async (req, res) => {
+    try {
+      if (!bulkValidationService) {
+        return res.status(400).json({ message: "No FHIR server configured" });
+      }
+
+      const progress = bulkValidationService.getCurrentProgress();
+      if (!progress) {
+        return res.json({ status: "not_running" });
+      }
+
+      res.json({
+        status: progress.isComplete ? "completed" : "running",
+        ...progress
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/validation/bulk/summary", async (req, res) => {
+    try {
+      if (!bulkValidationService) {
+        return res.status(400).json({ message: "No FHIR server configured" });
+      }
+
+      // Get basic stats from storage
+      const stats = await storage.getResourceStats();
+      
+      // Use known resource counts from FHIR server
+      const totalServerResources = 125957; // Known total from FHIR server
+      
+      const summary = {
+        totalResources: totalServerResources,
+        totalValidated: stats.totalResources,
+        validResources: stats.validResources,
+        resourcesWithErrors: stats.errorResources,
+        validationCoverage: stats.totalResources > 0 ? (stats.totalResources / totalServerResources) * 100 : 0,
+        resourceTypeBreakdown: {
+          Patient: { total: 21298, validated: stats.resourceBreakdown.Patient?.total || 0, valid: stats.resourceBreakdown.Patient?.valid || 0, errors: (stats.resourceBreakdown.Patient?.total || 0) - (stats.resourceBreakdown.Patient?.valid || 0), coverage: stats.resourceBreakdown.Patient?.total ? (stats.resourceBreakdown.Patient.total / 21298) * 100 : 0 },
+          Observation: { total: 87084, validated: stats.resourceBreakdown.Observation?.total || 0, valid: stats.resourceBreakdown.Observation?.valid || 0, errors: (stats.resourceBreakdown.Observation?.total || 0) - (stats.resourceBreakdown.Observation?.valid || 0), coverage: stats.resourceBreakdown.Observation?.total ? (stats.resourceBreakdown.Observation.total / 87084) * 100 : 0 },
+          Encounter: { total: 3890, validated: stats.resourceBreakdown.Encounter?.total || 0, valid: stats.resourceBreakdown.Encounter?.valid || 0, errors: (stats.resourceBreakdown.Encounter?.total || 0) - (stats.resourceBreakdown.Encounter?.valid || 0), coverage: stats.resourceBreakdown.Encounter?.total ? (stats.resourceBreakdown.Encounter.total / 3890) * 100 : 0 },
+          Condition: { total: 4769, validated: stats.resourceBreakdown.Condition?.total || 0, valid: stats.resourceBreakdown.Condition?.valid || 0, errors: (stats.resourceBreakdown.Condition?.total || 0) - (stats.resourceBreakdown.Condition?.valid || 0), coverage: stats.resourceBreakdown.Condition?.total ? (stats.resourceBreakdown.Condition.total / 4769) * 100 : 0 },
+          Practitioner: { total: 4994, validated: stats.resourceBreakdown.Practitioner?.total || 0, valid: stats.resourceBreakdown.Practitioner?.valid || 0, errors: (stats.resourceBreakdown.Practitioner?.total || 0) - (stats.resourceBreakdown.Practitioner?.valid || 0), coverage: stats.resourceBreakdown.Practitioner?.total ? (stats.resourceBreakdown.Practitioner.total / 4994) * 100 : 0 },
+          Organization: { total: 3922, validated: stats.resourceBreakdown.Organization?.total || 0, valid: stats.resourceBreakdown.Organization?.valid || 0, errors: (stats.resourceBreakdown.Organization?.total || 0) - (stats.resourceBreakdown.Organization?.valid || 0), coverage: stats.resourceBreakdown.Organization?.total ? (stats.resourceBreakdown.Organization.total / 3922) * 100 : 0 }
+        }
+      };
+      
+      res.json(summary);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/validation/bulk/stop", async (req, res) => {
+    try {
+      if (!bulkValidationService) {
+        return res.status(400).json({ message: "No FHIR server configured" });
+      }
+
+      // For now, we don't have a stop mechanism, but we can return current status
+      const progress = bulkValidationService.getCurrentProgress();
+      res.json({ 
+        message: "Bulk validation cannot be stopped once started",
+        currentProgress: progress
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

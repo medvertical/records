@@ -3,6 +3,7 @@ import ValidationChart from "@/components/dashboard/validation-chart";
 import RecentErrors from "@/components/dashboard/recent-errors";
 import ResourceBreakdown from "@/components/dashboard/resource-breakdown";
 import QuickBrowser from "@/components/dashboard/quick-browser";
+import ServerValidation from "@/components/validation/server-validation";
 import { useQuery } from "@tanstack/react-query";
 import { ResourceStats } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -72,8 +73,13 @@ export default function Dashboard() {
         
         {/* Resource Breakdown */}
         <div className="lg:col-span-1">
-          <ResourceBreakdown data={stats?.resourceBreakdown} />
+          <ResourceBreakdown stats={stats} />
         </div>
+      </div>
+
+      {/* Server Validation Section */}
+      <div className="mb-8">
+        <ServerValidation />
       </div>
 
       {/* Bottom Row */}

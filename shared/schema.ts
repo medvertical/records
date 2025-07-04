@@ -17,6 +17,7 @@ export const fhirResources = pgTable("fhir_resources", {
   resourceId: text("resource_id").notNull(),
   versionId: text("version_id"),
   data: jsonb("data").notNull(),
+  resourceHash: text("resource_hash"),
   lastModified: timestamp("last_modified").defaultNow(),
 });
 
@@ -44,6 +45,11 @@ export const validationResults = pgTable("validation_results", {
   isValid: boolean("is_valid").notNull(),
   errors: jsonb("errors").default([]),
   warnings: jsonb("warnings").default([]),
+  issues: jsonb("issues").default([]),
+  profileUrl: text("profile_url"),
+  errorCount: integer("error_count").default(0),
+  warningCount: integer("warning_count").default(0),
+  validationScore: integer("validation_score").default(0),
   validatedAt: timestamp("validated_at").defaultNow(),
 });
 
@@ -64,7 +70,6 @@ export const insertFhirServerSchema = createInsertSchema(fhirServers).omit({
 
 export const insertFhirResourceSchema = createInsertSchema(fhirResources).omit({
   id: true,
-  lastModified: true,
 });
 
 export const insertValidationProfileSchema = createInsertSchema(validationProfiles).omit({
@@ -74,7 +79,6 @@ export const insertValidationProfileSchema = createInsertSchema(validationProfil
 
 export const insertValidationResultSchema = createInsertSchema(validationResults).omit({
   id: true,
-  validatedAt: true,
 });
 
 export const insertDashboardCardSchema = createInsertSchema(dashboardCards).omit({
