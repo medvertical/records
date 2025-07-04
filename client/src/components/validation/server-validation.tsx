@@ -252,7 +252,7 @@ export default function ServerValidation() {
         {/* Validation Coverage */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-gray-700">Validation Coverage</span>
+            <span className="text-sm font-medium text-gray-700">Overall Validation Coverage</span>
             <span className="text-sm text-gray-600">
               {updatedSummary?.validationCoverage?.toFixed(1) || '0'}%
             </span>
@@ -261,7 +261,40 @@ export default function ServerValidation() {
             value={updatedSummary?.validationCoverage || 0} 
             className="h-2"
           />
+          <div className="flex justify-between text-xs text-gray-500 mt-1">
+            <span>{updatedSummary?.totalValidated?.toLocaleString() || '0'} validated</span>
+            <span>{updatedSummary?.totalResources?.toLocaleString() || '0'} total</span>
+          </div>
         </div>
+
+        {/* Resource Type Coverage Details */}
+        {updatedSummary?.resourceTypeBreakdown && Object.keys(updatedSummary.resourceTypeBreakdown).length > 0 && (
+          <div className="space-y-3">
+            <Separator />
+            <h4 className="text-sm font-medium text-gray-700">Resource Type Coverage Progress</h4>
+            <div className="space-y-3">
+              {Object.entries(updatedSummary.resourceTypeBreakdown)
+                .filter(([_, data]) => data.total > 0)
+                .sort(([_, a], [__, b]) => b.coverage - a.coverage)
+                .map(([type, data]) => (
+                <div key={type} className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-gray-700">{type}</span>
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <span>{data.validated.toLocaleString()} / {data.total.toLocaleString()}</span>
+                      <span className="text-right w-12">{data.coverage.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                  <Progress value={data.coverage} className="h-1.5" />
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>{data.valid.toLocaleString()} valid</span>
+                    <span>{data.errors > 0 ? `${data.errors.toLocaleString()} errors` : 'No errors'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Current Progress (if running) */}
         {(validationStatus === 'running' || progress?.status === 'running') && progress && (
