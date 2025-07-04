@@ -313,8 +313,8 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
         <CardContent>
           <Tabs defaultValue="form" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="form">Form View</TabsTrigger>
-              <TabsTrigger value="json">JSON View</TabsTrigger>
+              <TabsTrigger value="form">Hierarchy</TabsTrigger>
+              <TabsTrigger value="json">JSON</TabsTrigger>
             </TabsList>
             
             <TabsContent value="form" className="mt-4">
