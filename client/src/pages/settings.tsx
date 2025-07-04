@@ -41,7 +41,7 @@ export default function SettingsPage() {
     cacheDuration: 300
   });
 
-  const ValidationSettings = () => {
+  const ValidationSettingsContent = () => {
     const { data: settings, isLoading } = useValidationSettings();
     const updateSettings = useUpdateValidationSettings();
     const [localSettings, setLocalSettings] = useState(settings || {
@@ -378,7 +378,7 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ValidationSettings />
+              <ValidationSettingsContent />
             </CardContent>
           </Card>
         </TabsContent>
