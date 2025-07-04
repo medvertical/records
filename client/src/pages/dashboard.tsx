@@ -19,7 +19,7 @@ export default function Dashboard() {
   if (statsLoading) {
     return (
       <div className="p-6 space-y-6 h-full overflow-y-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-2 gap-6">
           {[1, 2, 3, 4].map(i => (
             <Skeleton key={i} className="h-32 rounded-xl" />
           ))}
@@ -36,7 +36,7 @@ export default function Dashboard() {
   return (
     <div className="p-6 overflow-y-auto h-full">
       {/* Quick Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-2 gap-6 mb-8">
         <StatCard
           title="Total Resources"
           value={stats?.totalResources || 0}
