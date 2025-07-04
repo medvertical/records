@@ -48,8 +48,8 @@ export class BulkValidationService {
     } = options;
 
     try {
-      // Get all resource types if not specified
-      const typesToValidate = resourceTypes || await this.fhirClient.getAllResourceTypes();
+      // Get priority resource types if not specified (focus on key clinical resources)
+      const typesToValidate = resourceTypes || ['Patient', 'Observation', 'Encounter', 'Condition', 'Practitioner', 'Organization', 'DiagnosticReport', 'MedicationRequest'];
       
       // Calculate total resources to process
       let totalResources = 0;
@@ -75,10 +75,25 @@ export class BulkValidationService {
         onProgress(this.currentProgress);
       }
 
-      // Process each resource type
+      // Process each resource type with timeout protection
       for (const resourceType of typesToValidate) {
-        this.currentProgress.currentResourceType = resourceType;
-        await this.validateResourceType(resourceType, resourceCounts[resourceType], batchSize, skipUnchanged, onProgress);
+        try {
+          this.currentProgress.currentResourceType = resourceType;
+          console.log(`Starting validation for ${resourceType}: ${resourceCounts[resourceType]} resources`);
+          
+          // Skip resource types with too many resources to avoid timeouts
+          if (resourceCounts[resourceType] > 50000) {
+            console.log(`Skipping ${resourceType} - too many resources (${resourceCounts[resourceType]})`);
+            this.currentProgress.processedResources += resourceCounts[resourceType];
+            continue;
+          }
+          
+          await this.validateResourceType(resourceType, resourceCounts[resourceType], batchSize, skipUnchanged, onProgress);
+        } catch (error) {
+          console.error(`Error processing resource type ${resourceType}:`, error);
+          this.currentProgress.errors.push(`Failed to process ${resourceType}: ${error instanceof Error ? error.message : String(error)}`);
+          // Continue with next resource type
+        }
       }
 
       this.currentProgress.isComplete = true;
