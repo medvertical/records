@@ -53,12 +53,13 @@ export default function Sidebar({ isOpen: externalIsOpen, onToggle }: SidebarPro
     }
   }, [location, isMobile]);
 
-  // Close sidebar by default on mobile
+  // Set initial sidebar state based on device type, but don't change on navigation
   useEffect(() => {
     if (isMobile) {
       setIsOpen(false);
     } else {
-      setIsOpen(true);
+      // Only set to true if not already set (first load)
+      setIsOpen(prev => prev);
     }
   }, [isMobile]);
   

@@ -5,13 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Download, Trash2, RefreshCw, AlertCircle, CheckCircle, Settings } from 'lucide-react';
+import { Search, Download, Trash2, RefreshCw, AlertCircle, CheckCircle, Settings, Package, Server, Clock } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { useValidationSettings, useUpdateValidationSettings } from '@/hooks/use-fhir-data';
+import { useValidationSettings, useUpdateValidationSettings, useFhirServerPackages } from '@/hooks/use-fhir-data';
 
 interface SimplifierPackage {
   id: string;
@@ -44,9 +44,12 @@ export function ProfileManagement() {
   const { toast } = useToast();
 
   // Fetch installed packages
-  const { data: installedPackages, isLoading: installedLoading } = useQuery<InstalledPackage[]>({
+  const { data: installedPackages, isLoading: isLoadingInstalled } = useQuery<InstalledPackage[]>({
     queryKey: ['/api/profiles/installed'],
   });
+
+  // FHIR Server packages
+  const { data: fhirServerPackages, isLoading: isLoadingFhirPackages } = useFhirServerPackages();
 
   // Search packages mutation
   const searchMutation = useMutation({
@@ -81,120 +84,297 @@ export function ProfileManagement() {
       }
       return response.json();
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data) => {
       toast({
-        title: 'Installation Successful',
-        description: data.message,
+        title: 'Package Installed',
+        description: `Successfully installed package: ${data.packageName}`,
       });
       queryClient.invalidateQueries({ queryKey: ['/api/profiles/installed'] });
     },
     onError: (error: any) => {
       toast({
         title: 'Installation Failed',
-        description: error.message || 'Failed to install package',
+        description: error.message,
         variant: 'destructive',
       });
     },
   });
 
-  // Uninstall package mutation
-  const uninstallMutation = useMutation({
-    mutationFn: async (packageId: string) => {
-      const response = await fetch(`/api/profiles/uninstall/${packageId}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Uninstallation failed');
-      }
-      return response.json();
-    },
-    onSuccess: (data: any) => {
-      toast({
-        title: 'Uninstallation Successful',
-        description: data.message,
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/profiles/installed'] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Uninstallation Failed',
-        description: error.message || 'Failed to uninstall package',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  // Update package mutation
-  const updateMutation = useMutation({
-    mutationFn: async (packageId: string) => {
-      const response = await fetch(`/api/profiles/update/${packageId}`, {
-        method: 'PUT',
-      });
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Update failed');
-      }
-      return response.json();
-    },
-    onSuccess: (data: any) => {
-      toast({
-        title: 'Update Successful',
-        description: data.message,
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/profiles/installed'] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Update Failed',
-        description: error.message || 'Failed to update package',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setSearchLoading(true);
-    searchMutation.mutate(searchQuery, {
-      onSettled: () => setSearchLoading(false),
-    });
-  };
-
-  const handleInstall = (packageId: string, version?: string) => {
-    installMutation.mutate({ packageId, version });
-  };
-
-  const handleUninstall = (packageId: string) => {
-    uninstallMutation.mutate(packageId);
-  };
-
-  const handleUpdate = (packageId: string) => {
-    updateMutation.mutate(packageId);
-  };
-
-  const ValidationSettings = () => {
-    const { data: settings, isLoading } = useValidationSettings();
-    const updateSettings = useUpdateValidationSettings();
-    const [localSettings, setLocalSettings] = useState(settings || {
-      fetchFromSimplifier: true,
-      fetchFromFhirServer: true,
-      autoDetectProfiles: true,
-      strictMode: false
-    });
-
-    const handleSettingChange = (key: string, value: any) => {
-      const newSettings = { ...localSettings, [key]: value };
-      setLocalSettings(newSettings);
-      updateSettings.mutate(newSettings);
-    };
-
-    if (isLoading) {
-      return <div className="text-center py-8">Loading validation settings...</div>;
+    try {
+      await searchMutation.mutateAsync(searchQuery);
+    } finally {
+      setSearchLoading(false);
     }
+  };
 
+  const handleInstall = (pkg: SimplifierPackage) => {
+    installMutation.mutate({ packageId: pkg.id, version: pkg.version });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Profile Management</h1>
+        <p className="text-muted-foreground">
+          Manage FHIR validation profiles and implementation guides
+        </p>
+      </div>
+
+      <Tabs defaultValue="installed" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="installed">Installed Packages</TabsTrigger>
+          <TabsTrigger value="fhir-server">FHIR Server Packages</TabsTrigger>
+          <TabsTrigger value="search">Search & Install</TabsTrigger>
+          <TabsTrigger value="settings">Validation Settings</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="installed" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Installed Packages</CardTitle>
+              <CardDescription>
+                Packages installed in your local profile repository
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {isLoadingInstalled ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-muted-foreground">Loading installed packages...</p>
+                  </div>
+                ) : installedPackages && installedPackages.length > 0 ? (
+                  <div className="grid gap-4">
+                    {(installedPackages || []).map((pkg: InstalledPackage) => (
+                      <Card key={pkg.id} className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-2 flex-1">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold">{pkg.name}</h3>
+                              <Badge variant={pkg.status === 'active' ? 'default' : pkg.status === 'error' ? 'destructive' : 'secondary'}>
+                                {pkg.status}
+                              </Badge>
+                              {pkg.updateAvailable && (
+                                <Badge variant="outline" className="text-orange-600">
+                                  Update Available
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              Version {pkg.version} • {pkg.profileCount} profiles • Installed {new Date(pkg.installedDate).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            {pkg.updateAvailable && (
+                              <Button size="sm" variant="outline">
+                                <RefreshCw className="w-4 h-4 mr-1" />
+                                Update
+                              </Button>
+                            )}
+                            <Button size="sm" variant="outline" className="text-destructive hover:text-destructive">
+                              <Trash2 className="w-4 h-4 mr-1" />
+                              Uninstall
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium mb-2">No packages installed</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Install validation packages to start validating FHIR resources
+                    </p>
+                    <Button>
+                      <Download className="w-4 h-4 mr-2" />
+                      Browse Available Packages
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="fhir-server" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>FHIR Server Packages</CardTitle>
+              <CardDescription>
+                Packages and profiles available on the connected FHIR server
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {isLoadingFhirPackages ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                    <p className="text-muted-foreground">Scanning FHIR server packages...</p>
+                  </div>
+                ) : fhirServerPackages && fhirServerPackages.length > 0 ? (
+                  <div className="grid gap-4">
+                    {fhirServerPackages.map((pkg: any) => (
+                      <Card key={pkg.id} className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-2 flex-1">
+                            <div className="flex items-center gap-2">
+                              <Server className="w-4 h-4 text-muted-foreground" />
+                              <h3 className="font-semibold">{pkg.title || pkg.name}</h3>
+                              <Badge variant={pkg.status === 'active' ? 'default' : 'secondary'}>
+                                {pkg.status}
+                              </Badge>
+                              <Badge variant="outline" className="text-blue-600">
+                                {pkg.type}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              {pkg.description || 'No description available'}
+                            </p>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <span>Version {pkg.version}</span>
+                              <span>FHIR {pkg.fhirVersion}</span>
+                              <span>{pkg.profileCount} profiles</span>
+                              <span>Publisher: {pkg.publisher}</span>
+                            </div>
+                            {pkg.url && (
+                              <p className="text-sm text-muted-foreground font-mono">
+                                {pkg.url}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Server className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium mb-2">No packages found</h3>
+                    <p className="text-muted-foreground mb-4">
+                      No implementation guides or profile packages detected on the FHIR server
+                    </p>
+                    <Button onClick={() => window.location.reload()}>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Refresh Scan
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="search" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Search & Install Packages</CardTitle>
+              <CardDescription>
+                Search for FHIR validation packages from Simplifier.net
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Search for packages..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                />
+                <Button onClick={handleSearch} disabled={searchLoading}>
+                  <Search className="w-4 h-4 mr-2" />
+                  {searchLoading ? 'Searching...' : 'Search'}
+                </Button>
+              </div>
+
+              {searchResults.length > 0 && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Search Results</h3>
+                  <div className="grid gap-4">
+                    {searchResults.map((pkg) => (
+                      <Card key={pkg.id} className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-2 flex-1">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold">{pkg.title}</h3>
+                              <Badge variant={pkg.status === 'active' ? 'default' : 'secondary'}>
+                                {pkg.status}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">{pkg.description}</p>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <span>Version {pkg.version}</span>
+                              <span>FHIR {pkg.fhirVersion}</span>
+                              <span>By {pkg.author}</span>
+                              <span>{new Date(pkg.publishedDate).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                          <Button
+                            onClick={() => handleInstall(pkg)}
+                            disabled={installMutation.isPending}
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Install
+                          </Button>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="settings" className="space-y-4">
+          <ValidationSettingsCard />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function ValidationSettingsCard() {
+  const { data: settings, isLoading } = useValidationSettings();
+  const updateSettings = useUpdateValidationSettings();
+  const [localSettings, setLocalSettings] = useState(settings || {
+    fetchFromSimplifier: true,
+    fetchFromFhirServer: true,
+    autoDetectProfiles: true,
+    strictMode: false,
+    maxProfiles: 3,
+    cacheDuration: 3600
+  });
+
+  const handleSettingChange = (key: string, value: any) => {
+    const newSettings = { ...localSettings, [key]: value };
+    setLocalSettings(newSettings);
+    updateSettings.mutate(newSettings);
+  };
+
+  if (isLoading) {
     return (
-      <div className="space-y-6">
+      <Card>
+        <CardContent className="pt-6">
+          <div className="text-center py-8">Loading validation settings...</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Validation Settings</CardTitle>
+        <CardDescription>
+          Configure how FHIR resources are validated against profiles
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
@@ -268,185 +448,7 @@ export function ProfileManagement() {
             may take longer depending on network conditions.
           </AlertDescription>
         </Alert>
-      </div>
-    );
-  };
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Profile Management</h1>
-        <p className="text-muted-foreground">
-          Install and manage FHIR implementation guides and validation profiles from Simplifier.net
-        </p>
-      </div>
-
-      <Tabs defaultValue="installed" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="installed">Installed Packages</TabsTrigger>
-          <TabsTrigger value="search">Search & Install</TabsTrigger>
-          <TabsTrigger value="settings">Validation Settings</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="installed" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Installed Packages</CardTitle>
-              <CardDescription>
-                Manage your installed FHIR validation profiles and implementation guides
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {installedLoading ? (
-                <div className="text-center py-8">Loading installed packages...</div>
-              ) : !installedPackages || installedPackages.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No packages installed yet. Use the search tab to find and install packages.
-                </div>
-              ) : (
-                <div className="grid gap-4">
-                  {(installedPackages || []).map((pkg: InstalledPackage) => (
-                    <Card key={pkg.id}>
-                      <CardContent className="pt-6">
-                        <div className="flex items-start justify-between">
-                          <div className="space-y-1">
-                            <h3 className="font-semibold">{pkg.name}</h3>
-                            <p className="text-sm text-muted-foreground">Version {pkg.version}</p>
-                            <div className="flex items-center space-x-2">
-                              <Badge variant={pkg.status === 'active' ? 'default' : 'secondary'}>
-                                {pkg.status}
-                              </Badge>
-                              {pkg.updateAvailable && (
-                                <Badge variant="outline" className="text-orange-600">
-                                  Update Available ({pkg.latestVersion})
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              {pkg.profileCount} profiles • Installed {new Date(pkg.installedDate).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <div className="flex space-x-2">
-                            {pkg.updateAvailable && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleUpdate(pkg.id)}
-                                disabled={updateMutation.isPending}
-                              >
-                                <RefreshCw className="w-4 h-4 mr-1" />
-                                Update
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => handleUninstall(pkg.id)}
-                              disabled={uninstallMutation.isPending}
-                            >
-                              <Trash2 className="w-4 h-4 mr-1" />
-                              Uninstall
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="search" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Search Simplifier.net</CardTitle>
-              <CardDescription>
-                Find and install FHIR implementation guides and validation profiles
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex space-x-2">
-                <Input
-                  placeholder="Search for packages (e.g., 'us-core', 'hl7.fhir.us.core')..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                />
-                <Button onClick={handleSearch} disabled={searchLoading || !searchQuery.trim()}>
-                  <Search className="w-4 h-4 mr-1" />
-                  Search
-                </Button>
-              </div>
-
-              {searchLoading && (
-                <div className="text-center py-8">Searching Simplifier.net...</div>
-              )}
-
-              {searchResults.length > 0 && (
-                <div className="space-y-4">
-                  <h3 className="font-semibold">Search Results</h3>
-                  <div className="grid gap-4">
-                    {searchResults.map((pkg) => (
-                      <Card key={pkg.id}>
-                        <CardContent className="pt-6">
-                          <div className="flex items-start justify-between">
-                            <div className="space-y-1 flex-1">
-                              <h4 className="font-semibold">{pkg.title || pkg.name}</h4>
-                              <p className="text-sm text-muted-foreground">{pkg.description}</p>
-                              <div className="flex items-center space-x-2">
-                                <Badge variant="outline">v{pkg.version}</Badge>
-                                <Badge variant="outline">FHIR {pkg.fhirVersion}</Badge>
-                                <Badge variant={pkg.status === 'active' ? 'default' : 'secondary'}>
-                                  {pkg.status}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground">
-                                By {pkg.author} • Published {new Date(pkg.publishedDate).toLocaleDateString()}
-                              </p>
-                            </div>
-                            <Button
-                              onClick={() => handleInstall(pkg.id, pkg.version)}
-                              disabled={installMutation.isPending}
-                            >
-                              <Download className="w-4 h-4 mr-1" />
-                              Install
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {searchQuery && !searchLoading && searchResults.length === 0 && searchMutation.isSuccess && (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    No packages found for "{searchQuery}". Try different search terms or check the package name.
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="settings" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Validation Settings</CardTitle>
-              <CardDescription>
-                Configure how FHIR resources are validated against profiles
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ValidationSettings />
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

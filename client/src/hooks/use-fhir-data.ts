@@ -100,6 +100,15 @@ export function useRecentValidationErrors(limit = 10) {
   });
 }
 
+// FHIR server packages hook
+export function useFhirServerPackages() {
+  return useQuery({
+    queryKey: ['/api/fhir/packages'],
+    queryFn: () => fetch('/api/fhir/packages').then(res => res.json()),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
 // FHIR servers hook
 export function useFhirServers() {
   return useQuery({

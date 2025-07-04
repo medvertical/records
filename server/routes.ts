@@ -311,6 +311,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/fhir/packages", async (req, res) => {
+    try {
+      const packages = await fhirClient.scanInstalledPackages();
+      res.json(packages);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Dashboard endpoints
   app.get("/api/dashboard/stats", async (req, res) => {
     try {

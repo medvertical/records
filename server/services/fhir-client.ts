@@ -228,6 +228,137 @@ export class FhirClient {
     }
   }
 
+  async getImplementationGuides(): Promise<any[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/ImplementationGuide`, {
+        headers: this.headers,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch implementation guides: ${response.statusText}`);
+      }
+
+      const bundle = await response.json();
+      return bundle.entry?.map((entry: any) => entry.resource) || [];
+    } catch (error: any) {
+      console.warn('Failed to fetch implementation guides:', error);
+      return [];
+    }
+  }
+
+  async getStructureDefinitions(): Promise<any[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/StructureDefinition`, {
+        headers: this.headers,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch structure definitions: ${response.statusText}`);
+      }
+
+      const bundle = await response.json();
+      return bundle.entry?.map((entry: any) => entry.resource) || [];
+    } catch (error: any) {
+      console.warn('Failed to fetch structure definitions:', error);
+      return [];
+    }
+  }
+
+  async getCapabilityStatement(): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/metadata`, {
+        headers: this.headers,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch capability statement: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      console.warn('Failed to fetch capability statement:', error);
+      return null;
+    }
+  }
+
+  async scanInstalledPackages(): Promise<any[]> {
+    try {
+      const packages: any[] = [];
+      
+      // Get Implementation Guides
+      const implementationGuides = await this.getImplementationGuides();
+      
+      // Get Structure Definitions to understand profiles
+      const structureDefinitions = await this.getStructureDefinitions();
+      
+      // Get Capability Statement for server information
+      const capabilityStatement = await this.getCapabilityStatement();
+      
+      // Process Implementation Guides as packages
+      for (const ig of implementationGuides) {
+        const packageInfo = {
+          id: ig.id || ig.url,
+          name: ig.name || ig.title,
+          title: ig.title || ig.name,
+          version: ig.version || '1.0.0',
+          status: ig.status || 'active',
+          publisher: ig.publisher || 'Unknown',
+          description: ig.description || '',
+          url: ig.url,
+          fhirVersion: ig.fhirVersion?.[0] || capabilityStatement?.fhirVersion || '4.0.1',
+          type: 'ImplementationGuide',
+          profileCount: structureDefinitions.filter(sd => 
+            sd.url?.includes(ig.url?.replace(/\/ImplementationGuide\/.*/, '')) ||
+            sd.publisher === ig.publisher
+          ).length,
+          lastModified: ig.meta?.lastUpdated || new Date().toISOString()
+        };
+        packages.push(packageInfo);
+      }
+      
+      // Group standalone profiles by publisher/package
+      const standaloneSDs = structureDefinitions.filter(sd => 
+        !implementationGuides.some(ig => 
+          sd.url?.includes(ig.url?.replace(/\/ImplementationGuide\/.*/, '')) ||
+          sd.publisher === ig.publisher
+        )
+      );
+      
+      const groupedByPublisher = standaloneSDs.reduce((groups: any, sd: any) => {
+        const publisher = sd.publisher || 'Unknown Publisher';
+        if (!groups[publisher]) {
+          groups[publisher] = [];
+        }
+        groups[publisher].push(sd);
+        return groups;
+      }, {});
+      
+      // Create packages for grouped standalone profiles
+      for (const [publisher, profiles] of Object.entries(groupedByPublisher)) {
+        const packageInfo = {
+          id: `standalone-${publisher.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+          name: `${publisher} Profiles`,
+          title: `${publisher} Structure Definitions`,
+          version: '1.0.0',
+          status: 'active',
+          publisher: publisher,
+          description: `Standalone structure definitions from ${publisher}`,
+          url: `http://fhir.server/packages/${publisher}`,
+          fhirVersion: capabilityStatement?.fhirVersion || '4.0.1',
+          type: 'ProfilePackage',
+          profileCount: (profiles as any[]).length,
+          lastModified: new Date().toISOString()
+        };
+        packages.push(packageInfo);
+      }
+      
+      return packages;
+    } catch (error: any) {
+      console.warn('Failed to scan installed packages:', error);
+      return [];
+    }
+  }
+
   private formatOperationOutcome(outcome: FhirOperationOutcome): string {
     return outcome.issue
       .map(issue => `${issue.severity}: ${issue.details?.text || issue.diagnostics || 'Unknown error'}`)

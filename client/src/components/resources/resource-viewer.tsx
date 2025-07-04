@@ -214,6 +214,13 @@ export default function ResourceViewer({ data, title = "Resource Structure" }: R
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Auto-validate when data changes
+  useEffect(() => {
+    if (data) {
+      validateResource();
+    }
+  }, [data]);
+
   // Automatically validate resource when it loads
   useEffect(() => {
     if (data && data.resourceType) {
@@ -293,15 +300,6 @@ export default function ResourceViewer({ data, title = "Resource Structure" }: R
             <CardTitle>{title}</CardTitle>
             <div className="flex items-center gap-2">
               {getValidationBadge()}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={validateResource}
-                disabled={isValidating}
-              >
-                <Shield className="w-4 h-4 mr-1" />
-                {isValidating ? 'Validating...' : 'Validate'}
-              </Button>
             </div>
           </div>
         </CardHeader>
@@ -330,6 +328,7 @@ export default function ResourceViewer({ data, title = "Resource Structure" }: R
             <CardTitle className="flex items-center gap-2">
               <Shield className="w-5 h-5" />
               Validation Results
+              {isValidating && <Badge variant="secondary">Auto-validating...</Badge>}
             </CardTitle>
             <Button
               variant="outline"
@@ -381,7 +380,7 @@ export default function ResourceViewer({ data, title = "Resource Structure" }: R
             <div className="text-center py-8">
               <Shield className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground">
-                Click "Validate" to check this resource against FHIR standards and installed profiles.
+                This resource will be automatically validated against FHIR standards and installed profiles.
               </p>
             </div>
           )}
