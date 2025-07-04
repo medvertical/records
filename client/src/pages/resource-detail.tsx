@@ -69,8 +69,8 @@ export default function ResourceDetail() {
           <div className="flex items-center space-x-4">
             <Link href="/resources">
               <Button variant="outline" size="sm" className="inline-flex items-center space-x-2">
-                <ArrowLeft className="h-4 w-4" />
-                <span>Back</span>
+                <ArrowLeft className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Back</span>
               </Button>
             </Link>
             <div>

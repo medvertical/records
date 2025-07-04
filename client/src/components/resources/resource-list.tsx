@@ -182,8 +182,8 @@ export default function ResourceList({
                       {renderValidationBadge(validationStatus)}
                       <Link href={`/resources/${resource.id}`}>
                         <Button variant="ghost" size="sm" className="text-fhir-blue hover:text-blue-700">
-                          <Eye className="h-4 w-4 mr-1" />
-                          View
+                          <Eye className="h-4 w-4 sm:mr-1" />
+                          <span className="hidden sm:inline">View</span>
                         </Button>
                       </Link>
                     </div>
@@ -213,17 +213,18 @@ export default function ResourceList({
           <Button
             variant="outline"
             onClick={() => onPageChange(0)}
-            disabled={page === 0}
+            disabled={currentPage === 0}
+            className="hidden sm:inline-flex"
           >
             First
           </Button>
           <Button
             variant="outline"
-            onClick={() => onPageChange(page - 1)}
-            disabled={page === 0}
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage === 0}
           >
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            Previous
+            <ChevronLeft className="h-4 w-4 sm:mr-1" />
+            <span className="hidden sm:inline">Previous</span>
           </Button>
           
           {/* Page numbers */}
@@ -243,16 +244,17 @@ export default function ResourceList({
           
           <Button
             variant="outline"
-            onClick={() => onPageChange(page + 1)}
-            disabled={page >= totalPages - 1}
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage >= totalPages - 1}
           >
-            Next
-            <ChevronRight className="h-4 w-4 ml-1" />
+            <span className="hidden sm:inline">Next</span>
+            <ChevronRight className="h-4 w-4 sm:ml-1" />
           </Button>
           <Button
             variant="outline"
             onClick={() => onPageChange(totalPages - 1)}
-            disabled={page >= totalPages - 1}
+            disabled={currentPage >= totalPages - 1}
+            className="hidden sm:inline-flex"
           >
             Last
           </Button>

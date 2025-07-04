@@ -67,13 +67,13 @@ export default function ResourceSearch({
         </Select>
 
         <Button onClick={handleSearch} className="bg-fhir-blue text-white hover:bg-blue-700">
-          <Search className="h-4 w-4 mr-2" />
-          Search
+          <Search className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Search</span>
         </Button>
         
         <Button variant="outline">
-          <Filter className="h-4 w-4 mr-2" />
-          Filters
+          <Filter className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Filters</span>
         </Button>
       </div>
       
