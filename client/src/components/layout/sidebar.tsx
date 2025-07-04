@@ -48,20 +48,10 @@ export default function Sidebar({ isOpen: externalIsOpen, onToggle }: SidebarPro
   
   // Close sidebar on mobile when location changes
   useEffect(() => {
-    if (isMobile) {
-      setIsOpen(false);
+    if (isMobile && isOpen && onToggle) {
+      onToggle();
     }
-  }, [location, isMobile]);
-
-  // Set initial sidebar state based on device type, but don't change on navigation
-  useEffect(() => {
-    if (isMobile) {
-      setIsOpen(false);
-    } else {
-      // Only set to true if not already set (first load)
-      setIsOpen(prev => prev);
-    }
-  }, [isMobile]);
+  }, [location, isMobile, isOpen, onToggle]);
   
   const { data: serverStatus } = useQuery<ServerStatus>({
     queryKey: ["/api/fhir/connection/test"],

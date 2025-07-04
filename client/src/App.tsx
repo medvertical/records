@@ -21,6 +21,10 @@ function Router() {
     setSidebarOpen(prev => !prev);
   };
 
+  const closeSidebar = () => {
+    setSidebarOpen(false);
+  };
+
   // Create components with sidebar toggle
   const DashboardWithSidebar = () => (
     <Dashboard onSidebarToggle={isMobile ? toggleSidebar : undefined} />
