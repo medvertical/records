@@ -1,12 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight, Shield, CheckCircle, AlertTriangle } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { ValidationResults } from '@/components/validation/validation-results';
 
 interface ResourceViewerProps {
   resource: any;
@@ -215,91 +213,16 @@ function JsonView({ data }: { data: any }) {
 export default function ResourceViewer({ resource, resourceId, resourceType, data, title = "Resource Structure" }: ResourceViewerProps) {
   // Use data if provided, otherwise use resource.data
   const resourceData = data || resource?.data;
-  const [validationResult, setValidationResult] = useState<any>(null);
-  const [isValidating, setIsValidating] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Auto-validate when resourceData changes
-  useEffect(() => {
-    if (resourceData) {
-      validateResource();
-    }
-  }, [resourceData]);
 
-  const validateResource = async () => {
-    if (!resourceData) return;
 
-    setIsValidating(true);
-    setValidationError(null);
-
-    try {
-      const response = await fetch('/api/validation/validate-resource-detailed', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          resource: resourceData,
-          config: {
-            strictMode: false,
-            requiredFields: ['resourceType'],
-            customRules: []
-          }
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Validation failed');
-      }
-
-      const result = await response.json();
-      setValidationResult(result);
-    } catch (error: any) {
-      setValidationError(error.message || 'Failed to validate resource');
-    } finally {
-      setIsValidating(false);
-    }
-  };
-
-  const getValidationBadge = () => {
-    if (isValidating) {
-      return <Badge variant="secondary">Validating...</Badge>;
-    }
-    if (validationError) {
-      return <Badge variant="destructive">Validation Error</Badge>;
-    }
-    if (validationResult) {
-      if (validationResult.isValid) {
-        return (
-          <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
-            <CheckCircle className="w-3 h-3 mr-1" />
-            Valid
-          </Badge>
-        );
-      } else {
-        const errorCount = (validationResult.summary?.errorCount || 0) + (validationResult.summary?.fatalCount || 0);
-        return (
-          <Badge variant="destructive">
-            <AlertTriangle className="w-3 h-3 mr-1" />
-            {errorCount} Error{errorCount !== 1 ? 's' : ''}
-          </Badge>
-        );
-      }
-    }
-    return null;
-  };
 
   return (
     <>
       {/* Resource Structure Card */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>{title}</CardTitle>
-            <div className="flex items-center gap-2">
-              {getValidationBadge()}
-            </div>
-          </div>
+          <CardTitle>{title}</CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="form" className="w-full">
@@ -319,71 +242,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
         </CardContent>
       </Card>
 
-      {/* Validation Results Card */}
-      <Card className="mt-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="w-5 h-5" />
-              Validation Results
-              {isValidating && <Badge variant="secondary">Auto-validating...</Badge>}
-            </CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={validateResource}
-              disabled={isValidating}
-            >
-              <Shield className="w-4 h-4 mr-1" />
-              {isValidating ? 'Validating...' : 'Revalidate'}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isValidating && (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
-              <p className="text-muted-foreground">Validating resource...</p>
-            </div>
-          )}
-          
-          {validationError && (
-            <Card className="border-red-200 bg-red-50">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-2 text-red-800">
-                  <AlertTriangle className="w-4 h-4" />
-                  <p className="font-medium">Validation Error</p>
-                </div>
-                <p className="text-sm text-red-700 mt-1">{validationError}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={validateResource}
-                  className="mt-3"
-                >
-                  Try Again
-                </Button>
-              </CardContent>
-            </Card>
-          )}
 
-          {validationResult && !isValidating && !validationError && (
-            <ValidationResults 
-              result={validationResult} 
-              onRetry={validateResource}
-            />
-          )}
-
-          {!validationResult && !isValidating && !validationError && (
-            <div className="text-center py-8">
-              <Shield className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">
-                This resource will be automatically validated against FHIR standards and installed profiles.
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </>
   );
 }
