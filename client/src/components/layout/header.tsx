@@ -48,7 +48,10 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
               variant="ghost"
               size="sm"
               className="p-2 md:hidden"
-              onClick={onSidebarToggle}
+              onClick={() => {
+                console.log('Sidebar toggle clicked');
+                onSidebarToggle();
+              }}
             >
               <PanelLeftOpen className="h-5 w-5 text-gray-600" />
             </Button>

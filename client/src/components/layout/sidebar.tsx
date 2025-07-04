@@ -37,21 +37,16 @@ interface SidebarProps {
   onToggle?: () => void;
 }
 
-export default function Sidebar({ isOpen: externalIsOpen, onToggle }: SidebarProps = {}) {
+export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {}) {
   const [location] = useLocation();
   const isMobile = useIsMobile();
-  const [internalIsOpen, setInternalIsOpen] = useState(false);
-  
-  // Use external state if provided, otherwise use internal state
-  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
-  const setIsOpen = onToggle || setInternalIsOpen;
   
   // Close sidebar on mobile when location changes
   useEffect(() => {
     if (isMobile && isOpen && onToggle) {
       onToggle();
     }
-  }, [location, isMobile, isOpen, onToggle]);
+  }, [location]);
   
   const { data: serverStatus } = useQuery<ServerStatus>({
     queryKey: ["/api/fhir/connection/test"],
@@ -69,7 +64,7 @@ export default function Sidebar({ isOpen: externalIsOpen, onToggle }: SidebarPro
         {isOpen && (
           <div 
             className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
-            onClick={() => setIsOpen(false)}
+            onClick={() => onToggle && onToggle()}
           />
         )}
 
@@ -82,7 +77,7 @@ export default function Sidebar({ isOpen: externalIsOpen, onToggle }: SidebarPro
             serverStatus={serverStatus} 
             resourceCounts={resourceCounts} 
             location={location}
-            onItemClick={() => setIsOpen(false)}
+            onItemClick={() => onToggle && onToggle()}
           />
         </aside>
       </>

@@ -33,7 +33,11 @@ function Router() {
   });
 
   const toggleSidebar = () => {
-    setSidebarOpen(prev => !prev);
+    console.log('toggleSidebar called, current state:', sidebarOpen);
+    setSidebarOpen(prev => {
+      console.log('Setting sidebar to:', !prev);
+      return !prev;
+    });
   };
 
   const getPageTitle = () => {
