@@ -92,6 +92,15 @@ export default function ServerValidation() {
 
   const summaryLoading = false;
 
+  // Update summary data with real-time validation progress
+  const updatedSummary = progress ? {
+    ...summary,
+    totalValidated: progress.processedResources,
+    validResources: progress.validResources,
+    resourcesWithErrors: progress.errorResources,
+    validationCoverage: (progress.processedResources / summary.totalResources) * 100,
+  } : summary;
+
   // Start bulk validation mutation
   const startValidation = useMutation({
     mutationFn: async (options?: { resourceTypes?: string[]; batchSize?: number; skipUnchanged?: boolean }) => {
@@ -219,7 +228,7 @@ export default function ServerValidation() {
           <div className="text-center p-3 bg-blue-50 rounded-lg">
             <Activity className="h-6 w-6 mx-auto mb-2 text-blue-600" />
             <div className="text-2xl font-bold text-blue-900">
-              {summary?.totalValidated?.toLocaleString() || '0'}
+              {updatedSummary?.totalValidated?.toLocaleString() || '0'}
             </div>
             <div className="text-sm text-blue-600">Validated</div>
           </div>
@@ -227,7 +236,7 @@ export default function ServerValidation() {
           <div className="text-center p-3 bg-green-50 rounded-lg">
             <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-green-600" />
             <div className="text-2xl font-bold text-green-900">
-              {summary?.validResources?.toLocaleString() || '0'}
+              {updatedSummary?.validResources?.toLocaleString() || '0'}
             </div>
             <div className="text-sm text-green-600">Valid</div>
           </div>
@@ -235,7 +244,7 @@ export default function ServerValidation() {
           <div className="text-center p-3 bg-red-50 rounded-lg">
             <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-red-600" />
             <div className="text-2xl font-bold text-red-900">
-              {summary?.resourcesWithErrors?.toLocaleString() || '0'}
+              {updatedSummary?.resourcesWithErrors?.toLocaleString() || '0'}
             </div>
             <div className="text-sm text-red-600">With Errors</div>
           </div>
@@ -246,11 +255,11 @@ export default function ServerValidation() {
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium text-gray-700">Validation Coverage</span>
             <span className="text-sm text-gray-600">
-              {summary?.validationCoverage?.toFixed(1) || '0'}%
+              {updatedSummary?.validationCoverage?.toFixed(1) || '0'}%
             </span>
           </div>
           <Progress 
-            value={summary?.validationCoverage || 0} 
+            value={updatedSummary?.validationCoverage || 0} 
             className="h-2"
           />
         </div>
