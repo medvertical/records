@@ -4,9 +4,11 @@ import RecentErrors from "@/components/dashboard/recent-errors";
 import ResourceBreakdown from "@/components/dashboard/resource-breakdown";
 import QuickBrowser from "@/components/dashboard/quick-browser";
 import ServerValidation from "@/components/validation/server-validation";
+import { ValidationTrends } from "@/components/dashboard/validation-trends";
 import { useQuery } from "@tanstack/react-query";
 import { ResourceStats } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useValidationWebSocket } from "@/hooks/use-validation-websocket";
 
 export default function Dashboard() {
   const { data: stats, isLoading: statsLoading } = useQuery<ResourceStats>({
@@ -16,6 +18,9 @@ export default function Dashboard() {
   const { data: resourceCounts } = useQuery<Record<string, number>>({
     queryKey: ["/api/fhir/resource-counts"],
   });
+
+  // Get real-time validation progress for trends
+  const { progress: validationProgress } = useValidationWebSocket();
 
   if (statsLoading) {
     return (
@@ -80,6 +85,11 @@ export default function Dashboard() {
       {/* Server Validation Section */}
       <div className="mb-8">
         <ServerValidation />
+      </div>
+
+      {/* Validation Trends Section */}
+      <div className="mb-8">
+        <ValidationTrends currentProgress={validationProgress} />
       </div>
 
       {/* Bottom Row */}
