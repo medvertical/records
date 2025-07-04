@@ -61,12 +61,24 @@ export class TerminologyClient {
     }
 
     try {
-      // Try to fetch the StructureDefinition directly by URL
+      // Handle different URL patterns for HL7 FHIR extensions
+      let searchUrl = extensionUrl;
+      
+      // Convert extension URL to canonical form if needed
+      if (extensionUrl.startsWith('http://hl7.org/fhir/StructureDefinition/')) {
+        const extensionName = extensionUrl.split('/').pop();
+        // Try different URL patterns for common extensions
+        if (extensionName === 'birthPlace') {
+          searchUrl = 'http://hl7.org/fhir/StructureDefinition/patient-birthPlace';
+        }
+      }
+
+      // Try to fetch the StructureDefinition by URL search
       const response: AxiosResponse = await axios.get(
         `${this.config.url}/StructureDefinition`,
         {
           params: {
-            url: extensionUrl,
+            url: searchUrl,
             _format: 'json'
           },
           timeout: 10000,
@@ -79,16 +91,18 @@ export class TerminologyClient {
       if (response.data?.entry && response.data.entry.length > 0) {
         const structureDefinition = response.data.entry[0].resource as StructureDefinition;
         this.cache.set(extensionUrl, structureDefinition);
+        console.log(`Successfully resolved extension: ${extensionUrl}`);
         return structureDefinition;
       }
 
-      // If not found by URL, try searching by canonical URL patterns
+      // If direct search fails, try searching by name pattern
       if (extensionUrl.includes('hl7.org/fhir')) {
-        const response2: AxiosResponse = await axios.get(
+        const extensionName = extensionUrl.split('/').pop();
+        const nameResponse: AxiosResponse = await axios.get(
           `${this.config.url}/StructureDefinition`,
           {
             params: {
-              'url:contains': extensionUrl.split('/').pop(),
+              name: extensionName,
               _format: 'json'
             },
             timeout: 10000,
@@ -98,14 +112,11 @@ export class TerminologyClient {
           }
         );
 
-        if (response2.data?.entry && response2.data.entry.length > 0) {
-          for (const entry of response2.data.entry) {
-            const sd = entry.resource as StructureDefinition;
-            if (sd.url === extensionUrl) {
-              this.cache.set(extensionUrl, sd);
-              return sd;
-            }
-          }
+        if (nameResponse.data?.entry && nameResponse.data.entry.length > 0) {
+          const structureDefinition = nameResponse.data.entry[0].resource as StructureDefinition;
+          this.cache.set(extensionUrl, structureDefinition);
+          console.log(`Successfully resolved extension by name: ${extensionUrl}`);
+          return structureDefinition;
         }
       }
 
@@ -208,12 +219,12 @@ export class TerminologyClient {
   }
 }
 
-// Default configuration for CSIRO OntoServer
+// Default configuration for HAPI FHIR server
 export const defaultTerminologyConfig: TerminologyServerConfig = {
   enabled: true,
-  url: 'https://r4.ontoserver.csiro.au/fhir',
-  type: 'ontoserver',
-  description: 'CSIRO OntoServer (Public)'
+  url: 'http://hapi.fhir.org/baseR4',
+  type: 'hapi-fhir',
+  description: 'HAPI FHIR Test Server (Public)'
 };
 
 export const terminologyClient = new TerminologyClient(defaultTerminologyConfig);
