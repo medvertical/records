@@ -13,9 +13,12 @@ import {
   Clock, 
   Database,
   Activity,
-  TrendingUp
+  TrendingUp,
+  Wifi,
+  WifiOff
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useValidationWebSocket } from "@/hooks/use-validation-websocket";
 
 interface BulkValidationProgress {
   totalResources: number;
@@ -50,12 +53,25 @@ export default function ServerValidation() {
   const [isStarting, setIsStarting] = useState(false);
   const queryClient = useQueryClient();
 
-  // Query validation progress
-  const { data: progress, isLoading: progressLoading } = useQuery<BulkValidationProgress>({
+  // Use WebSocket for real-time validation updates
+  const { 
+    isConnected: wsConnected, 
+    progress: wsProgress, 
+    validationStatus, 
+    lastError: wsError,
+    resetProgress 
+  } = useValidationWebSocket();
+
+  // Fallback to polling if WebSocket is not connected
+  const { data: fallbackProgress, isLoading: progressLoading } = useQuery<BulkValidationProgress>({
     queryKey: ["/api/validation/bulk/progress"],
-    refetchInterval: 2000, // Poll every 2 seconds
+    refetchInterval: wsConnected ? false : 2000, // Only poll if WebSocket is not connected
     refetchIntervalInBackground: false,
+    enabled: !wsConnected, // Only enabled when WebSocket is not connected
   });
+
+  // Use WebSocket progress if available, otherwise use fallback
+  const progress = wsConnected ? wsProgress : fallbackProgress;
 
   // Query validation summary - Use hardcoded data for demo
   const summary: ValidationSummary = {
@@ -101,6 +117,7 @@ export default function ServerValidation() {
 
   const handleStartValidation = async () => {
     setIsStarting(true);
+    resetProgress(); // Clear previous progress
     try {
       await startValidation.mutateAsync({
         batchSize: 100,
@@ -125,8 +142,9 @@ export default function ServerValidation() {
   };
 
   const getValidationStatus = () => {
-    if (progress?.status === 'running') return 'Running';
-    if (progress?.status === 'completed') return 'Completed';
+    if (validationStatus === 'running' || progress?.status === 'running') return 'Running';
+    if (validationStatus === 'completed' || progress?.status === 'completed') return 'Completed';
+    if (validationStatus === 'error') return 'Error';
     if (summary?.totalValidated === 0) return 'Not Started';
     return 'Partial';
   };
@@ -168,9 +186,22 @@ export default function ServerValidation() {
           <CardTitle className="text-lg font-semibold text-gray-900">
             Server-Wide Validation
           </CardTitle>
-          <Badge variant={getStatusColor() as any} className="ml-2">
-            {getValidationStatus()}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {/* WebSocket Connection Indicator */}
+            <div className="flex items-center gap-1">
+              {wsConnected ? (
+                <Wifi className="h-3 w-3 text-green-600" />
+              ) : (
+                <WifiOff className="h-3 w-3 text-red-600" />
+              )}
+              <span className="text-xs text-gray-500">
+                {wsConnected ? 'Live' : 'Polling'}
+              </span>
+            </div>
+            <Badge variant={getStatusColor() as any} className="ml-2">
+              {getValidationStatus()}
+            </Badge>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -225,13 +256,13 @@ export default function ServerValidation() {
         </div>
 
         {/* Current Progress (if running) */}
-        {progress?.status === 'running' && (
+        {(validationStatus === 'running' || progress?.status === 'running') && progress && (
           <div className="space-y-3">
             <Separator />
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-blue-600" />
               <span className="text-sm font-medium text-gray-700">
-                Validation in Progress
+                Validation in Progress {wsConnected && '(Live Updates)'}
               </span>
             </div>
             
@@ -248,6 +279,11 @@ export default function ServerValidation() {
                 value={(progress.processedResources / progress.totalResources) * 100} 
                 className="h-2"
               />
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>Valid: {progress.validResources}</span>
+                <span>Errors: {progress.errorResources}</span>
+                <span>{((progress.processedResources / progress.totalResources) * 100).toFixed(1)}%</span>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 text-sm">
@@ -297,22 +333,32 @@ export default function ServerValidation() {
         )}
 
         {/* Errors (if any) */}
-        {progress?.errors && progress.errors.length > 0 && (
+        {(wsError || (progress?.errors && progress.errors.length > 0)) && (
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               <div className="text-sm">
-                <strong>Validation Errors ({progress.errors.length}):</strong>
-                <ul className="mt-1 list-disc list-inside">
-                  {progress.errors.slice(0, 3).map((error, index) => (
-                    <li key={index} className="text-xs text-gray-600">{error}</li>
-                  ))}
-                  {progress.errors.length > 3 && (
-                    <li className="text-xs text-gray-500">
-                      ... and {progress.errors.length - 3} more errors
-                    </li>
-                  )}
-                </ul>
+                {wsError && (
+                  <div className="mb-2">
+                    <strong>Validation Error:</strong>
+                    <p className="text-xs text-gray-600">{wsError}</p>
+                  </div>
+                )}
+                {progress?.errors && progress.errors.length > 0 && (
+                  <div>
+                    <strong>Processing Errors ({progress.errors.length}):</strong>
+                    <ul className="mt-1 list-disc list-inside">
+                      {progress.errors.slice(0, 3).map((error, index) => (
+                        <li key={index} className="text-xs text-gray-600">{error}</li>
+                      ))}
+                      {progress.errors.length > 3 && (
+                        <li className="text-xs text-gray-500">
+                          ... and {progress.errors.length - 3} more errors
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
               </div>
             </AlertDescription>
           </Alert>

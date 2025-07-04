@@ -86,6 +86,7 @@ This application is a FHIR (Fast Healthcare Interoperability Resources) resource
 ## Changelog
 
 Changelog:
+- July 4, 2025 (Evening). **Major Feature**: Implemented comprehensive bulk validation system with real-time progress tracking via WebSocket. Added server-wide validation interface showing real resource counts (125,957 total), intelligent caching that only revalidates changed resources, live progress updates with resource type breakdowns, and API endpoints for bulk validation management. Dashboard now displays overall FHIR server validation status with coverage metrics.
 - July 4, 2025 (Evening). Fixed header to always display "Records" app name instead of dynamic view names, consolidated validation results display to eliminate duplication, restored validation functionality with revalidate button
 - July 4, 2025 (Evening). Fixed resource detail API to handle FHIR resource IDs, implemented working sidebar toggle functionality, dynamic page titles now working correctly, resource validation results display operational
 - July 4, 2025 (Evening). Moved validation settings to main Settings page, added FHIR server package scanning, implemented automatic resource validation, and removed manual validate buttons for improved UX

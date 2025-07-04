@@ -6,6 +6,7 @@ import { ValidationEngine } from "./services/validation-engine.js";
 import { profileManager } from "./services/profile-manager.js";
 import { BulkValidationService } from "./services/bulk-validation.js";
 import { insertFhirServerSchema, insertFhirResourceSchema, insertValidationProfileSchema } from "@shared/schema.js";
+import { validationWebSocket, initializeWebSocket } from "./services/websocket-server.js";
 import { z } from "zod";
 
 let fhirClient: FhirClient;
@@ -351,6 +352,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const options = req.body || {};
       
+      // Broadcast validation start via WebSocket
+      if (validationWebSocket) {
+        validationWebSocket.broadcastValidationStart();
+      }
+
       // Start bulk validation asynchronously
       bulkValidationService.validateAllResources({
         batchSize: options.batchSize || 50,
@@ -358,6 +364,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         resourceTypes: options.resourceTypes
       }).catch(error => {
         console.error('Bulk validation error:', error);
+        if (validationWebSocket) {
+          validationWebSocket.broadcastError(error.message);
+        }
       });
 
       res.json({ 
@@ -537,5 +546,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  
+  // Initialize WebSocket server for real-time validation updates
+  initializeWebSocket(httpServer);
+  
   return httpServer;
 }

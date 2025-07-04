@@ -2,6 +2,7 @@ import { FhirClient } from './fhir-client.js';
 import { ValidationEngine } from './validation-engine.js';
 import { storage } from '../storage.js';
 import { InsertFhirResource, InsertValidationResult } from '@shared/schema.js';
+import { validationWebSocket } from './websocket-server.js';
 
 export interface BulkValidationProgress {
   totalResources: number;
@@ -87,6 +88,11 @@ export class BulkValidationService {
         onProgress(this.currentProgress);
       }
 
+      // Broadcast final completion via WebSocket
+      if (validationWebSocket) {
+        validationWebSocket.broadcastValidationComplete(this.currentProgress);
+      }
+
       return this.currentProgress;
     } finally {
       this.isRunning = false;
@@ -129,6 +135,11 @@ export class BulkValidationService {
           // Report progress every 10 resources
           if (onProgress && this.currentProgress!.processedResources % 10 === 0) {
             onProgress(this.currentProgress!);
+          }
+
+          // Broadcast progress via WebSocket every 10 resources
+          if (validationWebSocket && this.currentProgress!.processedResources % 10 === 0) {
+            validationWebSocket.broadcastProgress(this.currentProgress!);
           }
         }
 
