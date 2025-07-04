@@ -425,14 +425,31 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
       )}
 
       {validationResult && !isValidating && !validationError && (
-        <div className="mt-6">
-          <ValidationResults 
-            result={validationResult} 
-            onRetry={validateResource}
-            onRevalidate={validateResource}
-            isValidating={isValidating}
-          />
-        </div>
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="w-5 h-5" />
+                Validation Results
+              </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={validateResource}
+                disabled={isValidating}
+              >
+                <Shield className="w-4 h-4 sm:mr-1" />
+                <span className="hidden sm:inline">Revalidate</span>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ValidationResults 
+              result={validationResult} 
+              onRetry={validateResource}
+            />
+          </CardContent>
+        </Card>
       )}
 
       {!validationResult && !isValidating && !validationError && (
