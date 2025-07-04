@@ -307,9 +307,9 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
             customRules: [],
             autoValidate: true,
             profiles: [],
-            fetchFromSimplifier: true,
-            fetchFromFhirServer: true,
-            autoDetectProfiles: true,
+            fetchFromSimplifier: false, // Disable to prevent timeouts
+            fetchFromFhirServer: true,  // Keep enabled for basic validation
+            autoDetectProfiles: false,  // Disable to prevent profile guessing
           },
         }),
       });
