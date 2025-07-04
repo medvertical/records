@@ -43,11 +43,11 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
     <header className="bg-white shadow-sm border-b border-gray-200 p-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          {isMobile && onSidebarToggle && (
+          {onSidebarToggle && (
             <Button
               variant="ghost"
               size="sm"
-              className="p-2"
+              className="p-2 md:hidden"
               onClick={onSidebarToggle}
             >
               <PanelLeftOpen className="h-5 w-5 text-gray-600" />
