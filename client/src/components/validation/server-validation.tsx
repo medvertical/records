@@ -98,7 +98,18 @@ export default function ServerValidation() {
     totalValidated: progress.processedResources,
     validResources: progress.validResources,
     resourcesWithErrors: progress.errorResources,
-    validationCoverage: (progress.processedResources / summary.totalResources) * 100,
+    validationCoverage: (progress.processedResources / progress.totalResources) * 100,
+    resourceTypeBreakdown: {
+      ...summary.resourceTypeBreakdown,
+      // Update the current resource type being processed
+      [progress.currentResourceType || 'Patient']: {
+        total: progress.totalResources,
+        validated: progress.processedResources,
+        valid: progress.validResources,
+        errors: progress.errorResources,
+        coverage: (progress.processedResources / progress.totalResources) * 100
+      }
+    }
   } : summary;
 
   // Start bulk validation mutation
@@ -312,34 +323,7 @@ export default function ServerValidation() {
           </div>
         )}
 
-        {/* Resource Type Breakdown */}
-        {summary?.resourceTypeBreakdown && Object.keys(summary.resourceTypeBreakdown).length > 0 && (
-          <div className="space-y-3">
-            <Separator />
-            <h4 className="text-sm font-medium text-gray-700">Resource Type Coverage</h4>
-            <div className="space-y-2">
-              {Object.entries(summary.resourceTypeBreakdown).map(([type, data]) => (
-                <div key={type} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-700">{type}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-600">
-                      {data.validated.toLocaleString()} / {data.total.toLocaleString()}
-                    </span>
-                    <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-blue-500 transition-all duration-300"
-                        style={{ width: `${data.coverage}%` }}
-                      />
-                    </div>
-                    <span className="text-xs text-gray-500 w-10 text-right">
-                      {data.coverage.toFixed(0)}%
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+
 
         {/* Errors (if any) */}
         {(wsError || (progress?.errors && progress.errors.length > 0)) && (
