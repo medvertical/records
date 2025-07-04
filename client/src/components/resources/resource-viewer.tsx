@@ -19,6 +19,21 @@ interface CollapsibleNodeProps {
 
 function CollapsibleNode({ keyName, value, level = 0 }: CollapsibleNodeProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  
+  // Handle null/undefined values
+  if (value === null || value === undefined) {
+    return (
+      <div style={{ paddingLeft: level * 20 }} className="py-1 flex items-center">
+        <span className="font-medium text-gray-700 min-w-0 flex-shrink-0 mr-2">
+          {keyName}:
+        </span>
+        <span className="text-sm text-gray-400">
+          {value === null ? 'null' : 'undefined'}
+        </span>
+      </div>
+    );
+  }
+  
   const isObject = typeof value === 'object' && value !== null && !Array.isArray(value);
   const isArray = Array.isArray(value);
   const isPrimitive = !isObject && !isArray;
@@ -106,8 +121,8 @@ function CollapsibleNode({ keyName, value, level = 0 }: CollapsibleNodeProps) {
                 level={level + 1}
               />
             ))
-          ) : (
-            Object.entries(value).map(([key, val]) => (
+          ) : isObject ? (
+            Object.entries(value || {}).map(([key, val]) => (
               <CollapsibleNode
                 key={key}
                 keyName={key}
@@ -115,7 +130,7 @@ function CollapsibleNode({ keyName, value, level = 0 }: CollapsibleNodeProps) {
                 level={level + 1}
               />
             ))
-          )}
+          ) : null}
         </div>
       )}
     </div>
@@ -123,9 +138,21 @@ function CollapsibleNode({ keyName, value, level = 0 }: CollapsibleNodeProps) {
 }
 
 function FormView({ data }: { data: any }) {
+  if (!data || typeof data !== 'object') {
+    return (
+      <div className="text-gray-500 italic p-4">
+        No data available to display
+      </div>
+    );
+  }
+
+  const entries = Array.isArray(data) 
+    ? data.map((item, index) => [`[${index}]`, item])
+    : Object.entries(data);
+
   return (
     <div className="space-y-2 max-h-96 overflow-auto">
-      {Object.entries(data).map(([key, value]) => (
+      {entries.map(([key, value]) => (
         <CollapsibleNode key={key} keyName={key} value={value} />
       ))}
     </div>
@@ -133,6 +160,14 @@ function FormView({ data }: { data: any }) {
 }
 
 function JsonView({ data }: { data: any }) {
+  if (!data) {
+    return (
+      <div className="text-gray-500 italic p-4">
+        No data available to display
+      </div>
+    );
+  }
+
   return (
     <div className="max-h-96 overflow-auto">
       <SyntaxHighlighter
