@@ -111,31 +111,7 @@ export default function ResourceDetail() {
 
           {/* Validation Results */}
           <div>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <span>Validation Results</span>
-                  {hasValidationResults && (
-                    <Badge variant={hasErrors ? "destructive" : "secondary"}>
-                      {resource.validationResults?.length} result{resource.validationResults?.length !== 1 ? 's' : ''}
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {hasValidationResults ? (
-                  <ValidationErrors validationResults={resource.validationResults || []} />
-                ) : (
-                  <div className="text-center py-8">
-                    <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">No Validation Issues</h3>
-                    <p className="text-gray-600">
-                      This resource has passed all validation checks.
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <ValidationErrors validationResults={resource.validationResults || []} />
           </div>
         </div>
       </div>
