@@ -252,8 +252,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRecentValidationErrors(limit = 10): Promise<ValidationResult[]> {
-    return await db.select()
+    return await db.select({
+      id: validationResults.id,
+      resourceId: validationResults.resourceId,
+      profileId: validationResults.profileId,
+      isValid: validationResults.isValid,
+      errors: validationResults.errors,
+      warnings: validationResults.warnings,
+      issues: validationResults.issues,
+      profileUrl: validationResults.profileUrl,
+      errorCount: validationResults.errorCount,
+      warningCount: validationResults.warningCount,
+      validationScore: validationResults.validationScore,
+      validatedAt: validationResults.validatedAt,
+      resourceType: fhirResources.resourceType,
+      fhirResourceId: fhirResources.resourceId,
+    })
       .from(validationResults)
+      .leftJoin(fhirResources, eq(validationResults.resourceId, fhirResources.id))
       .where(eq(validationResults.isValid, false))
       .orderBy(desc(validationResults.validatedAt))
       .limit(limit);

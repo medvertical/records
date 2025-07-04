@@ -5,6 +5,7 @@ import ResourceBreakdown from "@/components/dashboard/resource-breakdown";
 import QuickBrowser from "@/components/dashboard/quick-browser";
 import ServerValidation from "@/components/validation/server-validation";
 import { ValidationTrends } from "@/components/dashboard/validation-trends";
+import { ResourceTypePieChart } from "@/components/dashboard/resource-type-pie-chart";
 import { useQuery } from "@tanstack/react-query";
 import { ResourceStats } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -90,6 +91,11 @@ export default function Dashboard() {
       {/* Validation Trends Section */}
       <div className="mb-8">
         <ValidationTrends currentProgress={validationProgress} />
+      </div>
+
+      {/* Resource Type Distribution */}
+      <div className="mb-8">
+        <ResourceTypePieChart resourceCounts={resourceCounts} />
       </div>
 
       {/* Bottom Row */}

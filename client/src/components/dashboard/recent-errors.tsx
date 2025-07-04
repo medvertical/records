@@ -45,16 +45,58 @@ export default function RecentErrors() {
           <div className="space-y-4">
             {recentErrors.map((error, index) => (
               <div key={error.id || index} className="flex items-start space-x-3 p-3 bg-red-50 rounded-lg border border-red-100">
-                <div className="w-2 h-2 bg-fhir-error rounded-full mt-2" />
+                <AlertCircle className="w-4 h-4 text-fhir-error mt-0.5 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">
-                    Resource ID: {error.resourceId}
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-sm font-medium text-gray-900">
+                      {(error as any).resourceType || 'Resource'} #{error.resourceId}
+                    </p>
+                    <Badge variant="destructive" className="text-xs">
+                      {(error.errorCount || 0) > 0 ? `${error.errorCount} Error${(error.errorCount || 0) > 1 ? 's' : ''}` : 'Error'}
+                    </Badge>
+                    {(error.warningCount || 0) > 0 && (
+                      <Badge variant="outline" className="text-xs text-yellow-600">
+                        {error.warningCount} Warning{(error.warningCount || 0) > 1 ? 's' : ''}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-fhir-error leading-relaxed">
+                    {(() => {
+                      // Parse issues from the validation result
+                      try {
+                        const issues = typeof error.issues === 'string' ? JSON.parse(error.issues) : error.issues;
+                        if (Array.isArray(issues) && issues.length > 0) {
+                          const firstError = issues.find(issue => issue.severity === 'error') || issues[0];
+                          return firstError.humanReadable || firstError.details || "Validation failed";
+                        }
+                      } catch (e) {
+                        // Fallback to legacy errors format
+                        if (Array.isArray(error.errors) && error.errors.length > 0) {
+                          return error.errors[0].message || error.errors[0].diagnostics || "Validation failed";
+                        }
+                      }
+                      return "Validation failed";
+                    })()}
                   </p>
-                  <p className="text-sm text-fhir-error">
-                    {Array.isArray(error.errors) && error.errors.length > 0 
-                      ? error.errors[0].message || "Validation error"
-                      : "Validation error"}
-                  </p>
+                  {(() => {
+                    // Show location/path if available
+                    try {
+                      const issues = typeof error.issues === 'string' ? JSON.parse(error.issues) : error.issues;
+                      if (Array.isArray(issues) && issues.length > 0) {
+                        const firstError = issues.find(issue => issue.severity === 'error') || issues[0];
+                        if (firstError.location && Array.isArray(firstError.location) && firstError.location.length > 0) {
+                          return (
+                            <p className="text-xs text-gray-600 mt-1">
+                              Location: {firstError.location[0]}
+                            </p>
+                          );
+                        }
+                      }
+                    } catch (e) {
+                      // Ignore parsing errors
+                    }
+                    return null;
+                  })()}
                   <p className="text-xs text-gray-500 mt-1">
                     {error.validatedAt && formatDistanceToNow(new Date(error.validatedAt), { addSuffix: true })}
                   </p>
