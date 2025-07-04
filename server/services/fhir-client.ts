@@ -69,15 +69,26 @@ export class FhirClient {
 
   async searchResources(
     resourceType: string,
-    params: Record<string, string> = {},
+    params: Record<string, string | number> = {},
     count = 20
   ): Promise<FhirBundle> {
     try {
-      const searchParams = new URLSearchParams({
-        ...params,
-        _count: count.toString(),
-        _format: 'json',
+      const searchParams = new URLSearchParams();
+      
+      // Add all parameters from params first
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          searchParams.set(key, value.toString());
+        }
       });
+      
+      // Only set _count if not already provided in params
+      if (!params._count && count !== undefined) {
+        searchParams.set('_count', count.toString());
+      }
+      
+      // Always set format to json
+      searchParams.set('_format', 'json');
 
       const response: AxiosResponse<FhirBundle> = await axios.get(
         `${this.baseUrl}/${resourceType}?${searchParams.toString()}`,
@@ -141,22 +152,37 @@ export class FhirClient {
 
   async getResourceCount(resourceType: string): Promise<number> {
     try {
-      // Some FHIR servers don't support total counts, so we'll fetch a small sample
-      // and estimate based on the presence of data
-      const response = await this.searchResources(resourceType, {}, 10);
+      // First try to get total count with a summary request
+      const response = await this.searchResources(resourceType, { _count: '0', _summary: 'count' });
       
       if (response.total !== undefined && response.total !== null) {
         return response.total;
       }
       
-      // If no total is provided, estimate based on entry count and next link
-      if (response.entry && response.entry.length > 0) {
-        // If there are entries and a next link, there are likely more resources
-        if (response.link?.some(link => link.relation === 'next')) {
-          return response.entry.length * 10; // Rough estimate
+      // If summary count doesn't work, try with small count and _total parameter
+      const responseWithTotal = await this.searchResources(resourceType, { _count: '1', _total: 'accurate' });
+      
+      if (responseWithTotal.total !== undefined && responseWithTotal.total !== null) {
+        return responseWithTotal.total;
+      }
+      
+      // If no total is provided by server, fetch a larger sample to get better estimate
+      const sampleResponse = await this.searchResources(resourceType, {}, 50);
+      
+      if (sampleResponse.entry && sampleResponse.entry.length > 0) {
+        // If we got fewer results than requested and no next link, this is the total
+        if (sampleResponse.entry.length < 50 && !sampleResponse.link?.some(link => link.relation === 'next')) {
+          return sampleResponse.entry.length;
         }
+        
+        // If there are entries and a next link, make a more conservative estimate
+        if (sampleResponse.link?.some(link => link.relation === 'next')) {
+          // For better estimates, try to extrapolate from the actual data
+          return Math.floor(sampleResponse.entry.length * 2.5); // More conservative estimate
+        }
+        
         // If entries but no next link, return the actual count
-        return response.entry.length;
+        return sampleResponse.entry.length;
       }
       
       return 0;
