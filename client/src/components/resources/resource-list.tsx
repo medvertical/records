@@ -27,9 +27,13 @@ export default function ResourceList({
   onPageChange,
   pageSize = 20,
 }: ResourceListProps) {
-  const totalPages = Math.ceil(total / pageSize);
-  const startIndex = page * pageSize + 1;
-  const endIndex = Math.min((page + 1) * pageSize, total);
+  // Ensure page is a valid number and at least 0
+  const currentPage = Math.max(0, isNaN(page) ? 0 : page);
+  const validTotal = Math.max(0, isNaN(total) ? 0 : total);
+  
+  const totalPages = Math.ceil(validTotal / pageSize);
+  const startIndex = validTotal > 0 ? currentPage * pageSize + 1 : 0;
+  const endIndex = validTotal > 0 ? Math.min((currentPage + 1) * pageSize, validTotal) : 0;
 
   const getResourceDisplayName = (resource: any) => {
     switch (resource.resourceType) {
@@ -112,25 +116,25 @@ export default function ResourceList({
       {/* Results Header */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-600">
-          Showing {startIndex} to {endIndex} of {total} resources
+          Showing {startIndex} to {endIndex} of {validTotal} resources
         </p>
         <div className="flex items-center space-x-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onPageChange(page - 1)}
-            disabled={page === 0}
+            onClick={() => onPageChange(currentPage - 1)}
+            disabled={currentPage === 0}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <span className="text-sm text-gray-600">
-            Page {page + 1} of {totalPages}
+            Page {currentPage + 1} of {totalPages}
           </span>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onPageChange(page + 1)}
-            disabled={page >= totalPages - 1}
+            onClick={() => onPageChange(currentPage + 1)}
+            disabled={currentPage >= totalPages - 1}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -144,7 +148,7 @@ export default function ResourceList({
             const validationStatus = getValidationStatus(resource);
             
             return (
-              <Card key={resource.id || index} className="hover:shadow-md transition-shadow">
+              <Card key={resource.id || `${resource.resourceType}-${index}`} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4 flex-1 min-w-0">

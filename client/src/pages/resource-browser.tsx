@@ -62,7 +62,7 @@ export default function ResourceBrowser() {
           <ResourceList 
             resources={resourcesData?.resources || []}
             total={resourcesData?.total || 0}
-            currentPage={page}
+            page={page}
             onPageChange={handlePageChange}
           />
         )}
