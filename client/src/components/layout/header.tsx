@@ -88,7 +88,7 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
             className="flex items-center space-x-2 bg-fhir-blue text-white hover:bg-blue-700"
           >
             <RefreshCw className="h-4 w-4" />
-            <span>Refresh</span>
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
         </div>
       </div>
