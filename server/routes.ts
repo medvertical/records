@@ -221,6 +221,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/validation/validate-resource-detailed", async (req, res) => {
+    try {
+      if (!validationEngine) {
+        return res.status(400).json({ message: "Validation engine not initialized" });
+      }
+
+      const { resource, config } = req.body;
+      
+      // Create enhanced config with profiles from installed packages
+      const installedProfiles = await storage.getValidationProfiles(resource?.resourceType);
+      const enhancedConfig = {
+        strictMode: config?.strictMode || false,
+        requiredFields: config?.requiredFields || [],
+        customRules: config?.customRules || [],
+        autoValidate: true,
+        profiles: installedProfiles.map(p => p.url).slice(0, 3) // Limit to 3 profiles for performance
+      };
+      
+      const result = await validationEngine.validateResourceDetailed(resource, enhancedConfig);
+      
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/validation/profiles", async (req, res) => {
     try {
       const { resourceType } = req.query;
