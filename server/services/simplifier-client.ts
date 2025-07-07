@@ -49,13 +49,46 @@ export class SimplifierClient {
 
   async searchPackages(query: string, offset = 0, count = 20): Promise<SimplifierSearchResult> {
     try {
-      // First try NPM registry search for FHIR packages
-      const npmSearchResult = await this.searchNpmPackages(query, count);
-      if (npmSearchResult.packages.length > 0) {
-        return npmSearchResult;
+      // Try both Simplifier.net and NPM registry search
+      const [simplifierResult, npmResult] = await Promise.allSettled([
+        this.searchSimplifierPackages(query, offset, count),
+        this.searchNpmPackages(query, count)
+      ]);
+
+      const simplifierPackages = simplifierResult.status === 'fulfilled' ? simplifierResult.value.packages : [];
+      const npmPackages = npmResult.status === 'fulfilled' ? npmResult.value.packages : [];
+
+      // Combine results, prioritizing Simplifier.net packages
+      const allPackages = [...simplifierPackages, ...npmPackages];
+      
+      return {
+        packages: allPackages,
+        profiles: [],
+        total: allPackages.length,
+        offset,
+        count: allPackages.length
+      };
+    } catch (error: any) {
+      console.error('Failed to search packages:', error);
+      return { packages: [], profiles: [], total: 0, offset, count: 0 };
+    }
+  }
+
+  private async searchSimplifierPackages(query: string, offset = 0, count = 20): Promise<SimplifierSearchResult> {
+    try {
+      // First check if this is a known package
+      const knownPackages = this.searchKnownPackages(query);
+      if (knownPackages.packages.length > 0) {
+        return knownPackages;
       }
 
-      // Fallback to Simplifier.net API
+      // Try FHIR Package Registry first
+      const fhirRegistryResult = await this.searchFhirRegistry(query, count);
+      if (fhirRegistryResult.packages.length > 0) {
+        return fhirRegistryResult;
+      }
+
+      // Fallback to Simplifier.net API (if it works)
       const response: AxiosResponse = await axios.get(
         `${this.baseUrl}/packages/search`,
         {
@@ -172,6 +205,122 @@ export class SimplifierClient {
       if (match) return match[1];
     }
     return '4.0.1'; // Default to R4
+  }
+
+  private searchKnownPackages(query: string): SimplifierSearchResult {
+    const knownPackages = [
+      {
+        id: 'de.basisprofil.r4',
+        name: 'de.basisprofil.r4',
+        title: 'Deutsche Basisprofile für FHIR R4',
+        description: 'German base profiles for FHIR R4 implementation',
+        version: '1.4.0',
+        fhirVersion: '4.0.1',
+        author: 'HL7 Deutschland',
+        publishedDate: '2023-07-01T00:00:00.000Z',
+        dependencies: [],
+        downloadUrl: 'https://simplifier.net/packages/de.basisprofil.r4',
+        canonicalUrl: 'https://simplifier.net/packages/de.basisprofil.r4',
+        keywords: ['german', 'deutschland', 'basisprofil', 'r4'],
+        status: 'active' as const
+      },
+      {
+        id: 'hl7.fhir.us.core',
+        name: 'hl7.fhir.us.core',
+        title: 'US Core Implementation Guide',
+        description: 'Official US Core Implementation Guide for FHIR R4',
+        version: '6.1.0',
+        fhirVersion: '4.0.1',
+        author: 'HL7 International',
+        publishedDate: '2023-01-01T00:00:00.000Z',
+        dependencies: [],
+        downloadUrl: 'https://packages.fhir.org/hl7.fhir.us.core',
+        canonicalUrl: 'http://hl7.org/fhir/us/core',
+        keywords: ['us-core', 'usa', 'implementation-guide'],
+        status: 'active' as const
+      },
+      {
+        id: 'hl7.fhir.uv.ips',
+        name: 'hl7.fhir.uv.ips',
+        title: 'International Patient Summary',
+        description: 'IPS Implementation Guide for cross-border patient care',
+        version: '1.1.0',
+        fhirVersion: '4.0.1',
+        author: 'HL7 International',
+        publishedDate: '2023-01-01T00:00:00.000Z',
+        dependencies: [],
+        downloadUrl: 'https://packages.fhir.org/hl7.fhir.uv.ips',
+        canonicalUrl: 'http://hl7.org/fhir/uv/ips',
+        keywords: ['ips', 'international-patient-summary'],
+        status: 'active' as const
+      }
+    ];
+
+    const matchingPackages = knownPackages.filter(pkg => 
+      pkg.id.toLowerCase().includes(query.toLowerCase()) ||
+      pkg.name.toLowerCase().includes(query.toLowerCase()) ||
+      pkg.title.toLowerCase().includes(query.toLowerCase()) ||
+      pkg.keywords.some(k => k.toLowerCase().includes(query.toLowerCase()))
+    );
+
+    return {
+      packages: matchingPackages,
+      profiles: [],
+      total: matchingPackages.length,
+      offset: 0,
+      count: matchingPackages.length
+    };
+  }
+
+  private async searchFhirRegistry(query: string, count = 20): Promise<SimplifierSearchResult> {
+    try {
+      // Try packages.fhir.org search
+      const response: AxiosResponse = await axios.get(
+        `https://packages.fhir.org/catalog`,
+        {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'FHIR-Records-App/1.0'
+          }
+        }
+      );
+
+      // Filter packages based on query
+      const allPackages = response.data || [];
+      const matchingPackages = allPackages
+        .filter((pkg: any) => 
+          pkg.name?.toLowerCase().includes(query.toLowerCase()) ||
+          pkg.title?.toLowerCase().includes(query.toLowerCase()) ||
+          pkg.description?.toLowerCase().includes(query.toLowerCase())
+        )
+        .slice(0, count)
+        .map((pkg: any) => ({
+          id: pkg.name || pkg.id,
+          name: pkg.name || pkg.id,
+          title: pkg.title || pkg.name || pkg.id,
+          description: pkg.description || '',
+          version: pkg.version || '1.0.0',
+          fhirVersion: pkg.fhirVersion || '4.0.1',
+          author: pkg.author || 'Unknown',
+          publishedDate: pkg.date || new Date().toISOString(),
+          dependencies: pkg.dependencies || [],
+          downloadUrl: `https://packages.fhir.org/${pkg.name || pkg.id}`,
+          canonicalUrl: pkg.canonical || pkg.url,
+          keywords: pkg.keywords || [],
+          status: 'active' as const
+        }));
+
+      return {
+        packages: matchingPackages,
+        profiles: [],
+        total: matchingPackages.length,
+        offset: 0,
+        count: matchingPackages.length
+      };
+    } catch (error: any) {
+      console.error('Failed to search FHIR registry:', error);
+      return { packages: [], profiles: [], total: 0, offset: 0, count: 0 };
+    }
   }
 
   async getPackageDetails(packageId: string): Promise<SimplifierPackage | null> {

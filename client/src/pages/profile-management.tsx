@@ -69,8 +69,10 @@ function PackageInstallControl({
     
     setLoadingVersions(true);
     try {
-      const response = await apiRequest(`/api/profiles/versions?packageId=${encodeURIComponent(pkg.id)}`);
-      setPackageVersions(response);
+      const response = await fetch(`/api/profiles/versions?packageId=${encodeURIComponent(pkg.id)}`);
+      if (!response.ok) throw new Error('Failed to fetch versions');
+      const versions = await response.json() as PackageVersionInfo;
+      setPackageVersions(versions);
     } catch (error: any) {
       console.error('Failed to load versions:', error);
     } finally {
