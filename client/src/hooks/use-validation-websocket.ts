@@ -14,7 +14,7 @@ export interface ValidationProgress {
 }
 
 export interface WebSocketMessage {
-  type: 'status' | 'validation_progress' | 'validation_started' | 'validation_complete' | 'validation_error';
+  type: 'status' | 'validation_progress' | 'validation_started' | 'validation_complete' | 'validation_error' | 'validation_stopped';
   data: any;
 }
 
@@ -70,6 +70,13 @@ export function useValidationWebSocket() {
               console.log('Validation error:', message.data);
               setLastError(message.data.error);
               setValidationStatus('error');
+              break;
+              
+            case 'validation_stopped':
+              console.log('Validation stopped and reset');
+              setProgress(null);
+              setValidationStatus('idle');
+              setLastError(null);
               break;
               
             default:

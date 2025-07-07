@@ -87,6 +87,17 @@ export class ValidationWebSocketServer {
       this.sendToClient(client, message);
     });
   }
+
+  broadcastValidationStopped() {
+    const message = {
+      type: 'validation_stopped',
+      data: { timestamp: new Date().toISOString() }
+    };
+
+    this.clients.forEach(client => {
+      this.sendToClient(client, message);
+    });
+  }
 }
 
 export let validationWebSocket: ValidationWebSocketServer;

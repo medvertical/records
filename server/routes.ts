@@ -672,6 +672,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       robustValidationService.stopValidation();
+      
+      // Broadcast validation stopped via WebSocket to clear frontend state
+      if (validationWebSocket) {
+        validationWebSocket.broadcastValidationStopped();
+      }
+      
       res.json({ message: "Validation stopped successfully" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
