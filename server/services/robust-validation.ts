@@ -48,6 +48,7 @@ export class RobustValidationService {
   private state: ValidationState = 'idle';
   private checkpoint: ValidationCheckpoint | null = null;
   private shouldStop = false;
+  private pausedAt: Date | null = null;
   private batchTimes: number[] = [];
 
   constructor(fhirClient: FhirClient, validationEngine: ValidationEngine) {
@@ -63,6 +64,7 @@ export class RobustValidationService {
     console.log('Starting robust validation process...');
     this.state = 'running';
     this.shouldStop = false;
+    this.pausedAt = null;
     this.batchTimes = [];
 
     // Get ALL resource types from FHIR server if none specified
@@ -441,6 +443,7 @@ export class RobustValidationService {
   pauseValidation(): void {
     if (this.state === 'running') {
       console.log('Validation paused');
+      this.pausedAt = new Date();
       this.state = 'paused';
     }
   }
@@ -453,6 +456,7 @@ export class RobustValidationService {
     console.log('Resuming validation from checkpoint');
     this.state = 'running';
     this.shouldStop = false;
+    this.pausedAt = null;
 
     // Continue from checkpoint
     this.runValidation(options).catch(error => {
@@ -483,6 +487,10 @@ export class RobustValidationService {
 
   isValidationPaused(): boolean {
     return this.state === 'paused';
+  }
+
+  getPausedAt(): Date | null {
+    return this.pausedAt;
   }
 
   async getServerValidationSummary(): Promise<{
