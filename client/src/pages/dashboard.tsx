@@ -98,11 +98,17 @@ export default function Dashboard() {
     } else if (currentProgress) {
       setIsValidationRunning(currentProgress.status === 'running');
       setIsValidationPaused(currentProgress.status === 'paused');
+      
+      // Clear validation progress when status is not_running (validation was stopped/reset)
+      if (currentProgress.status === 'not_running') {
+        setValidationProgress(null);
+      }
     } else {
       // Only reset if we have no WebSocket connection and no current progress
       if (validationStatus === 'idle') {
         setIsValidationRunning(false);
         setIsValidationPaused(false);
+        setValidationProgress(null);
       }
     }
   }, [progress, currentProgress, validationStatus]);
