@@ -4,7 +4,7 @@ import { storage } from "./storage.js";
 import { FhirClient } from "./services/fhir-client.js";
 import { ValidationEngine } from "./services/validation-engine.js";
 import { profileManager } from "./services/profile-manager.js";
-import { BulkValidationService } from "./services/bulk-validation.js";
+import { BulkValidationService } from "./services/bulk-validation-new.js";
 import { insertFhirServerSchema, insertFhirResourceSchema, insertValidationProfileSchema } from "@shared/schema.js";
 import { validationWebSocket, initializeWebSocket } from "./services/websocket-server.js";
 import { z } from "zod";
@@ -431,10 +431,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validationWebSocket.broadcastValidationStart();
       }
 
-      // Start bulk validation asynchronously with proper error handling
-      const validationPromise = bulkValidationService.validateAllResources({
+      // Start bulk validation with new clean implementation
+      const validationPromise = bulkValidationService.startValidation({
         batchSize: options.batchSize || 50,
-        skipUnchanged: options.skipUnchanged !== false, // Default to true
+        skipUnchanged: options.skipUnchanged !== false,
         resourceTypes: options.resourceTypes,
         onProgress: (progress) => {
           if (validationWebSocket) {
@@ -476,11 +476,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       let status = "not_running";
-      if (progress.isComplete) {
+      const state = bulkValidationService.getState();
+      if (progress.isComplete || state === 'completed') {
         status = "completed";
-      } else if (bulkValidationService.isValidationPaused()) {
+      } else if (state === 'paused') {
         status = "paused";
-      } else if (bulkValidationService.isValidationRunning()) {
+      } else if (state === 'running') {
         status = "running";
       }
 
@@ -530,18 +531,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No FHIR server configured" });
       }
 
-      if (!bulkValidationService.isValidationPaused()) {
+      if (bulkValidationService.getState() !== 'paused') {
         return res.status(400).json({ message: "No paused validation to resume" });
       }
 
 
 
-      // Broadcast validation start when resuming (before actual resume)
+      // Broadcast validation start when resuming
       if (validationWebSocket) {
         validationWebSocket.broadcastValidationStart();
       }
 
-      // Resume the validation with proper options
+      // Resume the validation with new clean implementation
       const resumedProgress = await bulkValidationService.resumeValidation({
         batchSize: 50,
         skipUnchanged: true,

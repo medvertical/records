@@ -27,10 +27,12 @@ export class BulkValidationService {
   private fhirClient: FhirClient;
   private validationEngine: ValidationEngine;
   private currentProgress: BulkValidationProgress | null = null;
-  private isRunning = false;
-  private isPaused = false;
-  private resumeFromResourceType?: string;
-  private resumeFromOffset = 0;
+  private validationState: 'idle' | 'running' | 'paused' | 'stopping' = 'idle';
+  private resumeData: {
+    resourceTypes: string[];
+    currentTypeIndex: number;
+    resourceTypeProgress: Record<string, number>;
+  } | null = null;
 
   constructor(fhirClient: FhirClient, validationEngine: ValidationEngine) {
     this.fhirClient = fhirClient;
