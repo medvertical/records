@@ -12,7 +12,7 @@ import {
   TrendingUp, 
   Play, 
   Pause, 
-  RotateCcw,
+  Square,
   Zap,
   Timer,
   Target,
@@ -275,13 +275,13 @@ export default function Dashboard() {
               {!isValidationRunning && !isValidationPaused && validationProgress && !validationProgress.isComplete && (
                 <Button onClick={handleResumeValidation} size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700">
                   <Play className="h-4 w-4" />
-                  Continue
+                  Resume
                 </Button>
               )}
               
               {(isValidationRunning || isValidationPaused || (validationProgress && !validationProgress.isComplete)) && (
                 <Button onClick={handleStopValidation} variant="outline" size="sm" className="gap-2 border-red-500 text-red-600 hover:bg-red-50">
-                  <RotateCcw className="h-4 w-4" />
+                  <Square className="h-4 w-4" />
                   Stop
                 </Button>
               )}
