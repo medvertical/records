@@ -304,7 +304,7 @@ export default function Dashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          {validationProgress && (isValidationRunning || isValidationPaused) ? (
+          {validationProgress && (isValidationRunning || isValidationPaused || (validationProgress.processedResources > 0 && !validationProgress.isComplete)) ? (
             <div className="space-y-4">
               {/* Primary Progress Bar */}
               <div className="space-y-2">
@@ -389,7 +389,7 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* Show status when paused */}
+              {/* Show status when paused or resumable */}
               {isValidationPaused && (
                 <div className="p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
                   <div className="flex items-center gap-2">
@@ -400,8 +400,19 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
+              
+              {!isValidationRunning && !isValidationPaused && validationProgress.processedResources > 0 && !validationProgress.isComplete && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                    <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                      Validation Stopped - {validationProgress.validResources} resources validated, resume available
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-          ) : !isValidationRunning && !isValidationPaused ? (
+          ) : !isValidationRunning && !isValidationPaused && (!validationProgress || validationProgress.processedResources === 0 || validationProgress.isComplete) ? (
             <div className="text-center py-8">
               <div className="text-muted-foreground mb-4">Validation engine is idle</div>
               <div className="text-sm text-muted-foreground">
