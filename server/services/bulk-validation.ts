@@ -81,8 +81,8 @@ export class BulkValidationService {
 
       // Process each resource type with timeout protection
       for (const resourceType of typesToValidate) {
-        // Check if validation was paused
-        if (!this.isRunning) {
+        // Check if validation was paused or stopped
+        if (!this.isRunning || this.isPaused) {
           this.resumeFromResourceType = resourceType;
           console.log(`Validation paused at resource type: ${resourceType}`);
           return this.currentProgress;
@@ -100,6 +100,12 @@ export class BulkValidationService {
           }
           
           await this.validateResourceType(resourceType, resourceCounts[resourceType], batchSize, skipUnchanged, onProgress);
+          
+          // Check again after completing a resource type
+          if (!this.isRunning || this.isPaused) {
+            console.log(`Validation paused after completing ${resourceType}`);
+            return this.currentProgress;
+          }
         } catch (error) {
           console.error(`Error processing resource type ${resourceType}:`, error);
           this.currentProgress.errors.push(`Failed to process ${resourceType}: ${error instanceof Error ? error.message : String(error)}`);
@@ -121,6 +127,7 @@ export class BulkValidationService {
 
       return this.currentProgress;
     } finally {
+      // Only stop if not paused (paused validation should remain in running state to be resumed)
       if (!this.isPaused) {
         this.isRunning = false;
       }
@@ -176,7 +183,7 @@ export class BulkValidationService {
           }
           
           // Check if paused after each resource
-          if (!this.isRunning) {
+          if (!this.isRunning || this.isPaused) {
             console.log('Validation paused during batch processing');
             this.resumeFromOffset = offset;
             return;
@@ -186,7 +193,7 @@ export class BulkValidationService {
         offset += batchSize;
         
         // Check if paused before next batch
-        if (!this.isRunning) {
+        if (!this.isRunning || this.isPaused) {
           console.log('Validation paused before next batch');
           this.resumeFromOffset = offset;
           return;
@@ -205,7 +212,7 @@ export class BulkValidationService {
   private async validateSingleResource(resource: any, skipUnchanged: boolean): Promise<void> {
     try {
       // Check if validation was paused
-      if (!this.isRunning) {
+      if (!this.isRunning || this.isPaused) {
         return;
       }
       
