@@ -20,7 +20,11 @@ import {
   XCircle, 
   AlertTriangle,
   Eye,
-  EyeOff
+  EyeOff,
+  Edit,
+  Trash2,
+  Power,
+  PowerOff
 } from "lucide-react";
 
 interface ServerConnectionModalProps {
@@ -136,7 +140,6 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
         title: "Server Added",
         description: "FHIR server connection has been configured successfully.",
       });
-      setSelectedTab("servers");
       setIsAddingNew(false);
       setEditingServer(null);
       reset();
@@ -145,6 +148,54 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
       toast({
         title: "Connection Failed",
         description: error.message || "Failed to configure server connection.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const updateServerMutation = useMutation({
+    mutationFn: async (data: ServerFormData & { id: number }) => {
+      const response = await fetch(`/api/fhir/servers/${data.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: data.name,
+          url: data.url,
+          authConfig: {
+            type: data.authType,
+            username: data.username,
+            password: data.password,
+            token: data.token,
+            clientId: data.clientId,
+            clientSecret: data.clientSecret,
+            tokenUrl: data.tokenUrl
+          }
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to update server');
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/fhir/servers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fhir/connection/test"] });
+      toast({
+        title: "Server Updated",
+        description: "FHIR server settings have been updated successfully.",
+      });
+      setIsAddingNew(false);
+      setEditingServer(null);
+      reset();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update server settings.",
         variant: "destructive",
       });
     }
@@ -190,6 +241,29 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
       toast({
         title: "Error", 
         description: "Failed to connect to server",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const disconnectServerMutation = useMutation({
+    mutationFn: (serverId: number) => {
+      return fetch(`/api/fhir/servers/${serverId}/deactivate`, {
+        method: 'POST'
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/fhir/servers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fhir/connection/test"] });
+      toast({
+        title: "Server Disconnected",
+        description: "Successfully disconnected from FHIR server",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error", 
+        description: "Failed to disconnect from server",
         variant: "destructive",
       });
     }
@@ -270,7 +344,11 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
   };
 
   const onSubmit = (data: ServerFormData) => {
-    createServerMutation.mutate(data);
+    if (editingServer) {
+      updateServerMutation.mutate({ ...data, id: editingServer.id });
+    } else {
+      createServerMutation.mutate(data);
+    }
   };
 
   return (
@@ -317,24 +395,43 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
                           variant="outline" 
                           size="sm"
                           onClick={() => handleEditServer(server)}
+                          className="flex items-center gap-1"
                         >
+                          <Edit className="h-3 w-3" />
                           Edit
                         </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => connectServerMutation.mutate(server.id)}
-                          disabled={server.isActive}
-                        >
-                          {server.isActive ? "Connected" : "Connect"}
-                        </Button>
+                        {server.isActive ? (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => disconnectServerMutation.mutate(server.id)}
+                            disabled={disconnectServerMutation.isPending}
+                            className="flex items-center gap-1 text-orange-600 hover:text-orange-700"
+                          >
+                            <PowerOff className="h-3 w-3" />
+                            {disconnectServerMutation.isPending ? "Disconnecting..." : "Disconnect"}
+                          </Button>
+                        ) : (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => connectServerMutation.mutate(server.id)}
+                            disabled={connectServerMutation.isPending}
+                            className="flex items-center gap-1 text-green-600 hover:text-green-700"
+                          >
+                            <Power className="h-3 w-3" />
+                            {connectServerMutation.isPending ? "Connecting..." : "Connect"}
+                          </Button>
+                        )}
                         <Button 
                           variant="outline" 
                           size="sm"
                           onClick={() => deleteServerMutation.mutate(server.id)}
-                          className="text-red-600 hover:text-red-700"
+                          disabled={server.isActive || deleteServerMutation.isPending}
+                          className="flex items-center gap-1 text-red-600 hover:text-red-700 disabled:opacity-50"
                         >
-                          Delete
+                          <Trash2 className="h-3 w-3" />
+                          {deleteServerMutation.isPending ? "Deleting..." : "Delete"}
                         </Button>
                       </div>
                     </div>
@@ -490,8 +587,9 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
               </div>
 
               <div className="flex gap-3">
-                <Button type="submit" disabled={createServerMutation.isPending}>
-                  {createServerMutation.isPending ? "Connecting..." : "Add Server"}
+                <Button type="submit" disabled={createServerMutation.isPending || updateServerMutation.isPending} className="flex items-center gap-2">
+                  <Server className="h-4 w-4" />
+                  {(createServerMutation.isPending || updateServerMutation.isPending) ? "Saving..." : editingServer ? "Update Server" : "Add Server"}
                 </Button>
                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                   Cancel

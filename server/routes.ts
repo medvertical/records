@@ -62,6 +62,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/fhir/servers/:id/deactivate", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.updateFhirServerStatus(id, false);
+      
+      // Clear the FHIR client since no server is active
+      fhirClient = null as any;
+      validationEngine = null as any;
+      robustValidationService = null as any;
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/fhir/servers/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { name, url, authConfig } = req.body;
+      
+      if (!name || !url) {
+        return res.status(400).json({ message: "Name and URL are required" });
+      }
+
+      // Update the server
+      const updatedServer = await storage.updateFhirServer(id, {
+        name,
+        url,
+        authConfig
+      });
+
+      res.json(updatedServer);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.delete("/api/fhir/servers/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
