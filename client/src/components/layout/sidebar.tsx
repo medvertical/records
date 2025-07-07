@@ -108,17 +108,7 @@ function SidebarContent({
 }) {
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="p-6 border-b border-gray-200">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-fhir-blue rounded-lg flex items-center justify-center">
-            <HospitalIcon className="text-white text-sm h-4 w-4" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">Records</h1>
-          </div>
-        </div>
-      </div>
+      
 
       {/* Server Connection Status */}
       <div className="p-4 border-b border-gray-200">
