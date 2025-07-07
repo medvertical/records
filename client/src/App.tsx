@@ -25,7 +25,7 @@ interface ConnectionStatus {
 function Router() {
   const isMobile = useIsMobile();
   const [location] = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const { data: connectionStatus } = useQuery<ConnectionStatus>({
     queryKey: ["/api/fhir/connection/test"],
@@ -85,7 +85,6 @@ function Router() {
     <div className="min-h-screen bg-gray-50">
       <Header 
         title={getPageTitle()}
-        subtitle={getPageSubtitle()}
         connectionStatus={connectionStatus}
         onSidebarToggle={toggleSidebar}
       />

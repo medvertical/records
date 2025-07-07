@@ -57,7 +57,6 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
             <Database className="h-8 w-8" style={{ color: 'rgb(0, 85, 254)' }} />
             <div>
               <h1 className="text-xl font-bold text-gray-900">{title}</h1>
-              {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
             </div>
           </div>
         </div>
