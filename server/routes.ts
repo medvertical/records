@@ -393,8 +393,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ status: "not_running" });
       }
 
+      let status = "not_running";
+      if (progress.isComplete) {
+        status = "completed";
+      } else if (bulkValidationService.isValidationPaused()) {
+        status = "paused";
+      } else if (bulkValidationService.isValidationRunning()) {
+        status = "running";
+      }
+
       res.json({
-        status: progress.isComplete ? "completed" : "running",
+        status,
         ...progress
       });
     } catch (error: any) {
@@ -416,18 +425,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/validation/bulk/pause", async (req, res) => {
+    try {
+      if (!bulkValidationService) {
+        return res.status(400).json({ message: "No FHIR server configured" });
+      }
+
+      if (!bulkValidationService.isValidationRunning()) {
+        return res.status(400).json({ message: "No validation is currently running" });
+      }
+
+      bulkValidationService.pauseValidation();
+      res.json({ message: "Validation paused successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/validation/bulk/resume", async (req, res) => {
+    try {
+      if (!bulkValidationService) {
+        return res.status(400).json({ message: "No FHIR server configured" });
+      }
+
+      if (!bulkValidationService.isValidationPaused()) {
+        return res.status(400).json({ message: "No paused validation to resume" });
+      }
+
+      // Start the resumed validation asynchronously
+      bulkValidationService.resumeValidation({
+        batchSize: 50,
+        skipUnchanged: true
+      }).catch(error => {
+        console.error('Bulk validation resume error:', error);
+        if (validationWebSocket) {
+          validationWebSocket.broadcastError(error.message);
+        }
+      });
+
+      res.json({ message: "Validation resumed successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.post("/api/validation/bulk/stop", async (req, res) => {
     try {
       if (!bulkValidationService) {
         return res.status(400).json({ message: "No FHIR server configured" });
       }
 
-      // For now, we don't have a stop mechanism, but we can return current status
-      const progress = bulkValidationService.getCurrentProgress();
-      res.json({ 
-        message: "Bulk validation cannot be stopped once started",
-        currentProgress: progress
-      });
+      bulkValidationService.stopValidation();
+      res.json({ message: "Validation stopped successfully" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

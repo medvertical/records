@@ -28,6 +28,9 @@ export class BulkValidationService {
   private validationEngine: ValidationEngine;
   private currentProgress: BulkValidationProgress | null = null;
   private isRunning = false;
+  private isPaused = false;
+  private resumeFromResourceType?: string;
+  private resumeFromOffset = 0;
 
   constructor(fhirClient: FhirClient, validationEngine: ValidationEngine) {
     this.fhirClient = fhirClient;
@@ -35,11 +38,12 @@ export class BulkValidationService {
   }
 
   async validateAllResources(options: BulkValidationOptions = {}): Promise<BulkValidationProgress> {
-    if (this.isRunning) {
+    if (this.isRunning && !this.isPaused) {
       throw new Error('Bulk validation is already running');
     }
 
     this.isRunning = true;
+    this.isPaused = false;
     const {
       resourceTypes,
       batchSize = 50,
@@ -77,6 +81,13 @@ export class BulkValidationService {
 
       // Process each resource type with timeout protection
       for (const resourceType of typesToValidate) {
+        // Check if validation was paused
+        if (this.isPaused) {
+          this.resumeFromResourceType = resourceType;
+          console.log(`Validation paused at resource type: ${resourceType}`);
+          return this.currentProgress;
+        }
+
         try {
           this.currentProgress.currentResourceType = resourceType;
           console.log(`Starting validation for ${resourceType}: ${resourceCounts[resourceType]} resources`);
@@ -290,6 +301,43 @@ export class BulkValidationService {
 
   isValidationRunning(): boolean {
     return this.isRunning;
+  }
+
+  isValidationPaused(): boolean {
+    return this.isPaused;
+  }
+
+  pauseValidation(): void {
+    if (this.isRunning) {
+      this.isPaused = true;
+      console.log('Validation paused by user request');
+    }
+  }
+
+  async resumeValidation(options: BulkValidationOptions = {}): Promise<BulkValidationProgress> {
+    if (!this.isPaused || !this.currentProgress) {
+      throw new Error('No validation to resume');
+    }
+
+    console.log(`Resuming validation from resource type: ${this.resumeFromResourceType}`);
+    this.isPaused = false;
+    
+    // Continue from where we left off
+    const resumeOptions = {
+      ...options,
+      resourceTypes: this.resumeFromResourceType ? [this.resumeFromResourceType] : options.resourceTypes
+    };
+
+    return await this.validateAllResources(resumeOptions);
+  }
+
+  stopValidation(): void {
+    this.isRunning = false;
+    this.isPaused = false;
+    this.resumeFromResourceType = undefined;
+    this.resumeFromOffset = 0;
+    this.currentProgress = null;
+    console.log('Validation stopped by user request');
   }
 
   async getServerValidationSummary(): Promise<{

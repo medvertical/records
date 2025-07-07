@@ -120,6 +120,52 @@ export default function Dashboard() {
     }
   };
 
+  const handlePauseValidation = async () => {
+    try {
+      const response = await fetch('/api/validation/bulk/pause', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (response.ok) {
+        setIsValidationRunning(false);
+      }
+    } catch (error) {
+      console.error('Failed to pause validation:', error);
+    }
+  };
+
+  const handleResumeValidation = async () => {
+    try {
+      const response = await fetch('/api/validation/bulk/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (response.ok) {
+        setIsValidationRunning(true);
+      }
+    } catch (error) {
+      console.error('Failed to resume validation:', error);
+    }
+  };
+
+  const handleStopValidation = async () => {
+    try {
+      const response = await fetch('/api/validation/bulk/stop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (response.ok) {
+        setIsValidationRunning(false);
+        setValidationProgress(null);
+      }
+    } catch (error) {
+      console.error('Failed to stop validation:', error);
+    }
+  };
+
   // Calculate real-time metrics
   const validationCoverage = validationSummary?.validationCoverage || 0;
   const totalValidated = validationSummary?.totalValidated || dashboardStats?.totalResources || 0;
@@ -146,10 +192,10 @@ export default function Dashboard() {
     0;
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Real-Time Dashboard</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground">
             Live validation monitoring and resource analytics
           </p>
@@ -203,16 +249,31 @@ export default function Dashboard() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              {!isValidationRunning && (
+              {!isValidationRunning && (!validationProgress || validationProgress.isComplete) && (
                 <Button onClick={handleStartValidation} size="sm" className="gap-2">
                   <Play className="h-4 w-4" />
                   Start Validation
                 </Button>
               )}
+              
               {isValidationRunning && (
-                <Button variant="outline" size="sm" className="gap-2" disabled>
+                <Button onClick={handlePauseValidation} variant="outline" size="sm" className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-50">
                   <Pause className="h-4 w-4" />
-                  Running...
+                  Pause
+                </Button>
+              )}
+              
+              {!isValidationRunning && validationProgress && !validationProgress.isComplete && (
+                <Button onClick={handleResumeValidation} size="sm" className="gap-2 bg-green-600 hover:bg-green-700">
+                  <Play className="h-4 w-4" />
+                  Resume
+                </Button>
+              )}
+              
+              {(isValidationRunning || (validationProgress && !validationProgress.isComplete)) && (
+                <Button onClick={handleStopValidation} variant="outline" size="sm" className="gap-2 border-red-500 text-red-600 hover:bg-red-50">
+                  <RotateCcw className="h-4 w-4" />
+                  Stop
                 </Button>
               )}
             </div>
