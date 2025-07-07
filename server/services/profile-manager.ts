@@ -323,6 +323,26 @@ export class ProfileManager {
 
     return updatesAvailable;
   }
+
+  async getPackageVersions(packageId: string): Promise<{
+    versions: Record<string, {
+      fhirVersion: string;
+      date: string;
+      description?: string;
+    }>;
+    distTags: {
+      latest: string;
+    };
+  }> {
+    try {
+      // Use the Simplifier client to get package versions
+      const versionInfo = await simplifierClient.getPackageVersions(packageId);
+      return versionInfo;
+    } catch (error: any) {
+      console.error(`Failed to get versions for package ${packageId}:`, error);
+      throw new Error(`Failed to get package versions: ${error.message}`);
+    }
+  }
 }
 
 export const profileManager = new ProfileManager();

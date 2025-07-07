@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useValidationSettings, useUpdateValidationSettings, useFhirServerPackages } from '@/hooks/use-fhir-data';
 
@@ -24,6 +25,18 @@ interface SimplifierPackage {
   author: string;
   publishedDate: string;
   status: 'active' | 'draft' | 'retired';
+  versions?: string[];
+}
+
+interface PackageVersionInfo {
+  versions: Record<string, {
+    fhirVersion: string;
+    date: string;
+    description?: string;
+  }>;
+  distTags: {
+    latest: string;
+  };
 }
 
 interface InstalledPackage {
@@ -42,6 +55,10 @@ export function ProfileManagement() {
   const [searchResults, setSearchResults] = useState<SimplifierPackage[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchFilter, setSearchFilter] = useState('all');
+  const [selectedPackage, setSelectedPackage] = useState<SimplifierPackage | null>(null);
+  const [packageVersions, setPackageVersions] = useState<PackageVersionInfo | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<string>('latest');
+  const [loadingVersions, setLoadingVersions] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -172,8 +189,37 @@ export function ProfileManagement() {
     }
   };
 
-  const handleInstall = (pkg: SimplifierPackage) => {
-    installMutation.mutate({ packageId: pkg.id, version: pkg.version });
+  const handleGetVersions = async (packageId: string) => {
+    setLoadingVersions(true);
+    try {
+      const response = await fetch(`/api/profiles/versions?packageId=${encodeURIComponent(packageId)}`);
+      if (!response.ok) throw new Error('Failed to fetch versions');
+      const versions = await response.json() as PackageVersionInfo;
+      setPackageVersions(versions);
+      setSelectedVersion('latest');
+    } catch (error: any) {
+      toast({
+        title: 'Failed to Load Versions',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
+  const handleSelectPackage = (pkg: SimplifierPackage) => {
+    setSelectedPackage(pkg);
+    setPackageVersions(null);
+    setSelectedVersion('latest');
+    handleGetVersions(pkg.id);
+  };
+
+  const handleInstall = (pkg: SimplifierPackage, version?: string) => {
+    const versionToInstall = version || pkg.version;
+    installMutation.mutate({ packageId: pkg.id, version: versionToInstall });
+    setSelectedPackage(null);
+    setPackageVersions(null);
   };
 
   const handleUninstall = (packageId: string) => {
@@ -361,7 +407,7 @@ export function ProfileManagement() {
               <div className="flex gap-2">
                 <div className="flex-1">
                   <Input
-                    placeholder="Search for packages (e.g., 'US Core', 'IPS', 'IHE')..."
+                    placeholder="Search for packages (e.g., 'de.basisprofil.r4', 'US Core', 'IPS')..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -417,12 +463,12 @@ export function ProfileManagement() {
                             </div>
                           </div>
                           <Button
-                            onClick={() => handleInstall(pkg)}
-                            disabled={installMutation.isPending}
+                            onClick={() => handleSelectPackage(pkg)}
+                            disabled={loadingVersions}
                             variant="outline"
                           >
                             <Download className="w-4 h-4 mr-2" />
-                            Install
+                            Select Version
                           </Button>
                         </div>
                       </Card>
@@ -466,11 +512,11 @@ export function ProfileManagement() {
                             </div>
                           </div>
                           <Button
-                            onClick={() => handleInstall(pkg)}
-                            disabled={installMutation.isPending}
+                            onClick={() => handleSelectPackage(pkg)}
+                            disabled={loadingVersions}
                           >
                             <Download className="w-4 h-4 mr-2" />
-                            {installMutation.isPending ? 'Installing...' : 'Install'}
+                            Select Version
                           </Button>
                         </div>
                       </Card>
@@ -488,9 +534,96 @@ export function ProfileManagement() {
             </CardContent>
           </Card>
         </TabsContent>
-
-
       </Tabs>
+
+      {/* Version Selection Dialog */}
+      <Dialog open={!!selectedPackage} onOpenChange={() => setSelectedPackage(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Select Version for {selectedPackage?.title}</DialogTitle>
+            <DialogDescription>
+              Choose the version you want to install for package {selectedPackage?.id}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {loadingVersions ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mr-4"></div>
+              <span>Loading available versions...</span>
+            </div>
+          ) : packageVersions ? (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="version-select">Available Versions</Label>
+                <Select value={selectedVersion} onValueChange={setSelectedVersion}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select version" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="latest">
+                      Latest ({packageVersions.distTags.latest})
+                    </SelectItem>
+                    {Object.entries(packageVersions.versions)
+                      .sort(([a], [b]) => b.localeCompare(a, undefined, { numeric: true }))
+                      .map(([version, info]) => (
+                        <SelectItem key={version} value={version}>
+                          {version} (FHIR {info.fhirVersion})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedVersion && selectedVersion !== 'latest' && packageVersions.versions[selectedVersion] && (
+                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                  <h4 className="font-medium mb-2">Version Details</h4>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Version:</span> {selectedVersion}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">FHIR Version:</span> {packageVersions.versions[selectedVersion].fhirVersion}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Published:</span> {new Date(packageVersions.versions[selectedVersion].date).toLocaleDateString()}
+                    </div>
+                  </div>
+                  {packageVersions.versions[selectedVersion].description && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {packageVersions.versions[selectedVersion].description}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setSelectedPackage(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (selectedPackage) {
+                      const versionToInstall = selectedVersion === 'latest' 
+                        ? packageVersions.distTags.latest 
+                        : selectedVersion;
+                      handleInstall(selectedPackage, versionToInstall);
+                    }
+                  }}
+                  disabled={installMutation.isPending}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  {installMutation.isPending ? 'Installing...' : 'Install'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">Failed to load package versions</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

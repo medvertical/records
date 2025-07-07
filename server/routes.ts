@@ -775,6 +775,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/profiles/versions", async (req, res) => {
+    try {
+      const { packageId } = req.query;
+      if (!packageId) {
+        return res.status(400).json({ message: "Package ID is required" });
+      }
+      const versions = await profileManager.getPackageVersions(packageId as string);
+      res.json(versions);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/api/profiles/installed", async (req, res) => {
     try {
       const packages = await profileManager.getInstalledPackages();
@@ -801,9 +814,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/profiles/uninstall/:packageId", async (req, res) => {
+  app.post("/api/profiles/uninstall", async (req, res) => {
     try {
-      const { packageId } = req.params;
+      const { packageId } = req.body;
+      if (!packageId) {
+        return res.status(400).json({ message: "Package ID is required" });
+      }
       const result = await profileManager.uninstallPackage(packageId);
       if (result.success) {
         res.json(result);
@@ -815,9 +831,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/profiles/update/:packageId", async (req, res) => {
+  app.post("/api/profiles/update", async (req, res) => {
     try {
-      const { packageId } = req.params;
+      const { packageId } = req.body;
+      if (!packageId) {
+        return res.status(400).json({ message: "Package ID is required" });
+      }
       const result = await profileManager.updatePackage(packageId);
       if (result.success) {
         res.json(result);
