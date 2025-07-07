@@ -84,7 +84,7 @@ function Router() {
   return (
     <div className="min-h-screen flex bg-gray-50">
       <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
-      <main className="flex-1 overflow-hidden flex flex-col">
+      <main className="flex-1 flex flex-col">
         <Header 
           title={getPageTitle()}
           subtitle={getPageSubtitle()}

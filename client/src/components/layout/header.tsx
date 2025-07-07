@@ -40,8 +40,8 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
   };
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4 w-full">
-      <div className="flex items-center justify-between w-full">
+    <header className="bg-white shadow-sm border-b border-gray-200 w-full m-0 p-0">
+      <div className="flex items-center justify-between w-full px-6 py-4 m-0">
         <div className="flex items-center space-x-4">
           {onSidebarToggle && (
             <Button
