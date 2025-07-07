@@ -283,15 +283,10 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="servers">All Servers</TabsTrigger>
-            <TabsTrigger value="browse">Browse Servers</TabsTrigger>
-            <TabsTrigger value="configure">Configure Connection</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="servers" className="space-y-4">
-            <div className="flex justify-between items-center">
+        <div className="w-full">
+          {!isAddingNew && !editingServer ? (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
               <h3 className="text-lg font-medium">Manage FHIR Servers</h3>
               <Button onClick={handleAddNewServer} className="flex items-center gap-2">
                 <Server className="h-4 w-4" />
@@ -354,77 +349,16 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
                 </div>
               )}
             </div>
-          </TabsContent>
-
-          <TabsContent value="browse" className="space-y-4">
-            <div className="grid gap-4">
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Featured Servers</h3>
-                <div className="grid gap-3">
-                  {predefinedServers.filter(s => s.featured).map((server, index) => (
-                    <Card key={index} className="cursor-pointer" onClick={() => handleServerSelect(server)}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <Globe className="h-8 w-8 text-blue-600" />
-                            <div>
-                              <h4 className="font-medium">{server.name}</h4>
-                              <p className="text-sm text-gray-600">{server.description}</p>
-                              <p className="text-xs text-gray-400 mt-1">{server.url}</p>
-                            </div>
-                          </div>
-                          <Badge variant="secondary">
-                            <Shield className="h-3 w-3 mr-1" />
-                            Public
-                          </Badge>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-
-              <Separator />
-
-              <div>
-                <h3 className="text-lg font-semibold mb-2">Other Options</h3>
-                <div className="grid gap-3">
-                  {predefinedServers.filter(s => !s.featured).map((server, index) => (
-                    <Card key={index} className="cursor-pointer" onClick={() => handleServerSelect(server)}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            {server.custom ? <Key className="h-6 w-6 text-green-600" /> : <Globe className="h-6 w-6 text-blue-600" />}
-                            <div>
-                              <h4 className="font-medium">{server.name}</h4>
-                              <p className="text-sm text-gray-600">{server.description}</p>
-                            </div>
-                          </div>
-                          {server.custom && (
-                            <Badge variant="outline">
-                              <Key className="h-3 w-3 mr-1" />
-                              Custom
-                            </Badge>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
             </div>
-          </TabsContent>
-
-          <TabsContent value="configure" className="space-y-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium">
-                {editingServer ? `Edit ${editingServer.name}` : isAddingNew ? 'Add New Server' : 'Configure Connection'}
-              </h3>
-              {(editingServer || isAddingNew) && (
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium">
+                  {editingServer ? `Edit ${editingServer.name}` : 'Add New Server'}
+                </h3>
                 <Button 
                   variant="outline" 
                   onClick={() => {
-                    setSelectedTab("servers");
                     setEditingServer(null);
                     setIsAddingNew(false);
                     reset();
@@ -432,8 +366,7 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
                 >
                   Back to Servers
                 </Button>
-              )}
-            </div>
+              </div>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               <div className="grid gap-4">
                 <div>
@@ -565,44 +498,9 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
                 </Button>
               </div>
             </form>
-          </TabsContent>
-
-          <TabsContent value="existing" className="space-y-4">
-            <div className="space-y-3">
-              {existingServers?.map((server) => (
-                <Card key={server.id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-3 h-3 rounded-full ${server.isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
-                        <div>
-                          <h4 className="font-medium">{server.name}</h4>
-                          <p className="text-sm text-gray-600">{server.url}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {server.isActive && (
-                          <Badge variant="default">
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Active
-                          </Badge>
-                        )}
-                        <Button variant="outline" size="sm">
-                          {server.isActive ? "Disconnect" : "Connect"}
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-              {(!existingServers || existingServers.length === 0) && (
-                <div className="text-center py-8 text-gray-500">
-                  No servers configured yet. Add a server from the Browse or Configure tabs.
-                </div>
-              )}
             </div>
-          </TabsContent>
-        </Tabs>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
