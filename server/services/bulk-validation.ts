@@ -83,10 +83,11 @@ export class BulkValidationService {
       for (let i = 0; i < typesToValidate.length; i++) {
         const resourceType = typesToValidate[i];
         
-        // Check if validation was paused or stopped
+        // Check if validation was paused or stopped - CRITICAL: this must stop execution
         if (!this.isRunning || this.isPaused) {
           this.resumeFromResourceType = resourceType;
           console.log(`Validation paused at resource type: ${resourceType}`);
+          console.log('STOPPING VALIDATION LOOP - PAUSED');
           return this.currentProgress;
         }
 
@@ -106,6 +107,7 @@ export class BulkValidationService {
           // Check again after completing a resource type
           if (!this.isRunning || this.isPaused) {
             console.log(`Validation paused after completing ${resourceType}`);
+            console.log('STOPPING VALIDATION LOOP - PAUSED AFTER RESOURCE TYPE');
             // Set the next resource type for resume
             if (i + 1 < typesToValidate.length) {
               this.resumeFromResourceType = typesToValidate[i + 1];
@@ -135,9 +137,9 @@ export class BulkValidationService {
 
       return this.currentProgress;
     } finally {
-      // When paused, keep validation state for resuming
+      // Always stop running when exiting, but preserve state if paused
+      this.isRunning = false;
       if (!this.isPaused) {
-        this.isRunning = false;
         this.currentProgress = null;
       }
     }
@@ -359,6 +361,11 @@ export class BulkValidationService {
       this.isPaused = true;
       console.log('Validation paused by user request');
       console.log(`Paused at resource type: ${this.resumeFromResourceType}, offset: ${this.resumeFromOffset}`);
+      
+      // Force the validation to stop immediately
+      if (this.currentProgress) {
+        this.currentProgress.currentResourceType = undefined;
+      }
     }
   }
 
@@ -372,8 +379,8 @@ export class BulkValidationService {
     }
 
     console.log(`Resuming validation from resource type: ${this.resumeFromResourceType}`);
-    this.isRunning = true;
     this.isPaused = false;
+    this.isRunning = true;
     
     // Get all resource types and find where to continue
     const allResourceTypes = await this.fhirClient.getAllResourceTypes();
@@ -392,17 +399,69 @@ export class BulkValidationService {
       console.log(`No specific resume point, continuing with all resource types`);
     }
     
-    // Continue the validation with remaining resource types
-    const resumeOptions = {
-      batchSize: 50,
-      skipUnchanged: true,
-      ...options,
-      resourceTypes: typesToValidate,
-      onProgress: options.onProgress
-    };
+    // Continue the validation directly without calling validateAllResources 
+    // to avoid the "already running" check conflict
     
-    // Continue the validation loop
-    return await this.validateAllResources(resumeOptions);
+    // Get resource counts for the remaining types
+    const resourceCounts: Record<string, number> = {};
+    for (const resourceType of typesToValidate) {
+      try {
+        resourceCounts[resourceType] = await this.fhirClient.getResourceCount(resourceType);
+      } catch (error) {
+        console.error(`Failed to get count for ${resourceType}:`, error);
+        resourceCounts[resourceType] = 0;
+      }
+    }
+
+    // Update total resources for remaining types
+    this.currentProgress.totalResources = Object.values(resourceCounts).reduce((sum, count) => sum + count, 0);
+
+    const { batchSize = 50, skipUnchanged = true, onProgress } = options;
+
+    // Continue validation from where we left off
+    for (let i = 0; i < typesToValidate.length; i++) {
+      const resourceType = typesToValidate[i];
+      
+      // Check if validation was paused or stopped
+      if (!this.isRunning || this.isPaused) {
+        this.resumeFromResourceType = resourceType;
+        console.log('STOPPING VALIDATION LOOP - PAUSED DURING RESUME');
+        return this.currentProgress;
+      }
+
+      try {
+        this.currentProgress.currentResourceType = resourceType;
+        console.log(`Resuming validation for ${resourceType}: ${resourceCounts[resourceType]} resources`);
+        
+        await this.validateResourceType(resourceType, resourceCounts[resourceType], batchSize, skipUnchanged, onProgress);
+        
+        // Check again after completing a resource type
+        if (!this.isRunning || this.isPaused) {
+          console.log(`Validation paused after completing ${resourceType} during resume`);
+          if (i + 1 < typesToValidate.length) {
+            this.resumeFromResourceType = typesToValidate[i + 1];
+          } else {
+            this.resumeFromResourceType = undefined;
+          }
+          return this.currentProgress;
+        }
+      } catch (error) {
+        console.error(`Error processing resource type ${resourceType} during resume:`, error);
+        this.currentProgress.errors.push(`Failed to process ${resourceType}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    // Mark as complete if we finished all types
+    this.currentProgress.isComplete = true;
+    this.currentProgress.currentResourceType = undefined;
+    this.isRunning = false;
+    this.isPaused = false;
+    
+    if (onProgress) {
+      onProgress(this.currentProgress);
+    }
+
+    return this.currentProgress;
   }
 
   stopValidation(): void {

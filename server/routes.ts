@@ -534,6 +534,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No paused validation to resume" });
       }
 
+
+
       // Broadcast validation start when resuming (before actual resume)
       if (validationWebSocket) {
         validationWebSocket.broadcastValidationStart();
