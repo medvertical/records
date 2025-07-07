@@ -342,26 +342,44 @@ export class BulkValidationService {
       this.isRunning = false;
       this.isPaused = true;
       console.log('Validation paused by user request');
+      console.log(`Paused at resource type: ${this.resumeFromResourceType}, offset: ${this.resumeFromOffset}`);
     }
   }
 
   async resumeValidation(options: BulkValidationOptions = {}): Promise<BulkValidationProgress> {
-    if (!this.isPaused || !this.currentProgress) {
+    if (!this.currentProgress) {
       throw new Error('No validation to resume');
+    }
+
+    if (!this.isPaused) {
+      throw new Error('No paused validation to resume');
     }
 
     console.log(`Resuming validation from resource type: ${this.resumeFromResourceType}`);
     this.isRunning = true;
     this.isPaused = false;
     
-    // Continue from where we left off by starting a new validation with resume parameters
+    // Get all resource types to continue with
+    const resourceCounts = await this.fhirClient.getResourceCount();
+    const allResourceTypes = Object.keys(resourceCounts);
+    
+    // Find where to continue from
+    let startIndex = 0;
+    if (this.resumeFromResourceType) {
+      startIndex = allResourceTypes.indexOf(this.resumeFromResourceType);
+      if (startIndex === -1) startIndex = 0;
+    }
+    
+    const remainingResourceTypes = allResourceTypes.slice(startIndex);
+    
+    // Continue validation from where we left off
     const resumeOptions = {
       ...options,
-      resourceTypes: this.resumeFromResourceType ? [this.resumeFromResourceType] : options.resourceTypes,
+      resourceTypes: remainingResourceTypes,
       onProgress: options.onProgress
     };
     
-    // Start validation again from the paused point
+    // Continue the validation loop
     return await this.validateAllResources(resumeOptions);
   }
 

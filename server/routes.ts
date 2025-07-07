@@ -435,7 +435,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       bulkValidationService.validateAllResources({
         batchSize: options.batchSize || 50,
         skipUnchanged: options.skipUnchanged !== false, // Default to true
-        resourceTypes: options.resourceTypes
+        resourceTypes: options.resourceTypes,
+        onProgress: (progress) => {
+          if (validationWebSocket) {
+            validationWebSocket.broadcastProgress(progress);
+          }
+        }
       }).catch(error => {
         console.error('Bulk validation error:', error);
         if (validationWebSocket) {
