@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useValidationSettings, useUpdateValidationSettings, useFhirServerPackages } from '@/hooks/use-fhir-data';
 
@@ -40,6 +41,7 @@ export function ProfileManagement() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SimplifierPackage[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [searchFilter, setSearchFilter] = useState('all');
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -100,6 +102,66 @@ export function ProfileManagement() {
     },
   });
 
+  // Uninstall package mutation
+  const uninstallMutation = useMutation({
+    mutationFn: async (packageId: string) => {
+      const response = await fetch('/api/profiles/uninstall', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packageId }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Uninstall failed');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: 'Package Uninstalled',
+        description: `Successfully removed package and ${data.profilesRemoved || 0} profiles`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles/installed'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Uninstall Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // Update package mutation
+  const updateMutation = useMutation({
+    mutationFn: async (packageId: string) => {
+      const response = await fetch('/api/profiles/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packageId }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Update failed');
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: 'Package Updated',
+        description: `Successfully updated to version ${data.newVersion}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/profiles/installed'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'Update Failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setSearchLoading(true);
@@ -112,6 +174,14 @@ export function ProfileManagement() {
 
   const handleInstall = (pkg: SimplifierPackage) => {
     installMutation.mutate({ packageId: pkg.id, version: pkg.version });
+  };
+
+  const handleUninstall = (packageId: string) => {
+    uninstallMutation.mutate(packageId);
+  };
+
+  const handleUpdate = (packageId: string) => {
+    updateMutation.mutate(packageId);
   };
 
   return (
@@ -168,14 +238,25 @@ export function ProfileManagement() {
                           </div>
                           <div className="flex gap-2">
                             {pkg.updateAvailable && (
-                              <Button size="sm" variant="outline">
-                                <RefreshCw className="w-4 h-4 mr-1" />
-                                Update
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleUpdate(pkg.id)}
+                                disabled={updateMutation.isPending}
+                              >
+                                <RefreshCw className={`w-4 h-4 mr-1 ${updateMutation.isPending ? 'animate-spin' : ''}`} />
+                                {updateMutation.isPending ? 'Updating...' : 'Update'}
                               </Button>
                             )}
-                            <Button size="sm" variant="outline" className="text-destructive hover:text-destructive">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleUninstall(pkg.id)}
+                              disabled={uninstallMutation.isPending}
+                            >
                               <Trash2 className="w-4 h-4 mr-1" />
-                              Uninstall
+                              {uninstallMutation.isPending ? 'Removing...' : 'Uninstall'}
                             </Button>
                           </div>
                         </div>
@@ -278,21 +359,84 @@ export function ProfileManagement() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2">
-                <Input
-                  placeholder="Search for packages..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                />
+                <div className="flex-1">
+                  <Input
+                    placeholder="Search for packages (e.g., 'US Core', 'IPS', 'IHE')..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  />
+                </div>
+                <Select value={searchFilter} onValueChange={setSearchFilter}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue placeholder="Filter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="ig">Implementation Guides</SelectItem>
+                    <SelectItem value="profile">Profiles</SelectItem>
+                    <SelectItem value="terminology">Terminology</SelectItem>
+                    <SelectItem value="us-core">US Core</SelectItem>
+                    <SelectItem value="ips">IPS</SelectItem>
+                    <SelectItem value="ihe">IHE</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Button onClick={handleSearch} disabled={searchLoading}>
                   <Search className="w-4 h-4 mr-2" />
                   {searchLoading ? 'Searching...' : 'Search'}
                 </Button>
               </div>
 
+              {/* Popular Packages Section */}
+              {searchResults.length === 0 && !searchLoading && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Package className="w-5 h-5 text-muted-foreground" />
+                    <h3 className="text-lg font-medium">Popular Packages</h3>
+                  </div>
+                  <div className="grid gap-4">
+                    {[
+                      { id: 'hl7.fhir.us.core', title: 'US Core', description: 'Official US Core Implementation Guide for FHIR R4', version: '6.1.0', fhirVersion: '4.0.1', author: 'HL7 International' },
+                      { id: 'hl7.fhir.uv.ips', title: 'International Patient Summary', description: 'IPS Implementation Guide for cross-border patient care', version: '1.1.0', fhirVersion: '4.0.1', author: 'HL7 International' },
+                      { id: 'ihe.iti.pcc', title: 'IHE Patient Care Coordination', description: 'IHE PCC profiles for patient care coordination', version: '1.0.0', fhirVersion: '4.0.1', author: 'IHE International' },
+                      { id: 'hl7.fhir.uv.sdc', title: 'Structured Data Capture', description: 'SDC Implementation Guide for form-based data capture', version: '3.0.0', fhirVersion: '4.0.1', author: 'HL7 International' },
+                      { id: 'hl7.fhir.uv.smart', title: 'SMART App Launch', description: 'SMART on FHIR application launch framework', version: '2.0.0', fhirVersion: '4.0.1', author: 'HL7 International' },
+                    ].map((pkg) => (
+                      <Card key={pkg.id} className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-2 flex-1">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold">{pkg.title}</h3>
+                              <Badge variant="secondary">Popular</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground">{pkg.description}</p>
+                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <span>Version {pkg.version}</span>
+                              <span>FHIR {pkg.fhirVersion}</span>
+                              <span>By {pkg.author}</span>
+                            </div>
+                          </div>
+                          <Button
+                            onClick={() => handleInstall(pkg)}
+                            disabled={installMutation.isPending}
+                            variant="outline"
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Install
+                          </Button>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {searchResults.length > 0 && (
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Search Results</h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-medium">Search Results</h3>
+                    <Badge variant="outline">{searchResults.length} results</Badge>
+                  </div>
                   <div className="grid gap-4">
                     {searchResults.map((pkg) => (
                       <Card key={pkg.id} className="p-4">
@@ -303,6 +447,15 @@ export function ProfileManagement() {
                               <Badge variant={pkg.status === 'active' ? 'default' : 'secondary'}>
                                 {pkg.status}
                               </Badge>
+                              {pkg.id.includes('us.core') && (
+                                <Badge variant="outline" className="text-blue-600">US Core</Badge>
+                              )}
+                              {pkg.id.includes('ips') && (
+                                <Badge variant="outline" className="text-green-600">IPS</Badge>
+                              )}
+                              {pkg.id.includes('ihe') && (
+                                <Badge variant="outline" className="text-purple-600">IHE</Badge>
+                              )}
                             </div>
                             <p className="text-sm text-muted-foreground">{pkg.description}</p>
                             <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -317,12 +470,19 @@ export function ProfileManagement() {
                             disabled={installMutation.isPending}
                           >
                             <Download className="w-4 h-4 mr-2" />
-                            Install
+                            {installMutation.isPending ? 'Installing...' : 'Install'}
                           </Button>
                         </div>
                       </Card>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {searchResults.length === 0 && searchLoading && (
+                <div className="text-center py-8">
+                  <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Searching packages...</p>
                 </div>
               )}
             </CardContent>
