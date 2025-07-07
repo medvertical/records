@@ -3,6 +3,7 @@ import { ValidationEngine } from './validation-engine';
 import { storage } from '../storage';
 import { InsertFhirResource, InsertValidationResult } from '../../shared/schema';
 import { validationWebSocket } from './websocket-server';
+import { createHash } from 'crypto';
 
 export interface BulkValidationProgress {
   totalResources: number;
@@ -184,6 +185,7 @@ export class BulkValidationService {
     while (hasMore && !this.shouldStop && this.state === 'running') {
       try {
         console.log(`Searching ${resourceType} with offset ${offset}, batchSize ${batchSize}`);
+        
         const bundle = await this.fhirClient.searchResources(resourceType, { _offset: offset }, batchSize);
         console.log(`Got bundle for ${resourceType}: ${bundle.entry?.length || 0} entries, total: ${bundle.total || 'unknown'}`);
         
@@ -214,7 +216,7 @@ export class BulkValidationService {
         }
 
         offset += bundle.entry.length;
-        hasMore = bundle.entry.length === batchSize;
+        hasMore = bundle.entry.length >= batchSize;
 
         // Update progress
         if (progress.processedResources > 0) {
@@ -291,7 +293,7 @@ export class BulkValidationService {
   }
 
   private createResourceHash(resource: any): string {
-    const hash = require('crypto').createHash('sha256');
+    const hash = createHash('sha256');
     hash.update(JSON.stringify(resource));
     return hash.digest('hex');
   }
