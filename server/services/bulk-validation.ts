@@ -352,13 +352,8 @@ export class BulkValidationService {
     this.isRunning = true;
     this.isPaused = false;
     
-    // Continue from where we left off
-    const resumeOptions = {
-      ...options,
-      resourceTypes: this.resumeFromResourceType ? [this.resumeFromResourceType] : options.resourceTypes
-    };
-
-    return await this.validateAllResources(resumeOptions);
+    // Don't start a new validation - the current one should resume from pause checks
+    return this.currentProgress;
   }
 
   stopValidation(): void {
