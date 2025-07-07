@@ -114,12 +114,33 @@ export class RobustValidationService {
   private async getResourceCounts(resourceTypes: string[]): Promise<Record<string, number>> {
     const counts: Record<string, number> = {};
     
-    // Use reliable counts for demo purposes since FHIR server is unreliable
-    resourceTypes.forEach(type => {
-      counts[type] = this.getExpectedCountForType(type);
-    });
+    // Get actual counts from FHIR server with timeout protection
+    for (const type of resourceTypes) {
+      try {
+        console.log(`Getting count for ${type}...`);
+        const count = await Promise.race([
+          this.fhirClient.getResourceCount(type),
+          new Promise<number>((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout')), 8000)
+          )
+        ]);
+        
+        if (count > 0) {
+          counts[type] = count;
+          console.log(`Got real count for ${type}: ${count}`);
+        } else {
+          counts[type] = this.getExpectedCountForType(type);
+          console.log(`Using fallback count for ${type}: ${counts[type]}`);
+        }
+      } catch (error) {
+        counts[type] = this.getExpectedCountForType(type);
+        console.log(`Failed to get ${type} count, using fallback: ${counts[type]}`);
+      }
+    }
 
-    console.log('Using reliable resource counts for validation:', counts);
+
+
+    console.log('Resource counts for validation:', counts);
     return counts;
   }
 
@@ -174,7 +195,9 @@ export class RobustValidationService {
         options.onProgress(this.checkpoint.progress);
       }
       
-      validationWebSocket.broadcast('validation-completed', this.checkpoint.progress);
+      if (validationWebSocket && validationWebSocket.broadcast) {
+        validationWebSocket.broadcast('validation-completed', this.checkpoint.progress);
+      }
     }
   }
 
@@ -257,7 +280,9 @@ export class RobustValidationService {
         if (onProgress) {
           onProgress(progress);
         }
-        validationWebSocket.broadcast('validation-progress', progress);
+        if (validationWebSocket && validationWebSocket.broadcast) {
+          validationWebSocket.broadcast('validation-progress', progress);
+        }
 
       } catch (error) {
         console.error(`Critical error processing ${resourceType} batch:`, error);
@@ -269,21 +294,22 @@ export class RobustValidationService {
   }
 
   private getExpectedCountForType(resourceType: string): number {
+    // Use higher fallback counts that better match real FHIR servers
     const defaultCounts: Record<string, number> = {
-      'Patient': 100,
-      'Observation': 200, 
-      'Encounter': 150,
-      'Condition': 80,
-      'Procedure': 60,
-      'DiagnosticReport': 40,
-      'MedicationRequest': 70,
-      'AllergyIntolerance': 30,
-      'Immunization': 50,
-      'Organization': 20,
-      'Practitioner': 25,
-      'Location': 15
+      'Patient': 2000,
+      'Observation': 25000, 
+      'Encounter': 15000,
+      'Condition': 8000,
+      'Procedure': 6000,
+      'DiagnosticReport': 4000,
+      'MedicationRequest': 7000,
+      'AllergyIntolerance': 3000,
+      'Immunization': 5000,
+      'Organization': 500,
+      'Practitioner': 1000,
+      'Location': 800
     };
-    return defaultCounts[resourceType] || 50;
+    return defaultCounts[resourceType] || 1000;
   }
 
   private generateMockResourcesForDemo(resourceType: string, count: number): any[] {
