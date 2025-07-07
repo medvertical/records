@@ -83,7 +83,7 @@ export default function Dashboard() {
   });
 
   // WebSocket for real-time validation updates
-  const { isConnected, progress } = useValidationWebSocket();
+  const { isConnected, progress, validationStatus } = useValidationWebSocket();
 
   useEffect(() => {
     if (fhirConnection) {
@@ -760,7 +760,7 @@ export default function Dashboard() {
         <Card className="transition-all duration-300 hover:shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <RotateCcw className="h-5 w-5" />
+              <Square className="h-5 w-5" />
               Recent Validation Activity
             </CardTitle>
             <CardDescription>
