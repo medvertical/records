@@ -384,7 +384,12 @@ export class BulkValidationService {
       const resumeIndex = allResourceTypes.indexOf(this.resumeFromResourceType);
       if (resumeIndex >= 0) {
         typesToValidate = allResourceTypes.slice(resumeIndex);
+        console.log(`Resuming from resource type ${this.resumeFromResourceType} (index ${resumeIndex})`);
+      } else {
+        console.log(`Resume resource type ${this.resumeFromResourceType} not found, starting from beginning`);
       }
+    } else {
+      console.log(`No specific resume point, continuing with all resource types`);
     }
     
     // Continue the validation with remaining resource types

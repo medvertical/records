@@ -534,15 +534,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No paused validation to resume" });
       }
 
-      // Resume the validation (just change state, don't restart)
-      const resumedProgress = await bulkValidationService.resumeValidation({
-        batchSize: 50,
-        skipUnchanged: true
-      });
-      
-      // Broadcast validation start when resuming
+      // Broadcast validation start when resuming (before actual resume)
       if (validationWebSocket) {
         validationWebSocket.broadcastValidationStart();
+      }
+
+      // Resume the validation with proper options
+      const resumedProgress = await bulkValidationService.resumeValidation({
+        batchSize: 50,
+        skipUnchanged: true,
+        onProgress: (progress) => {
+          if (validationWebSocket) {
+            validationWebSocket.broadcastProgress(progress);
+          }
+        }
+      });
+      
+      // Broadcast initial resume progress
+      if (validationWebSocket && resumedProgress) {
         validationWebSocket.broadcastProgress(resumedProgress);
       }
 
