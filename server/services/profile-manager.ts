@@ -394,7 +394,7 @@ export class ProfileManager {
       return versionInfo;
     } catch (error: any) {
       console.error(`Failed to get versions for package ${packageId}:`, error);
-      throw new Error(`Failed to get package versions: ${error.message}`);
+      throw new Error(`Package ${packageId} was found through search but version information is not available through standard APIs. This package may be in early development or not yet published to standard registries.`);
     }
   }
 

@@ -544,8 +544,10 @@ export class SimplifierClient {
 
   async getPackageDetails(packageId: string): Promise<SimplifierPackage | null> {
     try {
+
+
       const response: AxiosResponse = await axios.get(
-        `${this.baseUrl}/packages/${packageId}`,
+        `${this.packageServerUrl}/packages/${packageId}`,
         { headers: this.headers }
       );
 
@@ -619,8 +621,17 @@ export class SimplifierClient {
 
   async getLatestVersion(packageId: string): Promise<string | null> {
     try {
+      // For packages discovered through search but not in standard registries
+      console.log(`[SimplifierClient] Getting latest version for: ${packageId}`);
+      
+      // Try to get versions first
+      const versionsResult = await this.getPackageVersions(packageId);
+      if (versionsResult.distTags?.latest) {
+        return versionsResult.distTags.latest;
+      }
+      
       const response: AxiosResponse = await axios.get(
-        `${this.baseUrl}/packages/${packageId}/versions`,
+        `${this.packageServerUrl}/packages/${packageId}/versions`,
         { headers: this.headers }
       );
 
@@ -708,50 +719,39 @@ export class SimplifierClient {
         return npmVersions;
       }
 
-      // Fallback to Simplifier.net API
-      const response: AxiosResponse = await axios.get(
-        `${this.baseUrl}/packages/${packageId}/versions`,
-        { headers: this.headers }
-      );
 
-      const versionsData = response.data.data || [];
-      const versions: Record<string, { fhirVersion: string; date: string; description?: string; }> = {};
-      let latestVersion = '';
 
-      // Process version data
-      for (const versionInfo of versionsData) {
-        if (versionInfo.version) {
-          versions[versionInfo.version] = {
-            fhirVersion: versionInfo.fhirVersion || '4.0.1',
-            date: versionInfo.publishedDate || versionInfo.date || new Date().toISOString(),
-            description: versionInfo.description || versionInfo.summary
-          };
+      // Try to get versions from FHIR Package Registry first
+      try {
+        const fhirResponse: AxiosResponse = await axios.get(
+          `${this.fhirRegistryUrl}/catalog`,
+          { headers: this.headers }
+        );
+        
+        if (fhirResponse.data && Array.isArray(fhirResponse.data)) {
+          const pkg = fhirResponse.data.find((p: any) => p.Name === packageId);
+          if (pkg) {
+            return {
+              versions: {
+                'latest': {
+                  fhirVersion: pkg.FhirVersion || '4.0.1',
+                  date: new Date().toISOString(),
+                  description: pkg.Description || ''
+                }
+              },
+              distTags: {
+                latest: 'latest'
+              }
+            };
+          }
         }
+      } catch (fhirError) {
+        console.log(`[FHIR Registry] Could not get versions for ${packageId}: ${fhirError.message}`);
       }
 
-      // Get the latest stable version (excluding pre-release versions)
-      const stableVersions = Object.keys(versions)
-        .filter(v => !v.includes('preview') && !v.includes('alpha') && !v.includes('beta') && !v.includes('rc'))
-        .sort((a, b) => {
-          const aParts = a.split('.').map(Number);
-          const bParts = b.split('.').map(Number);
-          
-          for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
-            const aPart = aParts[i] || 0;
-            const bPart = bParts[i] || 0;
-            if (aPart !== bPart) return bPart - aPart;
-          }
-          return 0;
-        });
-
-      latestVersion = stableVersions[0] || Object.keys(versions)[0] || '1.0.0';
-
-      return {
-        versions,
-        distTags: {
-          latest: latestVersion
-        }
-      };
+      // Package not found in standard registries
+      console.log(`[SimplifierClient] Package ${packageId} not found in standard registries`);
+      throw new Error(`Package ${packageId} versions not available through standard APIs`);
     } catch (error: any) {
       console.error(`Failed to get package versions for ${packageId}:`, error);
       // Return fallback data for testing
