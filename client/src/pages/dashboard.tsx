@@ -105,6 +105,20 @@ export default function Dashboard() {
     }
   }, [progress, currentProgress]);
 
+  // Also update validation state based on validationStatus from WebSocket
+  useEffect(() => {
+    if (validationStatus === 'running') {
+      setIsValidationRunning(true);
+      setIsValidationPaused(false);
+    } else if (validationStatus === 'completed') {
+      setIsValidationRunning(false);
+      setIsValidationPaused(false);
+    } else if (validationStatus === 'idle') {
+      setIsValidationRunning(false);
+      setIsValidationPaused(false);
+    }
+  }, [validationStatus]);
+
   const handleStartValidation = async () => {
     try {
       const response = await fetch('/api/validation/bulk/start', {

@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 import Dashboard from "@/pages/dashboard";
 import ResourceBrowser from "@/pages/resource-browser";
 import ResourceDetail from "@/pages/resource-detail";
@@ -90,7 +91,10 @@ function Router() {
       />
       <div className="flex pt-16">
         <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
-        <main className="flex-1 overflow-hidden relative z-10">
+        <main className={cn(
+          "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
+          sidebarOpen && !isMobile ? "ml-64" : "ml-0"
+        )}>
           <Switch>
             <Route path="/" component={DashboardComponent} />
             <Route path="/dashboard" component={DashboardComponent} />

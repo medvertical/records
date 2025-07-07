@@ -86,7 +86,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
 
   return (
     <aside className={cn(
-      "bg-white shadow-lg flex-shrink-0 transition-all duration-300 ease-in-out",
+      "fixed left-0 top-16 h-[calc(100vh-4rem)] bg-white shadow-lg transition-all duration-300 ease-in-out z-30 overflow-y-auto",
       isOpen ? "w-64" : "w-0 overflow-hidden"
     )}>
       <div className="w-64">
