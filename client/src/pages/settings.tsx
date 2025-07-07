@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import ServerConnectionModal from '@/components/settings/server-connection-modal';
 import { 
   Settings, 
   Database, 
@@ -18,7 +19,8 @@ import {
   RefreshCw,
   CheckCircle,
   AlertTriangle,
-  Info
+  Info,
+  Server
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useValidationSettings, useUpdateValidationSettings } from '@/hooks/use-fhir-data';
@@ -26,6 +28,7 @@ import { useValidationSettings, useUpdateValidationSettings } from '@/hooks/use-
 export default function SettingsPage() {
   const { toast } = useToast();
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [notifications, setNotifications] = useState({
     validationErrors: true,
     connectionIssues: true,
@@ -391,6 +394,37 @@ export default function SettingsPage() {
         <TabsContent value="fhir" className="space-y-4">
           <Card>
             <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>FHIR Server Connection</span>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setIsServerModalOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Server className="h-4 w-4" />
+                  Change Server
+                </Button>
+              </CardTitle>
+              <CardDescription>
+                Current FHIR server connection and settings
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                  <div>
+                    <p className="font-medium">Connected to HAPI FHIR R4</p>
+                    <p className="text-sm text-muted-foreground">https://server.fire.ly</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle>FHIR Server Settings</CardTitle>
               <CardDescription>
                 Configure how the application interacts with FHIR servers
@@ -668,6 +702,11 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <ServerConnectionModal 
+        open={isServerModalOpen} 
+        onOpenChange={setIsServerModalOpen} 
+      />
     </div>
   );
 }

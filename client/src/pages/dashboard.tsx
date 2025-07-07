@@ -284,10 +284,10 @@ export default function Dashboard() {
                     Processing: {validationProgress.processedResources.toLocaleString()} / {validationProgress.totalResources.toLocaleString()}
                   </span>
                   <span className="text-sm font-bold text-blue-600">
-                    {currentProgressPercent.toFixed(1)}%
+                    {Math.min(100, currentProgressPercent).toFixed(1)}%
                   </span>
                 </div>
-                <Progress value={currentProgressPercent} className="w-full h-3" />
+                <Progress value={Math.min(100, currentProgressPercent)} className="w-full h-3" />
               </div>
 
               {/* Live Statistics Grid */}
@@ -387,12 +387,12 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-2xl font-bold">{totalResources.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {validationCoverage > 0 ? `${(validationCoverage * 100).toFixed(1)}% validated` : 'Awaiting validation'}
+              {validationCoverage > 0 ? `${Math.min(100, (validationCoverage * 100)).toFixed(1)}% validated` : 'Awaiting validation'}
             </p>
             <div className="absolute bottom-0 left-0 w-full h-1 bg-muted">
               <div 
                 className="h-full bg-blue-500 transition-all duration-1000"
-                style={{ width: `${validationCoverage * 100}%` }}
+                style={{ width: `${Math.min(100, validationCoverage * 100)}%` }}
               />
             </div>
           </CardContent>
@@ -408,13 +408,13 @@ export default function Dashboard() {
               {(dashboardStats?.validResources || validationProgress?.validResources || 0).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {totalValidated > 0 ? `${((dashboardStats?.validResources || 0) / totalValidated * 100).toFixed(1)}% success rate` : 'No validation data'}
+              {totalValidated > 0 ? `${Math.min(100, ((dashboardStats?.validResources || 0) / totalValidated * 100)).toFixed(1)}% success rate` : 'No validation data'}
             </p>
             <div className="absolute bottom-0 left-0 w-full h-1 bg-muted">
               <div 
                 className="h-full bg-green-500 transition-all duration-1000"
                 style={{ 
-                  width: totalValidated > 0 ? `${((dashboardStats?.validResources || 0) / totalValidated) * 100}%` : '0%' 
+                  width: totalValidated > 0 ? `${Math.min(100, ((dashboardStats?.validResources || 0) / totalValidated) * 100)}%` : '0%' 
                 }}
               />
             </div>
@@ -431,13 +431,13 @@ export default function Dashboard() {
               {(validationSummary?.resourcesWithErrors || validationProgress?.errorResources || 0).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {totalValidated > 0 ? `${(((validationSummary?.resourcesWithErrors || 0) / totalValidated) * 100).toFixed(1)}% error rate` : 'No validation data'}
+              {totalValidated > 0 ? `${Math.min(100, (((validationSummary?.resourcesWithErrors || 0) / totalValidated) * 100)).toFixed(1)}% error rate` : 'No validation data'}
             </p>
             <div className="absolute bottom-0 left-0 w-full h-1 bg-muted">
               <div 
                 className="h-full bg-red-500 transition-all duration-1000"
                 style={{ 
-                  width: totalValidated > 0 ? `${((validationSummary?.resourcesWithErrors || 0) / totalValidated) * 100}%` : '0%' 
+                  width: totalValidated > 0 ? `${Math.min(100, ((validationSummary?.resourcesWithErrors || 0) / totalValidated) * 100)}%` : '0%' 
                 }}
               />
             </div>
@@ -567,7 +567,7 @@ export default function Dashboard() {
                       .sort(([, a], [, b]) => (b as any).total - (a as any).total)
                       .slice(0, 5)
                       .map(([type, data]) => {
-                        const percentage = ((data as any).valid / (data as any).total) * 100;
+                        const percentage = Math.min(100, ((data as any).valid / (data as any).total) * 100);
                         return (
                           <div key={type} className="flex justify-between items-center">
                             <span className="text-sm">{type}</span>
@@ -657,11 +657,11 @@ export default function Dashboard() {
                 <div className="text-sm font-medium mb-2">Validation Coverage</div>
                 <div className="flex items-center gap-2">
                   <Progress 
-                    value={(validationCoverage || 0) * 100} 
+                    value={Math.min(100, (validationCoverage || 0) * 100)} 
                     className="flex-1"
                   />
                   <span className="text-sm font-medium w-12">
-                    {((validationCoverage || 0) * 100).toFixed(1)}%
+                    {Math.min(100, (validationCoverage || 0) * 100).toFixed(1)}%
                   </span>
                 </div>
               </div>

@@ -7,6 +7,7 @@ export const fhirServers = pgTable("fhir_servers", {
   name: text("name").notNull(),
   url: text("url").notNull(),
   isActive: boolean("is_active").default(false),
+  authConfig: jsonb("auth_config"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

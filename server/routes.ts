@@ -74,6 +74,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test connection to a custom FHIR server
+  app.get("/api/fhir/connection/test-custom", async (req, res) => {
+    try {
+      const url = req.query.url as string;
+      if (!url) {
+        return res.status(400).json({ connected: false, error: "URL parameter is required" });
+      }
+
+      // Create a temporary FHIR client to test the connection
+      const tempClient = new FhirClient(url);
+      const result = await tempClient.testConnection();
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ connected: false, error: error.message });
+    }
+  });
+
+  // Get all FHIR servers
+  app.get("/api/fhir/servers", async (req, res) => {
+    try {
+      const servers = await storage.getFhirServers();
+      res.json(servers);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Create a new FHIR server
+  app.post("/api/fhir/servers", async (req, res) => {
+    try {
+      const { name, url, authConfig } = req.body;
+      
+      if (!name || !url) {
+        return res.status(400).json({ message: "Name and URL are required" });
+      }
+
+      // Deactivate other servers first
+      const existingServers = await storage.getFhirServers();
+      for (const server of existingServers) {
+        if (server.isActive) {
+          await storage.updateFhirServerStatus(server.id, false);
+        }
+      }
+
+      // Create new server
+      const newServer = await storage.createFhirServer({
+        name,
+        url,
+        isActive: true,
+        authConfig
+      });
+
+      // Update the global FHIR client
+      fhirClient = new FhirClient(url);
+      
+      res.json(newServer);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Resource endpoints
   app.get("/api/fhir/resources", async (req, res) => {
     try {
