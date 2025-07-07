@@ -127,7 +127,6 @@ export default function Dashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          resourceTypes: ['Patient', 'Observation', 'Encounter', 'Condition'],
           batchSize: 20
         })
       });
@@ -295,7 +294,7 @@ export default function Dashboard() {
                 </Button>
               )}
               
-              {(isValidationRunning || isValidationPaused || (validationProgress && !validationProgress.isComplete)) && (
+              {(isValidationRunning || isValidationPaused) && (
                 <Button onClick={handleStopValidation} variant="outline" size="sm" className="gap-2 border-red-500 text-red-600 hover:bg-red-50">
                   <Square className="h-4 w-4" />
                   Stop
