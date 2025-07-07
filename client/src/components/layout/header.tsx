@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Menu } from "lucide-react";
+import { RefreshCw, Menu, Database } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -40,8 +40,8 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
   };
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 p-6">
-      <div className="flex items-center justify-between">
+    <header className="bg-white shadow-sm border-b border-gray-200 px-6 py-4 w-full">
+      <div className="flex items-center justify-between w-full">
         <div className="flex items-center space-x-4">
           {onSidebarToggle && (
             <Button
@@ -53,9 +53,12 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
               <Menu className="h-5 w-5 text-gray-600" />
             </Button>
           )}
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
-            {subtitle && <p className="text-gray-600 mt-1">{subtitle}</p>}
+          <div className="flex items-center space-x-3">
+            <Database className="h-8 w-8 text-blue-600" />
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+              {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+            </div>
           </div>
         </div>
         <div className="flex items-center space-x-4">
