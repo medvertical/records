@@ -148,6 +148,7 @@ export class BulkValidationService {
         for (const resource of resources) {
           if (!this.isRunning) {
             console.log('Validation paused during resource processing');
+            this.resumeFromOffset = offset;
             return;
           }
           await this.validateSingleResource(resource, skipUnchanged);
@@ -171,9 +172,23 @@ export class BulkValidationService {
           if (validationWebSocket && this.currentProgress!.processedResources % 10 === 0) {
             validationWebSocket.broadcastProgress(this.currentProgress!);
           }
+          
+          // Check if paused after each resource
+          if (!this.isRunning) {
+            console.log('Validation paused during batch processing');
+            this.resumeFromOffset = offset;
+            return;
+          }
         }
 
         offset += batchSize;
+        
+        // Check if paused before next batch
+        if (!this.isRunning) {
+          console.log('Validation paused before next batch');
+          this.resumeFromOffset = offset;
+          return;
+        }
         
         // Small delay to prevent overwhelming the server
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -187,6 +202,11 @@ export class BulkValidationService {
 
   private async validateSingleResource(resource: any, skipUnchanged: boolean): Promise<void> {
     try {
+      // Check if validation was paused
+      if (!this.isRunning) {
+        return;
+      }
+      
       const resourceId = resource.id;
       const resourceType = resource.resourceType;
       
@@ -240,6 +260,10 @@ export class BulkValidationService {
 
       // Perform validation if needed
       if (shouldValidate) {
+        // Check if validation was paused before validation
+        if (!this.isRunning) {
+          return;
+        }
         await this.performValidation(resource, dbResourceId!);
       }
       
