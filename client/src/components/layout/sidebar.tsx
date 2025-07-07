@@ -148,12 +148,12 @@ function SidebarContent({
           https://server.fire.ly
         </div>
         <Button 
-          variant="ghost" 
+          variant="outline" 
           size="sm"
           onClick={onChangeServer}
-          className="mt-2 h-auto p-0 text-xs text-fhir-blue hover:text-blue-700 font-medium hover:bg-transparent"
+          className="mt-2 w-full text-xs flex items-center justify-center gap-1 h-7"
         >
-          <Server className="h-3 w-3 mr-1" />
+          <Server className="h-3 w-3" />
           Change Server
         </Button>
       </div>
