@@ -359,23 +359,12 @@ export class BulkValidationService {
     this.isRunning = true;
     this.isPaused = false;
     
-    // Get all resource types to continue with
-    const resourceCounts = await this.fhirClient.getResourceCount();
-    const allResourceTypes = Object.keys(resourceCounts);
-    
-    // Find where to continue from
-    let startIndex = 0;
-    if (this.resumeFromResourceType) {
-      startIndex = allResourceTypes.indexOf(this.resumeFromResourceType);
-      if (startIndex === -1) startIndex = 0;
-    }
-    
-    const remainingResourceTypes = allResourceTypes.slice(startIndex);
-    
-    // Continue validation from where we left off
+    // Simply continue the validation with the same options
+    // The validation will pick up from the current progress state
     const resumeOptions = {
+      batchSize: 50,
+      skipUnchanged: true,
       ...options,
-      resourceTypes: remainingResourceTypes,
       onProgress: options.onProgress
     };
     
