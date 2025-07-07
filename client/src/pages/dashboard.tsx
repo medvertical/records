@@ -182,6 +182,8 @@ export default function Dashboard() {
         setIsValidationRunning(false);
         setIsValidationPaused(false);
         setValidationProgress(null);
+        // Reset state to allow fresh start
+        console.log('Validation stopped and reset');
       }
     } catch (error) {
       console.error('Failed to stop validation:', error);
@@ -287,12 +289,7 @@ export default function Dashboard() {
                 </Button>
               )}
               
-              {!isValidationRunning && !isValidationPaused && validationProgress && !validationProgress.isComplete && (
-                <Button onClick={handleResumeValidation} size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700">
-                  <Play className="h-4 w-4" />
-                  Resume
-                </Button>
-              )}
+
               
               {(isValidationRunning || isValidationPaused) && (
                 <Button onClick={handleStopValidation} variant="outline" size="sm" className="gap-2 border-red-500 text-red-600 hover:bg-red-50">
@@ -304,7 +301,7 @@ export default function Dashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          {validationProgress && (isValidationRunning || isValidationPaused || (validationProgress.processedResources > 0 && !validationProgress.isComplete)) ? (
+          {validationProgress && (isValidationRunning || isValidationPaused) ? (
             <div className="space-y-4">
               {/* Primary Progress Bar */}
               <div className="space-y-2">
@@ -401,18 +398,9 @@ export default function Dashboard() {
                 </div>
               )}
               
-              {!isValidationRunning && !isValidationPaused && validationProgress.processedResources > 0 && !validationProgress.isComplete && (
-                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                    <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                      Validation Stopped - {validationProgress.validResources} resources validated, resume available
-                    </span>
-                  </div>
-                </div>
-              )}
+
             </div>
-          ) : !isValidationRunning && !isValidationPaused && (!validationProgress || validationProgress.processedResources === 0 || validationProgress.isComplete) ? (
+          ) : !isValidationRunning && !isValidationPaused ? (
             <div className="text-center py-8">
               <div className="text-muted-foreground mb-4">Validation engine is idle</div>
               <div className="text-sm text-muted-foreground">

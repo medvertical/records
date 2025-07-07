@@ -442,9 +442,13 @@ export class RobustValidationService {
   }
 
   stopValidation(): void {
-    console.log('Stopping validation');
+    console.log('Stopping validation and resetting state');
     this.shouldStop = true;
-    this.state = 'stopped';
+    this.state = 'idle';
+    this.checkpoint = null;
+    this.pausedAt = null;
+    this.batchTimes = [];
+    console.log('Validation stopped and reset - ready for fresh start');
   }
 
   getCurrentProgress(): RobustValidationProgress | null {
