@@ -49,6 +49,13 @@ export class SimplifierClient {
 
   async searchPackages(query: string, offset = 0, count = 20): Promise<SimplifierSearchResult> {
     try {
+      // First try NPM registry search for FHIR packages
+      const npmSearchResult = await this.searchNpmPackages(query, count);
+      if (npmSearchResult.packages.length > 0) {
+        return npmSearchResult;
+      }
+
+      // Fallback to Simplifier.net API
       const response: AxiosResponse = await axios.get(
         `${this.baseUrl}/packages/search`,
         {
@@ -95,6 +102,76 @@ export class SimplifierClient {
         count: 0
       };
     }
+  }
+
+  private async searchNpmPackages(query: string, count = 20): Promise<SimplifierSearchResult> {
+    try {
+      const response: AxiosResponse = await axios.get(
+        `https://registry.npmjs.org/-/v1/search`,
+        {
+          params: { 
+            text: query,
+            size: count,
+            popularity: 1.0,
+            quality: 1.0,
+            maintenance: 1.0
+          },
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'FHIR-Records-App/1.0'
+          }
+        }
+      );
+
+      const packages: SimplifierPackage[] = response.data.objects?.map((result: any) => {
+        const pkg = result.package;
+        return {
+          id: pkg.name,
+          name: pkg.name,
+          title: pkg.name,
+          description: pkg.description || '',
+          version: pkg.version,
+          fhirVersion: this.extractFhirVersion(pkg.keywords || []),
+          author: pkg.author?.name || pkg.publisher?.name || 'Unknown',
+          publishedDate: pkg.date || new Date().toISOString(),
+          dependencies: Object.keys(pkg.dependencies || {}),
+          downloadUrl: `https://registry.npmjs.org/${pkg.name}/-/${pkg.name}-${pkg.version}.tgz`,
+          canonicalUrl: pkg.links?.homepage || pkg.links?.repository,
+          keywords: pkg.keywords || [],
+          status: 'active'
+        };
+      }).filter((pkg: SimplifierPackage) => 
+        // Filter to show only FHIR-related packages
+        pkg.keywords.some(k => k.toLowerCase().includes('fhir')) ||
+        pkg.name.toLowerCase().includes('fhir') ||
+        pkg.description.toLowerCase().includes('fhir') ||
+        pkg.name.includes('hl7') ||
+        pkg.name.includes('basisprofil')
+      ) || [];
+
+      return {
+        packages,
+        profiles: [],
+        total: packages.length,
+        offset: 0,
+        count: packages.length
+      };
+    } catch (error: any) {
+      console.error('Failed to search NPM packages:', error);
+      return { packages: [], profiles: [], total: 0, offset: 0, count: 0 };
+    }
+  }
+
+  private extractFhirVersion(keywords: string[]): string {
+    // Try to extract FHIR version from keywords
+    const fhirVersionKeyword = keywords.find(k => 
+      k.toLowerCase().includes('fhir') && k.match(/\d+\.\d+/)
+    );
+    if (fhirVersionKeyword) {
+      const match = fhirVersionKeyword.match(/(\d+\.\d+)/);
+      if (match) return match[1];
+    }
+    return '4.0.1'; // Default to R4
   }
 
   async getPackageDetails(packageId: string): Promise<SimplifierPackage | null> {
@@ -257,6 +334,13 @@ export class SimplifierClient {
     };
   }> {
     try {
+      // First try NPM registry for packages that come from NPM
+      const npmVersions = await this.getNpmPackageVersions(packageId);
+      if (npmVersions.versions && Object.keys(npmVersions.versions).length > 0) {
+        return npmVersions;
+      }
+
+      // Fallback to Simplifier.net API
       const response: AxiosResponse = await axios.get(
         `${this.baseUrl}/packages/${packageId}/versions`,
         { headers: this.headers }
@@ -314,6 +398,53 @@ export class SimplifierClient {
         distTags: {
           latest: '1.0.0'
         }
+      };
+    }
+  }
+
+  private async getNpmPackageVersions(packageId: string): Promise<{
+    versions: Record<string, {
+      fhirVersion: string;
+      date: string;
+      description?: string;
+    }>;
+    distTags: {
+      latest: string;
+    };
+  }> {
+    try {
+      const response: AxiosResponse = await axios.get(
+        `https://registry.npmjs.org/${packageId}`,
+        {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'FHIR-Records-App/1.0'
+          }
+        }
+      );
+
+      const packageData = response.data;
+      const versions: Record<string, { fhirVersion: string; date: string; description?: string; }> = {};
+
+      // Process all versions
+      for (const [version, versionData] of Object.entries(packageData.versions || {})) {
+        const vData = versionData as any;
+        versions[version] = {
+          fhirVersion: this.extractFhirVersion(vData.keywords || []),
+          date: packageData.time?.[version] || new Date().toISOString(),
+          description: vData.description || ''
+        };
+      }
+
+      return {
+        versions,
+        distTags: packageData['dist-tags'] || { latest: Object.keys(versions)[0] || '1.0.0' }
+      };
+    } catch (error: any) {
+      console.error(`Failed to get NPM package versions for ${packageId}:`, error);
+      return {
+        versions: {},
+        distTags: { latest: '1.0.0' }
       };
     }
   }
