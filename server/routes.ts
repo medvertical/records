@@ -196,11 +196,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Resource endpoints
   app.get("/api/fhir/resources", async (req, res) => {
     try {
+      console.log("=== NEW RESOURCES ENDPOINT CALLED ===");
       const { resourceType, _count = '20', page = '0', search } = req.query;
       const count = parseInt(_count as string);
       const offset = parseInt(page as string) * count;
+      console.log(`=== PARAMS: resourceType=${resourceType}, count=${count}, page=${page}, search=${search} ===`);
 
       if (search) {
+        console.log("=== USING SEARCH BRANCH ===");
         // Perform search in local storage
         const results = await storage.searchFhirResources(search as string, resourceType as string);
         res.json({
@@ -208,41 +211,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
           total: results.length,
         });
       } else {
-        // Try to get cached resources from storage first
-        const cachedResources = await storage.getFhirResources(
-          undefined, // serverId
-          resourceType as string,
-          count,
-          offset
-        );
-
-        if (cachedResources.length > 0) {
-          console.log(`Returning ${cachedResources.length} cached ${resourceType || 'all'} resources`);
-          res.json({
-            resources: cachedResources.map(r => r.data),
-            total: cachedResources.length,
-          });
-          return;
-        }
-
-        // Only try FHIR server if we have no cached resources and FHIR client is available
+        // Always use FHIR server for live data when available
+        console.log(`[Resources] FHIR client available: ${!!fhirClient}`);
+        console.log(`[Resources] Resource type: ${resourceType}, Count: ${count}, Page: ${page}`);
+        
         if (fhirClient) {
           try {
-            console.log(`Fetching fresh ${resourceType || 'Patient'} resources from FHIR server...`);
-            const bundle = await Promise.race([
-              fhirClient.searchResources(
-                resourceType as string || 'Patient',
-                {},
-                Math.min(count, 10) // Limit to 10 to reduce timeout risk
-              ),
-              new Promise<never>((_, reject) => 
-                setTimeout(() => reject(new Error('FHIR server timeout')), 5000)
-              )
-            ]);
+            const targetResourceType = resourceType as string || 'Patient';
+            console.log(`Fetching live ${targetResourceType} resources from FHIR server with pagination...`);
+            
+            // Get real total count first
+            const realTotal = await fhirClient.getResourceCount(targetResourceType);
+            console.log(`Real total count for ${targetResourceType}: ${realTotal}`);
+            
+            // Fetch current page with _total=accurate for proper pagination
+            const bundle = await fhirClient.searchResources(
+              targetResourceType,
+              {
+                _total: 'accurate',
+                _count: count.toString(),
+                _offset: offset.toString()
+              }
+            );
 
             const resources = bundle.entry?.map(entry => entry.resource) || [];
+            console.log(`Fetched ${resources.length} ${targetResourceType} resources for page ${parseInt(page as string) + 1}`);
             
-            // Store resources locally for future use
+            // Store resources locally for caching (optional)
             for (const resource of resources) {
               try {
                 const existing = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
@@ -262,23 +257,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             res.json({
               resources,
-              total: bundle.total || resources.length,
+              total: realTotal, // Use the real total count from the server
             });
           } catch (fhirError: any) {
             console.warn('FHIR server failed, falling back to cached resources:', fhirError.message);
             // Fall back to any cached resources we might have
-            const fallbackResources = await storage.getFhirResources(undefined, undefined, count, offset);
+            const fallbackResources = await storage.getFhirResources(undefined, resourceType as string, count, offset);
+            
+            // Try to get a better total estimate from cache
+            const allCachedForType = await storage.getFhirResources(undefined, resourceType as string, 1000, 0);
+            
             res.json({
               resources: fallbackResources.map(r => r.data),
-              total: fallbackResources.length,
+              total: allCachedForType.length, // Use full cache count as estimate
             });
           }
         } else {
-          // No FHIR client, return cached resources
-          const fallbackResources = await storage.getFhirResources(undefined, undefined, count, offset);
+          // No FHIR client, return cached resources with better total estimation
+          const fallbackResources = await storage.getFhirResources(undefined, resourceType as string, count, offset);
+          const allCachedForType = await storage.getFhirResources(undefined, resourceType as string, 1000, 0);
+          
           res.json({
             resources: fallbackResources.map(r => r.data),
-            total: fallbackResources.length,
+            total: allCachedForType.length,
           });
         }
       }
