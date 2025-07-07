@@ -269,40 +269,84 @@ export class ProfileManager {
 
   async getInstalledPackages(): Promise<InstalledPackage[]> {
     try {
-      const packagesDir = await fs.readdir(PROFILES_DIR);
       const installedPackages: InstalledPackage[] = [];
-
-      for (const packageId of packagesDir) {
-        const packageDir = path.join(PROFILES_DIR, packageId);
-        const stats = await fs.stat(packageDir);
+      
+      // Get all validation profiles from database
+      const allProfiles = await storage.getValidationProfiles();
+      
+      // Group profiles by package ID
+      const packageGroups = allProfiles.reduce((groups, profile) => {
+        if (!profile.packageId || !profile.isActive) return groups;
         
-        if (!stats.isDirectory()) continue;
-
-        try {
-          const packageMetaPath = path.join(packageDir, 'package.json');
-          const packageMeta = JSON.parse(await fs.readFile(packageMetaPath, 'utf-8'));
-          
-          // Check for updates
-          const latestVersion = await simplifierClient.getLatestVersion(packageId);
-          const updateAvailable = !!(latestVersion && latestVersion !== packageMeta.version);
-
-          // Get current profile count
-          const profiles = await storage.getValidationProfiles();
-          const packageProfiles = profiles.filter(p => p.packageId === packageId && p.isActive);
-
-          installedPackages.push({
-            id: packageId,
-            name: packageMeta.name || packageId,
-            version: packageMeta.version,
-            installedDate: packageMeta.installedDate,
-            profileCount: packageProfiles.length,
-            status: packageProfiles.length > 0 ? 'active' : 'inactive',
-            updateAvailable: updateAvailable || undefined,
-            latestVersion: latestVersion ?? undefined
-          });
-        } catch (error) {
-          console.warn(`Failed to read package metadata for ${packageId}:`, error);
+        if (!groups[profile.packageId]) {
+          groups[profile.packageId] = [];
         }
+        groups[profile.packageId].push(profile);
+        return groups;
+      }, {} as Record<string, any[]>);
+
+      // Process each package
+      for (const [packageId, profiles] of Object.entries(packageGroups)) {
+        if (profiles.length === 0) continue;
+
+        // Use the first profile to get package metadata
+        const firstProfile = profiles[0];
+        
+        // Try to get metadata from filesystem first (for downloaded packages)
+        let packageMeta: any = null;
+        try {
+          const packageDir = path.join(PROFILES_DIR, packageId);
+          const packageMetaPath = path.join(packageDir, 'package.json');
+          packageMeta = JSON.parse(await fs.readFile(packageMetaPath, 'utf-8'));
+        } catch (error) {
+          // If filesystem metadata doesn't exist, get data from known packages or profile data
+          if (this.isKnownPackage(packageId)) {
+            const knownData = this.getKnownPackageData(packageId);
+            packageMeta = {
+              name: knownData?.name || packageId,
+              version: firstProfile.packageVersion || '1.0.0',
+              installedDate: firstProfile.createdAt || new Date().toISOString(),
+              author: 'Local Installation',
+              description: knownData?.description || `${packageId} profiles`
+            };
+          } else {
+            // Fallback for unknown packages
+            packageMeta = {
+              name: packageId,
+              version: firstProfile.packageVersion || '1.0.0', 
+              installedDate: firstProfile.createdAt || new Date().toISOString(),
+              author: 'Unknown',
+              description: `${packageId} profiles`
+            };
+          }
+        }
+
+        // Check for updates (only for known packages or those with downloadable versions)
+        let updateAvailable = false;
+        let latestVersion: string | undefined;
+        try {
+          if (this.isKnownPackage(packageId)) {
+            const knownData = this.getKnownPackageData(packageId);
+            latestVersion = knownData?.version;
+            updateAvailable = !!(latestVersion && latestVersion !== packageMeta.version);
+          } else {
+            latestVersion = await simplifierClient.getLatestVersion(packageId);
+            updateAvailable = !!(latestVersion && latestVersion !== packageMeta.version);
+          }
+        } catch (error) {
+          // Ignore update check errors
+        }
+
+        installedPackages.push({
+          id: packageId,
+          name: packageMeta.name || packageId,
+          version: packageMeta.version,
+          installedDate: packageMeta.installedDate,
+          profileCount: profiles.length,
+          status: profiles.length > 0 ? 'active' : 'inactive',
+          updateAvailable: updateAvailable || undefined,
+          latestVersion: latestVersion ?? undefined
+        });
       }
 
       return installedPackages;
