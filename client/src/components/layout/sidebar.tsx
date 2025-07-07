@@ -3,13 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import ServerConnectionModal from "@/components/settings/server-connection-modal";
 
 import { 
   Database, 
   ChartPie, 
   Settings, 
   HospitalIcon,
-  Package
+  Package,
+  Server
 } from "lucide-react";
 
 interface ServerStatus {
@@ -40,6 +43,7 @@ interface SidebarProps {
 export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {}) {
   const [location] = useLocation();
   const isMobile = useIsMobile();
+  const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   
   // Close sidebar on mobile when location changes
   useEffect(() => {
@@ -78,6 +82,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
             resourceCounts={resourceCounts} 
             location={location}
             onItemClick={() => onToggle && onToggle()}
+            onChangeServer={() => setIsServerModalOpen(true)}
           />
         </aside>
       </>
@@ -94,8 +99,15 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
           serverStatus={serverStatus} 
           resourceCounts={resourceCounts} 
           location={location}
+          onChangeServer={() => setIsServerModalOpen(true)}
         />
       </div>
+      
+      {/* Server Connection Modal */}
+      <ServerConnectionModal
+        open={isServerModalOpen}
+        onOpenChange={setIsServerModalOpen}
+      />
     </aside>
   );
 }
@@ -104,12 +116,14 @@ function SidebarContent({
   serverStatus, 
   resourceCounts, 
   location, 
-  onItemClick 
+  onItemClick,
+  onChangeServer
 }: {
   serverStatus?: ServerStatus;
   resourceCounts?: Record<string, number>;
   location: string;
   onItemClick?: () => void;
+  onChangeServer?: () => void;
 }) {
   return (
     <div className="h-full flex flex-col">
@@ -133,9 +147,15 @@ function SidebarContent({
         <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
           https://server.fire.ly
         </div>
-        <button className="mt-2 text-xs text-fhir-blue hover:text-blue-700 font-medium">
+        <Button 
+          variant="ghost" 
+          size="sm"
+          onClick={onChangeServer}
+          className="mt-2 h-auto p-0 text-xs text-fhir-blue hover:text-blue-700 font-medium hover:bg-transparent"
+        >
+          <Server className="h-3 w-3 mr-1" />
           Change Server
-        </button>
+        </Button>
       </div>
 
       {/* Navigation Menu */}
