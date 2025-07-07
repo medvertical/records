@@ -37,12 +37,21 @@ function Router() {
   };
 
   const getPageTitle = () => {
+    if (location === "/" || location === "/dashboard") return "Records";
+    if (location === "/resources") return "Records";
+    if (location.startsWith("/resources/")) return "Records";
+    if (location === "/profiles") return "Records";
+    if (location === "/settings") return "Records";
+    return "Records";
+  };
+
+  const getPageSubtitle = () => {
     if (location === "/" || location === "/dashboard") return "Dashboard";
     if (location === "/resources") return "Browse Resources";
     if (location.startsWith("/resources/")) return "Resource Details";
     if (location === "/profiles") return "Profile Management";
     if (location === "/settings") return "Settings";
-    return "Records";
+    return undefined;
   };
 
 
@@ -78,6 +87,7 @@ function Router() {
       <main className="flex-1 overflow-hidden flex flex-col">
         <Header 
           title={getPageTitle()}
+          subtitle={getPageSubtitle()}
           connectionStatus={connectionStatus}
           onSidebarToggle={toggleSidebar}
         />

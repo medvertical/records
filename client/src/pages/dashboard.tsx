@@ -193,13 +193,8 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Server Status */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Live validation monitoring and resource analytics
-          </p>
-        </div>
         <div className="flex items-center space-x-4">
           <div className="flex items-center space-x-2">
             {connectionStatus.connected ? (

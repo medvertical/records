@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, PanelLeftOpen } from "lucide-react";
+import { RefreshCw, Menu } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -47,14 +47,14 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
             <Button
               variant="ghost"
               size="sm"
-              className="p-2 md:hidden"
               onClick={onSidebarToggle}
+              className="p-2"
             >
-              <PanelLeftOpen className="h-5 w-5 text-gray-600" />
+              <Menu className="h-5 w-5 text-gray-600" />
             </Button>
           )}
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Records</h2>
+            <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
             {subtitle && <p className="text-gray-600 mt-1">{subtitle}</p>}
           </div>
         </div>
