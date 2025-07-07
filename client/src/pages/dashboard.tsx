@@ -44,6 +44,7 @@ export default function Dashboard() {
 
   const [validationProgress, setValidationProgress] = useState<ValidationProgress | null>(null);
   const [isValidationRunning, setIsValidationRunning] = useState(false);
+  const [isValidationPaused, setIsValidationPaused] = useState(false);
 
   // Test FHIR connection
   const { data: fhirConnection } = useQuery({
@@ -93,11 +94,14 @@ export default function Dashboard() {
   useEffect(() => {
     if (progress) {
       setValidationProgress(progress);
-      setIsValidationRunning(!progress.isComplete);
-    } else if (currentProgress && currentProgress.status === 'running') {
-      setIsValidationRunning(true);
+      setIsValidationRunning(!progress.isComplete && progress.status !== 'paused');
+      setIsValidationPaused(progress.status === 'paused');
+    } else if (currentProgress) {
+      setIsValidationRunning(currentProgress.status === 'running');
+      setIsValidationPaused(currentProgress.status === 'paused');
     } else {
       setIsValidationRunning(false);
+      setIsValidationPaused(false);
     }
   }, [progress, currentProgress]);
 
@@ -129,6 +133,7 @@ export default function Dashboard() {
       
       if (response.ok) {
         setIsValidationRunning(false);
+        setIsValidationPaused(true);
       }
     } catch (error) {
       console.error('Failed to pause validation:', error);
@@ -144,6 +149,7 @@ export default function Dashboard() {
       
       if (response.ok) {
         setIsValidationRunning(true);
+        setIsValidationPaused(false);
       }
     } catch (error) {
       console.error('Failed to resume validation:', error);
@@ -159,6 +165,7 @@ export default function Dashboard() {
       
       if (response.ok) {
         setIsValidationRunning(false);
+        setIsValidationPaused(false);
         setValidationProgress(null);
       }
     } catch (error) {
@@ -244,28 +251,35 @@ export default function Dashboard() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              {!isValidationRunning && (!validationProgress || validationProgress.isComplete) && (
+              {!isValidationRunning && !isValidationPaused && (!validationProgress || validationProgress.isComplete) && (
                 <Button onClick={handleStartValidation} size="sm" className="gap-2">
                   <Play className="h-4 w-4" />
                   Start Validation
                 </Button>
               )}
               
-              {isValidationRunning && (
+              {isValidationRunning && !isValidationPaused && (
                 <Button onClick={handlePauseValidation} variant="outline" size="sm" className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-50">
                   <Pause className="h-4 w-4" />
                   Pause
                 </Button>
               )}
               
-              {!isValidationRunning && validationProgress && !validationProgress.isComplete && (
+              {isValidationPaused && validationProgress && !validationProgress.isComplete && (
                 <Button onClick={handleResumeValidation} size="sm" className="gap-2 bg-green-600 hover:bg-green-700">
                   <Play className="h-4 w-4" />
                   Resume
                 </Button>
               )}
               
-              {(isValidationRunning || (validationProgress && !validationProgress.isComplete)) && (
+              {!isValidationRunning && !isValidationPaused && validationProgress && !validationProgress.isComplete && (
+                <Button onClick={handleResumeValidation} size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700">
+                  <Play className="h-4 w-4" />
+                  Continue
+                </Button>
+              )}
+              
+              {(isValidationRunning || isValidationPaused || (validationProgress && !validationProgress.isComplete)) && (
                 <Button onClick={handleStopValidation} variant="outline" size="sm" className="gap-2 border-red-500 text-red-600 hover:bg-red-50">
                   <RotateCcw className="h-4 w-4" />
                   Stop
