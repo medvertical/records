@@ -49,11 +49,14 @@ export class BulkValidationService {
       throw new Error('Validation is already running');
     }
 
+    console.log('Starting validation process...');
     this.state = 'running';
     this.shouldStop = false;
     
     // Initialize new validation
+    console.log('Getting resource types...');
     const resourceTypes = options.resourceTypes || await this.fhirClient.getAllResourceTypes();
+    console.log('Resource types to validate:', resourceTypes);
     const progress: BulkValidationProgress = {
       totalResources: 0,
       processedResources: 0,
@@ -65,14 +68,17 @@ export class BulkValidationService {
     };
 
     // Get total resource counts
+    console.log('Calculating total resource counts...');
     for (const resourceType of resourceTypes) {
       try {
         const count = await this.fhirClient.getResourceCount(resourceType);
+        console.log(`${resourceType}: ${count} resources`);
         progress.totalResources += count;
       } catch (error) {
         console.error(`Failed to get count for ${resourceType}:`, error);
       }
     }
+    console.log(`Total resources to validate: ${progress.totalResources}`);
 
     this.checkpoint = {
       resourceTypes,
@@ -81,6 +87,7 @@ export class BulkValidationService {
       progress
     };
 
+    console.log('Starting validation run...');
     return this.runValidation(options);
   }
 
@@ -117,10 +124,14 @@ export class BulkValidationService {
     const { resourceTypes, currentTypeIndex, progress } = this.checkpoint;
     const { batchSize = 50, skipUnchanged = true, onProgress } = options;
 
+    console.log(`runValidation: Starting from type index ${currentTypeIndex}, total types: ${resourceTypes.length}`);
+    console.log(`runValidation: Current state: ${this.state}, shouldStop: ${this.shouldStop}`);
+
     try {
       // Continue from where we left off
       for (let i = currentTypeIndex; i < resourceTypes.length; i++) {
         if (this.shouldStop || this.state === 'paused') {
+          console.log(`runValidation: Stopping/pausing at index ${i}, state: ${this.state}, shouldStop: ${this.shouldStop}`);
           this.checkpoint.currentTypeIndex = i;
           return progress;
         }
@@ -128,11 +139,14 @@ export class BulkValidationService {
         const resourceType = resourceTypes[i];
         progress.currentResourceType = resourceType;
         
-        console.log(`Processing ${resourceType}...`);
+        console.log(`Processing ${resourceType}... (${i + 1}/${resourceTypes.length})`);
         
         await this.processResourceType(resourceType, batchSize, skipUnchanged, progress, onProgress);
         
+        console.log(`Finished processing ${resourceType}. Current progress: ${progress.processedResources} processed`);
+        
         if (this.shouldStop || this.state === 'paused') {
+          console.log(`runValidation: Stopping/pausing after ${resourceType}, state: ${this.state}, shouldStop: ${this.shouldStop}`);
           this.checkpoint.currentTypeIndex = i + 1;
           return progress;
         }
@@ -169,9 +183,12 @@ export class BulkValidationService {
 
     while (hasMore && !this.shouldStop && this.state === 'running') {
       try {
-        const bundle = await this.fhirClient.searchResources(resourceType, batchSize, offset);
+        console.log(`Searching ${resourceType} with offset ${offset}, batchSize ${batchSize}`);
+        const bundle = await this.fhirClient.searchResources(resourceType, { _offset: offset }, batchSize);
+        console.log(`Got bundle for ${resourceType}: ${bundle.entry?.length || 0} entries, total: ${bundle.total || 'unknown'}`);
         
         if (!bundle.entry || bundle.entry.length === 0) {
+          console.log(`No more entries for ${resourceType}, stopping`);
           hasMore = false;
           break;
         }
