@@ -144,18 +144,19 @@ function SidebarContent({
             </span>
           </div>
         </div>
-        <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
-          https://server.fire.ly
+        <div className="flex items-center justify-between bg-gray-50 p-2 rounded">
+          <span className="text-xs text-gray-500 truncate">
+            https://server.fire.ly
+          </span>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={onChangeServer}
+            className="h-auto p-1 text-gray-500 hover:text-fhir-blue hover:bg-gray-100"
+          >
+            <Server className="h-3 w-3" />
+          </Button>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={onChangeServer}
-          className="mt-2 w-full text-xs flex items-center justify-center gap-1 h-7"
-        >
-          <Server className="h-3 w-3" />
-          Change Server
-        </Button>
       </div>
 
       {/* Navigation Menu */}
