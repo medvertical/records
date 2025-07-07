@@ -373,7 +373,7 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
             </div>
             
             <div className="space-y-3">
-              {existingServers?.map((server) => (
+              {existingServers?.sort((a, b) => a.name.localeCompare(b.name)).map((server) => (
                 <Card key={server.id}>
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
