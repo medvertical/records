@@ -53,8 +53,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (activeServer) {
         fhirClient = new FhirClient(activeServer.url);
         validationEngine = new ValidationEngine(fhirClient);
+        robustValidationService = new RobustValidationService(fhirClient, validationEngine);
       }
       
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/fhir/servers/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Check if this is the active server
+      const activeServer = await storage.getActiveFhirServer();
+      if (activeServer && activeServer.id === id) {
+        return res.status(400).json({ 
+          message: "Cannot delete the active server. Please activate another server first." 
+        });
+      }
+      
+      await storage.deleteFhirServer(id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });

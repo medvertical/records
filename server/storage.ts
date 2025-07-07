@@ -26,6 +26,7 @@ export interface IStorage {
   getActiveFhirServer(): Promise<FhirServer | undefined>;
   createFhirServer(server: InsertFhirServer): Promise<FhirServer>;
   updateFhirServerStatus(id: number, isActive: boolean): Promise<void>;
+  deleteFhirServer(id: number): Promise<void>;
 
   // FHIR Resources
   getFhirResources(serverId?: number, resourceType?: string, limit?: number, offset?: number): Promise<FhirResource[]>;
@@ -135,6 +136,10 @@ export class DatabaseStorage implements IStorage {
       await db.update(fhirServers).set({ isActive: false });
     }
     await db.update(fhirServers).set({ isActive }).where(eq(fhirServers.id, id));
+  }
+
+  async deleteFhirServer(id: number): Promise<void> {
+    await db.delete(fhirServers).where(eq(fhirServers.id, id));
   }
 
   async getFhirResources(serverId?: number, resourceType?: string, limit = 50, offset = 0): Promise<FhirResource[]> {

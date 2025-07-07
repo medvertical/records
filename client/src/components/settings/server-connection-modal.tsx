@@ -80,10 +80,12 @@ const predefinedServers = [
 ];
 
 export default function ServerConnectionModal({ open, onOpenChange }: ServerConnectionModalProps) {
-  const [selectedTab, setSelectedTab] = useState("browse");
+  const [selectedTab, setSelectedTab] = useState("servers");
   const [selectedServer, setSelectedServer] = useState<typeof predefinedServers[0] | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [editingServer, setEditingServer] = useState<FhirServer | null>(null);
+  const [isAddingNew, setIsAddingNew] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -134,13 +136,60 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
         title: "Server Added",
         description: "FHIR server connection has been configured successfully.",
       });
-      onOpenChange(false);
+      setSelectedTab("servers");
+      setIsAddingNew(false);
+      setEditingServer(null);
       reset();
     },
     onError: (error: any) => {
       toast({
         title: "Connection Failed",
         description: error.message || "Failed to configure server connection.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const deleteServerMutation = useMutation({
+    mutationFn: (serverId: number) => {
+      return fetch(`/api/fhir/servers/${serverId}`, {
+        method: 'DELETE'
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/fhir/servers"] });
+      toast({
+        title: "Server Deleted",
+        description: "FHIR server connection removed successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete server",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const connectServerMutation = useMutation({
+    mutationFn: (serverId: number) => {
+      return fetch(`/api/fhir/servers/${serverId}/activate`, {
+        method: 'POST'
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/fhir/servers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fhir/connection/test"] });
+      toast({
+        title: "Server Connected",
+        description: "Successfully connected to FHIR server",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error", 
+        description: "Failed to connect to server",
         variant: "destructive",
       });
     }
@@ -168,6 +217,22 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
       setValue('authType', 'none');
       setSelectedTab('configure');
     }
+  };
+
+  const handleAddNewServer = () => {
+    setIsAddingNew(true);
+    setEditingServer(null);
+    reset();
+    setSelectedTab('configure');
+  };
+
+  const handleEditServer = (server: FhirServer) => {
+    setEditingServer(server);
+    setIsAddingNew(false);
+    setValue('name', server.name);
+    setValue('url', server.url);
+    setValue('authType', 'none'); // Default since we don't store auth details
+    setSelectedTab('configure');
   };
 
   const handleTestConnection = async () => {
@@ -220,10 +285,76 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
 
         <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="servers">All Servers</TabsTrigger>
             <TabsTrigger value="browse">Browse Servers</TabsTrigger>
             <TabsTrigger value="configure">Configure Connection</TabsTrigger>
-            <TabsTrigger value="existing">Existing Servers</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="servers" className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-medium">Manage FHIR Servers</h3>
+              <Button onClick={handleAddNewServer} className="flex items-center gap-2">
+                <Server className="h-4 w-4" />
+                Add Server
+              </Button>
+            </div>
+            
+            <div className="space-y-3">
+              {existingServers?.map((server) => (
+                <Card key={server.id}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${server.isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
+                        <div>
+                          <h4 className="font-medium">{server.name}</h4>
+                          <p className="text-sm text-gray-600">{server.url}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {server.isActive && (
+                          <Badge variant="default">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Active
+                          </Badge>
+                        )}
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleEditServer(server)}
+                        >
+                          Edit
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => connectServerMutation.mutate(server.id)}
+                          disabled={server.isActive}
+                        >
+                          {server.isActive ? "Connected" : "Connect"}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => deleteServerMutation.mutate(server.id)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              {(!existingServers || existingServers.length === 0) && (
+                <div className="text-center py-8 text-gray-500">
+                  <Server className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                  <p>No FHIR servers configured</p>
+                  <p className="text-sm">Add your first server to get started</p>
+                </div>
+              )}
+            </div>
+          </TabsContent>
 
           <TabsContent value="browse" className="space-y-4">
             <div className="grid gap-4">
@@ -285,6 +416,24 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
           </TabsContent>
 
           <TabsContent value="configure" className="space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium">
+                {editingServer ? `Edit ${editingServer.name}` : isAddingNew ? 'Add New Server' : 'Configure Connection'}
+              </h3>
+              {(editingServer || isAddingNew) && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setSelectedTab("servers");
+                    setEditingServer(null);
+                    setIsAddingNew(false);
+                    reset();
+                  }}
+                >
+                  Back to Servers
+                </Button>
+              )}
+            </div>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
               <div className="grid gap-4">
                 <div>
