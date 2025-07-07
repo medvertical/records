@@ -82,7 +82,7 @@ export class BulkValidationService {
       // Process each resource type with timeout protection
       for (const resourceType of typesToValidate) {
         // Check if validation was paused
-        if (this.isPaused) {
+        if (!this.isRunning) {
           this.resumeFromResourceType = resourceType;
           console.log(`Validation paused at resource type: ${resourceType}`);
           return this.currentProgress;
@@ -134,7 +134,7 @@ export class BulkValidationService {
   ): Promise<void> {
     let offset = 0;
     
-    while (offset < totalCount) {
+    while (offset < totalCount && this.isRunning) {
       try {
         // Fetch batch of resources
         const searchResult = await this.fhirClient.searchResources(resourceType, {
@@ -146,6 +146,10 @@ export class BulkValidationService {
         
         // Process each resource in the batch
         for (const resource of resources) {
+          if (!this.isRunning) {
+            console.log('Validation paused during resource processing');
+            return;
+          }
           await this.validateSingleResource(resource, skipUnchanged);
           
           this.currentProgress!.processedResources++;
@@ -309,6 +313,7 @@ export class BulkValidationService {
 
   pauseValidation(): void {
     if (this.isRunning) {
+      this.isRunning = false;
       this.isPaused = true;
       console.log('Validation paused by user request');
     }
@@ -320,6 +325,7 @@ export class BulkValidationService {
     }
 
     console.log(`Resuming validation from resource type: ${this.resumeFromResourceType}`);
+    this.isRunning = true;
     this.isPaused = false;
     
     // Continue from where we left off
