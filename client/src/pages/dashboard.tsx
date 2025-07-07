@@ -222,31 +222,7 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Server Status */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            {connectionStatus.connected ? (
-              <Server className="h-4 w-4 text-green-500" />
-            ) : (
-              <Server className="h-4 w-4 text-red-500" />
-            )}
-            <span className="text-sm text-muted-foreground">
-              FHIR {connectionStatus.connected ? 'Connected' : 'Disconnected'}
-            </span>
-          </div>
-          <div className="flex items-center space-x-2">
-            {isConnected ? (
-              <Wifi className="h-4 w-4 text-blue-500" />
-            ) : (
-              <WifiOff className="h-4 w-4 text-gray-400" />
-            )}
-            <span className="text-sm text-muted-foreground">
-              WebSocket {isConnected ? 'Live' : 'Offline'}
-            </span>
-          </div>
-        </div>
-      </div>
+      
 
       {/* Real-time Validation Control Panel */}
       <Card className={`border-2 transition-colors duration-300 ${
