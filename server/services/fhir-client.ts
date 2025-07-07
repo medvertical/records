@@ -159,24 +159,46 @@ export class FhirClient {
       
       // Try multiple approaches to get accurate counts
       
-      // Approach 1: Use _summary=count parameter (FHIR R4 standard)
+      // Approach 1: Use _summary=count with _total=accurate parameter  
       try {
-        const countUrl = `${this.baseUrl}/${resourceType}?_summary=count`;
+        const countUrl = `${this.baseUrl}/${resourceType}?_summary=count&_total=accurate`;
+        console.log(`[FhirClient] Trying count URL: ${countUrl}`);
         const countResponse = await axios.get(countUrl, { 
           headers: this.headers,
           timeout: 15000
         });
         
+        console.log(`[FhirClient] Count response for ${resourceType}:`, JSON.stringify(countResponse.data, null, 2));
+        
         if (countResponse.data?.total !== undefined) {
-          console.log(`[FhirClient] Count for ${resourceType}: ${countResponse.data.total} (via _summary=count)`);
+          console.log(`[FhirClient] Count for ${resourceType}: ${countResponse.data.total} (via _summary=count&_total=accurate)`);
           return countResponse.data.total;
         }
       } catch (summaryError) {
-        console.log(`[FhirClient] _summary=count failed for ${resourceType}, trying alternative methods`);
+        console.log(`[FhirClient] _summary=count with _total=accurate failed for ${resourceType}:`, summaryError.message);
       }
       
-      // Approach 2: Use small _count with total
-      const response = await this.searchResources(resourceType, { _count: '1' });
+      // Approach 1b: Try with _total=true instead
+      try {
+        const countUrl = `${this.baseUrl}/${resourceType}?_summary=count&_total=true`;
+        console.log(`[FhirClient] Trying count URL with _total=true: ${countUrl}`);
+        const countResponse = await axios.get(countUrl, { 
+          headers: this.headers,
+          timeout: 15000
+        });
+        
+        console.log(`[FhirClient] Count response for ${resourceType} with _total=true:`, JSON.stringify(countResponse.data, null, 2));
+        
+        if (countResponse.data?.total !== undefined) {
+          console.log(`[FhirClient] Count for ${resourceType}: ${countResponse.data.total} (via _summary=count&_total=true)`);
+          return countResponse.data.total;
+        }
+      } catch (summaryError) {
+        console.log(`[FhirClient] _summary=count with _total=true failed for ${resourceType}:`, summaryError.message);
+      }
+      
+      // Approach 2: Use small _count with _total=accurate
+      const response = await this.searchResources(resourceType, { _count: '1', _total: 'accurate' });
       
       // If the server provides a total, use it
       if (response.total !== undefined && response.total !== null) {
@@ -188,7 +210,7 @@ export class FhirClient {
       console.log(`[FhirClient] No total available for ${resourceType}, attempting sample-based estimation`);
       
       try {
-        const largerSample = await this.searchResources(resourceType, { _count: '100' });
+        const largerSample = await this.searchResources(resourceType, { _count: '100', _total: 'accurate' });
         if (largerSample.entry && largerSample.entry.length > 0) {
           // If we got exactly 100, there are likely more - try to get better estimate
           if (largerSample.entry.length === 100) {
@@ -202,7 +224,8 @@ export class FhirClient {
               try {
                 const nextSample = await this.searchResources(resourceType, { 
                   _count: '100', 
-                  _offset: pageOffset.toString() 
+                  _offset: pageOffset.toString(),
+                  _total: 'accurate'
                 });
                 
                 if (nextSample.entry && nextSample.entry.length > 0) {
