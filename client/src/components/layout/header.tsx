@@ -40,8 +40,8 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
   };
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 w-full m-0 p-0">
-      <div className="flex items-center justify-between w-full px-6 py-4 m-0">
+    <header className="bg-white shadow-sm border-b border-gray-200 w-full">
+      <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center space-x-4">
           {onSidebarToggle && (
             <Button
@@ -54,7 +54,7 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
             </Button>
           )}
           <div className="flex items-center space-x-3">
-            <Database className="h-8 w-8 text-blue-600" />
+            <Database className="h-8 w-8" style={{ color: 'rgb(0, 85, 254)' }} />
             <div>
               <h1 className="text-xl font-bold text-gray-900">{title}</h1>
               {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
