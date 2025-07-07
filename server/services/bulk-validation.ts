@@ -127,9 +127,10 @@ export class BulkValidationService {
 
       return this.currentProgress;
     } finally {
-      // Only stop if not paused (paused validation should remain in running state to be resumed)
+      // When paused, keep validation state for resuming
       if (!this.isPaused) {
         this.isRunning = false;
+        this.currentProgress = null;
       }
     }
   }
@@ -366,12 +367,24 @@ export class BulkValidationService {
     this.isRunning = true;
     this.isPaused = false;
     
-    // Simply continue the validation with the same options
-    // The validation will pick up from the current progress state
+    // Get all resource types and find where to continue
+    const allResourceTypes = await this.fhirClient.getAllResourceTypes();
+    let typesToValidate = allResourceTypes;
+    
+    // If we have a resume point, start from there
+    if (this.resumeFromResourceType) {
+      const resumeIndex = allResourceTypes.indexOf(this.resumeFromResourceType);
+      if (resumeIndex >= 0) {
+        typesToValidate = allResourceTypes.slice(resumeIndex);
+      }
+    }
+    
+    // Continue the validation with remaining resource types
     const resumeOptions = {
       batchSize: 50,
       skipUnchanged: true,
       ...options,
+      resourceTypes: typesToValidate,
       onProgress: options.onProgress
     };
     
