@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Menu, Database } from "lucide-react";
+import { RefreshCw, PanelLeft, Database } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -50,7 +50,7 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
               onClick={onSidebarToggle}
               className="p-2"
             >
-              <Menu className="h-5 w-5 text-gray-600" />
+              <PanelLeft className="h-5 w-5 text-gray-600" />
             </Button>
           )}
           <div className="flex items-center space-x-3">

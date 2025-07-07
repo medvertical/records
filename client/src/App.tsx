@@ -90,7 +90,7 @@ function Router() {
       />
       <div className="flex pt-16">
         <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 overflow-hidden relative z-10">
           <Switch>
             <Route path="/" component={DashboardComponent} />
             <Route path="/dashboard" component={DashboardComponent} />

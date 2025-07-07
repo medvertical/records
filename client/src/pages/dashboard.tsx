@@ -379,7 +379,7 @@ export default function Dashboard() {
 
       {/* Enhanced Statistics Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="relative overflow-hidden transition-all duration-300 hover:shadow-lg">
+        <Card className="relative overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Resources</CardTitle>
             <Database className="h-4 w-4 text-muted-foreground" />
@@ -398,7 +398,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden transition-all duration-300 hover:shadow-lg">
+        <Card className="relative overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Valid Resources</CardTitle>
             <CheckCircle className="h-4 w-4 text-green-600" />
@@ -421,7 +421,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden transition-all duration-300 hover:shadow-lg">
+        <Card className="relative overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Resources with Errors</CardTitle>
             <AlertCircle className="h-4 w-4 text-red-600" />
@@ -444,7 +444,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden transition-all duration-300 hover:shadow-lg">
+        <Card className="relative overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Live Processing Rate</CardTitle>
             <TrendingUp className="h-4 w-4 text-blue-600" />
@@ -526,7 +526,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="transition-all duration-300 hover:shadow-lg">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5" />
@@ -641,7 +641,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="transition-all duration-300 hover:shadow-lg">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
