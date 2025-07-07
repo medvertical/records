@@ -94,22 +94,22 @@ export default function Dashboard() {
   useEffect(() => {
     if (progress) {
       setValidationProgress(progress);
-      setIsValidationRunning(progress.status === 'running');
-      setIsValidationPaused(progress.status === 'paused');
+      // Don't override validation status from WebSocket progress - WebSocket manages this
     } else if (currentProgress) {
       setIsValidationRunning(currentProgress.status === 'running');
       setIsValidationPaused(currentProgress.status === 'paused');
     } else {
-      setIsValidationRunning(false);
-      setIsValidationPaused(false);
+      // Only reset if we have no WebSocket connection and no current progress
+      if (validationStatus === 'idle') {
+        setIsValidationRunning(false);
+        setIsValidationPaused(false);
+      }
     }
-  }, [progress, currentProgress]);
+  }, [progress, currentProgress, validationStatus]);
 
   // Also update validation state based on validationStatus from WebSocket
   useEffect(() => {
-    console.log('WebSocket validationStatus changed:', validationStatus);
     if (validationStatus === 'running') {
-      console.log('Setting validation running to true');
       setIsValidationRunning(true);
       setIsValidationPaused(false);
     } else if (validationStatus === 'completed') {
@@ -120,17 +120,6 @@ export default function Dashboard() {
       setIsValidationPaused(false);
     }
   }, [validationStatus]);
-
-  // Debug current states
-  useEffect(() => {
-    console.log('Current states:', {
-      isValidationRunning,
-      isValidationPaused,
-      validationStatus,
-      hasProgress: !!progress,
-      progressStatus: progress?.status
-    });
-  }, [isValidationRunning, isValidationPaused, validationStatus, progress]);
 
   const handleStartValidation = async () => {
     try {
