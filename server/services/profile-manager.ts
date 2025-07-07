@@ -394,6 +394,32 @@ export class ProfileManager {
       return versionInfo;
     } catch (error: any) {
       console.error(`Failed to get versions for package ${packageId}:`, error);
+      
+      // For packages discovered through search but not in standard registries,
+      // try to get version info from the search results
+      try {
+        const searchResults = await simplifierClient.searchPackages(packageId, 0, 1);
+        const foundPackage = searchResults.packages.find(pkg => pkg.id === packageId);
+        
+        if (foundPackage) {
+          console.log(`[ProfileManager] Using version from search results: ${foundPackage.version}`);
+          return {
+            versions: {
+              [foundPackage.version]: {
+                fhirVersion: foundPackage.fhirVersion,
+                date: foundPackage.publishedDate,
+                description: foundPackage.description
+              }
+            },
+            distTags: {
+              latest: foundPackage.version
+            }
+          };
+        }
+      } catch (searchError) {
+        console.error(`[ProfileManager] Could not get version from search:`, searchError);
+      }
+      
       throw new Error(`Package ${packageId} was found through search but version information is not available through standard APIs. This package may be in early development or not yet published to standard registries.`);
     }
   }

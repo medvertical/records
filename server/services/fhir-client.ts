@@ -155,38 +155,103 @@ export class FhirClient {
 
   async getResourceCount(resourceType: string): Promise<number> {
     try {
-      // Use a simple approach that works with most FHIR servers
+      console.log(`[FhirClient] Getting count for ${resourceType}...`);
+      
+      // Try multiple approaches to get accurate counts
+      
+      // Approach 1: Use _summary=count parameter (FHIR R4 standard)
+      try {
+        const countUrl = `${this.baseUrl}/${resourceType}?_summary=count`;
+        const countResponse = await axios.get(countUrl, { 
+          headers: this.headers,
+          timeout: 15000
+        });
+        
+        if (countResponse.data?.total !== undefined) {
+          console.log(`[FhirClient] Count for ${resourceType}: ${countResponse.data.total} (via _summary=count)`);
+          return countResponse.data.total;
+        }
+      } catch (summaryError) {
+        console.log(`[FhirClient] _summary=count failed for ${resourceType}, trying alternative methods`);
+      }
+      
+      // Approach 2: Use small _count with total
       const response = await this.searchResources(resourceType, { _count: '1' });
       
       // If the server provides a total, use it
       if (response.total !== undefined && response.total !== null) {
+        console.log(`[FhirClient] Count for ${resourceType}: ${response.total} (via search total)`);
         return response.total;
       }
 
-      // If no total but we have entries, return a conservative estimate
-      if (response.entry && response.entry.length > 0) {
-        return 500; // Conservative estimate for demo
+      // Approach 3: If no total available, try to estimate by fetching larger samples
+      console.log(`[FhirClient] No total available for ${resourceType}, attempting sample-based estimation`);
+      
+      try {
+        const largerSample = await this.searchResources(resourceType, { _count: '100' });
+        if (largerSample.entry && largerSample.entry.length > 0) {
+          // If we got exactly 100, there are likely more - try to get better estimate
+          if (largerSample.entry.length === 100) {
+            // Try to get multiple pages to estimate total
+            let totalEstimate = 100;
+            let hasMorePages = true;
+            let pageOffset = 100;
+            
+            // Try to sample up to 5 pages to get better estimate
+            for (let page = 2; page <= 5 && hasMorePages; page++) {
+              try {
+                const nextSample = await this.searchResources(resourceType, { 
+                  _count: '100', 
+                  _offset: pageOffset.toString() 
+                });
+                
+                if (nextSample.entry && nextSample.entry.length > 0) {
+                  totalEstimate += nextSample.entry.length;
+                  pageOffset += 100;
+                  
+                  // If we got less than 100, we've reached the end
+                  if (nextSample.entry.length < 100) {
+                    hasMorePages = false;
+                  }
+                } else {
+                  hasMorePages = false;
+                }
+              } catch (offsetError) {
+                console.log(`[FhirClient] Offset query failed at page ${page}, stopping estimation`);
+                hasMorePages = false;
+              }
+            }
+            
+            // If we sampled 5 pages and still have 100 per page, extrapolate
+            if (hasMorePages && totalEstimate >= 500) {
+              const averagePerPage = totalEstimate / 5;
+              // Conservative extrapolation: assume at least 10 more pages
+              totalEstimate = Math.round(averagePerPage * 15);
+            }
+            
+            console.log(`[FhirClient] Estimated count for ${resourceType}: ${totalEstimate} (multi-page sampling)`);
+            return totalEstimate;
+          } else {
+            console.log(`[FhirClient] Count for ${resourceType}: ${largerSample.entry.length} (complete sample)`);
+            return largerSample.entry.length;
+          }
+        }
+      } catch (sampleError) {
+        console.log(`[FhirClient] Sample-based estimation failed for ${resourceType}`);
       }
       
+      // If we have any entries from the original search, return at least 1
+      if (response.entry && response.entry.length > 0) {
+        console.log(`[FhirClient] Minimum count for ${resourceType}: 1 (has entries)`);
+        return 1;
+      }
+      
+      console.log(`[FhirClient] Count for ${resourceType}: 0 (no entries found)`);
       return 0;
+      
     } catch (error) {
-      console.warn(`Failed to get count for ${resourceType}:`, error);
-      // Return default counts for common resource types when server fails
-      const defaultCounts: Record<string, number> = {
-        'Patient': 500,
-        'Observation': 2000, 
-        'Encounter': 800,
-        'Condition': 300,
-        'Procedure': 400,
-        'DiagnosticReport': 600,
-        'MedicationRequest': 350,
-        'AllergyIntolerance': 150,
-        'Immunization': 200,
-        'Organization': 50,
-        'Practitioner': 100,
-        'Location': 80
-      };
-      return defaultCounts[resourceType] || 100;
+      console.warn(`[FhirClient] Failed to get count for ${resourceType}:`, error.message);
+      return 0; // Return 0 instead of hardcoded values when server fails
     }
   }
 
