@@ -41,100 +41,252 @@ export interface SimplifierSearchResult {
 }
 
 export class SimplifierClient {
-  private baseUrl = 'https://simplifier.net/api';
+  private packageServerUrl = 'https://packages.simplifier.net';
+  private fhirRegistryUrl = 'https://packages.fhir.org';
   private headers = {
     'Accept': 'application/json',
     'User-Agent': 'FHIR-Records-App/1.0'
   };
 
   async searchPackages(query: string, offset = 0, count = 20): Promise<SimplifierSearchResult> {
+    console.log(`[SimplifierClient] Starting search for: "${query}"`);
+    
+    const allPackages: any[] = [];
+    
     try {
-      // Try both Simplifier.net and NPM registry search
-      const [simplifierResult, npmResult] = await Promise.allSettled([
-        this.searchSimplifierPackages(query, offset, count),
-        this.searchNpmPackages(query, count)
-      ]);
-
-      const simplifierPackages = simplifierResult.status === 'fulfilled' ? simplifierResult.value.packages : [];
-      const npmPackages = npmResult.status === 'fulfilled' ? npmResult.value.packages : [];
-
-      // Combine results, prioritizing Simplifier.net packages
-      const allPackages = [...simplifierPackages, ...npmPackages];
+      // Search FHIR Package Registry first (most reliable source)
+      console.log('[SimplifierClient] Fetching FHIR Package Registry...');
+      const response = await axios.get(`${this.fhirRegistryUrl}/catalog`, {
+        headers: this.headers,
+        timeout: 15000
+      });
       
-      return {
-        packages: allPackages,
-        profiles: [],
-        total: allPackages.length,
-        offset,
-        count: allPackages.length
-      };
+      if (response.data && Array.isArray(response.data)) {
+        console.log(`[SimplifierClient] Found ${response.data.length} packages in registry`);
+        
+        const searchText = query.toLowerCase();
+        const matchingPackages = response.data
+          .filter((pkg: any) => {
+            return pkg.Name?.toLowerCase().includes(searchText) ||
+                   pkg.Description?.toLowerCase().includes(searchText);
+          })
+          .slice(0, count)
+          .map((pkg: any) => ({
+            id: pkg.Name,
+            name: pkg.Name,
+            title: pkg.Name,
+            description: pkg.Description || '',
+            version: 'latest',
+            fhirVersion: pkg.FhirVersion || '4.0.1',
+            author: 'FHIR Community',
+            publishedDate: new Date().toISOString(),
+            dependencies: [],
+            downloadUrl: `${this.fhirRegistryUrl}/${pkg.Name}`,
+            keywords: [pkg.Name],
+            status: 'active' as const
+          }));
+        
+        allPackages.push(...matchingPackages);
+        console.log(`[SimplifierClient] Found ${matchingPackages.length} matching packages`);
+      }
     } catch (error: any) {
-      console.error('Failed to search packages:', error);
-      return { packages: [], profiles: [], total: 0, offset, count: 0 };
+      console.error('[SimplifierClient] FHIR Registry search failed:', error.message);
     }
+    
+    // Add known packages as additional results
+    try {
+      const knownResult = this.searchKnownPackages(query);
+      allPackages.push(...knownResult.packages);
+      console.log(`[SimplifierClient] Added ${knownResult.packages.length} known packages`);
+    } catch (error: any) {
+      console.error('[SimplifierClient] Known packages search failed:', error.message);
+    }
+    
+    console.log(`[SimplifierClient] Total packages found: ${allPackages.length}`);
+    
+    return {
+      packages: allPackages,
+      profiles: [],
+      total: allPackages.length,
+      offset,
+      count: allPackages.length
+    };
   }
 
-  private async searchSimplifierPackages(query: string, offset = 0, count = 20): Promise<SimplifierSearchResult> {
+  private async searchSimplifierPackageServer(query: string, count = 20): Promise<SimplifierSearchResult> {
     try {
-      // First check if this is a known package
-      const knownPackages = this.searchKnownPackages(query);
-      if (knownPackages.packages.length > 0) {
-        return knownPackages;
-      }
-
-      // Try FHIR Package Registry first
-      const fhirRegistryResult = await this.searchFhirRegistry(query, count);
-      if (fhirRegistryResult.packages.length > 0) {
-        return fhirRegistryResult;
-      }
-
-      // Fallback to Simplifier.net API (if it works)
+      // Search using NPM-compatible package listing API
       const response: AxiosResponse = await axios.get(
-        `${this.baseUrl}/packages/search`,
+        `${this.packageServerUrl}/catalog`,
         {
-          params: {
-            q: query,
-            offset,
-            count,
-            includePrerelease: false
-          },
-          headers: this.headers
+          headers: this.headers,
+          timeout: 10000
         }
       );
 
-      const packages = response.data.data?.map((pkg: any) => ({
-        id: pkg.id,
-        name: pkg.name,
-        title: pkg.title || pkg.name,
-        description: pkg.description || '',
-        version: pkg.version,
-        fhirVersion: pkg.fhirVersion || '4.0.1',
-        author: pkg.author || 'Unknown',
-        publishedDate: pkg.publishedDate || new Date().toISOString(),
-        dependencies: pkg.dependencies || [],
-        downloadUrl: pkg.downloadUrl || `${this.baseUrl}/packages/${pkg.id}`,
-        canonicalUrl: pkg.canonicalUrl,
-        keywords: pkg.keywords || [],
-        status: pkg.status || 'active'
-      })) || [];
+      if (!response.data || !Array.isArray(response.data)) {
+        return { packages: [], profiles: [], total: 0, offset: 0, count: 0 };
+      }
+
+      // Filter packages based on query
+      const allPackages = response.data;
+      const matchingPackages = allPackages
+        .filter((pkg: any) => {
+          const searchText = query.toLowerCase();
+          return pkg.Name?.toLowerCase().includes(searchText) ||
+                 pkg.Description?.toLowerCase().includes(searchText) ||
+                 pkg.name?.toLowerCase().includes(searchText) ||
+                 pkg.description?.toLowerCase().includes(searchText);
+        })
+        .slice(0, count)
+        .map((pkg: any) => ({
+          id: pkg.Name || pkg.name || pkg.id,
+          name: pkg.Name || pkg.name || pkg.id,
+          title: pkg.Name || pkg.title || pkg.name || pkg.id,
+          description: pkg.Description || pkg.description || '',
+          version: pkg.version || pkg['dist-tags']?.latest || 'latest',
+          fhirVersion: pkg.FhirVersion || pkg.fhirVersion || '4.0.1',
+          author: pkg.author?.name || pkg.author || 'Simplifier Community',
+          publishedDate: pkg.time?.modified || pkg.time?.created || new Date().toISOString(),
+          dependencies: Object.keys(pkg.dependencies || {}),
+          downloadUrl: `${this.packageServerUrl}/${pkg.Name || pkg.name}`,
+          canonicalUrl: pkg.canonical || pkg.url,
+          keywords: (pkg.keywords || []).concat(pkg.Name ? [pkg.Name] : []),
+          status: 'active' as const
+        }));
 
       return {
-        packages,
+        packages: matchingPackages,
         profiles: [],
-        total: response.data.total || packages.length,
-        offset: offset,
-        count: packages.length
+        total: matchingPackages.length,
+        offset: 0,
+        count: matchingPackages.length
       };
     } catch (error: any) {
-      console.error('Failed to search Simplifier packages:', error);
-      return {
-        packages: [],
-        profiles: [],
-        total: 0,
-        offset: 0,
-        count: 0
-      };
+      console.error('Failed to search Simplifier Package Server:', error.message);
+      return { packages: [], profiles: [], total: 0, offset: 0, count: 0 };
     }
+  }
+
+  private async searchFhirPackageRegistry(query: string, count = 20): Promise<SimplifierSearchResult> {
+    try {
+      console.log(`[FHIR Registry] Calling: ${this.fhirRegistryUrl}/catalog`);
+      
+      // Search the official FHIR Package Registry
+      const response: AxiosResponse = await axios.get(
+        `${this.fhirRegistryUrl}/catalog`,
+        {
+          headers: this.headers,
+          timeout: 10000
+        }
+      );
+
+      console.log(`[FHIR Registry] Response status: ${response.status}, data type: ${typeof response.data}, is array: ${Array.isArray(response.data)}`);
+      
+      if (!response.data || !Array.isArray(response.data)) {
+        console.log(`[FHIR Registry] Invalid response data format`);
+        return { packages: [], profiles: [], total: 0, offset: 0, count: 0 };
+      }
+
+      console.log(`[FHIR Registry] Total packages in catalog: ${response.data.length}`);
+      
+      // Filter packages based on query  
+      const allPackages = response.data;
+      const matchingPackages = allPackages
+        .filter((pkg: any) => {
+          const searchText = query.toLowerCase();
+          const matches = pkg.Name?.toLowerCase().includes(searchText) ||
+                         pkg.Description?.toLowerCase().includes(searchText) ||
+                         pkg.name?.toLowerCase().includes(searchText) ||
+                         pkg.description?.toLowerCase().includes(searchText);
+          return matches;
+        })
+        .slice(0, count)
+        .map((pkg: any) => ({
+          id: pkg.Name || pkg.name || pkg.id,
+          name: pkg.Name || pkg.name || pkg.id,
+          title: pkg.Name || pkg.title || pkg.name || pkg.id,
+          description: pkg.Description || pkg.description || '',
+          version: pkg.version || pkg['dist-tags']?.latest || 'latest',
+          fhirVersion: pkg.FhirVersion || pkg.fhirVersion || '4.0.1',
+          author: pkg.author?.name || pkg.author || 'FHIR Community',
+          publishedDate: pkg.time?.modified || pkg.time?.created || new Date().toISOString(),
+          dependencies: Object.keys(pkg.dependencies || {}),
+          downloadUrl: `${this.fhirRegistryUrl}/${pkg.Name || pkg.name}`,
+          canonicalUrl: pkg.canonical || pkg.url,
+          keywords: (pkg.keywords || []).concat(pkg.Name ? [pkg.Name] : []),
+          status: 'active' as const
+        }));
+
+      console.log(`[FHIR Registry] Found ${matchingPackages.length} matching packages for query "${query}"`);
+      if (matchingPackages.length > 0) {
+        console.log(`[FHIR Registry] Sample package:`, matchingPackages[0]);
+      }
+
+      return {
+        packages: matchingPackages,
+        profiles: [],
+        total: matchingPackages.length,
+        offset: 0,
+        count: matchingPackages.length
+      };
+    } catch (error: any) {
+      console.error('Failed to search FHIR Package Registry:', error.message);
+      return { packages: [], profiles: [], total: 0, offset: 0, count: 0 };
+    }
+  }
+
+  private extractFhirVersionFromPackage(pkg: any): string {
+    // Try to extract FHIR version from package data
+    if (pkg.fhirVersion) return pkg.fhirVersion;
+    if (pkg.engines?.fhir) return pkg.engines.fhir;
+    if (pkg.peerDependencies?.['hl7.fhir.core']) {
+      return pkg.peerDependencies['hl7.fhir.core'];
+    }
+    if (pkg.keywords?.some((k: string) => k.includes('R4'))) return '4.0.1';
+    if (pkg.keywords?.some((k: string) => k.includes('R5'))) return '5.0.0';
+    return '4.0.1'; // Default to R4
+  }
+
+  private searchKnownPackages(query: string): SimplifierSearchResult {
+    console.log(`[Known Packages] Searching for: "${query}"`);
+    
+    // Search through known packages as fallback
+    const knownPackageIds = ['hl7.fhir.us.core', 'hl7.fhir.uv.ips', 'de.basisprofil.r4', 'de.medizininformatikinitiative.kerndatensatz.person'];
+    const searchText = query.toLowerCase();
+    
+    console.log(`[Known Packages] Available IDs:`, knownPackageIds);
+    
+    const matchingPackages = knownPackageIds
+      .filter(id => {
+        const matches = id.toLowerCase().includes(searchText);
+        console.log(`[Known Packages] "${id}" matches "${searchText}": ${matches}`);
+        return matches;
+      })
+      .map(id => ({
+        id,
+        name: id,
+        title: id.replace(/\./g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        description: `Known FHIR package: ${id}`,
+        version: 'latest',
+        fhirVersion: '4.0.1',
+        author: 'HL7 FHIR',
+        publishedDate: new Date().toISOString(),
+        dependencies: [],
+        downloadUrl: `https://packages.fhir.org/${id}`,
+        keywords: id.split('.'),
+        status: 'active' as const
+      }));
+
+    console.log(`[Known Packages] Found ${matchingPackages.length} matching packages`);
+
+    return {
+      packages: matchingPackages,
+      profiles: [],
+      total: matchingPackages.length,
+      offset: 0,
+      count: matchingPackages.length
+    };
   }
 
   private async searchNpmPackages(query: string, count = 20): Promise<SimplifierSearchResult> {
