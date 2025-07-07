@@ -413,7 +413,7 @@ export class BulkValidationService {
         totalValidated: stats.totalResources,
         validResources: stats.validResources,
         resourcesWithErrors: stats.errorResources,
-        validationCoverage: totalServerResources > 0 ? (stats.totalResources / totalServerResources) * 100 : 0,
+        validationCoverage: totalServerResources > 0 ? Math.min(100, (stats.totalResources / totalServerResources) * 100) : 0,
         resourceTypeBreakdown
       };
     } catch (error) {
@@ -424,7 +424,7 @@ export class BulkValidationService {
         totalValidated: stats.totalResources,
         validResources: stats.validResources,
         resourcesWithErrors: stats.errorResources,
-        validationCoverage: stats.totalResources > 0 ? (stats.totalResources / 125957) * 100 : 0,
+        validationCoverage: stats.totalResources > 0 ? Math.min(100, (stats.totalResources / 125957) * 100) : 0,
         resourceTypeBreakdown: {}
       };
     }

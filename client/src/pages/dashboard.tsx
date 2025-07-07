@@ -387,12 +387,12 @@ export default function Dashboard() {
           <CardContent>
             <div className="text-2xl font-bold">{totalResources.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {validationCoverage > 0 ? `${Math.min(100, (validationCoverage * 100)).toFixed(1)}% validated` : 'Awaiting validation'}
+              {validationCoverage > 0 ? `${Math.min(100, validationCoverage).toFixed(1)}% validated` : 'Awaiting validation'}
             </p>
             <div className="absolute bottom-0 left-0 w-full h-1 bg-muted">
               <div 
                 className="h-full bg-blue-500 transition-all duration-1000"
-                style={{ width: `${Math.min(100, validationCoverage * 100)}%` }}
+                style={{ width: `${Math.min(100, validationCoverage || 0)}%` }}
               />
             </div>
           </CardContent>
@@ -553,7 +553,7 @@ export default function Dashboard() {
                 </div>
                 <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
                   <div className="text-lg font-bold text-blue-600">
-                    {((validationCoverage || 0) * 100).toFixed(1)}%
+                    {(validationCoverage || 0).toFixed(1)}%
                   </div>
                   <div className="text-xs text-muted-foreground">Coverage</div>
                 </div>
@@ -657,11 +657,11 @@ export default function Dashboard() {
                 <div className="text-sm font-medium mb-2">Validation Coverage</div>
                 <div className="flex items-center gap-2">
                   <Progress 
-                    value={Math.min(100, (validationCoverage || 0) * 100)} 
+                    value={Math.min(100, validationCoverage || 0)} 
                     className="flex-1"
                   />
                   <span className="text-sm font-medium w-12">
-                    {Math.min(100, (validationCoverage || 0) * 100).toFixed(1)}%
+                    {Math.min(100, validationCoverage || 0).toFixed(1)}%
                   </span>
                 </div>
               </div>
