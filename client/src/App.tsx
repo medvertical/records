@@ -82,16 +82,16 @@ function Router() {
   );
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
-      <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
-      <main className="flex-1 flex flex-col">
-        <Header 
-          title={getPageTitle()}
-          subtitle={getPageSubtitle()}
-          connectionStatus={connectionStatus}
-          onSidebarToggle={toggleSidebar}
-        />
-        <div className="flex-1 overflow-hidden">
+    <div className="min-h-screen bg-gray-50">
+      <Header 
+        title={getPageTitle()}
+        subtitle={getPageSubtitle()}
+        connectionStatus={connectionStatus}
+        onSidebarToggle={toggleSidebar}
+      />
+      <div className="flex pt-16">
+        <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
+        <main className="flex-1 overflow-hidden">
           <Switch>
             <Route path="/" component={DashboardComponent} />
             <Route path="/dashboard" component={DashboardComponent} />
@@ -101,8 +101,8 @@ function Router() {
             <Route path="/settings" component={SettingsComponent} />
             <Route component={NotFound} />
           </Switch>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
