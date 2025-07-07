@@ -140,29 +140,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/fhir/resources/:id", async (req, res) => {
     try {
       const resourceId = req.params.id;
+      console.log(`[Resource Detail] Looking for resource ID: ${resourceId}`);
       
       // Check if it's a numeric ID (database ID) or a UUID (FHIR resource ID)
       const isNumeric = /^\d+$/.test(resourceId);
+      console.log(`[Resource Detail] Is numeric: ${isNumeric}`);
       
       let resource;
       if (isNumeric) {
         const id = parseInt(resourceId);
+        console.log(`[Resource Detail] Searching by database ID: ${id}`);
         resource = await storage.getFhirResourceById(id);
       } else {
-        // Look up by FHIR resource ID
-        const resources = await storage.getFhirResources();
-        const foundResource = resources.find(r => r.resourceId === resourceId);
-        if (foundResource) {
-          resource = await storage.getFhirResourceById(foundResource.id);
+        // Look up by FHIR resource ID using database query
+        console.log(`[Resource Detail] Searching by FHIR resource ID: ${resourceId}`);
+        resource = await storage.getFhirResourceByTypeAndId("", resourceId);
+        console.log(`[Resource Detail] Found resource by FHIR ID:`, resource ? 'YES' : 'NO');
+        if (resource) {
+          // Get full resource with validation results
+          console.log(`[Resource Detail] Getting full resource with validation for DB ID: ${resource.id}`);
+          resource = await storage.getFhirResourceById(resource.id);
         }
       }
       
       if (!resource) {
+        console.log(`[Resource Detail] Resource not found for ID: ${resourceId}`);
         return res.status(404).json({ message: "Resource not found" });
       }
       
+      console.log(`[Resource Detail] Returning resource:`, resource.resourceType, resource.resourceId);
       res.json(resource);
     } catch (error: any) {
+      console.error(`[Resource Detail] Error:`, error.message);
       res.status(500).json({ message: error.message });
     }
   });

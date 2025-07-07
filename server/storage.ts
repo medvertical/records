@@ -167,11 +167,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getFhirResourceByTypeAndId(resourceType: string, resourceId: string): Promise<FhirResource | undefined> {
+    const conditions = [eq(fhirResources.resourceId, resourceId)];
+    if (resourceType) {
+      conditions.push(eq(fhirResources.resourceType, resourceType));
+    }
+    
     const [resource] = await db.select().from(fhirResources).where(
-      and(
-        eq(fhirResources.resourceType, resourceType),
-        eq(fhirResources.resourceId, resourceId)
-      )
+      resourceType ? and(...conditions) : conditions[0]
     );
     return resource || undefined;
   }

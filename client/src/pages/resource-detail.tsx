@@ -13,13 +13,22 @@ import { Link } from "wouter";
 export default function ResourceDetail() {
   const { id } = useParams<{ id: string }>();
   
-  const { data: resource, isLoading } = useQuery<FhirResourceWithValidation>({
+  const { data: resource, isLoading, error } = useQuery<FhirResourceWithValidation>({
     queryKey: ["/api/fhir/resources", id],
-    queryFn: ({ queryKey }) => {
+    queryFn: async ({ queryKey }) => {
       const [baseUrl, resourceId] = queryKey;
-      return fetch(`${baseUrl}/${resourceId}`).then(res => res.json());
+      console.log('Fetching resource with ID:', resourceId);
+      const response = await fetch(`${baseUrl}/${resourceId}`);
+      if (!response.ok) {
+        console.error('Resource fetch failed:', response.status, response.statusText);
+        throw new Error(`Failed to fetch resource: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log('Resource fetched successfully:', data);
+      return data;
     },
     enabled: !!id,
+    retry: 1,
   });
 
   if (isLoading) {
