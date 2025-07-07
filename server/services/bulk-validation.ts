@@ -80,7 +80,9 @@ export class BulkValidationService {
       }
 
       // Process each resource type with timeout protection
-      for (const resourceType of typesToValidate) {
+      for (let i = 0; i < typesToValidate.length; i++) {
+        const resourceType = typesToValidate[i];
+        
         // Check if validation was paused or stopped
         if (!this.isRunning || this.isPaused) {
           this.resumeFromResourceType = resourceType;
@@ -104,6 +106,12 @@ export class BulkValidationService {
           // Check again after completing a resource type
           if (!this.isRunning || this.isPaused) {
             console.log(`Validation paused after completing ${resourceType}`);
+            // Set the next resource type for resume
+            if (i + 1 < typesToValidate.length) {
+              this.resumeFromResourceType = typesToValidate[i + 1];
+            } else {
+              this.resumeFromResourceType = undefined; // No more resource types
+            }
             return this.currentProgress;
           }
         } catch (error) {
