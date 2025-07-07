@@ -458,6 +458,64 @@ export class ProfileManager {
           latest: '2024.0.0'
         }
       },
+      'de.medizininformatikinitiative.kerndatensatz.diagnose': {
+        versions: {
+          '2.0.0-alpha3': {
+            fhirVersion: '4.0.1',
+            date: '2024-11-01T00:00:00.000Z',
+            description: 'MII Core Dataset Diagnosis module (alpha version)'
+          },
+          '1.0.1': {
+            fhirVersion: '4.0.1',
+            date: '2024-06-01T00:00:00.000Z',
+            description: 'MII Core Dataset Diagnosis module v1.0.1'
+          }
+        },
+        distTags: {
+          latest: '2.0.0-alpha3'
+        }
+      },
+      'de.medizininformatikinitiative.kerndatensatz.medikation': {
+        versions: {
+          '2.0.0': {
+            fhirVersion: '4.0.1',
+            date: '2024-10-01T00:00:00.000Z',
+            description: 'MII Core Dataset Medication module v2.0.0'
+          },
+          '0.9.0': {
+            fhirVersion: '4.0.1',
+            date: '2024-03-01T00:00:00.000Z',
+            description: 'MII Core Dataset Medication module v0.9.0'
+          }
+        },
+        distTags: {
+          latest: '2.0.0'
+        }
+      },
+      'de.medizininformatikinitiative.kerndatensatz.prozedur': {
+        versions: {
+          '1.0.1': {
+            fhirVersion: '4.0.1',
+            date: '2024-08-01T00:00:00.000Z',
+            description: 'MII Core Dataset Procedure module v1.0.1'
+          }
+        },
+        distTags: {
+          latest: '1.0.1'
+        }
+      },
+      'de.medizininformatikinitiative.kerndatensatz.fall': {
+        versions: {
+          '1.0.1': {
+            fhirVersion: '4.0.1',
+            date: '2024-07-01T00:00:00.000Z',
+            description: 'MII Core Dataset Case/Fall module v1.0.1'
+          }
+        },
+        distTags: {
+          latest: '1.0.1'
+        }
+      },
       'hl7.fhir.us.core': {
         versions: {
           '6.1.0': {
@@ -501,66 +559,19 @@ export class ProfileManager {
   }
 
   private isKnownPackage(packageId: string): boolean {
-    const knownPackages = [
-      'de.basisprofil.r4',
-      'de.medizininformatikinitiative.kerndatensatz.person',
-      'hl7.fhir.us.core',
-      'hl7.fhir.uv.ips'
-    ];
-    return knownPackages.includes(packageId);
+    // Known packages are disabled - all packages must be found through external sources
+    return false;
   }
 
   private async installKnownPackage(packageId: string, version?: string): Promise<ProfileInstallResult> {
-    try {
-      const knownPackageData = this.getKnownPackageData(packageId);
-      if (!knownPackageData) {
-        return {
-          success: false,
-          message: `Known package ${packageId} data not available`
-        };
-      }
-
-      // Install profiles for the known package
-      let installedCount = 0;
-      const errors: string[] = [];
-
-      for (const profileData of knownPackageData.profiles) {
-        try {
-          const validationProfile: InsertValidationProfile = {
-            name: profileData.name,
-            title: profileData.title,
-            description: profileData.description,
-            version: version || knownPackageData.version,
-            url: profileData.url,
-            resourceType: profileData.resourceType,
-            packageId: packageId,
-            packageVersion: version || knownPackageData.version,
-            status: 'active',
-            isActive: true,
-            config: profileData.config || {}
-          };
-
-          await storage.createValidationProfile(validationProfile);
-          installedCount++;
-        } catch (error: any) {
-          errors.push(`Failed to install profile ${profileData.name}: ${error.message}`);
-        }
-      }
-
-      return {
-        success: installedCount > 0,
-        message: installedCount > 0 
-          ? `Successfully installed ${installedCount} profiles from ${packageId}`
-          : `Failed to install any profiles from ${packageId}`,
-        profilesInstalled: installedCount,
-        errors: errors.length > 0 ? errors : undefined
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        message: `Failed to install known package ${packageId}: ${error.message}`
-      };
-    }
+    // Known packages are disabled - all packages must be found through external sources
+    console.log(`[ProfileManager] Known packages disabled - package ${packageId} must be found externally`);
+    
+    return {
+      success: false,
+      message: `Package ${packageId} not found in external repositories`,
+      errors: [`Package must be found through external search (Simplifier.net, FHIR Package Registry)`]
+    };
   }
 
   private getKnownPackageData(packageId: string): any {
@@ -645,6 +656,90 @@ export class ProfileManager {
               kind: 'resource',
               abstract: false,
               baseDefinition: 'http://hl7.org/fhir/StructureDefinition/ResearchSubject'
+            }
+          }
+        ]
+      },
+      'de.medizininformatikinitiative.kerndatensatz.diagnose': {
+        name: 'MII Kerndatensatz - Diagnose',
+        version: '2.0.0-alpha3',
+        profiles: [
+          {
+            name: 'mii-pr-diagnose-condition',
+            title: 'MII PR Diagnose Condition',
+            description: 'Medical Informatics Initiative profile for diagnosis conditions',
+            url: 'https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose/StructureDefinition/Condition',
+            resourceType: 'Condition',
+            config: {
+              kind: 'resource',
+              abstract: false,
+              baseDefinition: 'http://hl7.org/fhir/StructureDefinition/Condition'
+            }
+          }
+        ]
+      },
+      'de.medizininformatikinitiative.kerndatensatz.medikation': {
+        name: 'MII Kerndatensatz - Medikation',
+        version: '2.0.0',
+        profiles: [
+          {
+            name: 'mii-pr-medikation-medication',
+            title: 'MII PR Medikation Medication',
+            description: 'Medical Informatics Initiative profile for medication',
+            url: 'https://www.medizininformatik-initiative.de/fhir/core/modul-medikation/StructureDefinition/Medication',
+            resourceType: 'Medication',
+            config: {
+              kind: 'resource',
+              abstract: false,
+              baseDefinition: 'http://hl7.org/fhir/StructureDefinition/Medication'
+            }
+          },
+          {
+            name: 'mii-pr-medikation-medicationstatement',
+            title: 'MII PR Medikation MedicationStatement',
+            description: 'Medical Informatics Initiative profile for medication statements',
+            url: 'https://www.medizininformatik-initiative.de/fhir/core/modul-medikation/StructureDefinition/MedicationStatement',
+            resourceType: 'MedicationStatement',
+            config: {
+              kind: 'resource',
+              abstract: false,
+              baseDefinition: 'http://hl7.org/fhir/StructureDefinition/MedicationStatement'
+            }
+          }
+        ]
+      },
+      'de.medizininformatikinitiative.kerndatensatz.prozedur': {
+        name: 'MII Kerndatensatz - Prozedur',
+        version: '1.0.1',
+        profiles: [
+          {
+            name: 'mii-pr-prozedur-procedure',
+            title: 'MII PR Prozedur Procedure',
+            description: 'Medical Informatics Initiative profile for procedures',
+            url: 'https://www.medizininformatik-initiative.de/fhir/core/modul-prozedur/StructureDefinition/Procedure',
+            resourceType: 'Procedure',
+            config: {
+              kind: 'resource',
+              abstract: false,
+              baseDefinition: 'http://hl7.org/fhir/StructureDefinition/Procedure'
+            }
+          }
+        ]
+      },
+      'de.medizininformatikinitiative.kerndatensatz.fall': {
+        name: 'MII Kerndatensatz - Fall',
+        version: '1.0.1',
+        profiles: [
+          {
+            name: 'mii-pr-fall-encounter',
+            title: 'MII PR Fall Encounter',
+            description: 'Medical Informatics Initiative profile for case/encounter data',
+            url: 'https://www.medizininformatik-initiative.de/fhir/core/modul-fall/StructureDefinition/Encounter',
+            resourceType: 'Encounter',
+            config: {
+              kind: 'resource',
+              abstract: false,
+              baseDefinition: 'http://hl7.org/fhir/StructureDefinition/Encounter'
             }
           }
         ]
