@@ -4,14 +4,14 @@ import { storage } from "./storage.js";
 import { FhirClient } from "./services/fhir-client.js";
 import { ValidationEngine } from "./services/validation-engine.js";
 import { profileManager } from "./services/profile-manager.js";
-import { BulkValidationService } from "./services/bulk-validation-new.js";
+import { RobustValidationService } from "./services/robust-validation.js";
 import { insertFhirServerSchema, insertFhirResourceSchema, insertValidationProfileSchema } from "@shared/schema.js";
 import { validationWebSocket, initializeWebSocket } from "./services/websocket-server.js";
 import { z } from "zod";
 
 let fhirClient: FhirClient;
 let validationEngine: ValidationEngine;
-let bulkValidationService: BulkValidationService;
+let robustValidationService: RobustValidationService;
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize FHIR client with active server
@@ -19,7 +19,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   if (activeServer) {
     fhirClient = new FhirClient(activeServer.url);
     validationEngine = new ValidationEngine(fhirClient);
-    bulkValidationService = new BulkValidationService(fhirClient, validationEngine);
+    robustValidationService = new RobustValidationService(fhirClient, validationEngine);
   }
 
   // FHIR Server endpoints
@@ -416,12 +416,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Bulk validation endpoints
   app.post("/api/validation/bulk/start", async (req, res) => {
     try {
-      if (!bulkValidationService) {
+      if (!robustValidationService) {
         return res.status(400).json({ message: "No FHIR server configured" });
       }
 
-      if (bulkValidationService.isValidationRunning()) {
-        return res.status(409).json({ message: "Bulk validation is already running" });
+      if (robustValidationService.isValidationRunning()) {
+        return res.status(409).json({ message: "Robust validation is already running" });
       }
 
       const options = req.body || {};
@@ -431,9 +431,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validationWebSocket.broadcastValidationStart();
       }
 
-      // Start bulk validation with new clean implementation
-      const validationPromise = bulkValidationService.startValidation({
-        batchSize: options.batchSize || 50,
+      // Start robust validation with fallback mechanisms
+      const validationPromise = robustValidationService.startValidation({
+        batchSize: options.batchSize || 20,
+        maxRetries: options.maxRetries || 3,
         skipUnchanged: options.skipUnchanged !== false,
         resourceTypes: options.resourceTypes,
         onProgress: (progress) => {
@@ -456,7 +457,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       res.json({ 
-        message: "Bulk validation started",
+        message: "Robust validation started",
         status: "running"
       });
     } catch (error: any) {
@@ -466,17 +467,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/validation/bulk/progress", async (req, res) => {
     try {
-      if (!bulkValidationService) {
+      if (!robustValidationService) {
         return res.status(400).json({ message: "No FHIR server configured" });
       }
 
-      const progress = bulkValidationService.getCurrentProgress();
+      const progress = robustValidationService.getCurrentProgress();
       if (!progress) {
         return res.json({ status: "not_running" });
       }
 
       let status = "not_running";
-      const state = bulkValidationService.getState();
+      const state = robustValidationService.getState();
       if (progress.isComplete || state === 'completed') {
         status = "completed";
       } else if (state === 'paused') {
@@ -496,11 +497,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/validation/bulk/summary", async (req, res) => {
     try {
-      if (!bulkValidationService) {
+      if (!robustValidationService) {
         return res.status(400).json({ message: "No FHIR server configured" });
       }
 
-      const summary = await bulkValidationService.getServerValidationSummary();
+      const summary = await robustValidationService.getServerValidationSummary();
       res.json(summary);
     } catch (error: any) {
       console.error('Error getting validation summary:', error);
@@ -510,15 +511,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/validation/bulk/pause", async (req, res) => {
     try {
-      if (!bulkValidationService) {
+      if (!robustValidationService) {
         return res.status(400).json({ message: "No FHIR server configured" });
       }
 
-      if (!bulkValidationService.isValidationRunning()) {
+      if (!robustValidationService.isValidationRunning()) {
         return res.status(400).json({ message: "No validation is currently running" });
       }
 
-      bulkValidationService.pauseValidation();
+      robustValidationService.pauseValidation();
       res.json({ message: "Validation paused successfully" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -527,11 +528,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/validation/bulk/resume", async (req, res) => {
     try {
-      if (!bulkValidationService) {
+      if (!robustValidationService) {
         return res.status(400).json({ message: "No FHIR server configured" });
       }
 
-      if (bulkValidationService.getState() !== 'paused') {
+      if (robustValidationService.getState() !== 'paused') {
         return res.status(400).json({ message: "No paused validation to resume" });
       }
 
@@ -542,9 +543,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validationWebSocket.broadcastValidationStart();
       }
 
-      // Resume the validation with new clean implementation
-      const resumedProgress = await bulkValidationService.resumeValidation({
-        batchSize: 50,
+      // Resume the validation with robust implementation
+      const resumedProgress = await robustValidationService.resumeValidation({
+        batchSize: 20,
+        maxRetries: 3,
         skipUnchanged: true,
         onProgress: (progress) => {
           if (validationWebSocket) {
@@ -566,11 +568,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/validation/bulk/stop", async (req, res) => {
     try {
-      if (!bulkValidationService) {
+      if (!robustValidationService) {
         return res.status(400).json({ message: "No FHIR server configured" });
       }
 
-      bulkValidationService.stopValidation();
+      robustValidationService.stopValidation();
       res.json({ message: "Validation stopped successfully" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
