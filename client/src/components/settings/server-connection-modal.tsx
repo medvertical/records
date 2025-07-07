@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useForm } from "react-hook-form";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 import { 
   Globe, 
   Shield, 
@@ -101,22 +100,33 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
   });
 
   const createServerMutation = useMutation({
-    mutationFn: (data: ServerFormData) => apiRequest('/api/fhir/servers', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: data.name,
-        url: data.url,
-        authConfig: {
-          type: data.authType,
-          username: data.username,
-          password: data.password,
-          token: data.token,
-          clientId: data.clientId,
-          clientSecret: data.clientSecret,
-          tokenUrl: data.tokenUrl
-        }
-      })
-    }),
+    mutationFn: async (data: ServerFormData) => {
+      const response = await fetch('/api/fhir/servers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: data.name,
+          url: data.url,
+          authConfig: {
+            type: data.authType,
+            username: data.username,
+            password: data.password,
+            token: data.token,
+            clientId: data.clientId,
+            clientSecret: data.clientSecret,
+            tokenUrl: data.tokenUrl
+          }
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to create server');
+      }
+      
+      return response.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/fhir/servers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/fhir/connection/test"] });
