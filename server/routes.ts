@@ -426,17 +426,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const options = req.body || {};
       
+      // Get ALL resource types from server if none specified  
+      let resourceTypes = options.resourceTypes;
+      
+      if (!resourceTypes || resourceTypes.length === 0) {
+        console.log('Getting ALL resource types from FHIR server...');
+        try {
+          resourceTypes = await fhirClient.getAllResourceTypes();
+          console.log(`Found ${resourceTypes.length} total resource types on FHIR server`);
+        } catch (error) {
+          console.error('Failed to get resource types, using common defaults:', error);
+          resourceTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'Practitioner', 'Organization'];
+        }
+      }
+      
       // Broadcast validation start via WebSocket
       if (validationWebSocket) {
         validationWebSocket.broadcastValidationStart();
       }
 
-      // Start robust validation with fallback mechanisms
+      // Start robust validation with fallback mechanisms for ALL resource types
       const validationPromise = robustValidationService.startValidation({
         batchSize: options.batchSize || 20,
         maxRetries: options.maxRetries || 3,
         skipUnchanged: options.skipUnchanged !== false,
-        resourceTypes: options.resourceTypes,
+        resourceTypes: resourceTypes,
         onProgress: (progress) => {
           if (validationWebSocket) {
             validationWebSocket.broadcastProgress(progress);

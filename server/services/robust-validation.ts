@@ -65,9 +65,22 @@ export class RobustValidationService {
     this.shouldStop = false;
     this.batchTimes = [];
 
-    // Get resource types to validate
-    const resourceTypes = options.resourceTypes || ['Patient', 'Observation', 'Encounter', 'Condition'];
-    console.log('Resource types to validate:', resourceTypes);
+    // Get ALL resource types from FHIR server if none specified
+    let resourceTypes = options.resourceTypes;
+    
+    if (!resourceTypes || resourceTypes.length === 0) {
+      console.log('Getting ALL resource types from FHIR server for comprehensive validation...');
+      try {
+        resourceTypes = await this.fhirClient.getAllResourceTypes();
+        console.log(`Found ${resourceTypes.length} total resource types for validation`);
+      } catch (error) {
+        console.error('Failed to get all resource types, using common subset:', error);
+        resourceTypes = ['Patient', 'Observation', 'Encounter', 'Condition'];
+      }
+    } else {
+      console.log(`Using ${resourceTypes.length} specified resource types`);
+    }
+    console.log('Resource types to validate:', resourceTypes.length > 10 ? `${resourceTypes.slice(0, 10).join(', ')}... (${resourceTypes.length} total)` : resourceTypes);
 
     // Calculate total resources with fallback
     const totalCounts = await this.getResourceCounts(resourceTypes);
