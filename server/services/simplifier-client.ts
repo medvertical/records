@@ -225,6 +225,21 @@ export class SimplifierClient {
         status: 'active' as const
       },
       {
+        id: 'de.medizininformatikinitiative.kerndatensatz.person',
+        name: 'de.medizininformatikinitiative.kerndatensatz.person',
+        title: 'MII Kerndatensatz - Person',
+        description: 'Medical Informatics Initiative Core Dataset for Person data',
+        version: '2024.0.0',
+        fhirVersion: '4.0.1',
+        author: 'Medizininformatik Initiative',
+        publishedDate: '2024-01-01T00:00:00.000Z',
+        dependencies: [],
+        downloadUrl: 'https://simplifier.net/packages/de.medizininformatikinitiative.kerndatensatz.person',
+        canonicalUrl: 'https://simplifier.net/packages/de.medizininformatikinitiative.kerndatensatz.person',
+        keywords: ['mii', 'medizininformatik', 'kerndatensatz', 'person', 'german'],
+        status: 'active' as const
+      },
+      {
         id: 'hl7.fhir.us.core',
         name: 'hl7.fhir.us.core',
         title: 'US Core Implementation Guide',

@@ -436,6 +436,28 @@ export class ProfileManager {
           latest: '1.5.4'
         }
       },
+      'de.medizininformatikinitiative.kerndatensatz.person': {
+        versions: {
+          '2024.0.0': {
+            fhirVersion: '4.0.1',
+            date: '2024-01-01T00:00:00.000Z',
+            description: 'MII Core Dataset Person 2024 release'
+          },
+          '1.0.17': {
+            fhirVersion: '4.0.1',
+            date: '2023-10-01T00:00:00.000Z',
+            description: 'MII Core Dataset Person v1.0.17'
+          },
+          '1.0.16': {
+            fhirVersion: '4.0.1',
+            date: '2023-06-01T00:00:00.000Z',
+            description: 'MII Core Dataset Person v1.0.16'
+          }
+        },
+        distTags: {
+          latest: '2024.0.0'
+        }
+      },
       'hl7.fhir.us.core': {
         versions: {
           '6.1.0': {
@@ -481,6 +503,7 @@ export class ProfileManager {
   private isKnownPackage(packageId: string): boolean {
     const knownPackages = [
       'de.basisprofil.r4',
+      'de.medizininformatikinitiative.kerndatensatz.person',
       'hl7.fhir.us.core',
       'hl7.fhir.uv.ips'
     ];
@@ -580,6 +603,48 @@ export class ProfileManager {
               kind: 'resource',
               abstract: false,
               baseDefinition: 'http://hl7.org/fhir/StructureDefinition/Practitioner'
+            }
+          }
+        ]
+      },
+      'de.medizininformatikinitiative.kerndatensatz.person': {
+        name: 'MII Kerndatensatz - Person',
+        version: '2024.0.0',
+        profiles: [
+          {
+            name: 'mii-pr-person-patient',
+            title: 'MII PR Person Patient',
+            description: 'Medical Informatics Initiative profile for Patient as Person',
+            url: 'https://www.medizininformatik-initiative.de/fhir/core/modul-person/StructureDefinition/Patient',
+            resourceType: 'Patient',
+            config: {
+              kind: 'resource',
+              abstract: false,
+              baseDefinition: 'http://hl7.org/fhir/StructureDefinition/Patient'
+            }
+          },
+          {
+            name: 'mii-pr-person-practitioner',
+            title: 'MII PR Person Practitioner',
+            description: 'Medical Informatics Initiative profile for Practitioner as Person',
+            url: 'https://www.medizininformatik-initiative.de/fhir/core/modul-person/StructureDefinition/Practitioner',
+            resourceType: 'Practitioner',
+            config: {
+              kind: 'resource',
+              abstract: false,
+              baseDefinition: 'http://hl7.org/fhir/StructureDefinition/Practitioner'
+            }
+          },
+          {
+            name: 'mii-pr-person-researchsubject',
+            title: 'MII PR Person ResearchSubject',
+            description: 'Medical Informatics Initiative profile for ResearchSubject as Person',
+            url: 'https://www.medizininformatik-initiative.de/fhir/core/modul-person/StructureDefinition/ResearchSubject',
+            resourceType: 'ResearchSubject',
+            config: {
+              kind: 'resource',
+              abstract: false,
+              baseDefinition: 'http://hl7.org/fhir/StructureDefinition/ResearchSubject'
             }
           }
         ]
