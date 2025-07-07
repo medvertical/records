@@ -182,7 +182,6 @@ export default function Dashboard() {
         setIsValidationRunning(false);
         setIsValidationPaused(false);
         setValidationProgress(null);
-        // Reset state to allow fresh start
         console.log('Validation stopped and reset');
       }
     } catch (error) {

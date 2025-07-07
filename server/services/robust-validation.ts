@@ -168,6 +168,11 @@ export class RobustValidationService {
   private async runValidation(options: RobustValidationOptions = {}): Promise<void> {
     if (!this.checkpoint) return;
 
+    if (!this.checkpoint?.resourceTypes) {
+      console.log('No checkpoint available - validation was reset');
+      return;
+    }
+
     const { resourceTypes } = this.checkpoint;
     const batchSize = options.batchSize || 20;
     const maxRetries = options.maxRetries || 3;
@@ -176,6 +181,12 @@ export class RobustValidationService {
     console.log(`runValidation: Starting from type index ${this.checkpoint.currentTypeIndex}, total types: ${resourceTypes.length}`);
 
     for (let i = this.checkpoint.currentTypeIndex; i < resourceTypes.length && !this.shouldStop && this.state === 'running'; i++) {
+      // Check if validation was stopped and reset
+      if (!this.checkpoint?.progress) {
+        console.log('Validation stopped and reset - exiting validation loop');
+        return;
+      }
+
       const resourceType = resourceTypes[i];
       console.log(`Processing ${resourceType}... (${i+1}/${resourceTypes.length})`);
       
@@ -193,13 +204,20 @@ export class RobustValidationService {
         );
       } catch (error) {
         console.error(`Failed to process ${resourceType}:`, error);
-        this.checkpoint.progress.errors.push(`${resourceType}: ${error instanceof Error ? error.message : String(error)}`);
+        if (this.checkpoint?.progress) {
+          this.checkpoint.progress.errors.push(`${resourceType}: ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
 
-      console.log(`Finished processing ${resourceType}. Current progress: ${this.checkpoint.progress.processedResources} processed`);
-      
-      // Reset processed count for next type
-      this.checkpoint.processedInCurrentType = 0;
+      if (this.checkpoint?.progress) {
+        console.log(`Finished processing ${resourceType}. Current progress: ${this.checkpoint.progress.processedResources} processed`);
+        
+        // Reset processed count for next type
+        this.checkpoint.processedInCurrentType = 0;
+      } else {
+        console.log(`Validation stopped during ${resourceType} processing`);
+        return; // Exit early if validation was stopped and reset
+      }
 
       if (this.state === 'paused') {
         console.log(`runValidation: Pausing after ${resourceType}, state: ${this.state}`);
@@ -207,7 +225,7 @@ export class RobustValidationService {
       }
     }
 
-    if (!this.shouldStop && this.state === 'running') {
+    if (!this.shouldStop && this.state === 'running' && this.checkpoint?.progress) {
       this.checkpoint.progress.isComplete = true;
       this.state = 'completed';
       console.log('Validation completed successfully');
