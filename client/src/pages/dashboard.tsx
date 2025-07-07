@@ -94,7 +94,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (progress) {
       setValidationProgress(progress);
-      setIsValidationRunning(!progress.isComplete && progress.status !== 'paused');
+      setIsValidationRunning(progress.status === 'running');
       setIsValidationPaused(progress.status === 'paused');
     } else if (currentProgress) {
       setIsValidationRunning(currentProgress.status === 'running');
