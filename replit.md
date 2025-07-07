@@ -102,3 +102,4 @@ Changelog:
 
 Preferred communication style: Simple, everyday language.
 App branding: Header should always show "Records" as the app name, not dynamic view names.
+Card design: Never use shadow hover effects on cards - no hover:shadow, shadow-, or transition-shadow classes on Card components.

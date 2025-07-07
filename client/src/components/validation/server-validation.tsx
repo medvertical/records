@@ -296,8 +296,8 @@ export default function ServerValidation() {
           </div>
         )}
 
-        {/* Current Progress (if running) */}
-        {(validationStatus === 'running' || progress?.status === 'running') && progress && (
+        {/* Current Progress (if running or paused) */}
+        {(validationStatus === 'running' || progress?.status === 'running' || validationStatus === 'paused' || progress?.status === 'paused') && progress && (
           <div className="space-y-3">
             <Separator />
             <div className="flex items-center gap-2">

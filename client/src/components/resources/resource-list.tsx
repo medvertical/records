@@ -148,7 +148,7 @@ export default function ResourceList({
             const validationStatus = getValidationStatus(resource);
             
             return (
-              <Card key={resource.id || `${resource.resourceType}-${index}`} className="hover:shadow-md transition-shadow">
+              <Card key={resource.id || `${resource.resourceType}-${index}`} className="">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4 flex-1 min-w-0">

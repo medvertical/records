@@ -305,7 +305,7 @@ export default function Dashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          {validationProgress && isValidationRunning ? (
+          {validationProgress && (isValidationRunning || isValidationPaused) ? (
             <div className="space-y-4">
               {/* Primary Progress Bar */}
               <div className="space-y-2">
@@ -389,8 +389,20 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
+
+              {/* Show status when paused */}
+              {isValidationPaused && (
+                <div className="p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-orange-500 rounded-full" />
+                    <span className="text-sm font-medium text-orange-700 dark:text-orange-300">
+                      Validation Paused - {validationProgress.validResources} resources validated, {validationProgress.errorResources} errors
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-          ) : !isValidationRunning ? (
+          ) : !isValidationRunning && !isValidationPaused ? (
             <div className="text-center py-8">
               <div className="text-muted-foreground mb-4">Validation engine is idle</div>
               <div className="text-sm text-muted-foreground">
@@ -495,7 +507,7 @@ export default function Dashboard() {
 
       {/* FHIR Server Details */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="transition-all duration-300 hover:shadow-lg">
+        <Card className="transition-all duration-300">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Server className="h-5 w-5" />
@@ -628,7 +640,7 @@ export default function Dashboard() {
 
       {/* Server Performance & Data Quality */}
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="transition-all duration-300 hover:shadow-lg">
+        <Card className="transition-all duration-300">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Zap className="h-5 w-5" />
@@ -714,7 +726,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="transition-all duration-300 hover:shadow-lg">
+        <Card className="transition-all duration-300">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Wifi className="h-5 w-5" />
@@ -759,7 +771,7 @@ export default function Dashboard() {
 
       {/* Recent Activity */}
       {recentErrors && recentErrors.length > 0 && (
-        <Card className="transition-all duration-300 hover:shadow-lg">
+        <Card className="transition-all duration-300">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Square className="h-5 w-5" />

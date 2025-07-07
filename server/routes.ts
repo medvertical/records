@@ -486,12 +486,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const progress = robustValidationService.getCurrentProgress();
+      const state = robustValidationService.getState();
+      
       if (!progress) {
         return res.json({ status: "not_running" });
       }
 
+      // Always include full progress details regardless of state
       let status = "not_running";
-      const state = robustValidationService.getState();
       if (progress.isComplete || state === 'completed') {
         status = "completed";
       } else if (state === 'paused') {
@@ -500,9 +502,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status = "running";
       }
 
+      // Calculate elapsed time
+      const elapsedMs = Date.now() - progress.startTime.getTime();
+      const elapsedSeconds = Math.floor(elapsedMs / 1000);
+
       res.json({
         status,
-        ...progress
+        ...progress,
+        elapsedTime: elapsedSeconds,
+        elapsedTimeFormatted: `${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s`
       });
     } catch (error: any) {
       res.status(500).json({ message: error.message });

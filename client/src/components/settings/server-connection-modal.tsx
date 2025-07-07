@@ -231,7 +231,7 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
                 <h3 className="text-lg font-semibold mb-2">Featured Servers</h3>
                 <div className="grid gap-3">
                   {predefinedServers.filter(s => s.featured).map((server, index) => (
-                    <Card key={index} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleServerSelect(server)}>
+                    <Card key={index} className="cursor-pointer" onClick={() => handleServerSelect(server)}>
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
@@ -259,7 +259,7 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
                 <h3 className="text-lg font-semibold mb-2">Other Options</h3>
                 <div className="grid gap-3">
                   {predefinedServers.filter(s => !s.featured).map((server, index) => (
-                    <Card key={index} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => handleServerSelect(server)}>
+                    <Card key={index} className="cursor-pointer" onClick={() => handleServerSelect(server)}>
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
