@@ -528,8 +528,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         skipUnchanged: true
       });
       
-      // Broadcast resume status
+      // Broadcast validation start when resuming
       if (validationWebSocket) {
+        validationWebSocket.broadcastValidationStart();
         validationWebSocket.broadcastProgress(resumedProgress);
       }
 
