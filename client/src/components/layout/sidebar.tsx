@@ -144,25 +144,18 @@ function SidebarContent({
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium text-gray-700">Server Connection</span>
-          <Badge 
-            variant="secondary"
-            className={cn(
-              "flex items-center space-x-1 px-2 py-1",
-              serverStatus?.connected 
-                ? "bg-green-50 text-green-700 border-green-200" 
-                : "bg-red-50 text-red-700 border-red-200"
-            )}
-          >
+          <div className="flex items-center space-x-1">
             <div className={cn(
               "w-2 h-2 rounded-full",
-              serverStatus?.connected 
-                ? "bg-fhir-success animate-pulse" 
-                : "bg-fhir-error"
+              serverStatus?.connected ? "bg-fhir-success" : "bg-fhir-error"
             )} />
-            <span className="text-xs font-medium">
+            <span className={cn(
+              "text-xs",
+              serverStatus?.connected ? "text-fhir-success" : "text-fhir-error"
+            )}>
               {serverStatus?.connected ? "Connected" : "Disconnected"}
             </span>
-          </Badge>
+          </div>
         </div>
         <div className="flex items-center justify-between bg-gray-50 p-2 rounded">
           <div className="min-w-0 flex-1">
