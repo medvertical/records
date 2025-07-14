@@ -98,9 +98,9 @@ export default function Dashboard() {
     }
   }, [fhirConnection]);
 
-  // Initialize validation state from server (takes priority over WebSocket on component mount)
+  // Initialize validation state from server (but don't override WebSocket data)
   useEffect(() => {
-    if (currentValidationProgress) {
+    if (currentValidationProgress && !hasInitialized) {
       const status = currentValidationProgress.status;
       
       if (status === 'running') {
@@ -116,28 +116,32 @@ export default function Dashboard() {
         setIsValidationPaused(false);
         setValidationProgress(currentValidationProgress);
       } else if (status === 'not_running') {
-        // Only reset state if server explicitly says not running
-        setIsValidationRunning(false);
-        setIsValidationPaused(false);
-        // Keep last validation progress for display
+        // Only reset if no WebSocket progress indicating active validation
+        if (!progress || progress.isComplete) {
+          setIsValidationRunning(false);
+          setIsValidationPaused(false);
+        }
       }
       
       // Mark as initialized after first server response
       setHasInitialized(true);
     }
-  }, [currentValidationProgress]);
+  }, [currentValidationProgress, hasInitialized, progress]);
 
-  // WebSocket progress updates (real-time during validation)
+  // WebSocket progress updates (real-time during validation) - HIGHEST PRIORITY
   useEffect(() => {
     if (progress) {
       console.log('WebSocket progress received:', progress);
       setValidationProgress(progress);
       
-      // If we have progress with processed resources, validation is definitely running
-      if (progress.processedResources > 0 || progress.status === 'running') {
+      // WebSocket progress takes priority - if we have active processing, validation is running
+      if (progress.processedResources > 0 && !progress.isComplete) {
         setIsValidationRunning(true);
         setIsValidationPaused(false);
         setHasInitialized(true);
+      } else if (progress.isComplete) {
+        setIsValidationRunning(false);
+        setIsValidationPaused(false);
       }
     }
   }, [progress]);
