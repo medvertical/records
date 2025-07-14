@@ -796,61 +796,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No FHIR server configured" });
       }
 
-      // Return simple running status for now - real implementation would track progress
+      // Get real validation summary from database
+      const summary = await storage.getResourceStats();
+      
       const progress = {
-        totalResources: 126000,
-        processedResources: 0,
-        validResources: 0,
-        errorResources: 0,
+        totalResources: summary.totalResources,
+        processedResources: summary.validResources + summary.errorResources,
+        validResources: summary.validResources,
+        errorResources: summary.errorResources,
         isComplete: false,
         errors: [],
-        startTime: new Date().toISOString()
+        startTime: new Date().toISOString(),
+        status: 'not_running' as const
       };
-      const state = 'not_running';
       
-      if (!progress) {
-        return res.json({ status: "not_running" });
-      }
-
-      // Always include full progress details regardless of state
-      let status = "not_running";
-      if (progress.isComplete || state === 'completed') {
-        status = "completed";
-      } else if (state === 'paused') {
-        status = "paused";
-      } else if (state === 'running') {
-        status = "running";
-      }
-
-      // Calculate elapsed time - freeze when paused
-      let elapsedMs: number;
-      let adjustedProgress = { ...progress };
-      
-      if (state === 'paused') {
-        // Use paused time instead of current time
-        const pausedAt = robustValidationService.getPausedAt();
-        if (pausedAt) {
-          elapsedMs = pausedAt.getTime() - progress.startTime.getTime();
-        } else {
-          elapsedMs = Date.now() - progress.startTime.getTime();
-        }
-        
-        // Zero out processing rate when paused
-        adjustedProgress.performance = {
-          ...progress.performance,
-          resourcesPerSecond: 0
-        };
-      } else {
-        elapsedMs = Date.now() - progress.startTime.getTime();
-      }
-      
-      const elapsedSeconds = Math.floor(elapsedMs / 1000);
-
+      console.log('[ValidationProgress] Real error count from database:', summary.errorResources);
       res.json({
-        status,
-        ...adjustedProgress,
-        elapsedTime: elapsedSeconds,
-        elapsedTimeFormatted: `${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s`
+        status: "not_running",
+        ...progress
       });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -859,12 +822,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/validation/bulk/summary", async (req, res) => {
     try {
-      if (!robustValidationService) {
-        return res.status(400).json({ message: "No FHIR server configured" });
-      }
-
-      const summary = await robustValidationService.getServerValidationSummary();
-      res.json(summary);
+      // Get real validation summary from database
+      const summary = await storage.getResourceStats();
+      
+      const validationSummary = {
+        totalResources: summary.totalResources,
+        totalValidated: summary.validResources + summary.errorResources,
+        validResources: summary.validResources,
+        errorResources: summary.errorResources,
+        resourcesWithErrors: summary.errorResources, // Match dashboard expectation
+        lastValidationRun: new Date()
+      };
+      
+      console.log('[ValidationSummary] Real error count from database:', summary.errorResources);
+      res.json(validationSummary);
     } catch (error: any) {
       console.error('Error getting validation summary:', error);
       res.status(500).json({ message: error.message });
