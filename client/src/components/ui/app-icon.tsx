@@ -15,26 +15,52 @@ export default function AppIcon({ size = "md", className }: AppIconProps) {
   return (
     <div 
       className={cn(
-        "flex items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 shadow-sm",
+        "flex items-center justify-center rounded-lg overflow-hidden",
         sizeClasses[size],
         className
       )}
     >
       <svg
-        viewBox="0 0 24 24"
-        className="h-5/6 w-5/6 text-white"
-        fill="currentColor"
+        viewBox="0 0 128 128"
+        className="h-full w-full"
+        xmlns="http://www.w3.org/2000/svg"
       >
-        {/* Medical Record / Health Data Icon */}
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
-        <path d="M14 2v6h6"/>
-        <path d="M8 12h8"/>
-        <path d="M8 16h8"/>
-        <path d="M8 20h8"/>
-        {/* Health/Medical Cross accent */}
-        <circle cx="11" cy="9" r="1.5" fill="rgba(255,255,255,0.9)"/>
-        <rect x="10.25" y="7.5" width="1.5" height="3" rx="0.75" fill="rgba(255,255,255,0.9)"/>
-        <rect x="9.5" y="8.25" width="3" height="1.5" rx="0.75" fill="rgba(255,255,255,0.9)"/>
+        <defs>
+          <linearGradient 
+            id="appIconGradient" 
+            gradientUnits="userSpaceOnUse" 
+            x1="64" 
+            y1="1.2756" 
+            x2="64" 
+            y2="129.2756" 
+            gradientTransform="matrix(1 0 0 -1 0 129.2756)"
+          >
+            <stop offset="0" stopColor="#0055FE"/>
+            <stop offset="1" stopColor="#CADCFE"/>
+          </linearGradient>
+        </defs>
+        
+        {/* Background */}
+        <path fill="#0055FE" d="M128,0H0v128h128V0z"/>
+        
+        {/* Gradient overlay */}
+        <path 
+          fill="url(#appIconGradient)" 
+          opacity="0.4" 
+          d="M128,0H0v128h128V0z"
+        />
+        
+        {/* Database icon */}
+        <path 
+          fill="#FFFFFF" 
+          d="M95.6,39.9C94.8,31.2,79.3,26.7,64,26.7c-15.3,0-30.8,4.5-31.6,13.2c0,0.2-0.1,0.4-0.1,0.7v42.7 c0,9.1,15.5,13.5,29.9,13.8h0.1c1.7,0,3.2-1.4,3.2-3.1c0-1.8-1.4-3.2-3.1-3.3c-15.3-0.3-23.7-5.1-23.7-7.4V70.5 c6.1,3.4,15.7,5.2,25.2,5.2h0.2c4,0,8.1-0.3,12.1-1c1.7-0.3,2.9-1.9,2.6-3.7c-0.3-1.7-1.9-2.9-3.7-2.6c-3.7,0.6-7.5,0.9-11.2,0.9 c-15.7,0-25.2-4.8-25.2-7.5V49.2c6.1,3.4,15.7,5.2,25.2,5.2c9.6,0,19.2-1.8,25.2-5.2V69c0,1.8,1.4,3.2,3.2,3.2 c1.8,0,3.2-1.4,3.2-3.2V40.6C95.6,40.3,95.6,40.1,95.6,39.9L95.6,39.9z M64,48c-15.7,0-25.2-4.8-25.2-7.5c0-2.6,9.6-7.5,25.2-7.5 c15.7,0,25.2,4.8,25.2,7.5C89.2,43.2,79.7,48,64,48z"
+        />
+        
+        {/* Flame/Fire icon */}
+        <path 
+          fill="#FFFFFF" 
+          d="M96.9,91.4c-2.5-6.5-11.5-6.9-9.3-16.4c0.1-0.4-0.1-0.9-0.6-1c-0.2-0.1-0.4,0-0.6,0.1 c-6.9,3.8-9.7,12.2-6.5,19.3c0.1,0.4,0,0.9-0.5,1c-0.3,0.1-0.5,0.1-0.7-0.1c-2.3-1.8-3.4-4.7-3-7.6c0-0.4-0.3-0.8-0.7-0.9 c-0.3,0-0.6,0.1-0.8,0.3c-1.5,2.5-2.3,5.5-2.2,8.4c0.3,6.1,4.9,11.2,10.9,12.1c4,0.7,8.1-0.4,11.2-3 C97.5,100.7,98.6,95.7,96.9,91.4L96.9,91.4z M82,99.5c1.9-0.4,3.4-1.8,3.8-3.7c0.5-2.3-1.5-4.5-0.1-8.2c0.5,3,5.2,4.9,5.2,8.1 C91,99.8,86.6,103.3,82,99.5L82,99.5z"
+        />
       </svg>
     </div>
   );
