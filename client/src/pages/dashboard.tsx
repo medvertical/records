@@ -310,13 +310,17 @@ export default function Dashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          {((validationProgress && (validationProgress.processedResources > 0 || isValidationRunning || isValidationPaused)) || 
-            (progress && progress.processedResources > 0) || 
-            (currentProgress && currentProgress.processedResources > 0)) ? (
+          {((isValidationRunning || isValidationPaused) || 
+            (progress && progress.processedResources > 0 && !progress.isComplete) || 
+            (validationProgress && validationProgress.processedResources > 0 && !validationProgress.isComplete) || 
+            (currentProgress && currentProgress.processedResources > 0 && !currentProgress.isComplete)) ? (
             <div className="space-y-4">
               {/* Primary Progress Bar */}
               {(() => {
-                const activeProgress = progress || validationProgress || currentProgress;
+                // Only use progress data if validation is actually running
+                const activeProgress = (isValidationRunning || isValidationPaused) 
+                  ? (progress || validationProgress || currentProgress)
+                  : null;
                 const progressPercent = activeProgress 
                   ? (activeProgress.processedResources / activeProgress.totalResources) * 100 
                   : 0;
@@ -338,7 +342,10 @@ export default function Dashboard() {
 
               {/* Live Statistics Grid */}
               {(() => {
-                const activeProgress = progress || validationProgress || currentProgress;
+                // Only use progress data if validation is actually running
+                const activeProgress = (isValidationRunning || isValidationPaused) 
+                  ? (progress || validationProgress || currentProgress)
+                  : null;
                 
                 return (
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -387,7 +394,7 @@ export default function Dashboard() {
                     <div className="text-xs text-muted-foreground">Processing Rate</div>
                   </div>
                 </div>
-                {(progress || validationProgress || currentProgress)?.currentResourceType && (
+                {(isValidationRunning || isValidationPaused) && (progress || validationProgress || currentProgress)?.currentResourceType && (
                   <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
                     <Zap className="h-5 w-5 text-blue-500 animate-pulse" />
                     <div>
@@ -399,15 +406,15 @@ export default function Dashboard() {
               </div>
 
               {/* Error Summary */}
-              {(progress || validationProgress || currentProgress)?.errors?.length > 0 && (
+              {(isValidationRunning || isValidationPaused) && (progress || validationProgress || currentProgress)?.errors?.length > 0 && (
                 <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
                   <div className="text-sm font-medium text-red-700 dark:text-red-300 mb-2">
-                    Recent Errors ({(progress || validationProgress || currentProgress)?.errors?.length || 0})
+                    Recent Errors ({(isValidationRunning || isValidationPaused) ? ((progress || validationProgress || currentProgress)?.errors?.length || 0) : 0})
                   </div>
                   <div className="text-xs text-red-600 dark:text-red-400 space-y-1 max-h-20 overflow-y-auto">
-                    {((progress || validationProgress || currentProgress)?.errors || []).slice(-3).map((error, idx) => (
+                    {(isValidationRunning || isValidationPaused) ? (((progress || validationProgress || currentProgress)?.errors || []).slice(-3).map((error, idx) => (
                       <div key={idx} className="truncate">{error}</div>
-                    ))}
+                    ))) : []}
                   </div>
                 </div>
               )}
