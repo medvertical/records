@@ -148,7 +148,7 @@ export default function ResourceList({
             const validationStatus = getValidationStatus(resource);
             
             return (
-              <div key={resource.id || `${resource.resourceType}-${index}`} className="mb-6">
+              <div key={resource.id || `${resource.resourceType}-${index}`} className="mb-8 last:mb-0" style={{ marginBottom: '32px', paddingBottom: '16px', borderBottom: '2px solid transparent' }}>
                 <Link href={`/resources/${resource.id}`}>
                   <Card className="hover:bg-gray-50 transition-colors cursor-pointer">
                   <CardContent className="p-6">
