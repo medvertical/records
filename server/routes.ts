@@ -18,9 +18,11 @@ let robustValidationService: RobustValidationService;
 // Global validation state tracking
 let globalValidationState = {
   isRunning: false,
+  isPaused: false,
   startTime: null as Date | null,
   canPause: false,
-  shouldStop: false
+  shouldStop: false,
+  resumeData: null as any | null
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
