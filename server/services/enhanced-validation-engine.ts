@@ -239,6 +239,30 @@ export class EnhancedValidationEngine {
       });
     }
 
+    // Add more comprehensive structural checks
+    if (!resource.meta) {
+      issues.push({
+        severity: 'warning',
+        code: 'missing-meta',
+        category: 'structural',
+        message: 'Resource is missing meta element',
+        path: 'meta',
+        suggestion: 'Add meta element with versionId and lastUpdated'
+      });
+    }
+
+    // Check for required narrative
+    if (!resource.text || !resource.text.status) {
+      issues.push({
+        severity: 'information',
+        code: 'missing-narrative',
+        category: 'structural',
+        message: 'Resource lacks narrative text',
+        path: 'text.status',
+        suggestion: 'Add narrative text for better human readability'
+      });
+    }
+
     // FHIR Datentypen prüfen
     await this.validateDataTypes(resource, '', issues);
 
@@ -464,11 +488,14 @@ export class EnhancedValidationEngine {
       result.isValid = false;
     } else if (warningCount > 0) {
       result.validationScore = Math.max(70, 100 - (warningCount * 5));
+      result.isValid = false; // Changed: warnings also make resource invalid
     } else {
       result.validationScore = 100;
+      result.isValid = true;
     }
 
-    result.isValid = errorCount === 0;
+    // Log validation result for debugging
+    console.log(`[EnhancedValidation] Validation result: score=${result.validationScore}, valid=${result.isValid}, errors=${errorCount}, warnings=${warningCount}`);
   }
 
   // Placeholder methods for remaining validation aspects (to be implemented in next steps)

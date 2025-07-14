@@ -20,10 +20,164 @@ import {
   CheckCircle,
   AlertTriangle,
   Info,
-  Server
+  Server,
+  GripVertical,
+  Plus,
+  X
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useValidationSettings, useUpdateValidationSettings } from '@/hooks/use-fhir-data';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import {
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+// Sortable Terminology Server Component
+function SortableTerminologyServer({ server, index, localSettings, handleSettingChange }: any) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: server.priority.toString() });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <Card
+      ref={setNodeRef}
+      className={`p-4 border-l-4 ${isDragging ? 'opacity-50' : ''}`}
+      style={{
+        borderLeftColor: server.enabled ? '#3b82f6' : '#d1d5db',
+        ...style
+      }}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center space-x-3">
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-100"
+          >
+            <GripVertical className="h-4 w-4 text-gray-400" />
+          </div>
+          <Badge variant={server.enabled ? "default" : "secondary"} className="text-xs">
+            Priority {server.priority}
+          </Badge>
+          <h5 className="font-medium text-sm">{server.name}</h5>
+          <Badge variant="outline" className="text-xs">
+            {server.type}
+          </Badge>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Switch
+            checked={server.enabled}
+            onCheckedChange={(checked) => {
+              const newServers = [...(localSettings.terminologyServers || [])];
+              newServers[index] = { ...server, enabled: checked };
+              handleSettingChange('terminologyServers', newServers);
+            }}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const newServers = (localSettings.terminologyServers || []).filter((_, i) => i !== index);
+              // Re-adjust priorities
+              const reorderedServers = newServers.map((server, i) => ({
+                ...server,
+                priority: i + 1
+              }));
+              handleSettingChange('terminologyServers', reorderedServers);
+            }}
+            className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      
+      <p className="text-xs text-muted-foreground mb-3">{server.description}</p>
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+        <div>
+          <Label className="text-xs font-medium">URL</Label>
+          <Input
+            value={server.url}
+            onChange={(e) => {
+              const newServers = [...(localSettings.terminologyServers || [])];
+              newServers[index] = { ...server, url: e.target.value };
+              handleSettingChange('terminologyServers', newServers);
+            }}
+            className="text-xs h-8"
+            disabled={!server.enabled}
+          />
+        </div>
+        
+        <div>
+          <Label className="text-xs font-medium">Priority</Label>
+          <Input
+            type="number"
+            min="1"
+            max="10"
+            value={server.priority}
+            onChange={(e) => {
+              const newServers = [...(localSettings.terminologyServers || [])];
+              newServers[index] = { ...server, priority: parseInt(e.target.value) || 1 };
+              // Re-sort servers by priority
+              newServers.sort((a, b) => a.priority - b.priority);
+              handleSettingChange('terminologyServers', newServers);
+            }}
+            className="text-xs h-8"
+            disabled={!server.enabled}
+          />
+        </div>
+        
+        <div>
+          <Label className="text-xs font-medium">Name</Label>
+          <Input
+            value={server.name}
+            onChange={(e) => {
+              const newServers = [...(localSettings.terminologyServers || [])];
+              newServers[index] = { ...server, name: e.target.value };
+              handleSettingChange('terminologyServers', newServers);
+            }}
+            className="text-xs h-8"
+            disabled={!server.enabled}
+          />
+        </div>
+      </div>
+      
+      <div className="flex flex-wrap gap-1">
+        {server.capabilities?.map((capability, capIndex) => (
+          <Badge key={capIndex} variant="outline" className="text-xs">
+            {capability}
+          </Badge>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -43,6 +197,14 @@ export default function SettingsPage() {
     cacheEnabled: true,
     cacheDuration: 300
   });
+
+  // Drag and Drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const ValidationSettingsContent = () => {
     const { data: settings, isLoading } = useValidationSettings();
@@ -138,6 +300,34 @@ export default function SettingsPage() {
       };
       setLocalSettings(newSettings);
       updateSettings.mutate(newSettings);
+    };
+
+    // Handle drag end for terminology servers
+    const handleDragEnd = (event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (active.id !== over?.id) {
+        const servers = localSettings.terminologyServers || [];
+        const oldIndex = servers.findIndex(server => server.priority.toString() === active.id);
+        const newIndex = servers.findIndex(server => server.priority.toString() === over?.id);
+
+        const newServers = arrayMove(servers, oldIndex, newIndex);
+        
+        // Update priorities based on new positions
+        const updatedServers = newServers.map((server, index) => ({
+          ...server,
+          priority: index + 1
+        }));
+
+        const newSettings = { ...localSettings, terminologyServers: updatedServers };
+        setLocalSettings(newSettings);
+        updateSettings.mutate(newSettings);
+
+        toast({
+          title: 'Terminology Servers Reordered',
+          description: 'Priority order has been updated successfully.',
+        });
+      }
     };
 
     if (isLoading) {
@@ -357,89 +547,51 @@ export default function SettingsPage() {
             Multiple terminology servers with fallback priority. The Enhanced Validation Engine tries servers in order until one responds successfully.
           </p>
           
-          <div className="space-y-4">
-            {localSettings.terminologyServers?.map((server, index) => (
-              <Card key={index} className="p-4 border-l-4" style={{borderLeftColor: server.enabled ? '#3b82f6' : '#d1d5db'}}>
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center space-x-3">
-                    <Badge variant={server.enabled ? "default" : "secondary"} className="text-xs">
-                      Priority {server.priority}
-                    </Badge>
-                    <h5 className="font-medium text-sm">{server.name}</h5>
-                    <Badge variant="outline" className="text-xs">
-                      {server.type}
-                    </Badge>
-                  </div>
-                  <Switch
-                    checked={server.enabled}
-                    onCheckedChange={(checked) => {
-                      const newServers = [...(localSettings.terminologyServers || [])];
-                      newServers[index] = { ...server, enabled: checked };
-                      handleSettingChange('terminologyServers', newServers);
-                    }}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={localSettings.terminologyServers?.map(server => server.priority.toString()) || []}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-4">
+                {localSettings.terminologyServers?.map((server, index) => (
+                  <SortableTerminologyServer
+                    key={server.priority}
+                    server={server}
+                    index={index}
+                    localSettings={localSettings}
+                    handleSettingChange={handleSettingChange}
                   />
-                </div>
-                
-                <p className="text-xs text-muted-foreground mb-3">{server.description}</p>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-                  <div>
-                    <Label className="text-xs font-medium">URL</Label>
-                    <Input
-                      value={server.url}
-                      onChange={(e) => {
-                        const newServers = [...(localSettings.terminologyServers || [])];
-                        newServers[index] = { ...server, url: e.target.value };
-                        handleSettingChange('terminologyServers', newServers);
-                      }}
-                      className="text-xs h-8"
-                      disabled={!server.enabled}
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label className="text-xs font-medium">Priority</Label>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="10"
-                      value={server.priority}
-                      onChange={(e) => {
-                        const newServers = [...(localSettings.terminologyServers || [])];
-                        newServers[index] = { ...server, priority: parseInt(e.target.value) || 1 };
-                        // Re-sort servers by priority
-                        newServers.sort((a, b) => a.priority - b.priority);
-                        handleSettingChange('terminologyServers', newServers);
-                      }}
-                      className="text-xs h-8"
-                      disabled={!server.enabled}
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label className="text-xs font-medium">Name</Label>
-                    <Input
-                      value={server.name}
-                      onChange={(e) => {
-                        const newServers = [...(localSettings.terminologyServers || [])];
-                        newServers[index] = { ...server, name: e.target.value };
-                        handleSettingChange('terminologyServers', newServers);
-                      }}
-                      className="text-xs h-8"
-                      disabled={!server.enabled}
-                    />
-                  </div>
-                </div>
-                
-                <div className="flex flex-wrap gap-1">
-                  {server.capabilities?.map((capability, capIndex) => (
-                    <Badge key={capIndex} variant="outline" className="text-xs">
-                      {capability}
-                    </Badge>
-                  ))}
-                </div>
-              </Card>
-            ))}
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+
+          {/* Add New Server */}
+          <div className="mt-6 p-4 border-2 border-dashed border-gray-300 rounded-lg">
+            <Button
+              variant="outline"
+              onClick={() => {
+                const newServer = {
+                  priority: (localSettings.terminologyServers?.length || 0) + 1,
+                  enabled: true,
+                  url: '',
+                  type: 'custom',
+                  name: 'New Terminology Server',
+                  description: 'Custom terminology server',
+                  capabilities: ['Custom']
+                };
+                const newServers = [...(localSettings.terminologyServers || []), newServer];
+                handleSettingChange('terminologyServers', newServers);
+              }}
+              className="w-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add New Terminology Server
+            </Button>
           </div>
 
           <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">

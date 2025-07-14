@@ -46,6 +46,12 @@ export default function Dashboard() {
   const [isValidationRunning, setIsValidationRunning] = useState(false);
   const [isValidationPaused, setIsValidationPaused] = useState(false);
 
+  // Get current validation progress from server
+  const { data: currentValidationProgress } = useQuery({
+    queryKey: ['/api/validation/bulk/progress'],
+    refetchInterval: 2000,
+  });
+
   // Test FHIR connection
   const { data: fhirConnection } = useQuery({
     queryKey: ['/api/fhir/connection/test'],
@@ -90,6 +96,29 @@ export default function Dashboard() {
       setConnectionStatus(fhirConnection);
     }
   }, [fhirConnection]);
+
+  // Initialize validation state from server
+  useEffect(() => {
+    if (currentValidationProgress) {
+      if (currentValidationProgress.status === 'running') {
+        setIsValidationRunning(true);
+        setIsValidationPaused(false);
+        setValidationProgress(currentValidationProgress);
+      } else if (currentValidationProgress.status === 'paused') {
+        setIsValidationRunning(false);
+        setIsValidationPaused(true);
+        setValidationProgress(currentValidationProgress);
+      } else if (currentValidationProgress.status === 'completed') {
+        setIsValidationRunning(false);
+        setIsValidationPaused(false);
+        setValidationProgress(currentValidationProgress);
+      } else {
+        setIsValidationRunning(false);
+        setIsValidationPaused(false);
+        // Don't reset progress if validation is not running - keep last known state
+      }
+    }
+  }, [currentValidationProgress]);
 
   useEffect(() => {
     if (progress) {

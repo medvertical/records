@@ -208,9 +208,16 @@ export class BulkValidationService {
           }
 
           try {
-            await this.validateSingleResource(entry.resource, skipUnchanged);
+            const validationResult = await this.validateSingleResource(entry.resource, skipUnchanged);
             progress.processedResources++;
-            progress.validResources++;
+            
+            // Check if validation found errors
+            if (validationResult && validationResult.isValid === false) {
+              progress.errorResources++;
+              progress.errors.push(`${resourceType}/${entry.resource.id}: Validation failed`);
+            } else {
+              progress.validResources++;
+            }
           } catch (error) {
             progress.processedResources++;
             progress.errorResources++;
@@ -245,10 +252,18 @@ export class BulkValidationService {
     }
   }
 
-  private async validateSingleResource(resource: any, skipUnchanged: boolean): Promise<void> {
+  private async validateSingleResource(resource: any, skipUnchanged: boolean): Promise<{isValid: boolean}> {
     try {
       console.log(`[BulkValidation] Validating ${resource.resourceType}/${resource.id} with unified service`);
-      await this.unifiedValidationService.validateResource(resource, skipUnchanged, false);
+      const result = await this.unifiedValidationService.validateResource(resource, skipUnchanged, false);
+      
+      // Check if any validation results indicate errors
+      if (result.validationResults && result.validationResults.length > 0) {
+        const hasErrors = result.validationResults.some(vr => vr.isValid === false);
+        return { isValid: !hasErrors };
+      }
+      
+      return { isValid: true };
     } catch (error) {
       console.error(`[BulkValidation] Validation failed for ${resource.resourceType}/${resource.id}:`, error);
       throw new Error(`Validation failed: ${error instanceof Error ? error.message : String(error)}`);
