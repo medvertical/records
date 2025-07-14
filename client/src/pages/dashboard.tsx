@@ -316,13 +316,6 @@ export default function Dashboard() {
                 </Button>
               )}
               
-              {isValidationInitializing && (
-                <Button disabled size="sm" className="gap-2 opacity-50">
-                  <Activity className="h-4 w-4" />
-                  Initializing...
-                </Button>
-              )}
-              
               {(isValidationRunning && !isValidationPaused) && (
                 <Button onClick={handlePauseValidation} variant="outline" size="sm" className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-50">
                   <Pause className="h-4 w-4" />
@@ -336,10 +329,8 @@ export default function Dashboard() {
                   Resume
                 </Button>
               )}
-              
 
-              
-              {(isValidationRunning || isValidationPaused) && (
+              {(isValidationRunning || isValidationPaused || isValidationInitializing) && (
                 <Button onClick={handleStopValidation} variant="outline" size="sm" className="gap-2 border-red-500 text-red-600 hover:bg-red-50">
                   <Square className="h-4 w-4" />
                   Stop
