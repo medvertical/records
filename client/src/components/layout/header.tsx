@@ -62,29 +62,6 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
           </div>
         </div>
         <div className="flex items-center space-x-4">
-          {/* Server Health Indicator */}
-          {connectionStatus && (
-            <Badge 
-              variant="secondary"
-              className={cn(
-                "flex items-center space-x-2 px-3 py-2",
-                connectionStatus.connected 
-                  ? "bg-green-50 text-green-700 border-green-200" 
-                  : "bg-red-50 text-red-700 border-red-200"
-              )}
-            >
-              <div className={cn(
-                "w-2 h-2 rounded-full",
-                connectionStatus.connected 
-                  ? "bg-fhir-success animate-pulse" 
-                  : "bg-fhir-error"
-              )} />
-              <span className="text-sm font-medium">
-                {connectionStatus.connected ? "Server Healthy" : "Server Error"}
-              </span>
-            </Badge>
-          )}
-          
           {/* Refresh Button */}
           <Button 
             onClick={handleRefresh}
