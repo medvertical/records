@@ -57,9 +57,17 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
     refetchInterval: 30000,
   });
 
+  const { data: servers } = useQuery({
+    queryKey: ["/api/fhir/servers"],
+    refetchInterval: 60000, // Refresh every minute
+  });
+
   const { data: resourceCounts } = useQuery<Record<string, number>>({
     queryKey: ["/api/fhir/resource-counts"],
   });
+
+  // Find the active server
+  const activeServer = servers?.find((server: any) => server.isActive);
 
   if (isMobile) {
     return (
@@ -80,6 +88,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
           <SidebarContent 
             serverStatus={serverStatus} 
             resourceCounts={resourceCounts} 
+            activeServer={activeServer}
             location={location}
             onItemClick={() => onToggle && onToggle()}
             onChangeServer={() => setIsServerModalOpen(true)}
@@ -98,6 +107,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
         <SidebarContent 
           serverStatus={serverStatus} 
           resourceCounts={resourceCounts} 
+          activeServer={activeServer}
           location={location}
           onChangeServer={() => setIsServerModalOpen(true)}
         />
@@ -115,12 +125,14 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
 function SidebarContent({ 
   serverStatus, 
   resourceCounts, 
+  activeServer,
   location, 
   onItemClick,
   onChangeServer
 }: {
   serverStatus?: ServerStatus;
   resourceCounts?: Record<string, number>;
+  activeServer?: any;
   location: string;
   onItemClick?: () => void;
   onChangeServer?: () => void;
@@ -145,14 +157,19 @@ function SidebarContent({
           </div>
         </div>
         <div className="flex items-center justify-between bg-gray-50 p-2 rounded">
-          <span className="text-xs text-gray-500 truncate">
-            https://server.fire.ly
-          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-medium text-gray-700 truncate">
+              {activeServer?.name || "No Server"}
+            </div>
+            <div className="text-xs text-gray-500 truncate">
+              {activeServer?.url || "Not connected"}
+            </div>
+          </div>
           <Button 
             variant="ghost" 
             size="sm"
             onClick={onChangeServer}
-            className="h-auto p-1 text-gray-500 hover:text-fhir-blue hover:bg-gray-100"
+            className="h-auto p-1 text-gray-500 hover:text-fhir-blue hover:bg-gray-100 ml-2 flex-shrink-0"
           >
             <Server className="h-3 w-3" />
           </Button>
