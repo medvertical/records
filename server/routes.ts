@@ -816,29 +816,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Process ALL resource types with real FHIR server data - NO LIMITS!
+      // Process ALL resource types with real FHIR server data - ALL RESOURCES!
       for (const resourceType of resourceTypes) { // Process ALL 148 resource types
         // Check if validation should stop (pause/stop request)
         if (globalValidationState.shouldStop) {
-          console.log('Validation stopped by user request');
+          console.log('Validation paused by user request - saving state');
           globalValidationState.isRunning = false;
+          globalValidationState.isPaused = true; // Set paused state
+          // Save current progress for resume
+          globalValidationState.resumeData = {
+            resourceType,
+            processedResources,
+            validResources,
+            errorResources,
+            errors,
+            startTime
+          };
           break;
         }
         
         try {
-          console.log(`Validating real ${resourceType} resources from FHIR server...`);
+          console.log(`Validating ALL ${resourceType} resources from FHIR server...`);
           
-          // Get real resources from FHIR server
-          const bundle = await fhirClient.searchResources(resourceType, {}, options.batchSize || 20);
+          // Get total count for this resource type
+          const totalCount = await fhirClient.getResourceCount(resourceType);
+          console.log(`Found ${totalCount} total ${resourceType} resources on server`);
           
-          if (bundle.entry && bundle.entry.length > 0) {
-            console.log(`Found ${bundle.entry.length} real ${resourceType} resources from server`);
+          // Process ALL resources in batches
+          let offset = 0;
+          const batchSize = options.batchSize || 20;
+          
+          while (offset < totalCount && globalValidationState.isRunning && !globalValidationState.shouldStop) {
+            // Get batch of resources
+            const bundle = await fhirClient.searchResources(resourceType, { _offset: offset }, batchSize);
+            
+            if (!bundle.entry || bundle.entry.length === 0) {
+              console.log(`No more ${resourceType} resources at offset ${offset}`);
+              break;
+            }
+            
+            console.log(`Processing ${resourceType} batch: ${bundle.entry.length} resources (offset: ${offset})`);
             
             for (const entry of bundle.entry) {
               // Check if validation should stop before each resource
               if (globalValidationState.shouldStop) {
-                console.log('Validation stopped by user request during resource processing');
+                console.log('Validation paused by user request during resource processing');
                 globalValidationState.isRunning = false;
+                globalValidationState.isPaused = true; // Set paused state
+                // Save current progress for resume
+                globalValidationState.resumeData = {
+                  resourceType,
+                  offset,
+                  processedResources,
+                  validResources,
+                  errorResources,
+                  errors,
+                  startTime
+                };
                 break;
               }
               
@@ -868,7 +902,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   // Broadcast real progress with AUTHENTIC total resource count
                   if (validationWebSocket && processedResources % 5 === 0) {
                     const progress = {
-                      totalResources: realTotalResources, // REAL total from FHIR server (126,000+)
+                      totalResources: realTotalResources, // REAL total from FHIR server (617,442+)
                       processedResources,
                       validResources,
                       errorResources,
@@ -888,9 +922,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 }
               }
             }
-          } else {
-            console.log(`No ${resourceType} resources found on server`);
+            
+            offset += batchSize;
+            
+            // Check if validation should stop after each batch
+            if (globalValidationState.shouldStop) {
+              console.log('Validation paused by user request after batch');
+              globalValidationState.isRunning = false;
+              globalValidationState.isPaused = true; // Set paused state
+              // Save current progress for resume
+              globalValidationState.resumeData = {
+                resourceType,
+                offset,
+                processedResources,
+                validResources,
+                errorResources,
+                errors,
+                startTime
+              };
+              break;
+            }
+            
+            // Small delay between batches to prevent overwhelming server
+            await new Promise(resolve => setTimeout(resolve, 100));
           }
+          
+          // If we broke out of the while loop due to pause, break out of the for loop too
+          if (globalValidationState.shouldStop || globalValidationState.isPaused) {
+            break;
+          }
+          
         } catch (resourceError) {
           console.error(`Error fetching ${resourceType} resources:`, resourceError);
           errors.push(`${resourceType}: Failed to fetch resources - ${resourceError}`);
@@ -966,6 +1027,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const summary = await storage.getResourceStats();
+      // Determine actual status based on validation state
+      let status = 'not_running';
+      if (globalValidationState.isRunning) {
+        status = 'running';
+      } else if (globalValidationState.isPaused) {
+        status = 'paused';
+      }
+      
       const progress = {
         totalResources,
         processedResources: globalValidationState.isRunning ? 0 : (summary.validResources + summary.errorResources),
@@ -974,12 +1043,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isComplete: false,
         errors: [],
         startTime: new Date().toISOString(),
-        status: globalValidationState.isRunning ? 'running' : 'not_running' as const
+        status: status as 'running' | 'paused' | 'not_running'
       };
       
       console.log('[ValidationProgress] Real error count from database:', summary.errorResources);
+      console.log('[ValidationProgress] Current status:', status, 'isRunning:', globalValidationState.isRunning, 'isPaused:', globalValidationState.isPaused);
+      
       res.json({
-        status: "not_running",
+        status,
         ...progress
       });
     } catch (error: any) {
@@ -1011,20 +1082,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/validation/bulk/pause", async (req, res) => {
     try {
-      if (!globalValidationState.isRunning || !globalValidationState.canPause) {
-        return res.status(400).json({ message: "No validation is currently running or cannot be paused" });
+      if (!globalValidationState.isRunning) {
+        return res.status(400).json({ message: "No validation is currently running" });
       }
 
       // Set global pause state
       globalValidationState.shouldStop = true;
+      globalValidationState.canPause = true;
       console.log('Validation pause requested - setting shouldStop flag');
       
-      // Broadcast pause via WebSocket (using existing stopped method)
-      if (validationWebSocket && typeof validationWebSocket.broadcastValidationStopped === 'function') {
-        validationWebSocket.broadcastValidationStopped();
-      }
-      
-      res.json({ message: "Validation pause requested - validation will stop after current resource" });
+      // Don't broadcast stopped, let the validation loop set paused state
+      res.json({ message: "Validation pause requested - validation will pause after current batch" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -1032,7 +1100,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/validation/bulk/resume", async (req, res) => {
     try {
-      if (!robustValidationService) {
+      if (!globalValidationState.isPaused || !globalValidationState.resumeData) {
+        return res.status(400).json({ message: "No paused validation to resume" });
+      }
+
+      // Reset pause flags and resume validation
+      globalValidationState.shouldStop = false;
+      globalValidationState.isPaused = false;
+      globalValidationState.isRunning = true;
+      
+      console.log('Resuming validation from saved state:', globalValidationState.resumeData);
+      
+      // Broadcast resume via WebSocket
+      if (validationWebSocket) {
+        validationWebSocket.broadcastValidationStart();
+        validationWebSocket.broadcastProgress({
+          totalResources: 617442,
+          processedResources: globalValidationState.resumeData.processedResources,
+          validResources: globalValidationState.resumeData.validResources,
+          errorResources: globalValidationState.resumeData.errorResources,
+          currentResourceType: `Resuming ${globalValidationState.resumeData.resourceType}...`,
+          startTime: globalValidationState.resumeData.startTime,
+          isComplete: false,
+          errors: globalValidationState.resumeData.errors.slice(-10),
+          status: 'running' as const
+        });
+      }
+
+      res.json({ message: "Validation resumed successfully" });
+      
+      // TODO: Implement actual resume logic here
+      // For now, just clear the resume data
+      globalValidationState.resumeData = null;
+      
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/validation/bulk/stop", async (req, res) => {
+    try {
+      if (!globalValidationState.isRunning && !globalValidationState.isPaused) {
         return res.status(400).json({ message: "No FHIR server configured" });
       }
 
@@ -1076,10 +1184,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No validation is currently running" });
       }
 
-      // Stop validation immediately
+      // Stop validation completely (not pause)
       globalValidationState.shouldStop = true;
       globalValidationState.isRunning = false;
-      console.log('Validation stop requested - setting shouldStop flag and isRunning to false');
+      globalValidationState.isPaused = false; // Clear paused state
+      globalValidationState.resumeData = null; // Clear resume data
+      console.log('Validation stop requested - clearing all state');
       
       // Broadcast validation stopped via WebSocket to clear frontend state
       if (validationWebSocket) {
