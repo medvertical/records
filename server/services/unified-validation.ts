@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { storage } from '../storage.js';
 import { ValidationEngine } from './validation-engine.js';
+import { EnhancedValidationEngine } from './enhanced-validation-engine.js';
 import { FhirClient } from './fhir-client.js';
 import type { FhirResource, InsertFhirResource, InsertValidationResult, ValidationResult } from '@shared/schema.js';
 
@@ -9,10 +10,27 @@ import type { FhirResource, InsertFhirResource, InsertValidationResult, Validati
  * with timestamp-based invalidation
  */
 export class UnifiedValidationService {
+  private enhancedValidationEngine: EnhancedValidationEngine;
+
   constructor(
     private fhirClient: FhirClient,
     private validationEngine: ValidationEngine
-  ) {}
+  ) {
+    // Initialize enhanced validation engine with comprehensive validation
+    this.enhancedValidationEngine = new EnhancedValidationEngine(fhirClient, {
+      enableStructuralValidation: true,
+      enableProfileValidation: true,
+      enableTerminologyValidation: true,
+      enableReferenceValidation: true,
+      enableBusinessRuleValidation: true,
+      enableMetadataValidation: true,
+      strictMode: false,
+      profiles: [
+        'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient',
+        'http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab'
+      ]
+    });
+  }
 
   /**
    * Check if validation results are outdated based on resource timestamps
@@ -97,39 +115,62 @@ export class UnifiedValidationService {
       wasRevalidated = true;
 
       try {
-        // Perform FHIR validation
-        const outcome = await this.validationEngine.validateResource(resource);
+        // Use enhanced validation engine for comprehensive validation
+        const enhancedResult = await this.enhancedValidationEngine.validateResource(resource);
         
-        // Convert validation outcome to our format
+        console.log(`[UnifiedValidation] Enhanced validation completed with score: ${enhancedResult.validationScore}`);
+        console.log(`[UnifiedValidation] Validation aspects:`, {
+          structural: enhancedResult.validationAspects.structural.passed,
+          profile: enhancedResult.validationAspects.profile.passed,
+          terminology: enhancedResult.validationAspects.terminology.passed,
+          reference: enhancedResult.validationAspects.reference.passed,
+          businessRule: enhancedResult.validationAspects.businessRule.passed,
+          metadata: enhancedResult.validationAspects.metadata.passed
+        });
+        
+        // Convert enhanced validation result to our database format
         const validationResult: InsertValidationResult = {
           resourceId: dbResource.id,
-          profileId: null, // Will be set by validation engine if specific profile used
-          isValid: !outcome.issue.some(issue => issue.severity === 'error' || issue.severity === 'fatal'),
-          errors: outcome.issue.filter(issue => issue.severity === 'error' || issue.severity === 'fatal').map(issue => ({
+          profileId: null,
+          isValid: enhancedResult.isValid,
+          errors: enhancedResult.issues.filter(issue => issue.severity === 'error' || issue.severity === 'fatal').map(issue => ({
             severity: issue.severity as 'error' | 'warning' | 'information',
-            message: issue.details?.text || issue.diagnostics || 'Unknown error',
-            path: issue.location?.[0] || '',
-            expression: issue.expression?.[0],
+            message: issue.message,
+            path: issue.path,
+            expression: issue.expression,
             code: issue.code
           })),
-          warnings: outcome.issue.filter(issue => issue.severity === 'warning').map(issue => ({
+          warnings: enhancedResult.issues.filter(issue => issue.severity === 'warning').map(issue => ({
             severity: issue.severity as 'error' | 'warning' | 'information',
-            message: issue.details?.text || issue.diagnostics || 'Unknown warning',
-            path: issue.location?.[0] || '',
-            expression: issue.expression?.[0],
+            message: issue.message,
+            path: issue.path,
+            expression: issue.expression,
             code: issue.code
           })),
-          issues: outcome.issue.map(issue => ({
+          issues: enhancedResult.issues.map(issue => ({
             severity: issue.severity as 'error' | 'warning' | 'information',
-            message: issue.details?.text || issue.diagnostics || 'Unknown issue',
-            path: issue.location?.[0] || '',
-            expression: issue.expression?.[0],
+            message: issue.message,
+            path: issue.path,
+            expression: issue.expression,
             code: issue.code
           })),
-          errorCount: outcome.issue.filter(issue => issue.severity === 'error' || issue.severity === 'fatal').length,
-          warningCount: outcome.issue.filter(issue => issue.severity === 'warning').length,
-          validationScore: this.calculateValidationScore(outcome.issue),
-          validatedAt: new Date()
+          profileUrl: enhancedResult.validationAspects.profile.profilesChecked[0] || null,
+          errorCount: enhancedResult.issues.filter(i => i.severity === 'error' || i.severity === 'fatal').length,
+          warningCount: enhancedResult.issues.filter(i => i.severity === 'warning').length,
+          validationScore: enhancedResult.validationScore,
+          validatedAt: enhancedResult.validatedAt,
+          // Add enhanced validation details
+          details: {
+            validationAspects: enhancedResult.validationAspects,
+            categories: {
+              structural: enhancedResult.issues.filter(i => i.category === 'structural').length,
+              profile: enhancedResult.issues.filter(i => i.category === 'profile').length,
+              terminology: enhancedResult.issues.filter(i => i.category === 'terminology').length,
+              reference: enhancedResult.issues.filter(i => i.category === 'reference').length,
+              businessRule: enhancedResult.issues.filter(i => i.category === 'business-rule').length,
+              metadata: enhancedResult.issues.filter(i => i.category === 'metadata').length
+            }
+          }
         };
 
         // Save validation result
