@@ -1104,34 +1104,204 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No paused validation to resume" });
       }
 
+      const resumeData = globalValidationState.resumeData;
+      
       // Reset pause flags and resume validation
       globalValidationState.shouldStop = false;
       globalValidationState.isPaused = false;
       globalValidationState.isRunning = true;
       
-      console.log('Resuming validation from saved state:', globalValidationState.resumeData);
+      console.log('Resuming validation from saved state:', resumeData);
       
       // Broadcast resume via WebSocket
       if (validationWebSocket) {
         validationWebSocket.broadcastValidationStart();
         validationWebSocket.broadcastProgress({
           totalResources: 617442,
-          processedResources: globalValidationState.resumeData.processedResources,
-          validResources: globalValidationState.resumeData.validResources,
-          errorResources: globalValidationState.resumeData.errorResources,
-          currentResourceType: `Resuming ${globalValidationState.resumeData.resourceType}...`,
-          startTime: globalValidationState.resumeData.startTime,
+          processedResources: resumeData.processedResources,
+          validResources: resumeData.validResources,
+          errorResources: resumeData.errorResources,
+          currentResourceType: `Resuming ${resumeData.resourceType}...`,
+          startTime: resumeData.startTime,
           isComplete: false,
-          errors: globalValidationState.resumeData.errors.slice(-10),
+          errors: resumeData.errors.slice(-10),
           status: 'running' as const
         });
       }
 
       res.json({ message: "Validation resumed successfully" });
       
-      // TODO: Implement actual resume logic here
-      // For now, just clear the resume data
-      globalValidationState.resumeData = null;
+      // Actually restart validation from saved state
+      setImmediate(async () => {
+        try {
+          console.log('Restarting validation loop from resume point...');
+          
+          // Get all resource types and find where we left off
+          const resourceTypes = await fhirClient.getAllResourceTypes();
+          const resumeIndex = resourceTypes.indexOf(resumeData.resourceType);
+          
+          if (resumeIndex === -1) {
+            console.error('Resume resource type not found:', resumeData.resourceType);
+            return;
+          }
+          
+          // Continue from where we left off
+          let processedResources = resumeData.processedResources;
+          let validResources = resumeData.validResources;
+          let errorResources = resumeData.errorResources;
+          const errors = [...resumeData.errors];
+          const startTime = resumeData.startTime;
+          
+          // Continue processing from the saved resource type
+          for (let i = resumeIndex; i < resourceTypes.length && globalValidationState.isRunning && !globalValidationState.shouldStop; i++) {
+            const resourceType = resourceTypes[i];
+            
+            try {
+              console.log(`Resuming validation of ${resourceType} resources...`);
+              
+              // Get total count for this resource type
+              const totalCount = await fhirClient.getResourceCount(resourceType);
+              console.log(`Found ${totalCount} total ${resourceType} resources on server`);
+              
+              // Start from saved offset for current resource type, or 0 for new types
+              let offset = (i === resumeIndex && resumeData.offset) ? resumeData.offset : 0;
+              const batchSize = 20;
+              
+              while (offset < totalCount && globalValidationState.isRunning && !globalValidationState.shouldStop) {
+                // Get batch of resources
+                const bundle = await fhirClient.searchResources(resourceType, { _offset: offset }, batchSize);
+                
+                if (!bundle.entry || bundle.entry.length === 0) {
+                  console.log(`No more ${resourceType} resources at offset ${offset}`);
+                  break;
+                }
+                
+                console.log(`Processing ${resourceType} batch: ${bundle.entry.length} resources (offset: ${offset})`);
+                
+                for (const entry of bundle.entry) {
+                  // Check if validation should stop before each resource
+                  if (globalValidationState.shouldStop) {
+                    console.log('Validation paused during resume processing');
+                    globalValidationState.isRunning = false;
+                    globalValidationState.isPaused = true;
+                    // Save current progress for next resume
+                    globalValidationState.resumeData = {
+                      resourceType,
+                      offset,
+                      processedResources,
+                      validResources,
+                      errorResources,
+                      errors,
+                      startTime
+                    };
+                    return;
+                  }
+                  
+                  if (entry.resource) {
+                    try {
+                      // Validate real FHIR resource
+                      const result = await unifiedValidationService.validateResource(
+                        entry.resource, 
+                        true, // skipUnchanged
+                        false
+                      );
+                      
+                      processedResources++;
+                      
+                      // Check for validation errors
+                      if (result.validationResults?.some(vr => !vr.isValid)) {
+                        errorResources++;
+                        const errorDetails = result.validationResults
+                          .filter(vr => !vr.isValid)
+                          .flatMap(vr => vr.errors || [])
+                          .join('; ');
+                        errors.push(`${resourceType}/${entry.resource.id}: ${errorDetails}`);
+                      } else {
+                        validResources++;
+                      }
+                      
+                      // Broadcast progress every 5 resources
+                      if (validationWebSocket && processedResources % 5 === 0) {
+                        const progress = {
+                          totalResources: 617442,
+                          processedResources,
+                          validResources,
+                          errorResources,
+                          currentResourceType: resourceType,
+                          startTime: startTime,
+                          isComplete: false,
+                          errors: errors.slice(-10),
+                          status: 'running' as const
+                        };
+                        validationWebSocket.broadcastProgress(progress);
+                      }
+                      
+                    } catch (validationError) {
+                      processedResources++;
+                      errorResources++;
+                      errors.push(`${resourceType}/${entry.resource.id}: Validation failed - ${validationError}`);
+                    }
+                  }
+                }
+                
+                offset += batchSize;
+                
+                // Check if validation should stop after each batch
+                if (globalValidationState.shouldStop) {
+                  console.log('Validation paused after batch during resume');
+                  globalValidationState.isRunning = false;
+                  globalValidationState.isPaused = true;
+                  // Save current progress for next resume
+                  globalValidationState.resumeData = {
+                    resourceType,
+                    offset,
+                    processedResources,
+                    validResources,
+                    errorResources,
+                    errors,
+                    startTime
+                  };
+                  return;
+                }
+                
+                // Small delay between batches
+                await new Promise(resolve => setTimeout(resolve, 100));
+              }
+              
+            } catch (resourceError) {
+              console.error(`Error fetching ${resourceType} resources during resume:`, resourceError);
+              errors.push(`${resourceType}: Failed to fetch resources - ${resourceError}`);
+            }
+          }
+          
+          // Validation completed
+          globalValidationState.isRunning = false;
+          globalValidationState.isPaused = false;
+          globalValidationState.resumeData = null;
+          
+          const finalProgress = {
+            totalResources: processedResources,
+            processedResources,
+            validResources,
+            errorResources,
+            isComplete: true,
+            errors,
+            startTime
+          };
+          
+          if (validationWebSocket) {
+            validationWebSocket.broadcastValidationComplete(finalProgress);
+          }
+          
+        } catch (error) {
+          console.error('Error during resume validation:', error);
+          globalValidationState.isRunning = false;
+          globalValidationState.isPaused = false;
+          if (validationWebSocket) {
+            validationWebSocket.broadcastError(`Resume validation failed: ${error}`);
+          }
+        }
+      });
       
     } catch (error: any) {
       res.status(500).json({ message: error.message });
