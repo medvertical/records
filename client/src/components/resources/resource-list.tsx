@@ -142,14 +142,14 @@ export default function ResourceList({
       </div>
 
       {/* Resource List */}
-      <div className="space-y-6">
+      <div>
         {resources.length > 0 ? (
           resources.map((resource, index) => {
             const validationStatus = getValidationStatus(resource);
             
             return (
               <Link key={resource.id || `${resource.resourceType}-${index}`} href={`/resources/${resource.id}`}>
-                <Card className="hover:bg-gray-50 transition-colors cursor-pointer">
+                <Card className="hover:bg-gray-50 transition-colors cursor-pointer mb-6">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4 flex-1 min-w-0">
