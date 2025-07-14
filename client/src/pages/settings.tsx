@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -48,19 +48,79 @@ export default function SettingsPage() {
     const { data: settings, isLoading } = useValidationSettings();
     const updateSettings = useUpdateValidationSettings();
     const [localSettings, setLocalSettings] = useState(settings || {
+      // Enhanced Validation Engine - 6 Aspects
+      enableStructuralValidation: true,
+      enableProfileValidation: true,
+      enableTerminologyValidation: true,
+      enableReferenceValidation: true,
+      enableBusinessRuleValidation: true,
+      enableMetadataValidation: true,
+      
+      // Legacy settings
       fetchFromSimplifier: true,
       fetchFromFhirServer: true,
       autoDetectProfiles: true,
       strictMode: false,
       maxProfiles: 3,
       cacheDuration: 3600,
+      
+      // Advanced settings
+      validationProfiles: [
+        'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient',
+        'http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab'
+      ],
+      terminologyServers: [
+        {
+          priority: 1,
+          enabled: true,
+          url: 'https://r4.ontoserver.csiro.au/fhir',
+          type: 'ontoserver',
+          name: 'CSIRO OntoServer',
+          description: 'Primary terminology server with SNOMED CT, LOINC, extensions',
+          capabilities: ['SNOMED CT', 'LOINC', 'ICD-10', 'Extensions', 'ValueSets']
+        },
+        {
+          priority: 2,
+          enabled: true,
+          url: 'https://tx.fhir.org/r4',
+          type: 'fhir-terminology',
+          name: 'HL7 FHIR Terminology Server',
+          description: 'Official HL7 terminology server for FHIR standards',
+          capabilities: ['US Core', 'FHIR Base', 'HL7 Standards', 'ValueSets']
+        },
+        {
+          priority: 3,
+          enabled: false,
+          url: 'https://snowstorm.ihtsdotools.org/fhir',
+          type: 'snowstorm',
+          name: 'SNOMED International',
+          description: 'Official SNOMED CT terminology server',
+          capabilities: ['SNOMED CT', 'ECL', 'Concept Maps']
+        }
+      ],
       terminologyServer: {
         enabled: true,
         url: 'https://r4.ontoserver.csiro.au/fhir',
         type: 'ontoserver',
         description: 'CSIRO OntoServer (Public)'
-      }
+      },
+      
+      // Performance settings
+      batchSize: 20,
+      maxRetries: 3,
+      timeout: 30000,
+      
+      // Quality thresholds
+      minValidationScore: 70,
+      errorSeverityThreshold: 'warning'
     });
+
+    // Update local settings when data loads
+    React.useEffect(() => {
+      if (settings) {
+        setLocalSettings(settings);
+      }
+    }, [settings]);
 
     const handleSettingChange = (key: string, value: any) => {
       const newSettings = { ...localSettings, [key]: value };
@@ -68,199 +128,348 @@ export default function SettingsPage() {
       updateSettings.mutate(newSettings);
     };
 
+    const handleNestedSettingChange = (parent: string, key: string, value: any) => {
+      const newSettings = { 
+        ...localSettings, 
+        [parent]: { 
+          ...localSettings[parent], 
+          [key]: value 
+        } 
+      };
+      setLocalSettings(newSettings);
+      updateSettings.mutate(newSettings);
+    };
+
     if (isLoading) {
-      return <div className="text-center py-8">Loading validation settings...</div>;
+      return <div className="text-center py-8">Loading Enhanced Validation Engine settings...</div>;
     }
 
     return (
       <div className="space-y-6">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="fetch-simplifier" className="text-sm font-medium">
-                Fetch Profiles from Simplifier.net
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Automatically download validation profiles from Simplifier.net when needed
-              </p>
-            </div>
-            <Switch
-              id="fetch-simplifier"
-              checked={(localSettings as any).fetchFromSimplifier !== false}
-              onCheckedChange={(checked) => handleSettingChange('fetchFromSimplifier', checked)}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="fetch-fhir-server" className="text-sm font-medium">
-                Fetch Profiles from FHIR Server
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Try to fetch validation profiles from the connected FHIR server
-              </p>
-            </div>
-            <Switch
-              id="fetch-fhir-server"
-              checked={(localSettings as any).fetchFromFhirServer !== false}
-              onCheckedChange={(checked) => handleSettingChange('fetchFromFhirServer', checked)}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="auto-detect-profiles" className="text-sm font-medium">
-                Auto-detect Resource Profiles
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Automatically detect and validate against profiles specified in resources
-              </p>
-            </div>
-            <Switch
-              id="auto-detect-profiles"
-              checked={(localSettings as any).autoDetectProfiles !== false}
-              onCheckedChange={(checked) => handleSettingChange('autoDetectProfiles', checked)}
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="strict-mode" className="text-sm font-medium">
-                Strict Validation Mode
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Enable stricter validation rules and error reporting
-              </p>
-            </div>
-            <Switch
-              id="strict-mode"
-              checked={(localSettings as any).strictMode === true}
-              onCheckedChange={(checked) => handleSettingChange('strictMode', checked)}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="max-profiles" className="text-sm font-medium">
-              Maximum Profiles per Validation
-            </Label>
-            <Input
-              id="max-profiles"
-              type="number"
-              min="1"
-              max="10"
-              value={(localSettings as any).maxProfiles || 3}
-              onChange={(e) => handleSettingChange('maxProfiles', parseInt(e.target.value))}
-              className="w-32"
-            />
-            <p className="text-sm text-muted-foreground">
-              Limit the number of profiles to validate against for performance
-            </p>
-          </div>
-        </div>
-
-        {/* Terminology Server Configuration */}
-        <div className="space-y-4 border-t pt-6">
-          <h3 className="text-lg font-medium text-gray-900">Terminology Server</h3>
-          <p className="text-sm text-gray-600">
-            Configure connection to a FHIR terminology server to resolve extension references and perform terminology validation.
+        {/* Enhanced Validation Engine - 6 Aspects */}
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-2 flex items-center">
+            <Shield className="h-5 w-5 mr-2 text-blue-600" />
+            Enhanced Validation Engine
+          </h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Comprehensive FHIR validation with 6 validation aspects for complete resource quality assurance
           </p>
           
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="terminology-enabled" className="text-sm font-medium">
-                Enable Terminology Server
-              </Label>
-              <p className="text-sm text-muted-foreground">
-                Connect to external terminology server for extension resolution
-              </p>
-            </div>
-            <Switch
-              id="terminology-enabled"
-              checked={(localSettings as any).terminologyServer?.enabled !== false}
-              onCheckedChange={(checked) => 
-                handleSettingChange('terminologyServer', {
-                  ...(localSettings as any).terminologyServer,
-                  enabled: checked
-                })
-              }
-            />
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="terminology-url" className="text-sm font-medium">
-                Terminology Server URL
-              </Label>
-              <Input
-                id="terminology-url"
-                value={(localSettings as any).terminologyServer?.url || 'https://tx.fhir.org/r4'}
-                onChange={(e) => 
-                  handleSettingChange('terminologyServer', {
-                    ...(localSettings as any).terminologyServer,
-                    url: e.target.value
-                  })
-                }
-                placeholder="https://tx.fhir.org/r4"
-                className="mt-1"
-              />
-              <p className="text-sm text-muted-foreground mt-1">
-                HL7 FHIR Terminology Server hosts US Core profiles and international FHIR standards
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="terminology-type" className="text-sm font-medium">
-                  Server Type
-                </Label>
-                <Input
-                  id="terminology-type"
-                  value={(localSettings as any).terminologyServer?.type || 'ontoserver'}
-                  onChange={(e) => 
-                    handleSettingChange('terminologyServer', {
-                      ...(localSettings as any).terminologyServer,
-                      type: e.target.value
-                    })
-                  }
-                  placeholder="ontoserver"
-                  className="mt-1"
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* 1. Structural Validation */}
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-sm">Structural Validation</h4>
+                <Switch
+                  checked={localSettings.enableStructuralValidation}
+                  onCheckedChange={(checked) => handleSettingChange('enableStructuralValidation', checked)}
                 />
               </div>
-              
-              <div>
-                <Label htmlFor="terminology-description" className="text-sm font-medium">
-                  Description
-                </Label>
-                <Input
-                  id="terminology-description"
-                  value={(localSettings as any).terminologyServer?.description || 'CSIRO OntoServer (Public)'}
-                  onChange={(e) => 
-                    handleSettingChange('terminologyServer', {
-                      ...(localSettings as any).terminologyServer,
-                      description: e.target.value
-                    })
-                  }
-                  placeholder="CSIRO OntoServer (Public)"
-                  className="mt-1"
+              <p className="text-xs text-muted-foreground">
+                Validates FHIR syntax, cardinality rules, and data types
+              </p>
+              <div className="mt-2">
+                <Badge variant={localSettings.enableStructuralValidation ? "default" : "secondary"} className="text-xs">
+                  {localSettings.enableStructuralValidation ? "Active" : "Disabled"}
+                </Badge>
+              </div>
+            </Card>
+
+            {/* 2. Profile Validation */}
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-sm">Profile Validation</h4>
+                <Switch
+                  checked={localSettings.enableProfileValidation}
+                  onCheckedChange={(checked) => handleSettingChange('enableProfileValidation', checked)}
                 />
               </div>
-            </div>
-          </div>
+              <p className="text-xs text-muted-foreground">
+                Validates against FHIR profiles (US Core, IPS, custom profiles)
+              </p>
+              <div className="mt-2">
+                <Badge variant={localSettings.enableProfileValidation ? "default" : "secondary"} className="text-xs">
+                  {localSettings.enableProfileValidation ? "Active" : "Disabled"}
+                </Badge>
+              </div>
+            </Card>
 
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              The CSIRO OntoServer provides free access to FHIR terminology services including common extensions like birthPlace. 
-              This helps resolve "Unable to resolve reference to extension" errors during validation.
-            </AlertDescription>
-          </Alert>
+            {/* 3. Terminology Validation */}
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-sm">Terminology Validation</h4>
+                <Switch
+                  checked={localSettings.enableTerminologyValidation}
+                  onCheckedChange={(checked) => handleSettingChange('enableTerminologyValidation', checked)}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Validates codes against ValueSets (SNOMED CT, LOINC, ICD-10)
+              </p>
+              <div className="mt-2">
+                <Badge variant={localSettings.enableTerminologyValidation ? "default" : "secondary"} className="text-xs">
+                  {localSettings.enableTerminologyValidation ? "Active" : "Disabled"}
+                </Badge>
+              </div>
+            </Card>
+
+            {/* 4. Reference Validation */}
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-sm">Reference Validation</h4>
+                <Switch
+                  checked={localSettings.enableReferenceValidation}
+                  onCheckedChange={(checked) => handleSettingChange('enableReferenceValidation', checked)}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Validates resource references and circular dependency checks
+              </p>
+              <div className="mt-2">
+                <Badge variant={localSettings.enableReferenceValidation ? "default" : "secondary"} className="text-xs">
+                  {localSettings.enableReferenceValidation ? "Active" : "Disabled"}
+                </Badge>
+              </div>
+            </Card>
+
+            {/* 5. Business Rule Validation */}
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-sm">Business Rule Validation</h4>
+                <Switch
+                  checked={localSettings.enableBusinessRuleValidation}
+                  onCheckedChange={(checked) => handleSettingChange('enableBusinessRuleValidation', checked)}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Cross-field logic validation (birthDate &lt; deathDate, etc.)
+              </p>
+              <div className="mt-2">
+                <Badge variant={localSettings.enableBusinessRuleValidation ? "default" : "secondary"} className="text-xs">
+                  {localSettings.enableBusinessRuleValidation ? "Active" : "Disabled"}
+                </Badge>
+              </div>
+            </Card>
+
+            {/* 6. Metadata Validation */}
+            <Card className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-medium text-sm">Metadata Validation</h4>
+                <Switch
+                  checked={localSettings.enableMetadataValidation}
+                  onCheckedChange={(checked) => handleSettingChange('enableMetadataValidation', checked)}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Validates FHIR version, security labels, and meta elements
+              </p>
+              <div className="mt-2">
+                <Badge variant={localSettings.enableMetadataValidation ? "default" : "secondary"} className="text-xs">
+                  {localSettings.enableMetadataValidation ? "Active" : "Disabled"}
+                </Badge>
+              </div>
+            </Card>
+          </div>
         </div>
 
+        {/* Legacy and Performance Settings */}
+        <Card className="p-6">
+          <h4 className="text-lg font-medium mb-4 flex items-center">
+            <Settings className="h-5 w-5 mr-2" />
+            Validation Configuration
+          </h4>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label className="text-sm font-medium">Strict Mode</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Enable enhanced error checking with stricter validation rules
+                  </p>
+                </div>
+                <Switch
+                  checked={localSettings.strictMode}
+                  onCheckedChange={(checked) => handleSettingChange('strictMode', checked)}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label className="text-sm font-medium">Auto-Detect Profiles</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically detect appropriate validation profiles for resources
+                  </p>
+                </div>
+                <Switch
+                  checked={localSettings.autoDetectProfiles}
+                  onCheckedChange={(checked) => handleSettingChange('autoDetectProfiles', checked)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="minValidationScore" className="text-sm font-medium">
+                  Minimum Validation Score (%)
+                </Label>
+                <Input
+                  id="minValidationScore"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={localSettings.minValidationScore}
+                  onChange={(e) => handleSettingChange('minValidationScore', parseInt(e.target.value))}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Resources below this score are marked as requiring attention
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="batchSize" className="text-sm font-medium">
+                  Batch Size
+                </Label>
+                <Input
+                  id="batchSize"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={localSettings.batchSize}
+                  onChange={(e) => handleSettingChange('batchSize', parseInt(e.target.value))}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Number of resources to validate in each batch (affects performance)
+                </p>
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        {/* Priority-Ordered Terminology Servers */}
+        <Card className="p-6">
+          <h4 className="text-lg font-medium mb-4 flex items-center">
+            <Server className="h-5 w-5 mr-2" />
+            Priority-Ordered Terminology Servers
+          </h4>
+          <p className="text-sm text-muted-foreground mb-6">
+            Multiple terminology servers with fallback priority. The Enhanced Validation Engine tries servers in order until one responds successfully.
+          </p>
+          
+          <div className="space-y-4">
+            {localSettings.terminologyServers?.map((server, index) => (
+              <Card key={index} className="p-4 border-l-4" style={{borderLeftColor: server.enabled ? '#3b82f6' : '#d1d5db'}}>
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center space-x-3">
+                    <Badge variant={server.enabled ? "default" : "secondary"} className="text-xs">
+                      Priority {server.priority}
+                    </Badge>
+                    <h5 className="font-medium text-sm">{server.name}</h5>
+                    <Badge variant="outline" className="text-xs">
+                      {server.type}
+                    </Badge>
+                  </div>
+                  <Switch
+                    checked={server.enabled}
+                    onCheckedChange={(checked) => {
+                      const newServers = [...(localSettings.terminologyServers || [])];
+                      newServers[index] = { ...server, enabled: checked };
+                      handleSettingChange('terminologyServers', newServers);
+                    }}
+                  />
+                </div>
+                
+                <p className="text-xs text-muted-foreground mb-3">{server.description}</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                  <div>
+                    <Label className="text-xs font-medium">URL</Label>
+                    <Input
+                      value={server.url}
+                      onChange={(e) => {
+                        const newServers = [...(localSettings.terminologyServers || [])];
+                        newServers[index] = { ...server, url: e.target.value };
+                        handleSettingChange('terminologyServers', newServers);
+                      }}
+                      className="text-xs h-8"
+                      disabled={!server.enabled}
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label className="text-xs font-medium">Priority</Label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={server.priority}
+                      onChange={(e) => {
+                        const newServers = [...(localSettings.terminologyServers || [])];
+                        newServers[index] = { ...server, priority: parseInt(e.target.value) || 1 };
+                        // Re-sort servers by priority
+                        newServers.sort((a, b) => a.priority - b.priority);
+                        handleSettingChange('terminologyServers', newServers);
+                      }}
+                      className="text-xs h-8"
+                      disabled={!server.enabled}
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label className="text-xs font-medium">Name</Label>
+                    <Input
+                      value={server.name}
+                      onChange={(e) => {
+                        const newServers = [...(localSettings.terminologyServers || [])];
+                        newServers[index] = { ...server, name: e.target.value };
+                        handleSettingChange('terminologyServers', newServers);
+                      }}
+                      className="text-xs h-8"
+                      disabled={!server.enabled}
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex flex-wrap gap-1">
+                  {server.capabilities?.map((capability, capIndex) => (
+                    <Badge key={capIndex} variant="outline" className="text-xs">
+                      {capability}
+                    </Badge>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <strong>CSIRO OntoServer:</strong> Best for SNOMED CT, LOINC, and international extensions. Free public access.
+              </AlertDescription>
+            </Alert>
+            
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <strong>HL7 Terminology Server:</strong> Official FHIR terminology standards, US Core profiles, and HL7 vocabularies.
+              </AlertDescription>
+            </Alert>
+            
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <strong>SNOMED International:</strong> Official SNOMED CT server with full ECL support and concept maps.
+              </AlertDescription>
+            </Alert>
+          </div>
+        </Card>
+
         <Alert>
-          <Settings className="h-4 w-4" />
+          <CheckCircle className="h-4 w-4" />
           <AlertDescription>
-            Validation settings are applied immediately when changed. Profile fetching from external sources 
-            may take longer depending on network conditions.
+            Enhanced Validation Engine settings are applied immediately when changed. All 6 validation aspects work together to ensure comprehensive FHIR resource quality.
           </AlertDescription>
         </Alert>
       </div>

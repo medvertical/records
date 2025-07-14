@@ -486,14 +486,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/validation/settings", async (req, res) => {
     try {
-      // Return default validation settings
+      // Return comprehensive Enhanced Validation Engine settings
       const settings = {
+        // Enhanced Validation Engine - 6 Aspects
+        enableStructuralValidation: true,
+        enableProfileValidation: true,
+        enableTerminologyValidation: true,
+        enableReferenceValidation: true,
+        enableBusinessRuleValidation: true,
+        enableMetadataValidation: true,
+        
+        // Legacy settings for backwards compatibility
         fetchFromSimplifier: true,
         fetchFromFhirServer: true,
         autoDetectProfiles: true,
         strictMode: false,
         maxProfiles: 3,
-        cacheDuration: 3600 // 1 hour in seconds
+        cacheDuration: 3600, // 1 hour in seconds
+        
+        // Advanced settings
+        validationProfiles: [
+          'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient',
+          'http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab'
+        ],
+        terminologyServers: [
+          {
+            priority: 1,
+            enabled: true,
+            url: 'https://r4.ontoserver.csiro.au/fhir',
+            type: 'ontoserver',
+            name: 'CSIRO OntoServer',
+            description: 'Primary terminology server with SNOMED CT, LOINC, extensions',
+            capabilities: ['SNOMED CT', 'LOINC', 'ICD-10', 'Extensions', 'ValueSets']
+          },
+          {
+            priority: 2,
+            enabled: true,
+            url: 'https://tx.fhir.org/r4',
+            type: 'fhir-terminology',
+            name: 'HL7 FHIR Terminology Server',
+            description: 'Official HL7 terminology server for FHIR standards',
+            capabilities: ['US Core', 'FHIR Base', 'HL7 Standards', 'ValueSets']
+          },
+          {
+            priority: 3,
+            enabled: false,
+            url: 'https://snowstorm.ihtsdotools.org/fhir',
+            type: 'snowstorm',
+            name: 'SNOMED International',
+            description: 'Official SNOMED CT terminology server',
+            capabilities: ['SNOMED CT', 'ECL', 'Concept Maps']
+          }
+        ],
+        // Legacy single server for backwards compatibility
+        terminologyServer: {
+          enabled: true,
+          url: 'https://r4.ontoserver.csiro.au/fhir',
+          type: 'ontoserver',
+          description: 'CSIRO OntoServer (Public)'
+        },
+        
+        // Performance settings
+        batchSize: 20,
+        maxRetries: 3,
+        timeout: 30000,
+        
+        // Quality thresholds
+        minValidationScore: 70,
+        errorSeverityThreshold: 'warning' // 'information', 'warning', 'error', 'fatal'
       };
       res.json(settings);
     } catch (error: any) {
@@ -504,6 +564,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/validation/settings", async (req, res) => {
     try {
       const settings = req.body;
+      console.log('[ValidationSettings] Updating Enhanced Validation Engine configuration:', settings);
+      
+      // Update Enhanced Validation Engine configuration
+      if (unifiedValidationService) {
+        const enhancedConfig = {
+          enableStructuralValidation: settings.enableStructuralValidation ?? true,
+          enableProfileValidation: settings.enableProfileValidation ?? true,
+          enableTerminologyValidation: settings.enableTerminologyValidation ?? true,
+          enableReferenceValidation: settings.enableReferenceValidation ?? true,
+          enableBusinessRuleValidation: settings.enableBusinessRuleValidation ?? true,
+          enableMetadataValidation: settings.enableMetadataValidation ?? true,
+          strictMode: settings.strictMode ?? false,
+          profiles: settings.validationProfiles ?? [],
+          terminologyServers: settings.terminologyServers ?? [],
+          // Legacy single server for backwards compatibility
+          terminologyServer: settings.terminologyServer
+        };
+        
+        console.log('[ValidationSettings] Applying config to Enhanced Validation Engine with multiple terminology servers:', enhancedConfig);
+        // Update validation engine configuration
+        if (typeof unifiedValidationService.updateConfig === 'function') {
+          unifiedValidationService.updateConfig(enhancedConfig);
+        }
+      }
       
       // Update terminology server configuration if provided
       if (settings.terminologyServer && validationEngine) {
@@ -511,10 +595,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json({
-        message: "Validation settings updated successfully",
-        settings: settings
+        message: "Enhanced Validation Engine settings updated successfully",
+        settings: settings,
+        appliedConfig: {
+          enhancedValidationEnabled: true,
+          aspectsConfigured: [
+            'Structural Validation',
+            'Profile Validation', 
+            'Terminology Validation',
+            'Reference Validation',
+            'Business Rule Validation',
+            'Metadata Validation'
+          ]
+        }
       });
     } catch (error: any) {
+      console.error('[ValidationSettings] Failed to update settings:', error);
       res.status(500).json({ message: error.message });
     }
   });

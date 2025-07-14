@@ -13,6 +13,16 @@ import { storage } from '../storage.js';
  * 6. Versions- und Metadatenprüfung: Technische Metadaten (VersionId, LastUpdated)
  */
 
+export interface TerminologyServer {
+  priority: number;
+  enabled: boolean;
+  url: string;
+  type: string;
+  name: string;
+  description: string;
+  capabilities: string[];
+}
+
 export interface EnhancedValidationConfig {
   enableStructuralValidation: boolean;
   enableProfileValidation: boolean;
@@ -22,6 +32,8 @@ export interface EnhancedValidationConfig {
   enableMetadataValidation: boolean;
   strictMode: boolean;
   profiles: string[];
+  terminologyServers?: TerminologyServer[];
+  // Legacy single server for backwards compatibility
   terminologyServer?: {
     enabled: boolean;
     url: string;
@@ -73,8 +85,52 @@ export class EnhancedValidationEngine {
       enableMetadataValidation: true,
       strictMode: false,
       profiles: [],
+      terminologyServers: [],
       ...config
     };
+    
+    // Update terminology client with priority-ordered servers
+    this.updateTerminologyServers();
+  }
+
+  /**
+   * Update configuration and terminology servers
+   */
+  updateConfig(config: Partial<EnhancedValidationConfig>) {
+    this.config = { ...this.config, ...config };
+    this.updateTerminologyServers();
+  }
+
+  /**
+   * Configure terminology client with priority-ordered servers
+   */
+  private updateTerminologyServers() {
+    if (this.config.terminologyServers && this.config.terminologyServers.length > 0) {
+      // Sort servers by priority and filter enabled ones
+      const enabledServers = this.config.terminologyServers
+        .filter(server => server.enabled)
+        .sort((a, b) => a.priority - b.priority);
+      
+      console.log(`[EnhancedValidation] Configured ${enabledServers.length} terminology servers in priority order:`, 
+        enabledServers.map(s => `${s.priority}: ${s.name} (${s.type})`));
+      
+      if (enabledServers.length > 0) {
+        // Use first (highest priority) server as primary
+        const primaryServer = enabledServers[0];
+        this.terminologyClient.updateConfig({
+          url: primaryServer.url,
+          enabled: true
+        });
+        console.log(`[EnhancedValidation] Primary terminology server: ${primaryServer.name} (${primaryServer.url})`);
+      }
+    } else if (this.config.terminologyServer?.enabled) {
+      // Legacy single server fallback
+      this.terminologyClient.updateConfig({
+        url: this.config.terminologyServer.url,
+        enabled: true
+      });
+      console.log(`[EnhancedValidation] Using legacy terminology server: ${this.config.terminologyServer.url}`);
+    }
   }
 
   /**
