@@ -747,6 +747,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const resourceCounts: Record<string, number> = {};
       
       for (const resourceType of resourceTypes) {
+        // Check if validation should stop during initialization
+        if (globalValidationState.shouldStop) {
+          console.log('Validation stopped during initialization phase');
+          globalValidationState.isRunning = false;
+          globalValidationState.isPaused = false;
+          if (validationWebSocket) {
+            validationWebSocket.broadcastValidationStopped();
+          }
+          return res.json({ message: "Validation stopped during initialization" });
+        }
+        
         try {
           const count = await fhirClient.getResourceCount(resourceType);
           resourceCounts[resourceType] = count;
