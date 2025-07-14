@@ -6,8 +6,7 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        'sans': ['Manrope', 'Inter', 'system-ui', 'sans-serif'],
-        'proxima': ['Manrope', 'Inter', 'system-ui', 'sans-serif'],
+        'sans': ['Inter', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
         lg: "var(--radius)",
