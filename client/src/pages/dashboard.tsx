@@ -293,16 +293,15 @@ export default function Dashboard() {
                   isValidationInitializing ? 'text-yellow-500' : 'text-blue-500'
                 }`} />
                 Validation Engine
-                {isValidationRunning && (
-                  <Badge variant="secondary" className="bg-green-100 text-green-800 animate-pulse">
-                    RUNNING
-                  </Badge>
-                )}
-                {isValidationInitializing && (
+                {isValidationInitializing ? (
                   <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 animate-pulse">
                     INITIALIZING
                   </Badge>
-                )}
+                ) : isValidationRunning ? (
+                  <Badge variant="secondary" className="bg-green-100 text-green-800 animate-pulse">
+                    RUNNING
+                  </Badge>
+                ) : null}
               </CardTitle>
               <CardDescription>
                 Real-time validation progress and system control
