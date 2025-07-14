@@ -230,8 +230,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (cachedResources.length > 0) {
             console.log(`[Resources] Serving ${cachedResources.length} cached resources (${allCachedForType.length} total in cache)`);
             
+            // Include validation results with each resource
+            const resourcesWithValidation = await Promise.all(
+              cachedResources.map(async (resource) => {
+                try {
+                  const validationResults = await storage.getValidationResultsByResourceId(resource.id);
+                  return {
+                    ...resource.data,
+                    _dbId: resource.id, // Include database ID for validation lookup
+                    _validationResults: validationResults,
+                    _validationSummary: {
+                      hasErrors: validationResults.some(vr => !vr.isValid && vr.errors && vr.errors.length > 0),
+                      hasWarnings: validationResults.some(vr => vr.warnings && vr.warnings.length > 0),
+                      errorCount: validationResults.reduce((sum, vr) => sum + (vr.errors?.length || 0), 0),
+                      warningCount: validationResults.reduce((sum, vr) => sum + (vr.warnings?.length || 0), 0),
+                      isValid: validationResults.length > 0 && validationResults.every(vr => vr.isValid),
+                      lastValidated: validationResults.length > 0 ? new Date(Math.max(...validationResults.map(vr => new Date(vr.validatedAt).getTime()))) : null
+                    }
+                  };
+                } catch (error) {
+                  console.warn(`Failed to get validation results for resource ${resource.id}:`, error);
+                  return {
+                    ...resource.data,
+                    _dbId: resource.id,
+                    _validationResults: [],
+                    _validationSummary: {
+                      hasErrors: false,
+                      hasWarnings: false,
+                      errorCount: 0,
+                      warningCount: 0,
+                      isValid: false,
+                      lastValidated: null
+                    }
+                  };
+                }
+              })
+            );
+            
             res.json({
-              resources: cachedResources.map(r => r.data),
+              resources: resourcesWithValidation,
               total: allCachedForType.length,
             });
           } else {

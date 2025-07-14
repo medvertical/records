@@ -73,13 +73,32 @@ export default function ResourceList({
   };
 
   const getValidationStatus = (resource: any) => {
-    // TODO: Implement actual validation status based on stored validation results
-    // For now, return a random status for demonstration
-    const statuses = ['valid', 'error', 'warning'];
-    return statuses[Math.floor(Math.random() * statuses.length)];
+    // Use real validation results from the database
+    const validationSummary = resource._validationSummary;
+    
+    if (!validationSummary) {
+      return 'not-validated';
+    }
+    
+    if (validationSummary.hasErrors) {
+      return 'error';
+    }
+    
+    if (validationSummary.hasWarnings) {
+      return 'warning';
+    }
+    
+    if (validationSummary.isValid) {
+      return 'valid';
+    }
+    
+    return 'not-validated';
   };
 
-  const renderValidationBadge = (status: string) => {
+  const renderValidationBadge = (resource: any) => {
+    const validationSummary = resource._validationSummary;
+    const status = getValidationStatus(resource);
+    
     switch (status) {
       case 'valid':
         return (
@@ -90,21 +109,28 @@ export default function ResourceList({
         );
       case 'error':
         return (
-          <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50">
-            <XCircle className="h-3 w-3 mr-1" />
-            Error
-          </Badge>
+          <div className="flex flex-col items-end space-y-1">
+            <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50">
+              <XCircle className="h-3 w-3 mr-1" />
+              {validationSummary?.errorCount || 0} Error{(validationSummary?.errorCount || 0) !== 1 ? 's' : ''}
+            </Badge>
+            {validationSummary?.hasWarnings && (
+              <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
+                {validationSummary.warningCount} Warning{validationSummary.warningCount !== 1 ? 's' : ''}
+              </Badge>
+            )}
+          </div>
         );
       case 'warning':
         return (
           <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50">
             <AlertTriangle className="h-3 w-3 mr-1" />
-            Warning
+            {validationSummary?.warningCount || 0} Warning{(validationSummary?.warningCount || 0) !== 1 ? 's' : ''}
           </Badge>
         );
       default:
         return (
-          <Badge variant="secondary">
+          <Badge variant="secondary" className="text-xs">
             Not Validated
           </Badge>
         );
@@ -181,7 +207,7 @@ export default function ResourceList({
                       </div>
 
                       <div className="flex items-center space-x-4 ml-6">
-                        {renderValidationBadge(validationStatus)}
+                        {renderValidationBadge(resource)}
                         <ChevronRight className="h-4 w-4 text-gray-400" />
                       </div>
                     </div>

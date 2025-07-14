@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Search, ExternalLink, ChevronRight } from "lucide-react";
+import { Search, ExternalLink, ChevronRight, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 
@@ -48,6 +48,51 @@ export default function QuickBrowser({ resourceCounts }: QuickBrowserProps) {
   };
 
   const resources = resourcesData?.resources || [];
+
+  const renderValidationBadge = (resource: any) => {
+    const validationSummary = resource._validationSummary;
+    
+    if (!validationSummary) {
+      return (
+        <Badge variant="secondary" className="text-xs">
+          Not Validated
+        </Badge>
+      );
+    }
+    
+    if (validationSummary.hasErrors) {
+      return (
+        <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50 text-xs">
+          <XCircle className="h-3 w-3 mr-1" />
+          {validationSummary.errorCount} Error{validationSummary.errorCount !== 1 ? 's' : ''}
+        </Badge>
+      );
+    }
+    
+    if (validationSummary.hasWarnings) {
+      return (
+        <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
+          <AlertTriangle className="h-3 w-3 mr-1" />
+          {validationSummary.warningCount} Warning{validationSummary.warningCount !== 1 ? 's' : ''}
+        </Badge>
+      );
+    }
+    
+    if (validationSummary.isValid) {
+      return (
+        <Badge className="bg-green-50 text-fhir-success border-green-200 hover:bg-green-50 text-xs">
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Valid
+        </Badge>
+      );
+    }
+    
+    return (
+      <Badge variant="secondary" className="text-xs">
+        Not Validated
+      </Badge>
+    );
+  };
 
   return (
     <Card className="bg-white shadow-sm border border-gray-200">
@@ -149,9 +194,7 @@ export default function QuickBrowser({ resourceCounts }: QuickBrowserProps) {
                     </div>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Badge variant="outline" className="bg-fhir-success/10 text-fhir-success border-fhir-success/20">
-                      Valid
-                    </Badge>
+                    {renderValidationBadge(resource)}
                     <ChevronRight className="h-4 w-4 text-gray-400" />
                   </div>
                 </div>
