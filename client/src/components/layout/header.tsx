@@ -55,7 +55,7 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
               variant="ghost"
               size="sm"
               onClick={onSidebarToggle}
-              className="p-2 ml-auto mr-6"
+              className="p-2 ml-auto mr-2"
             >
               <PanelLeft className="h-5 w-5 text-gray-600" />
             </Button>
