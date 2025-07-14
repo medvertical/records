@@ -131,7 +131,7 @@ export default function ServerValidation() {
         batchSize: 100,
         skipUnchanged: true
       });
-      // Keep loading state until WebSocket confirms validation is running
+      // Keep loading state until WebSocket confirms validation is running or calculation starts
     } catch (error) {
       console.error('Failed to start validation:', error);
       setIsStarting(false);

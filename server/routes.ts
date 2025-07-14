@@ -672,6 +672,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(409).json({ message: "Validation is already running" });
       }
 
+      const options = req.body || {};
+
       // Return immediately to provide fast UI response
       res.json({ 
         message: "Validation starting...", 
@@ -681,7 +683,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Start validation asynchronously in background  
       setImmediate(async () => {
         try {
-          console.log('Starting background validation...');
+          console.log('Starting background validation with options:', options);
           
           // ALWAYS use comprehensive FHIR resource types - ignore any specific types from frontend
           console.log('Starting comprehensive FHIR validation across ALL resource types...');
