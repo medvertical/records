@@ -94,7 +94,7 @@ export class FhirClient {
         `${this.baseUrl}/${resourceType}?${searchParams.toString()}`,
         { 
           headers: this.headers,
-          timeout: 30000 // 30 second timeout
+          timeout: 8000 // 8 second timeout for faster response
         }
       );
 

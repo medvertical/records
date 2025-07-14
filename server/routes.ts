@@ -216,76 +216,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
           total: results.length,
         });
       } else {
-        // Always use FHIR server for live data when available
-        console.log(`[Resources] FHIR client available: ${!!fhirClient}`);
+        // Prioritize cached resources for fast loading, use FHIR server only for fresh data
+        console.log(`[Resources] Using cached data for performance`);
         console.log(`[Resources] Resource type: ${resourceType}, Count: ${count}, Page: ${page}`);
         
-        if (fhirClient) {
-          try {
-            const targetResourceType = resourceType as string || 'Patient';
-            console.log(`Fetching live ${targetResourceType} resources from FHIR server with pagination...`);
-            
-            // Get real total count first
-            const realTotal = await fhirClient.getResourceCount(targetResourceType);
-            console.log(`Real total count for ${targetResourceType}: ${realTotal}`);
-            
-            // Fetch current page with _total=accurate for proper pagination
-            const bundle = await fhirClient.searchResources(
-              targetResourceType,
-              {
-                _total: 'accurate',
-                _count: count.toString(),
-                _offset: offset.toString()
-              }
-            );
-
-            const resources = bundle.entry?.map(entry => entry.resource) || [];
-            console.log(`Fetched ${resources.length} ${targetResourceType} resources for page ${parseInt(page as string) + 1}`);
-            
-            // Store resources locally for caching (optional)
-            for (const resource of resources) {
-              try {
-                const existing = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
-                if (!existing) {
-                  await storage.createFhirResource({
-                    serverId: (await storage.getActiveFhirServer())?.id || 1,
-                    resourceType: resource.resourceType,
-                    resourceId: resource.id,
-                    versionId: resource.meta?.versionId,
-                    data: resource,
-                  });
-                }
-              } catch (storageError) {
-                console.warn(`Failed to store resource ${resource.resourceType}/${resource.id}:`, storageError);
-              }
-            }
-
-            res.json({
-              resources,
-              total: realTotal, // Use the real total count from the server
-            });
-          } catch (fhirError: any) {
-            console.warn('FHIR server failed, falling back to cached resources:', fhirError.message);
-            // Fall back to any cached resources we might have
-            const fallbackResources = await storage.getFhirResources(undefined, resourceType as string, count, offset);
-            
-            // Try to get a better total estimate from cache
-            const allCachedForType = await storage.getFhirResources(undefined, resourceType as string, 1000, 0);
-            
-            res.json({
-              resources: fallbackResources.map(r => r.data),
-              total: allCachedForType.length, // Use full cache count as estimate
-            });
-          }
-        } else {
-          // No FHIR client, return cached resources with better total estimation
-          const fallbackResources = await storage.getFhirResources(undefined, resourceType as string, count, offset);
-          const allCachedForType = await storage.getFhirResources(undefined, resourceType as string, 1000, 0);
+        try {
+          // Try to get cached resources first for immediate response
+          const cachedResources = await storage.getFhirResources(undefined, resourceType as string, count, offset);
           
-          res.json({
-            resources: fallbackResources.map(r => r.data),
-            total: allCachedForType.length,
-          });
+          // Get total count from cache for this resource type
+          const allCachedForType = await storage.getFhirResources(undefined, resourceType as string, 10000, 0);
+          
+          if (cachedResources.length > 0) {
+            console.log(`[Resources] Serving ${cachedResources.length} cached resources (${allCachedForType.length} total in cache)`);
+            
+            res.json({
+              resources: cachedResources.map(r => r.data),
+              total: allCachedForType.length,
+            });
+          } else {
+            // No cached data, fall back to FHIR server
+            if (fhirClient) {
+              console.log(`[Resources] No cached data, fetching from FHIR server...`);
+              const targetResourceType = resourceType as string || 'Patient';
+              
+              // Fetch resources with total count in single request for speed
+              const bundle = await fhirClient.searchResources(
+                targetResourceType,
+                {
+                  _total: 'accurate',
+                  _count: count.toString(),
+                  _offset: offset.toString()
+                }
+              );
+
+              const resources = bundle.entry?.map(entry => entry.resource) || [];
+              const realTotal = bundle.total || 0;
+              console.log(`Fetched ${resources.length} ${targetResourceType} resources (${realTotal} total) from FHIR server`);
+              
+              // Store resources locally for future use
+              for (const resource of resources) {
+                try {
+                  const existing = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
+                  if (!existing) {
+                    await storage.createFhirResource({
+                      serverId: (await storage.getActiveFhirServer())?.id || 1,
+                      resourceType: resource.resourceType,
+                      resourceId: resource.id,
+                      versionId: resource.meta?.versionId,
+                      data: resource,
+                    });
+                  }
+                } catch (storageError) {
+                  console.warn(`Failed to store resource ${resource.resourceType}/${resource.id}:`, storageError);
+                }
+              }
+
+              res.json({
+                resources,
+                total: realTotal,
+              });
+            } else {
+              // No FHIR client and no cached data
+              res.json({
+                resources: [],
+                total: 0,
+              });
+            }
+          }
+        } catch (error: any) {
+          console.error('Error accessing cached resources:', error);
+          res.status(500).json({ message: error.message });
         }
       }
     } catch (error: any) {
