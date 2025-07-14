@@ -672,10 +672,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(409).json({ message: "Validation is already running" });
       }
 
-      const options = req.body || {};
-      
-      // ALWAYS use comprehensive FHIR resource types - ignore any specific types from frontend
-      console.log('Starting comprehensive FHIR validation across ALL resource types...');
+      // Return immediately to provide fast UI response
+      res.json({ 
+        message: "Validation starting...", 
+        status: "starting" 
+      });
+
+      // Start validation asynchronously in background  
+      setImmediate(async () => {
+        try {
+          console.log('Starting background validation...');
+          
+          // ALWAYS use comprehensive FHIR resource types - ignore any specific types from frontend
+          console.log('Starting comprehensive FHIR validation across ALL resource types...');
       const resourceTypes = [
         'Account', 'ActivityDefinition', 'AdverseEvent', 'AllergyIntolerance', 'Appointment', 
         'AppointmentResponse', 'AuditEvent', 'Basic', 'Binary', 'BiologicallyDerivedProduct',
@@ -845,10 +854,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
 
-      res.json({ 
-        message: "Real FHIR server validation started with authentic data",
-        status: "running",
-        dataSource: "Fire.ly FHIR Server (authentic data)"
+          console.log("Background validation started successfully");
+        } catch (error: any) {
+          console.error('Background validation startup error:', error);
+          if (validationWebSocket) {
+            validationWebSocket.broadcastError('Failed to start validation: ' + error.message);
+          }
+        }
       });
     } catch (error: any) {
       res.status(500).json({ message: error.message });

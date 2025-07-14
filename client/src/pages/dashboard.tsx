@@ -160,6 +160,9 @@ export default function Dashboard() {
   }, [validationStatus]);
 
   const handleStartValidation = async () => {
+    // Show loading state immediately
+    setIsValidationRunning(true);
+    
     try {
       const response = await fetch('/api/validation/bulk/start', {
         method: 'POST',
@@ -169,11 +172,14 @@ export default function Dashboard() {
         })
       });
       
-      if (response.ok) {
-        setIsValidationRunning(true);
+      if (!response.ok) {
+        setIsValidationRunning(false);
+        console.error('Failed to start validation');
       }
+      // Keep validation running state - WebSocket will update with real status
     } catch (error) {
       console.error('Failed to start validation:', error);
+      setIsValidationRunning(false);
     }
   };
 
