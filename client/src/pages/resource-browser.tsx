@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import ResourceSearch from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,9 +11,24 @@ interface ResourcesResponse {
 }
 
 export default function ResourceBrowser() {
+  const [location] = useLocation();
   const [resourceType, setResourceType] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [page, setPage] = useState(0);
+
+  // Parse URL parameters on component mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const typeParam = urlParams.get('type');
+    const searchParam = urlParams.get('search');
+    
+    if (typeParam) {
+      setResourceType(typeParam);
+    }
+    if (searchParam) {
+      setSearchQuery(searchParam);
+    }
+  }, [location]);
 
   const { data: resourceTypes } = useQuery<string[]>({
     queryKey: ["/api/fhir/resource-types"],

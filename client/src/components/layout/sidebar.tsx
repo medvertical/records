@@ -183,7 +183,8 @@ function SidebarContent({
           {navigationItems.map((item) => {
             const Icon = item.icon;
             const isActive = location === item.href || 
-              (item.href === "/" && location === "/dashboard");
+              (item.href === "/" && location === "/dashboard") ||
+              (item.href === "/resources" && location.startsWith("/resources"));
             
             return (
               <li key={item.href}>
