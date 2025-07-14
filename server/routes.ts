@@ -676,6 +676,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Using comprehensive ${resourceTypes.length} FHIR resource types`);
       console.log(`Resource types to validate: ${JSON.stringify(resourceTypes.slice(0, 10))}... (showing first 10 of ${resourceTypes.length})`);
       
+      // Calculate REAL total resources from FHIR server
+      console.log('Calculating real total resources from FHIR server...');
+      let realTotalResources = 0;
+      const resourceCounts: Record<string, number> = {};
+      
+      for (const resourceType of resourceTypes) {
+        try {
+          const count = await fhirClient.getResourceCount(resourceType);
+          resourceCounts[resourceType] = count;
+          realTotalResources += count;
+          console.log(`${resourceType}: ${count} resources`);
+        } catch (error) {
+          console.error(`Failed to get count for ${resourceType}:`, error);
+          resourceCounts[resourceType] = 0;
+        }
+      }
+      
+      console.log(`REAL TOTAL RESOURCES TO VALIDATE: ${realTotalResources} across ${resourceTypes.length} resource types`);
+      console.log('Top resource types:', Object.entries(resourceCounts)
+        .sort(([,a], [,b]) => b - a)
+        .slice(0, 10)
+        .map(([type, count]) => `${type}: ${count}`)
+        .join(', '));
+      
+      if (realTotalResources === 0) {
+        throw new Error('No resources found on FHIR server. Cannot start validation.');
+      }
+      
       // Broadcast validation start via WebSocket
       if (validationWebSocket) {
         validationWebSocket.broadcastValidationStart();
@@ -690,8 +718,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startTime = new Date();
       const errors: string[] = [];
 
-      // Process each resource type with real FHIR server data
-      for (const resourceType of resourceTypes.slice(0, 10)) { // Start with first 10 types for testing
+      // Process ALL resource types with real FHIR server data - NO LIMITS!
+      for (const resourceType of resourceTypes) { // Process ALL 148 resource types
         try {
           console.log(`Validating real ${resourceType} resources from FHIR server...`);
           
@@ -725,10 +753,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     validResources++;
                   }
                   
-                  // Broadcast real progress
+                  // Broadcast real progress with AUTHENTIC total resource count
                   if (validationWebSocket && processedResources % 5 === 0) {
                     const progress = {
-                      totalResources: 50000, // Estimated based on real server
+                      totalResources: realTotalResources, // REAL total from FHIR server (126,000+)
                       processedResources,
                       validResources,
                       errorResources,
