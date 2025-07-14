@@ -682,12 +682,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const options = req.body || {};
 
-      // Set global validation state immediately before response
+      // RESET validation state for NEW start (always start at 0)
       globalValidationState.isRunning = true;
       globalValidationState.startTime = new Date();
       globalValidationState.canPause = true;
       globalValidationState.shouldStop = false;
-      console.log('Global validation state set BEFORE response: isRunning=true, canPause=true');
+      console.log('NEW validation start - RESET to 0. Global state: isRunning=true, canPause=true');
 
       // Return immediately to provide fast UI response
       res.json({ 
@@ -777,11 +777,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Start real FHIR server validation using authentic data
       console.log('Starting real FHIR server validation with authentic data from Fire.ly server...');
       
+      // RESET all counters to 0 for NEW start (nicht Resume!)
       let processedResources = 0;
       let validResources = 0;
       let errorResources = 0;
       const startTime = new Date();
       const errors: string[] = [];
+      console.log('NEW START: Reset all counters to 0 (processedResources=0, validResources=0, errorResources=0)');
 
       // Process ALL resource types with real FHIR server data - NO LIMITS!
       for (const resourceType of resourceTypes) { // Process ALL 148 resource types

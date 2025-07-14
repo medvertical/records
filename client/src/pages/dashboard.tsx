@@ -160,8 +160,11 @@ export default function Dashboard() {
   }, [validationStatus]);
 
   const handleStartValidation = async () => {
-    // Show loading state immediately
+    // RESET all progress for NEW start (not resume!)
     setIsValidationRunning(true);
+    setIsValidationPaused(false);
+    setValidationProgress(null); // Reset to 0 for new start
+    console.log('NEW START: Reset validation progress to null');
     
     try {
       const response = await fetch('/api/validation/bulk/start', {
@@ -432,7 +435,7 @@ export default function Dashboard() {
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 bg-orange-500 rounded-full" />
                     <span className="text-sm font-medium text-orange-700 dark:text-orange-300">
-                      Validation Paused - {validationProgress.validResources} resources validated, {validationProgress.errorResources} errors
+                      Validation Paused - {validationProgress?.validResources || 0} resources validated, {validationProgress?.errorResources || 0} errors
                     </span>
                   </div>
                 </div>
