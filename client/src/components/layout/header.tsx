@@ -40,7 +40,7 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
   };
 
   return (
-    <header className="bg-white shadow-sm border-b border-gray-200 w-screen fixed top-0 left-0 z-50">
+    <header className="bg-white border-b border-gray-200 w-screen fixed top-0 left-0 z-50">
       <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center space-x-4">
           {onSidebarToggle && (

@@ -82,7 +82,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
 
         {/* Mobile Sidebar */}
         <aside className={cn(
-          "fixed left-0 top-16 h-full w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out z-40 md:hidden",
+          "fixed left-0 top-16 h-full w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out z-40 md:hidden",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}>
           <SidebarContent 
@@ -100,7 +100,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
 
   return (
     <aside className={cn(
-      "fixed left-0 top-16 h-[calc(100vh-4rem)] bg-white shadow-lg transition-all duration-300 ease-in-out z-30 overflow-y-auto",
+      "fixed left-0 top-16 h-[calc(100vh-4rem)] bg-white border-r border-gray-200 transition-all duration-300 ease-in-out z-30 overflow-y-auto",
       isOpen ? "w-64" : "w-0 overflow-hidden"
     )}>
       <div className="w-64">
