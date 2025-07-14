@@ -142,14 +142,15 @@ export default function ResourceList({
       </div>
 
       {/* Resource List */}
-      <div>
+      <div className="resource-cards-container">
         {resources.length > 0 ? (
           resources.map((resource, index) => {
             const validationStatus = getValidationStatus(resource);
             
             return (
-              <Link key={resource.id || `${resource.resourceType}-${index}`} href={`/resources/${resource.id}`}>
-                <Card className="hover:bg-gray-50 transition-colors cursor-pointer mb-6">
+              <div key={resource.id || `${resource.resourceType}-${index}`} className="mb-6">
+                <Link href={`/resources/${resource.id}`}>
+                  <Card className="hover:bg-gray-50 transition-colors cursor-pointer">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4 flex-1 min-w-0">
@@ -185,8 +186,9 @@ export default function ResourceList({
                       </div>
                     </div>
                   </CardContent>
-                </Card>
-              </Link>
+                  </Card>
+                </Link>
+              </div>
             );
           })
         ) : (
