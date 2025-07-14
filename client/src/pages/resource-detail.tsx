@@ -55,9 +55,8 @@ export default function ResourceDetail() {
                 The requested resource could not be found or has been removed.
               </p>
               <Link href="/resources">
-                <Button variant="outline" className="inline-flex items-center space-x-2">
+                <Button variant="outline" className="inline-flex items-center">
                   <ArrowLeft className="h-4 w-4" />
-                  <span>Back to Resources</span>
                 </Button>
               </Link>
             </div>
@@ -77,9 +76,8 @@ export default function ResourceDetail() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link href="/resources">
-              <Button variant="outline" size="sm" className="inline-flex items-center space-x-2">
-                <ArrowLeft className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">Back</span>
+              <Button variant="outline" size="sm" className="inline-flex items-center">
+                <ArrowLeft className="h-4 w-4" />
               </Button>
             </Link>
             <div>

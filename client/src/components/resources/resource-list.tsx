@@ -148,48 +148,45 @@ export default function ResourceList({
             const validationStatus = getValidationStatus(resource);
             
             return (
-              <Card key={resource.id || `${resource.resourceType}-${index}`} className="">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4 flex-1 min-w-0">
-                      <div className={cn(
-                        "w-3 h-3 rounded-full flex-shrink-0",
-                        validationStatus === 'valid' ? "bg-fhir-success" :
-                        validationStatus === 'error' ? "bg-fhir-error" :
-                        validationStatus === 'warning' ? "bg-fhir-warning" :
-                        "bg-gray-400"
-                      )} />
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-3 mb-1">
-                          <h3 className="text-sm font-semibold text-gray-900 truncate">
-                            {resource.resourceType}/{resource.id}
-                          </h3>
-                          <Badge variant="outline" className="text-xs">
-                            {resource.resourceType}
-                          </Badge>
+              <Link key={resource.id || `${resource.resourceType}-${index}`} href={`/resources/${resource.id}`}>
+                <Card className="hover:bg-gray-50 transition-colors cursor-pointer">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4 flex-1 min-w-0">
+                        <div className={cn(
+                          "w-3 h-3 rounded-full flex-shrink-0",
+                          validationStatus === 'valid' ? "bg-fhir-success" :
+                          validationStatus === 'error' ? "bg-fhir-error" :
+                          validationStatus === 'warning' ? "bg-fhir-warning" :
+                          "bg-gray-400"
+                        )} />
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center space-x-3 mb-1">
+                            <h3 className="text-sm font-semibold text-gray-900 truncate">
+                              {resource.resourceType}/{resource.id}
+                            </h3>
+                            <Badge variant="outline" className="text-xs">
+                              {resource.resourceType}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-600 truncate">
+                            {getResourceDisplayName(resource)}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate mt-1">
+                            {getResourceSubtext(resource)}
+                          </p>
                         </div>
-                        <p className="text-sm text-gray-600 truncate">
-                          {getResourceDisplayName(resource)}
-                        </p>
-                        <p className="text-xs text-gray-500 truncate mt-1">
-                          {getResourceSubtext(resource)}
-                        </p>
+                      </div>
+
+                      <div className="flex items-center space-x-3 ml-4">
+                        {renderValidationBadge(validationStatus)}
+                        <ChevronRight className="h-4 w-4 text-gray-400" />
                       </div>
                     </div>
-
-                    <div className="flex items-center space-x-3 ml-4">
-                      {renderValidationBadge(validationStatus)}
-                      <Link href={`/resources/${resource.id}`}>
-                        <Button variant="ghost" size="sm" className="text-fhir-blue hover:text-blue-700">
-                          <Eye className="h-4 w-4 sm:mr-1" />
-                          <span className="hidden sm:inline">View</span>
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </Link>
             );
           })
         ) : (
