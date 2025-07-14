@@ -290,7 +290,7 @@ export default function Dashboard() {
               <CardTitle className="flex items-center gap-2">
                 <Activity className={`h-5 w-5 transition-colors duration-300 ${
                   isValidationRunning ? 'text-green-500 animate-pulse' : 
-                  isValidationInitializing ? 'text-yellow-500 animate-spin' : 'text-blue-500'
+                  isValidationInitializing ? 'text-yellow-500' : 'text-blue-500'
                 }`} />
                 Validation Engine
                 {isValidationRunning && (
@@ -300,7 +300,7 @@ export default function Dashboard() {
                 )}
                 {isValidationInitializing && (
                   <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 animate-pulse">
-                    INITIALISIERUNG
+                    INITIALIZING
                   </Badge>
                 )}
               </CardTitle>
@@ -318,8 +318,8 @@ export default function Dashboard() {
               
               {isValidationInitializing && (
                 <Button disabled size="sm" className="gap-2 opacity-50">
-                  <Activity className="h-4 w-4 animate-spin" />
-                  Initialisierung...
+                  <Activity className="h-4 w-4" />
+                  Initializing...
                 </Button>
               )}
               

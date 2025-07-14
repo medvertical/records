@@ -776,7 +776,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Broadcast initializing status via WebSocket
       if (validationWebSocket) {
-        validationWebSocket.broadcastValidationProgress({
+        validationWebSocket.broadcastProgress({
           totalResources: 0,
           processedResources: 0,
           validResources: 0,
