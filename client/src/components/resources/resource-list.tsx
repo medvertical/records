@@ -150,7 +150,7 @@ export default function ResourceList({
             return (
               <Link key={resource.id || `${resource.resourceType}-${index}`} href={`/resources/${resource.id}`}>
                 <Card className="hover:bg-gray-50 transition-colors cursor-pointer">
-                  <CardContent className="p-4">
+                  <CardContent className="p-6">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4 flex-1 min-w-0">
                         <div className={cn(
@@ -179,7 +179,7 @@ export default function ResourceList({
                         </div>
                       </div>
 
-                      <div className="flex items-center space-x-3 ml-4">
+                      <div className="flex items-center space-x-4 ml-6">
                         {renderValidationBadge(validationStatus)}
                         <ChevronRight className="h-4 w-4 text-gray-400" />
                       </div>
