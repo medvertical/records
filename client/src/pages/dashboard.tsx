@@ -122,6 +122,10 @@ export default function Dashboard() {
           setIsValidationRunning(false);
           setIsValidationPaused(false);
         }
+      } else if (status === 'paused') {
+        setIsValidationRunning(false);
+        setIsValidationPaused(true);
+        setValidationProgress(currentValidationProgress);
       }
       
       // Mark as initialized after first server response
@@ -135,12 +139,16 @@ export default function Dashboard() {
       console.log('WebSocket progress received:', progress);
       setValidationProgress(progress);
       
-      // WebSocket progress takes priority - if we have active processing, validation is running
-      if (progress.processedResources > 0 && !progress.isComplete) {
+      // Use the actual status from progress data instead of inferring from processed resources
+      if (progress.status === 'running') {
         setIsValidationRunning(true);
         setIsValidationPaused(false);
         setHasInitialized(true);
-      } else if (progress.isComplete) {
+      } else if (progress.status === 'paused') {
+        setIsValidationRunning(false);
+        setIsValidationPaused(true);
+        setHasInitialized(true);
+      } else if (progress.isComplete || progress.status === 'completed') {
         setIsValidationRunning(false);
         setIsValidationPaused(false);
       }
