@@ -25,6 +25,7 @@ export function useValidationWebSocket() {
   const [lastError, setLastError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasReceivedMessage = useRef(false);
 
   const connect = () => {
     try {
@@ -37,6 +38,7 @@ export function useValidationWebSocket() {
         console.log('WebSocket connected for validation updates');
         setIsConnected(true);
         setLastError(null);
+        // Don't reset status on connection - let server messages determine state
       };
 
       wsRef.current.onmessage = (event) => {
@@ -52,12 +54,14 @@ export function useValidationWebSocket() {
               console.log('Validation started:', message.data);
               setValidationStatus('running');
               setLastError(null);
+              hasReceivedMessage.current = true;
               break;
               
             case 'validation_progress':
               console.log('Validation progress:', message.data);
               setProgress(message.data);
               setValidationStatus('running');
+              hasReceivedMessage.current = true;
               break;
               
             case 'validation_complete':
