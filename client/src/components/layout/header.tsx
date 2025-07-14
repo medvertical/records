@@ -1,10 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, PanelLeft, Database } from "lucide-react";
+import { RefreshCw, PanelLeft } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import AppIcon from "@/components/ui/app-icon";
 
 interface ConnectionStatus {
   connected: boolean;
@@ -54,7 +55,7 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
             </Button>
           )}
           <div className="flex items-center space-x-3">
-            <Database className="h-8 w-8" style={{ color: 'rgb(0, 85, 254)' }} />
+            <AppIcon size="md" />
             <div>
               <h1 className="text-xl font-bold text-gray-900">{title}</h1>
             </div>
