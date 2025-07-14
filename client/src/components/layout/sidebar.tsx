@@ -160,7 +160,7 @@ function SidebarContent({
                 : "bg-fhir-error"
             )} />
             <span className="text-xs font-medium">
-              {serverStatus?.connected ? "Server Healthy" : "Server Error"}
+              {serverStatus?.connected ? "Connected" : "Disconnected"}
             </span>
           </Badge>
         </div>
