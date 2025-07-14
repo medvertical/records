@@ -53,7 +53,7 @@ export default function ResourceBrowser() {
         />
         
         {isLoading ? (
-          <div className="space-y-4">
+          <div className="space-y-6">
             {[1, 2, 3, 4, 5].map(i => (
               <Skeleton key={i} className="h-20 rounded-lg" />
             ))}

@@ -114,9 +114,9 @@ export default function QuickBrowser({ resourceCounts }: QuickBrowserProps) {
         )}
 
         {/* Resource List */}
-        <div className="space-y-2 max-h-64 overflow-y-auto">
+        <div className="space-y-4 max-h-64 overflow-y-auto">
           {isLoading ? (
-            <div className="space-y-2">
+            <div className="space-y-4">
               {[1, 2, 3].map(i => (
                 <div key={i} className="animate-pulse">
                   <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
