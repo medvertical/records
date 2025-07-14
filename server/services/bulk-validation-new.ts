@@ -1,5 +1,6 @@
 import { FhirClient } from './fhir-client';
 import { ValidationEngine } from './validation-engine';
+import { UnifiedValidationService } from './unified-validation';
 import { storage } from '../storage';
 import { InsertFhirResource, InsertValidationResult } from '../../shared/schema';
 import { validationWebSocket } from './websocket-server';
@@ -36,6 +37,7 @@ interface ValidationCheckpoint {
 export class BulkValidationService {
   private fhirClient: FhirClient;
   private validationEngine: ValidationEngine;
+  private unifiedValidationService: UnifiedValidationService;
   private state: ValidationState = 'idle';
   private checkpoint: ValidationCheckpoint | null = null;
   private shouldStop = false;
@@ -43,6 +45,7 @@ export class BulkValidationService {
   constructor(fhirClient: FhirClient, validationEngine: ValidationEngine) {
     this.fhirClient = fhirClient;
     this.validationEngine = validationEngine;
+    this.unifiedValidationService = new UnifiedValidationService(fhirClient, validationEngine);
   }
 
   async startValidation(options: BulkValidationOptions = {}): Promise<BulkValidationProgress> {
@@ -243,51 +246,11 @@ export class BulkValidationService {
   }
 
   private async validateSingleResource(resource: any, skipUnchanged: boolean): Promise<void> {
-    const resourceHash = this.createResourceHash(resource);
-    
-    // Check if resource already exists and is unchanged
-    let dbResource = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
-    
-    if (dbResource && skipUnchanged && dbResource.hash === resourceHash) {
-      return; // Skip validation if unchanged
-    }
-
-    // Save or update resource
-    const resourceData: InsertFhirResource = {
-      resourceType: resource.resourceType,
-      resourceId: resource.id,
-      data: resource,
-      hash: resourceHash,
-      serverId: 1 // Default server ID
-    };
-
-    if (dbResource) {
-      await storage.updateFhirResource(dbResource.id, resource);
-      dbResource = { ...dbResource, data: resource, hash: resourceHash };
-    } else {
-      dbResource = await storage.createFhirResource(resourceData);
-    }
-
-    // Perform validation
     try {
-      const outcome = await this.validationEngine.validateResource(resource);
-      
-      const validationResult: InsertValidationResult = {
-        resourceId: dbResource.id,
-        profileId: null, // Will be set by validation engine if specific profile used
-        isValid: !outcome.issue.some(issue => issue.severity === 'error' || issue.severity === 'fatal'),
-        errors: outcome.issue.map(issue => ({
-          severity: issue.severity as 'error' | 'warning' | 'information',
-          message: issue.details?.text || issue.diagnostics || 'Unknown error',
-          path: issue.location?.[0] || '',
-          expression: issue.expression?.[0],
-          code: issue.code
-        })),
-        validatedAt: new Date()
-      };
-
-      await storage.createValidationResult(validationResult);
+      console.log(`[BulkValidation] Validating ${resource.resourceType}/${resource.id} with unified service`);
+      await this.unifiedValidationService.validateResource(resource, skipUnchanged, false);
     } catch (error) {
+      console.error(`[BulkValidation] Validation failed for ${resource.resourceType}/${resource.id}:`, error);
       throw new Error(`Validation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }

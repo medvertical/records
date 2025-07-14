@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { FhirClient } from "./services/fhir-client.js";
 import { ValidationEngine } from "./services/validation-engine.js";
+import { UnifiedValidationService } from "./services/unified-validation.js";
 import { profileManager } from "./services/profile-manager.js";
 import { RobustValidationService } from "./services/robust-validation.js";
 import { insertFhirServerSchema, insertFhirResourceSchema, insertValidationProfileSchema } from "@shared/schema.js";
@@ -11,6 +12,7 @@ import { z } from "zod";
 
 let fhirClient: FhirClient;
 let validationEngine: ValidationEngine;
+let unifiedValidationService: UnifiedValidationService;
 let robustValidationService: RobustValidationService;
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -19,6 +21,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   if (activeServer) {
     fhirClient = new FhirClient(activeServer.url);
     validationEngine = new ValidationEngine(fhirClient);
+    unifiedValidationService = new UnifiedValidationService(fhirClient, validationEngine);
     robustValidationService = new RobustValidationService(fhirClient, validationEngine);
   }
 
@@ -53,6 +56,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (activeServer) {
         fhirClient = new FhirClient(activeServer.url);
         validationEngine = new ValidationEngine(fhirClient);
+        unifiedValidationService = new UnifiedValidationService(fhirClient, validationEngine);
         robustValidationService = new RobustValidationService(fhirClient, validationEngine);
       }
       
@@ -70,6 +74,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Clear the FHIR client since no server is active
       fhirClient = null as any;
       validationEngine = null as any;
+      unifiedValidationService = null as any;
       robustValidationService = null as any;
       
       res.json({ success: true });
@@ -318,6 +323,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!resource) {
         console.log(`[Resource Detail] Resource not found for ID: ${resourceId}`);
         return res.status(404).json({ message: "Resource not found" });
+      }
+      
+      // Check if validation is outdated and revalidate if needed
+      if (unifiedValidationService && resource.data) {
+        console.log(`[Resource Detail] Checking validation freshness for ${resource.resourceType}/${resource.resourceId}`);
+        try {
+          const validationResult = await unifiedValidationService.checkAndRevalidateResource(resource);
+          resource = validationResult.resource;
+          
+          if (validationResult.wasRevalidated) {
+            console.log(`[Resource Detail] Resource ${resource.resourceType}/${resource.resourceId} was revalidated`);
+          } else {
+            console.log(`[Resource Detail] Resource ${resource.resourceType}/${resource.resourceId} validation is up-to-date`);
+          }
+        } catch (validationError) {
+          console.warn(`[Resource Detail] Validation check failed for ${resource.resourceType}/${resource.resourceId}:`, validationError);
+          // Continue with existing validation results
+        }
       }
       
       console.log(`[Resource Detail] Returning resource:`, resource.resourceType, resource.resourceId);
