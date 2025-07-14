@@ -277,21 +277,21 @@ export default function Dashboard() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              {!isValidationRunning && !isValidationPaused && (!validationProgress || validationProgress.isComplete) && (
+              {!isValidationRunning && !isValidationPaused && (!(progress || validationProgress || currentProgress) || (progress || validationProgress || currentProgress)?.isComplete) && (
                 <Button onClick={handleStartValidation} size="sm" className="gap-2">
                   <Play className="h-4 w-4" />
                   Start Validation
                 </Button>
               )}
               
-              {isValidationRunning && !isValidationPaused && (
+              {((isValidationRunning || (progress && progress.processedResources > 0 && !progress.isComplete) || (validationProgress && validationProgress.processedResources > 0 && !validationProgress.isComplete) || (currentProgress && currentProgress.processedResources > 0 && !currentProgress.isComplete)) && !isValidationPaused) && (
                 <Button onClick={handlePauseValidation} variant="outline" size="sm" className="gap-2 border-orange-500 text-orange-600 hover:bg-orange-50">
                   <Pause className="h-4 w-4" />
                   Pause
                 </Button>
               )}
               
-              {isValidationPaused && validationProgress && !validationProgress.isComplete && (
+              {isValidationPaused && (progress || validationProgress || currentProgress) && !(progress || validationProgress || currentProgress)?.isComplete && (
                 <Button onClick={handleResumeValidation} size="sm" className="gap-2 bg-green-600 hover:bg-green-700">
                   <Play className="h-4 w-4" />
                   Resume
@@ -300,7 +300,7 @@ export default function Dashboard() {
               
 
               
-              {(isValidationRunning || isValidationPaused) && (
+              {((isValidationRunning || isValidationPaused) || (progress && progress.processedResources > 0 && !progress.isComplete) || (validationProgress && validationProgress.processedResources > 0 && !validationProgress.isComplete) || (currentProgress && currentProgress.processedResources > 0 && !currentProgress.isComplete)) && (
                 <Button onClick={handleStopValidation} variant="outline" size="sm" className="gap-2 border-red-500 text-red-600 hover:bg-red-50">
                   <Square className="h-4 w-4" />
                   Stop
