@@ -142,7 +142,7 @@ export default function ResourceList({
       </div>
 
       {/* Resource List */}
-      <div className="space-y-3">
+      <div className="space-y-6">
         {resources.length > 0 ? (
           resources.map((resource, index) => {
             const validationStatus = getValidationStatus(resource);
