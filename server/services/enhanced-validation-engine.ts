@@ -717,17 +717,1194 @@ export class EnhancedValidationEngine {
   }
 
   private async performReferenceValidation(resource: any, result: EnhancedValidationResult): Promise<void> {
-    console.log(`[EnhancedValidation] Reference validation - placeholder`);
-    // Will be implemented in step 4
+    console.log(`[EnhancedValidation] Performing reference validation...`);
+    
+    const issues: ValidationIssue[] = [];
+    let referencesChecked = 0;
+
+    // Find and validate all Reference elements
+    referencesChecked = await this.validateReferences(resource, '', issues, new Set());
+
+    result.validationAspects.reference.issues = issues;
+    result.validationAspects.reference.referencesChecked = referencesChecked;
+    result.validationAspects.reference.passed = !issues.some(i => i.severity === 'error' || i.severity === 'fatal');
+    result.issues.push(...issues);
+  }
+
+  /**
+   * Recursively validate all Reference elements in the resource
+   */
+  private async validateReferences(obj: any, path: string, issues: ValidationIssue[], checkedReferences: Set<string>): Promise<number> {
+    let referencesChecked = 0;
+    
+    if (!obj || typeof obj !== 'object') return referencesChecked;
+
+    // Check if this is a Reference element
+    if (obj.reference && typeof obj.reference === 'string') {
+      referencesChecked++;
+      await this.validateSingleReference(obj, path, issues, checkedReferences);
+    }
+
+    // Check specific FHIR reference fields
+    const referenceFields = ['subject', 'patient', 'encounter', 'performer', 'requester', 'recorder', 'author', 'source', 'target'];
+    for (const field of referenceFields) {
+      if (obj[field] && obj[field].reference) {
+        referencesChecked++;
+        await this.validateSingleReference(obj[field], `${path}.${field}`, issues, checkedReferences);
+      }
+    }
+
+    // Recursively check nested objects and arrays
+    for (const [key, value] of Object.entries(obj)) {
+      const currentPath = path ? `${path}.${key}` : key;
+      
+      if (Array.isArray(value)) {
+        for (let i = 0; i < value.length; i++) {
+          referencesChecked += await this.validateReferences(value[i], `${currentPath}[${i}]`, issues, checkedReferences);
+        }
+      } else if (typeof value === 'object' && value !== null) {
+        referencesChecked += await this.validateReferences(value, currentPath, issues, checkedReferences);
+      }
+    }
+
+    return referencesChecked;
+  }
+
+  /**
+   * Validate a single Reference element
+   */
+  private async validateSingleReference(reference: any, path: string, issues: ValidationIssue[], checkedReferences: Set<string>): Promise<void> {
+    const refString = reference.reference;
+    
+    console.log(`[EnhancedValidation] Validating reference: ${refString}`);
+
+    // 1. Validate reference format
+    if (!this.isValidReferenceFormat(refString)) {
+      issues.push({
+        severity: 'error',
+        code: 'invalid-reference-format',
+        category: 'reference',
+        message: `Invalid reference format: ${refString}`,
+        path: `${path}.reference`,
+        suggestion: 'Use format: ResourceType/id or #fragment or http://external.url'
+      });
+      return;
+    }
+
+    // 2. Check for circular references
+    if (checkedReferences.has(refString)) {
+      issues.push({
+        severity: 'warning',
+        code: 'circular-reference',
+        category: 'reference',
+        message: `Potential circular reference detected: ${refString}`,
+        path: `${path}.reference`,
+        suggestion: 'Review reference chain to avoid circular dependencies'
+      });
+      return;
+    }
+
+    checkedReferences.add(refString);
+
+    // 3. Validate reference type consistency
+    if (reference.type) {
+      const expectedType = this.extractResourceTypeFromReference(refString);
+      if (expectedType && expectedType !== reference.type) {
+        issues.push({
+          severity: 'error',
+          code: 'reference-type-mismatch',
+          category: 'reference',
+          message: `Reference type mismatch: expected ${expectedType}, got ${reference.type}`,
+          path: `${path}.type`,
+          suggestion: `Change type to ${expectedType} or update reference`
+        });
+      }
+    }
+
+    // 4. Validate identifier reference consistency
+    if (reference.identifier && reference.reference) {
+      issues.push({
+        severity: 'warning',
+        code: 'reference-identifier-ambiguity',
+        category: 'reference',
+        message: 'Reference contains both reference and identifier - prefer reference',
+        path: path,
+        suggestion: 'Use either reference OR identifier, not both'
+      });
+    }
+
+    // 5. Check reference existence (for internal references)
+    if (this.isInternalReference(refString)) {
+      await this.validateInternalReferenceExistence(refString, path, issues);
+    }
+
+    // 6. Validate external URL references
+    if (this.isExternalReference(refString)) {
+      await this.validateExternalReference(refString, path, issues);
+    }
+
+    // 7. Validate fragment references
+    if (this.isFragmentReference(refString)) {
+      await this.validateFragmentReference(refString, path, issues);
+    }
+
+    checkedReferences.delete(refString);
+  }
+
+  /**
+   * Validate reference format according to FHIR specification
+   */
+  private isValidReferenceFormat(reference: string): boolean {
+    if (!reference) return false;
+
+    // FHIR Reference patterns:
+    // 1. ResourceType/id
+    // 2. #fragment
+    // 3. http://external.url
+    // 4. urn:uuid:uuid
+    // 5. urn:oid:oid
+
+    const patterns = [
+      /^[A-Z][a-zA-Z]*\/[A-Za-z0-9\-\.]{1,64}$/, // ResourceType/id
+      /^#[A-Za-z0-9\-\.]+$/, // #fragment
+      /^https?:\/\/.+$/, // HTTP URL
+      /^urn:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/, // UUID
+      /^urn:oid:[0-2](\.(0|[1-9][0-9]*))*$/ // OID
+    ];
+
+    return patterns.some(pattern => pattern.test(reference));
+  }
+
+  /**
+   * Extract resource type from reference string
+   */
+  private extractResourceTypeFromReference(reference: string): string | null {
+    const match = reference.match(/^([A-Z][a-zA-Z]*)\/[A-Za-z0-9\-\.]{1,64}$/);
+    return match ? match[1] : null;
+  }
+
+  /**
+   * Check if reference is internal (ResourceType/id format)
+   */
+  private isInternalReference(reference: string): boolean {
+    return /^[A-Z][a-zA-Z]*\/[A-Za-z0-9\-\.]{1,64}$/.test(reference);
+  }
+
+  /**
+   * Check if reference is external (HTTP URL)
+   */
+  private isExternalReference(reference: string): boolean {
+    return /^https?:\/\/.+$/.test(reference);
+  }
+
+  /**
+   * Check if reference is fragment (#fragment)
+   */
+  private isFragmentReference(reference: string): boolean {
+    return reference.startsWith('#');
+  }
+
+  /**
+   * Validate that internally referenced resource exists
+   */
+  private async validateInternalReferenceExistence(reference: string, path: string, issues: ValidationIssue[]): Promise<void> {
+    try {
+      const [resourceType, resourceId] = reference.split('/');
+      
+      // Check if resource exists in our database
+      const existingResource = await storage.getFhirResourceByTypeAndId(resourceType, resourceId);
+      
+      if (!existingResource) {
+        // Try to fetch from FHIR server
+        try {
+          if (this.fhirClient) {
+            const serverResource = await this.fhirClient.getResource(resourceType, resourceId);
+            if (!serverResource) {
+              issues.push({
+                severity: 'error',
+                code: 'reference-not-found',
+                category: 'reference',
+                message: `Referenced resource not found: ${reference}`,
+                path: `${path}.reference`,
+                suggestion: 'Ensure the referenced resource exists or update the reference'
+              });
+            }
+          } else {
+            issues.push({
+              severity: 'warning',
+              code: 'reference-existence-unknown',
+              category: 'reference',
+              message: `Cannot verify reference existence: ${reference}`,
+              path: `${path}.reference`,
+              suggestion: 'FHIR server connection required to validate references'
+            });
+          }
+        } catch (error) {
+          issues.push({
+            severity: 'error',
+            code: 'reference-not-found',
+            category: 'reference',
+            message: `Referenced resource not found: ${reference}`,
+            path: `${path}.reference`,
+            suggestion: 'Ensure the referenced resource exists or update the reference'
+          });
+        }
+      } else {
+        console.log(`[EnhancedValidation] Reference verified: ${reference} exists`);
+      }
+    } catch (error: any) {
+      console.warn(`[EnhancedValidation] Reference validation failed for ${reference}:`, error.message);
+      issues.push({
+        severity: 'warning',
+        code: 'reference-validation-error',
+        category: 'reference',
+        message: `Could not validate reference: ${reference}`,
+        path: `${path}.reference`,
+        suggestion: 'Check reference format and resource availability'
+      });
+    }
+  }
+
+  /**
+   * Validate external reference URLs
+   */
+  private async validateExternalReference(reference: string, path: string, issues: ValidationIssue[]): Promise<void> {
+    try {
+      // Validate URL format
+      new URL(reference);
+      
+      // Check for secure HTTPS (warning for HTTP)
+      if (reference.startsWith('http://')) {
+        issues.push({
+          severity: 'warning',
+          code: 'insecure-reference',
+          category: 'reference',
+          message: `External reference uses insecure HTTP: ${reference}`,
+          path: `${path}.reference`,
+          suggestion: 'Consider using HTTPS for external references'
+        });
+      }
+
+      // Basic reachability check (simplified - in production, implement proper HTTP check)
+      console.log(`[EnhancedValidation] External reference format valid: ${reference}`);
+      
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'invalid-external-reference',
+        category: 'reference',
+        message: `Invalid external reference URL: ${reference}`,
+        path: `${path}.reference`,
+        suggestion: 'Ensure the URL is properly formatted'
+      });
+    }
+  }
+
+  /**
+   * Validate fragment references (#fragment)
+   */
+  private async validateFragmentReference(reference: string, path: string, issues: ValidationIssue[]): Promise<void> {
+    const fragmentId = reference.substring(1); // Remove #
+    
+    if (!fragmentId) {
+      issues.push({
+        severity: 'error',
+        code: 'empty-fragment-reference',
+        category: 'reference',
+        message: 'Fragment reference cannot be empty',
+        path: `${path}.reference`,
+        suggestion: 'Provide a valid fragment identifier'
+      });
+      return;
+    }
+
+    // Fragment references should point to contained resources
+    // This would need access to the containing Bundle or resource
+    console.log(`[EnhancedValidation] Fragment reference: ${reference} (validation limited without full context)`);
+    
+    // In a full implementation, we would:
+    // 1. Find the containing Bundle or resource
+    // 2. Check if a contained resource with this id exists
+    // 3. Validate the resource type matches expectations
   }
 
   private async performBusinessRuleValidation(resource: any, result: EnhancedValidationResult): Promise<void> {
-    console.log(`[EnhancedValidation] Business rule validation - placeholder`);
-    // Will be implemented in step 5
+    console.log(`[EnhancedValidation] Performing business rule validation...`);
+    
+    const issues: ValidationIssue[] = [];
+    let rulesChecked = 0;
+
+    // Apply resource-specific business rules
+    switch (resource.resourceType) {
+      case 'Patient':
+        rulesChecked += await this.validatePatientBusinessRules(resource, issues);
+        break;
+      case 'Observation':
+        rulesChecked += await this.validateObservationBusinessRules(resource, issues);
+        break;
+      case 'Condition':
+        rulesChecked += await this.validateConditionBusinessRules(resource, issues);
+        break;
+      case 'Encounter':
+        rulesChecked += await this.validateEncounterBusinessRules(resource, issues);
+        break;
+      case 'Procedure':
+        rulesChecked += await this.validateProcedureBusinessRules(resource, issues);
+        break;
+      default:
+        // Apply general business rules for all resources
+        rulesChecked += await this.validateGeneralBusinessRules(resource, issues);
+        break;
+    }
+
+    result.validationAspects.businessRule.issues = issues;
+    result.validationAspects.businessRule.rulesChecked = rulesChecked;
+    result.validationAspects.businessRule.passed = !issues.some(i => i.severity === 'error' || i.severity === 'fatal');
+    result.issues.push(...issues);
+  }
+
+  /**
+   * Validate Patient-specific business rules
+   */
+  private async validatePatientBusinessRules(patient: any, issues: ValidationIssue[]): Promise<number> {
+    let rulesChecked = 0;
+
+    // Rule 1: Birth date vs Death date
+    if (patient.birthDate && patient.deceasedDateTime) {
+      rulesChecked++;
+      const birthDate = new Date(patient.birthDate);
+      const deathDate = new Date(patient.deceasedDateTime);
+      
+      if (birthDate >= deathDate) {
+        issues.push({
+          severity: 'error',
+          code: 'invalid-death-date',
+          category: 'business-rule',
+          message: 'Death date must be after birth date',
+          path: 'deceasedDateTime',
+          suggestion: 'Verify death date is chronologically after birth date'
+        });
+      }
+    }
+
+    // Rule 2: Reasonable birth date (not in future, not too old)
+    if (patient.birthDate) {
+      rulesChecked++;
+      const birthDate = new Date(patient.birthDate);
+      const today = new Date();
+      const maxAge = 150; // years
+      const minDate = new Date(today.getFullYear() - maxAge, today.getMonth(), today.getDate());
+
+      if (birthDate > today) {
+        issues.push({
+          severity: 'error',
+          code: 'future-birth-date',
+          category: 'business-rule',
+          message: 'Birth date cannot be in the future',
+          path: 'birthDate',
+          suggestion: 'Verify birth date is not after current date'
+        });
+      } else if (birthDate < minDate) {
+        issues.push({
+          severity: 'warning',
+          code: 'extremely-old-patient',
+          category: 'business-rule',
+          message: `Patient would be over ${maxAge} years old`,
+          path: 'birthDate',
+          suggestion: 'Verify birth date accuracy for very elderly patients'
+        });
+      }
+    }
+
+    // Rule 3: Gender consistency with name prefixes
+    if (patient.gender && patient.name) {
+      rulesChecked++;
+      for (const name of patient.name) {
+        if (name.prefix && Array.isArray(name.prefix)) {
+          for (const prefix of name.prefix) {
+            if (this.isGenderSpecificPrefix(prefix, patient.gender)) {
+              issues.push({
+                severity: 'warning',
+                code: 'gender-prefix-mismatch',
+                category: 'business-rule',
+                message: `Name prefix "${prefix}" may not match gender "${patient.gender}"`,
+                path: 'name.prefix',
+                suggestion: 'Verify gender and name prefix consistency'
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Rule 4: Contact information format validation
+    if (patient.telecom) {
+      rulesChecked++;
+      for (let i = 0; i < patient.telecom.length; i++) {
+        const telecom = patient.telecom[i];
+        if (telecom.system === 'email' && telecom.value) {
+          if (!this.isValidEmail(telecom.value)) {
+            issues.push({
+              severity: 'error',
+              code: 'invalid-email-format',
+              category: 'business-rule',
+              message: `Invalid email format: ${telecom.value}`,
+              path: `telecom[${i}].value`,
+              suggestion: 'Use valid email format (e.g., user@domain.com)'
+            });
+          }
+        }
+        if (telecom.system === 'phone' && telecom.value) {
+          if (!this.isValidPhoneNumber(telecom.value)) {
+            issues.push({
+              severity: 'warning',
+              code: 'invalid-phone-format',
+              category: 'business-rule',
+              message: `Phone number format may be invalid: ${telecom.value}`,
+              path: `telecom[${i}].value`,
+              suggestion: 'Use standard phone number format with country code'
+            });
+          }
+        }
+      }
+    }
+
+    return rulesChecked;
+  }
+
+  /**
+   * Validate Observation-specific business rules
+   */
+  private async validateObservationBusinessRules(observation: any, issues: ValidationIssue[]): Promise<number> {
+    let rulesChecked = 0;
+
+    // Rule 1: Effective date should not be in future
+    if (observation.effectiveDateTime) {
+      rulesChecked++;
+      const effectiveDate = new Date(observation.effectiveDateTime);
+      const today = new Date();
+      
+      if (effectiveDate > today) {
+        issues.push({
+          severity: 'warning',
+          code: 'future-observation-date',
+          category: 'business-rule',
+          message: 'Observation effective date is in the future',
+          path: 'effectiveDateTime',
+          suggestion: 'Verify observation date is not scheduled for future'
+        });
+      }
+    }
+
+    // Rule 2: Value validation based on observation code
+    if (observation.code && observation.valueQuantity) {
+      rulesChecked++;
+      await this.validateObservationValue(observation, issues);
+    }
+
+    // Rule 3: Status consistency with value
+    if (observation.status === 'final' && !observation.valueQuantity && !observation.valueString && !observation.valueCodeableConcept) {
+      rulesChecked++;
+      issues.push({
+        severity: 'warning',
+        code: 'final-observation-without-value',
+        category: 'business-rule',
+        message: 'Final observation should have a value',
+        path: 'value[x]',
+        suggestion: 'Add observation value or change status to preliminary'
+      });
+    }
+
+    // Rule 4: Reference range validation
+    if (observation.valueQuantity && observation.referenceRange) {
+      rulesChecked++;
+      const value = observation.valueQuantity.value;
+      for (const range of observation.referenceRange) {
+        if (range.low?.value && value < range.low.value) {
+          issues.push({
+            severity: 'information',
+            code: 'value-below-range',
+            category: 'business-rule',
+            message: `Observation value ${value} is below reference range (${range.low.value})`,
+            path: 'valueQuantity.value',
+            suggestion: 'Consider if low value is clinically significant'
+          });
+        }
+        if (range.high?.value && value > range.high.value) {
+          issues.push({
+            severity: 'information',
+            code: 'value-above-range',
+            category: 'business-rule',
+            message: `Observation value ${value} is above reference range (${range.high.value})`,
+            path: 'valueQuantity.value',
+            suggestion: 'Consider if high value is clinically significant'
+          });
+        }
+      }
+    }
+
+    return rulesChecked;
+  }
+
+  /**
+   * Validate Condition-specific business rules
+   */
+  private async validateConditionBusinessRules(condition: any, issues: ValidationIssue[]): Promise<number> {
+    let rulesChecked = 0;
+
+    // Rule 1: Onset vs Abatement dates
+    if (condition.onsetDateTime && condition.abatementDateTime) {
+      rulesChecked++;
+      const onsetDate = new Date(condition.onsetDateTime);
+      const abatementDate = new Date(condition.abatementDateTime);
+      
+      if (onsetDate >= abatementDate) {
+        issues.push({
+          severity: 'error',
+          code: 'invalid-condition-timeline',
+          category: 'business-rule',
+          message: 'Condition abatement date must be after onset date',
+          path: 'abatementDateTime',
+          suggestion: 'Verify condition timeline is chronologically correct'
+        });
+      }
+    }
+
+    // Rule 2: Clinical status vs verification status consistency
+    if (condition.clinicalStatus && condition.verificationStatus) {
+      rulesChecked++;
+      const clinical = condition.clinicalStatus.coding?.[0]?.code;
+      const verification = condition.verificationStatus.coding?.[0]?.code;
+      
+      if (clinical === 'active' && verification === 'refuted') {
+        issues.push({
+          severity: 'error',
+          code: 'status-inconsistency',
+          category: 'business-rule',
+          message: 'Condition cannot be both active and refuted',
+          path: 'verificationStatus',
+          suggestion: 'Update clinical or verification status for consistency'
+        });
+      }
+    }
+
+    // Rule 3: Severity and clinical status relationship
+    if (condition.severity && condition.clinicalStatus) {
+      rulesChecked++;
+      const clinical = condition.clinicalStatus.coding?.[0]?.code;
+      const severity = condition.severity.coding?.[0]?.code;
+      
+      if (clinical === 'resolved' && severity === 'severe') {
+        issues.push({
+          severity: 'warning',
+          code: 'severity-status-mismatch',
+          category: 'business-rule',
+          message: 'Resolved condition with severe severity may be inconsistent',
+          path: 'severity',
+          suggestion: 'Review if severity should be updated for resolved conditions'
+        });
+      }
+    }
+
+    return rulesChecked;
+  }
+
+  /**
+   * Validate Encounter-specific business rules
+   */
+  private async validateEncounterBusinessRules(encounter: any, issues: ValidationIssue[]): Promise<number> {
+    let rulesChecked = 0;
+
+    // Rule 1: Start vs End time
+    if (encounter.period?.start && encounter.period?.end) {
+      rulesChecked++;
+      const startDate = new Date(encounter.period.start);
+      const endDate = new Date(encounter.period.end);
+      
+      if (startDate >= endDate) {
+        issues.push({
+          severity: 'error',
+          code: 'invalid-encounter-period',
+          category: 'business-rule',
+          message: 'Encounter end time must be after start time',
+          path: 'period.end',
+          suggestion: 'Verify encounter period dates are chronologically correct'
+        });
+      }
+    }
+
+    // Rule 2: Status consistency with period
+    if (encounter.status === 'finished' && encounter.period?.start && !encounter.period?.end) {
+      rulesChecked++;
+      issues.push({
+        severity: 'error',
+        code: 'finished-encounter-no-end',
+        category: 'business-rule',
+        message: 'Finished encounter must have an end time',
+        path: 'period.end',
+        suggestion: 'Add end time or change status to in-progress'
+      });
+    }
+
+    // Rule 3: Class vs type consistency
+    if (encounter.class && encounter.type) {
+      rulesChecked++;
+      // Simplified validation - in practice would use valuesets
+      const encounterClass = encounter.class.code;
+      const encounterType = encounter.type[0]?.coding?.[0]?.code;
+      
+      if (encounterClass === 'AMB' && encounterType?.includes('inpatient')) {
+        issues.push({
+          severity: 'warning',
+          code: 'class-type-mismatch',
+          category: 'business-rule',
+          message: 'Ambulatory class with inpatient type may be inconsistent',
+          path: 'type',
+          suggestion: 'Verify encounter class and type alignment'
+        });
+      }
+    }
+
+    return rulesChecked;
+  }
+
+  /**
+   * Validate Procedure-specific business rules
+   */
+  private async validateProcedureBusinessRules(procedure: any, issues: ValidationIssue[]): Promise<number> {
+    let rulesChecked = 0;
+
+    // Rule 1: Status consistency with performed date
+    if (procedure.status === 'completed' && !procedure.performedDateTime && !procedure.performedPeriod) {
+      rulesChecked++;
+      issues.push({
+        severity: 'error',
+        code: 'completed-procedure-no-date',
+        category: 'business-rule',
+        message: 'Completed procedure must have a performed date',
+        path: 'performed[x]',
+        suggestion: 'Add performed date or change status'
+      });
+    }
+
+    // Rule 2: Outcome vs status consistency
+    if (procedure.outcome && procedure.status) {
+      rulesChecked++;
+      const outcome = procedure.outcome.coding?.[0]?.code;
+      
+      if (procedure.status === 'preparation' && outcome) {
+        issues.push({
+          severity: 'warning',
+          code: 'outcome-before-completion',
+          category: 'business-rule',
+          message: 'Procedure in preparation should not have outcome',
+          path: 'outcome',
+          suggestion: 'Remove outcome or update status to completed'
+        });
+      }
+    }
+
+    return rulesChecked;
+  }
+
+  /**
+   * Validate general business rules applicable to all resources
+   */
+  private async validateGeneralBusinessRules(resource: any, issues: ValidationIssue[]): Promise<number> {
+    let rulesChecked = 0;
+
+    // Rule 1: Meta.lastUpdated should not be in future
+    if (resource.meta?.lastUpdated) {
+      rulesChecked++;
+      const lastUpdated = new Date(resource.meta.lastUpdated);
+      const now = new Date();
+      
+      if (lastUpdated > now) {
+        issues.push({
+          severity: 'warning',
+          code: 'future-last-updated',
+          category: 'business-rule',
+          message: 'Last updated timestamp is in the future',
+          path: 'meta.lastUpdated',
+          suggestion: 'Verify system clock is correct'
+        });
+      }
+    }
+
+    // Rule 2: Resource ID format validation
+    if (resource.id) {
+      rulesChecked++;
+      if (!/^[A-Za-z0-9\-\.]{1,64}$/.test(resource.id)) {
+        issues.push({
+          severity: 'error',
+          code: 'invalid-resource-id',
+          category: 'business-rule',
+          message: `Resource ID format invalid: ${resource.id}`,
+          path: 'id',
+          suggestion: 'Use alphanumeric characters, hyphens, and dots only (max 64 chars)'
+        });
+      }
+    }
+
+    return rulesChecked;
+  }
+
+  /**
+   * Helper method to validate observation values based on code
+   */
+  private async validateObservationValue(observation: any, issues: ValidationIssue[]): Promise<void> {
+    const code = observation.code.coding?.[0]?.code;
+    const value = observation.valueQuantity?.value;
+    const unit = observation.valueQuantity?.unit;
+
+    // Common observation value validations
+    if (code === '8310-5' && value !== undefined) { // Body temperature
+      if (value < 30 || value > 45) { // Celsius
+        issues.push({
+          severity: 'warning',
+          code: 'abnormal-body-temperature',
+          category: 'business-rule',
+          message: `Body temperature ${value}°C is outside normal range (30-45°C)`,
+          path: 'valueQuantity.value',
+          suggestion: 'Verify temperature measurement and unit'
+        });
+      }
+    }
+
+    if (code === '8480-6' && value !== undefined) { // Systolic BP
+      if (value < 60 || value > 250) {
+        issues.push({
+          severity: 'warning',
+          code: 'abnormal-blood-pressure',
+          category: 'business-rule',
+          message: `Systolic blood pressure ${value} mmHg is outside typical range`,
+          path: 'valueQuantity.value',
+          suggestion: 'Verify blood pressure measurement'
+        });
+      }
+    }
+  }
+
+  /**
+   * Helper methods for validation
+   */
+  private isGenderSpecificPrefix(prefix: string, gender: string): boolean {
+    const maleTerms = ['Mr.', 'Mr', 'Sir', 'Lord'];
+    const femaleTerms = ['Mrs.', 'Mrs', 'Ms.', 'Ms', 'Miss', 'Lady'];
+    
+    if (gender === 'male' && femaleTerms.includes(prefix)) return true;
+    if (gender === 'female' && maleTerms.includes(prefix)) return true;
+    
+    return false;
+  }
+
+  private isValidEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  }
+
+  private isValidPhoneNumber(phone: string): boolean {
+    // Simplified phone validation - accepts various formats
+    const phoneRegex = /^[\+]?[\d\s\-\(\)\.]{7,}$/;
+    return phoneRegex.test(phone);
   }
 
   private async performMetadataValidation(resource: any, result: EnhancedValidationResult): Promise<void> {
-    console.log(`[EnhancedValidation] Metadata validation - placeholder`);
-    // Will be implemented in step 6
+    console.log(`[EnhancedValidation] Performing metadata validation...`);
+    
+    const issues: ValidationIssue[] = [];
+
+    // 1. Resource.meta validation
+    await this.validateResourceMeta(resource, issues);
+
+    // 2. FHIR version compatibility
+    await this.validateFhirVersion(resource, issues);
+
+    // 3. Security and audit metadata
+    await this.validateSecurityMetadata(resource, issues);
+
+    // 4. Narrative validation
+    await this.validateNarrative(resource, issues);
+
+    // 5. Extension validation
+    await this.validateExtensions(resource, issues);
+
+    result.validationAspects.metadata.issues = issues;
+    result.validationAspects.metadata.passed = !issues.some(i => i.severity === 'error' || i.severity === 'fatal');
+    result.issues.push(...issues);
+  }
+
+  /**
+   * Validate Resource.meta element
+   */
+  private async validateResourceMeta(resource: any, issues: ValidationIssue[]): Promise<void> {
+    if (!resource.meta) {
+      issues.push({
+        severity: 'information',
+        code: 'missing-meta',
+        category: 'metadata',
+        message: 'Resource lacks meta element',
+        path: 'meta',
+        suggestion: 'Consider adding meta element for better resource management'
+      });
+      return;
+    }
+
+    const meta = resource.meta;
+
+    // Validate versionId format
+    if (meta.versionId) {
+      if (typeof meta.versionId !== 'string' || meta.versionId.length === 0) {
+        issues.push({
+          severity: 'error',
+          code: 'invalid-version-id',
+          category: 'metadata',
+          message: 'VersionId must be a non-empty string',
+          path: 'meta.versionId',
+          suggestion: 'Provide a valid version identifier'
+        });
+      }
+    }
+
+    // Validate lastUpdated format and logic
+    if (meta.lastUpdated) {
+      try {
+        const lastUpdated = new Date(meta.lastUpdated);
+        const now = new Date();
+        
+        if (isNaN(lastUpdated.getTime())) {
+          issues.push({
+            severity: 'error',
+            code: 'invalid-last-updated',
+            category: 'metadata',
+            message: 'LastUpdated timestamp is not a valid date',
+            path: 'meta.lastUpdated',
+            suggestion: 'Use ISO 8601 date format (YYYY-MM-DDTHH:mm:ss.sssZ)'
+          });
+        } else if (lastUpdated > now) {
+          issues.push({
+            severity: 'warning',
+            code: 'future-last-updated',
+            category: 'metadata',
+            message: 'LastUpdated timestamp is in the future',
+            path: 'meta.lastUpdated',
+            suggestion: 'Verify system clock is correct'
+          });
+        }
+      } catch (error) {
+        issues.push({
+          severity: 'error',
+          code: 'invalid-last-updated-format',
+          category: 'metadata',
+          message: 'LastUpdated timestamp format is invalid',
+          path: 'meta.lastUpdated',
+          suggestion: 'Use ISO 8601 date format'
+        });
+      }
+    }
+
+    // Validate source if present
+    if (meta.source) {
+      try {
+        new URL(meta.source);
+      } catch (error) {
+        issues.push({
+          severity: 'warning',
+          code: 'invalid-source-url',
+          category: 'metadata',
+          message: `Source URL is not valid: ${meta.source}`,
+          path: 'meta.source',
+          suggestion: 'Provide a valid URL for the source system'
+        });
+      }
+    }
+
+    // Validate profiles
+    if (meta.profile) {
+      if (!Array.isArray(meta.profile)) {
+        issues.push({
+          severity: 'error',
+          code: 'invalid-profile-format',
+          category: 'metadata',
+          message: 'Meta.profile must be an array of canonical URLs',
+          path: 'meta.profile',
+          suggestion: 'Use array format for profile references'
+        });
+      } else {
+        for (let i = 0; i < meta.profile.length; i++) {
+          const profileUrl = meta.profile[i];
+          try {
+            new URL(profileUrl);
+          } catch (error) {
+            issues.push({
+              severity: 'error',
+              code: 'invalid-profile-url',
+              category: 'metadata',
+              message: `Profile URL is not valid: ${profileUrl}`,
+              path: `meta.profile[${i}]`,
+              suggestion: 'Use valid canonical URLs for profile references'
+            });
+          }
+        }
+      }
+    }
+
+    // Validate security labels
+    if (meta.security) {
+      if (!Array.isArray(meta.security)) {
+        issues.push({
+          severity: 'error',
+          code: 'invalid-security-format',
+          category: 'metadata',
+          message: 'Meta.security must be an array of Coding elements',
+          path: 'meta.security',
+          suggestion: 'Use array of Coding elements for security labels'
+        });
+      }
+    }
+
+    // Validate tags
+    if (meta.tag) {
+      if (!Array.isArray(meta.tag)) {
+        issues.push({
+          severity: 'error',
+          code: 'invalid-tag-format',
+          category: 'metadata',
+          message: 'Meta.tag must be an array of Coding elements',
+          path: 'meta.tag',
+          suggestion: 'Use array of Coding elements for tags'
+        });
+      }
+    }
+  }
+
+  /**
+   * Validate FHIR version compatibility
+   */
+  private async validateFhirVersion(resource: any, issues: ValidationIssue[]): Promise<void> {
+    // Check for FHIR version indicator in meta
+    if (resource.meta?.tag) {
+      const fhirVersionTag = resource.meta.tag.find((tag: any) => 
+        tag.system === 'http://hl7.org/fhir/fhir-version'
+      );
+      
+      if (fhirVersionTag) {
+        const version = fhirVersionTag.code;
+        const supportedVersions = ['4.0.1', '4.0.0', '4.3.0', '5.0.0'];
+        
+        if (!supportedVersions.includes(version)) {
+          issues.push({
+            severity: 'warning',
+            code: 'unsupported-fhir-version',
+            category: 'metadata',
+            message: `FHIR version ${version} may not be fully supported`,
+            path: 'meta.tag',
+            suggestion: `Consider using supported versions: ${supportedVersions.join(', ')}`
+          });
+        }
+      }
+    }
+
+    // Check for deprecated elements or patterns
+    if (resource.resourceType === 'Patient' && resource.animal) {
+      issues.push({
+        severity: 'warning',
+        code: 'deprecated-element',
+        category: 'metadata',
+        message: 'Patient.animal element is deprecated in FHIR R4',
+        path: 'animal',
+        suggestion: 'Use appropriate resource types for animal patients'
+      });
+    }
+  }
+
+  /**
+   * Validate security and audit metadata
+   */
+  private async validateSecurityMetadata(resource: any, issues: ValidationIssue[]): Promise<void> {
+    // Check for required security labels in sensitive resources
+    const sensitiveResourceTypes = ['Patient', 'Observation', 'Condition', 'DiagnosticReport'];
+    
+    if (sensitiveResourceTypes.includes(resource.resourceType)) {
+      if (!resource.meta?.security || resource.meta.security.length === 0) {
+        issues.push({
+          severity: 'information',
+          code: 'missing-security-labels',
+          category: 'metadata',
+          message: 'Sensitive resource lacks security labels',
+          path: 'meta.security',
+          suggestion: 'Consider adding appropriate security labels for data governance'
+        });
+      }
+    }
+
+    // Validate audit trail completeness
+    if (resource.meta?.lastUpdated && !resource.meta?.versionId) {
+      issues.push({
+        severity: 'warning',
+        code: 'incomplete-audit-trail',
+        category: 'metadata',
+        message: 'Resource has lastUpdated but no versionId',
+        path: 'meta.versionId',
+        suggestion: 'Include versionId for complete audit trail'
+      });
+    }
+  }
+
+  /**
+   * Validate narrative content
+   */
+  private async validateNarrative(resource: any, issues: ValidationIssue[]): Promise<void> {
+    if (resource.text) {
+      // Validate narrative status
+      const validStatuses = ['generated', 'extensions', 'additional', 'empty'];
+      if (!validStatuses.includes(resource.text.status)) {
+        issues.push({
+          severity: 'error',
+          code: 'invalid-narrative-status',
+          category: 'metadata',
+          message: `Invalid narrative status: ${resource.text.status}`,
+          path: 'text.status',
+          suggestion: `Use one of: ${validStatuses.join(', ')}`
+        });
+      }
+
+      // Validate narrative div content
+      if (resource.text.status !== 'empty') {
+        if (!resource.text.div) {
+          issues.push({
+            severity: 'error',
+            code: 'missing-narrative-div',
+            category: 'metadata',
+            message: 'Narrative must have div element when status is not empty',
+            path: 'text.div',
+            suggestion: 'Provide XHTML div content or set status to empty'
+          });
+        } else if (typeof resource.text.div !== 'string' || resource.text.div.length === 0) {
+          issues.push({
+            severity: 'error',
+            code: 'invalid-narrative-div',
+            category: 'metadata',
+            message: 'Narrative div must be non-empty XHTML string',
+            path: 'text.div',
+            suggestion: 'Provide valid XHTML content in div element'
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Validate extensions
+   */
+  private async validateExtensions(resource: any, issues: ValidationIssue[]): Promise<void> {
+    await this.validateExtensionsRecursively(resource, '', issues);
+  }
+
+  /**
+   * Recursively validate extensions in resource
+   */
+  private async validateExtensionsRecursively(obj: any, path: string, issues: ValidationIssue[]): Promise<void> {
+    if (!obj || typeof obj !== 'object') return;
+
+    // Check for extension array
+    if (obj.extension && Array.isArray(obj.extension)) {
+      for (let i = 0; i < obj.extension.length; i++) {
+        const extension = obj.extension[i];
+        const extPath = path ? `${path}.extension[${i}]` : `extension[${i}]`;
+        
+        // Validate extension URL
+        if (!extension.url) {
+          issues.push({
+            severity: 'error',
+            code: 'missing-extension-url',
+            category: 'metadata',
+            message: 'Extension must have URL',
+            path: `${extPath}.url`,
+            suggestion: 'Provide canonical URL for extension definition'
+          });
+        } else {
+          try {
+            new URL(extension.url);
+          } catch (error) {
+            issues.push({
+              severity: 'error',
+              code: 'invalid-extension-url',
+              category: 'metadata',
+              message: `Extension URL is not valid: ${extension.url}`,
+              path: `${extPath}.url`,
+              suggestion: 'Use valid canonical URL for extension'
+            });
+          }
+        }
+
+        // Validate extension has value or nested extensions
+        const hasValue = Object.keys(extension).some(key => key.startsWith('value'));
+        const hasNestedExtensions = extension.extension && extension.extension.length > 0;
+        
+        if (!hasValue && !hasNestedExtensions) {
+          issues.push({
+            severity: 'error',
+            code: 'extension-without-value',
+            category: 'metadata',
+            message: 'Extension must have either value[x] or nested extensions',
+            path: extPath,
+            suggestion: 'Add value or nested extensions to extension'
+          });
+        }
+
+        // Recursively validate nested extensions
+        if (hasNestedExtensions) {
+          await this.validateExtensionsRecursively(extension, extPath, issues);
+        }
+      }
+    }
+
+    // Check for modifier extensions
+    if (obj.modifierExtension && Array.isArray(obj.modifierExtension)) {
+      for (let i = 0; i < obj.modifierExtension.length; i++) {
+        const modExt = obj.modifierExtension[i];
+        const modPath = path ? `${path}.modifierExtension[${i}]` : `modifierExtension[${i}]`;
+        
+        if (!modExt.url) {
+          issues.push({
+            severity: 'error',
+            code: 'missing-modifier-extension-url',
+            category: 'metadata',
+            message: 'Modifier extension must have URL',
+            path: `${modPath}.url`,
+            suggestion: 'Provide canonical URL for modifier extension definition'
+          });
+        }
+
+        // Modifier extensions are more critical
+        const hasValue = Object.keys(modExt).some(key => key.startsWith('value'));
+        const hasNestedExtensions = modExt.extension && modExt.extension.length > 0;
+        
+        if (!hasValue && !hasNestedExtensions) {
+          issues.push({
+            severity: 'error',
+            code: 'modifier-extension-without-value',
+            category: 'metadata',
+            message: 'Modifier extension must have either value[x] or nested extensions',
+            path: modPath,
+            suggestion: 'Add value or nested extensions to modifier extension'
+          });
+        }
+      }
+    }
+
+    // Recursively check nested objects and arrays
+    for (const [key, value] of Object.entries(obj)) {
+      const currentPath = path ? `${path}.${key}` : key;
+      
+      if (Array.isArray(value)) {
+        for (let i = 0; i < value.length; i++) {
+          await this.validateExtensionsRecursively(value[i], `${currentPath}[${i}]`, issues);
+        }
+      } else if (typeof value === 'object' && value !== null) {
+        await this.validateExtensionsRecursively(value, currentPath, issues);
+      }
+    }
   }
 }
