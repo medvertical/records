@@ -15,6 +15,14 @@ let validationEngine: ValidationEngine;
 let unifiedValidationService: UnifiedValidationService;
 let robustValidationService: RobustValidationService;
 
+// Global validation state tracking
+let globalValidationState = {
+  isRunning: false,
+  startTime: null as Date | null,
+  canPause: false,
+  shouldStop: false
+};
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize FHIR client with active server
   const activeServer = await storage.getActiveFhirServer();
@@ -674,6 +682,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const options = req.body || {};
 
+      // Set global validation state immediately before response
+      globalValidationState.isRunning = true;
+      globalValidationState.startTime = new Date();
+      globalValidationState.canPause = true;
+      globalValidationState.shouldStop = false;
+      console.log('Global validation state set BEFORE response: isRunning=true, canPause=true');
+
       // Return immediately to provide fast UI response
       res.json({ 
         message: "Validation starting...", 
@@ -684,6 +699,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       setImmediate(async () => {
         try {
           console.log('Starting background validation with options:', options);
+          
+          // Don't reset global state here - it's already set in main thread
           
           // ALWAYS use comprehensive FHIR resource types - ignore any specific types from frontend
           console.log('Starting comprehensive FHIR validation across ALL resource types...');
@@ -768,6 +785,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Process ALL resource types with real FHIR server data - NO LIMITS!
       for (const resourceType of resourceTypes) { // Process ALL 148 resource types
+        // Check if validation should stop (pause/stop request)
+        if (globalValidationState.shouldStop) {
+          console.log('Validation stopped by user request');
+          globalValidationState.isRunning = false;
+          break;
+        }
+        
         try {
           console.log(`Validating real ${resourceType} resources from FHIR server...`);
           
@@ -778,6 +802,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`Found ${bundle.entry.length} real ${resourceType} resources from server`);
             
             for (const entry of bundle.entry) {
+              // Check if validation should stop before each resource
+              if (globalValidationState.shouldStop) {
+                console.log('Validation stopped by user request during resource processing');
+                globalValidationState.isRunning = false;
+                break;
+              }
+              
               if (entry.resource) {
                 try {
                   // Validate real FHIR resource using enhanced validation
@@ -923,16 +954,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/validation/bulk/pause", async (req, res) => {
     try {
-      if (!robustValidationService) {
-        return res.status(400).json({ message: "No FHIR server configured" });
+      if (!globalValidationState.isRunning || !globalValidationState.canPause) {
+        return res.status(400).json({ message: "No validation is currently running or cannot be paused" });
       }
 
-      if (!robustValidationService.isValidationRunning()) {
-        return res.status(400).json({ message: "No validation is currently running" });
+      // Set global pause state
+      globalValidationState.shouldStop = true;
+      console.log('Validation pause requested - setting shouldStop flag');
+      
+      // Broadcast pause via WebSocket (using existing stopped method)
+      if (validationWebSocket && typeof validationWebSocket.broadcastValidationStopped === 'function') {
+        validationWebSocket.broadcastValidationStopped();
       }
-
-      robustValidationService.pauseValidation();
-      res.json({ message: "Validation paused successfully" });
+      
+      res.json({ message: "Validation pause requested - validation will stop after current resource" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -980,11 +1015,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/validation/bulk/stop", async (req, res) => {
     try {
-      if (!robustValidationService) {
-        return res.status(400).json({ message: "No FHIR server configured" });
+      if (!globalValidationState.isRunning) {
+        return res.status(400).json({ message: "No validation is currently running" });
       }
 
-      robustValidationService.stopValidation();
+      // Stop validation immediately
+      globalValidationState.shouldStop = true;
+      globalValidationState.isRunning = false;
+      console.log('Validation stop requested - setting shouldStop flag and isRunning to false');
       
       // Broadcast validation stopped via WebSocket to clear frontend state
       if (validationWebSocket) {
