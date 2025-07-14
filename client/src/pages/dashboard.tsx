@@ -130,8 +130,15 @@ export default function Dashboard() {
   // WebSocket progress updates (real-time during validation)
   useEffect(() => {
     if (progress) {
+      console.log('WebSocket progress received:', progress);
       setValidationProgress(progress);
-      // WebSocket provides real-time updates but doesn't override base state
+      
+      // If we have progress with processed resources, validation is definitely running
+      if (progress.processedResources > 0 || progress.status === 'running') {
+        setIsValidationRunning(true);
+        setIsValidationPaused(false);
+        setHasInitialized(true);
+      }
     }
   }, [progress]);
 
@@ -140,6 +147,7 @@ export default function Dashboard() {
     if (validationStatus === 'running') {
       setIsValidationRunning(true);
       setIsValidationPaused(false);
+      setHasInitialized(true);
     } else if (validationStatus === 'completed') {
       setIsValidationRunning(false);
       setIsValidationPaused(false);
@@ -302,56 +310,73 @@ export default function Dashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          {validationProgress && (isValidationRunning || isValidationPaused) ? (
+          {((validationProgress && (validationProgress.processedResources > 0 || isValidationRunning || isValidationPaused)) || 
+            (progress && progress.processedResources > 0) || 
+            (currentProgress && currentProgress.processedResources > 0)) ? (
             <div className="space-y-4">
               {/* Primary Progress Bar */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">
-                    Processing: {validationProgress.processedResources.toLocaleString()} / {validationProgress.totalResources.toLocaleString()}
-                  </span>
-                  <span className="text-sm font-bold text-blue-600">
-                    {Math.min(100, currentProgressPercent).toFixed(1)}%
-                  </span>
-                </div>
-                <Progress value={Math.min(100, currentProgressPercent)} className="w-full h-3" />
-              </div>
+              {(() => {
+                const activeProgress = progress || validationProgress || currentProgress;
+                const progressPercent = activeProgress 
+                  ? (activeProgress.processedResources / activeProgress.totalResources) * 100 
+                  : 0;
+                
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">
+                        Processing: {activeProgress?.processedResources?.toLocaleString() || 0} / {activeProgress?.totalResources?.toLocaleString() || 0}
+                      </span>
+                      <span className="text-sm font-bold text-blue-600">
+                        {Math.min(100, progressPercent).toFixed(1)}%
+                      </span>
+                    </div>
+                    <Progress value={Math.min(100, progressPercent)} className="w-full h-3" />
+                  </div>
+                );
+              })()}
 
               {/* Live Statistics Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
-                  <CheckCircle className="h-5 w-5 text-green-500" />
-                  <div>
-                    <div className="text-lg font-bold">{validationProgress.validResources.toLocaleString()}</div>
-                    <div className="text-xs text-muted-foreground">Valid</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
-                  <AlertCircle className="h-5 w-5 text-red-500" />
-                  <div>
-                    <div className="text-lg font-bold">{validationProgress.errorResources.toLocaleString()}</div>
-                    <div className="text-xs text-muted-foreground">Errors</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
-                  <Timer className="h-5 w-5 text-blue-500" />
-                  <div>
-                    <div className="text-lg font-bold">
-                      {formatElapsedTime(validationProgress.startTime)}
+              {(() => {
+                const activeProgress = progress || validationProgress || currentProgress;
+                
+                return (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <div>
+                        <div className="text-lg font-bold">{activeProgress?.validResources?.toLocaleString() || 0}</div>
+                        <div className="text-xs text-muted-foreground">Valid</div>
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">Elapsed</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg">
-                  <Target className="h-5 w-5 text-orange-500" />
-                  <div>
-                    <div className="text-lg font-bold">
-                      {estimatedMinutesRemaining ? `${estimatedMinutesRemaining}m` : 'Calc...'}
+                    <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
+                      <AlertCircle className="h-5 w-5 text-red-500" />
+                      <div>
+                        <div className="text-lg font-bold">{activeProgress?.errorResources?.toLocaleString() || 0}</div>
+                        <div className="text-xs text-muted-foreground">Errors</div>
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">Remaining</div>
+                    <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
+                      <Timer className="h-5 w-5 text-blue-500" />
+                      <div>
+                        <div className="text-lg font-bold">
+                          {activeProgress?.startTime ? formatElapsedTime(activeProgress.startTime) : 'N/A'}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Elapsed</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg">
+                      <Target className="h-5 w-5 text-orange-500" />
+                      <div>
+                        <div className="text-lg font-bold">
+                          {estimatedMinutesRemaining ? `${estimatedMinutesRemaining}m` : 'Calc...'}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Remaining</div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* Processing Rate and Current Activity */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -362,11 +387,11 @@ export default function Dashboard() {
                     <div className="text-xs text-muted-foreground">Processing Rate</div>
                   </div>
                 </div>
-                {validationProgress.currentResourceType && (
+                {(progress || validationProgress || currentProgress)?.currentResourceType && (
                   <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
                     <Zap className="h-5 w-5 text-blue-500 animate-pulse" />
                     <div>
-                      <div className="text-sm font-medium">{validationProgress.currentResourceType}</div>
+                      <div className="text-sm font-medium">{(progress || validationProgress || currentProgress)?.currentResourceType}</div>
                       <div className="text-xs text-muted-foreground">Currently Processing</div>
                     </div>
                   </div>
@@ -374,13 +399,13 @@ export default function Dashboard() {
               </div>
 
               {/* Error Summary */}
-              {validationProgress.errors.length > 0 && (
+              {(progress || validationProgress || currentProgress)?.errors?.length > 0 && (
                 <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
                   <div className="text-sm font-medium text-red-700 dark:text-red-300 mb-2">
-                    Recent Errors ({validationProgress.errors.length})
+                    Recent Errors ({(progress || validationProgress || currentProgress)?.errors?.length || 0})
                   </div>
                   <div className="text-xs text-red-600 dark:text-red-400 space-y-1 max-h-20 overflow-y-auto">
-                    {validationProgress.errors.slice(-3).map((error, idx) => (
+                    {((progress || validationProgress || currentProgress)?.errors || []).slice(-3).map((error, idx) => (
                       <div key={idx} className="truncate">{error}</div>
                     ))}
                   </div>
