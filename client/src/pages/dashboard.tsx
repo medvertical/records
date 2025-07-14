@@ -45,6 +45,7 @@ export default function Dashboard() {
   const [validationProgress, setValidationProgress] = useState<ValidationProgress | null>(null);
   const [isValidationRunning, setIsValidationRunning] = useState(false);
   const [isValidationPaused, setIsValidationPaused] = useState(false);
+  const [isValidationInitializing, setIsValidationInitializing] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
 
   // Get current validation progress from server
@@ -146,25 +147,32 @@ export default function Dashboard() {
     }
   }, [progress]);
 
-  // WebSocket status updates (but only update state, don't reset progress)
+  // WebSocket status updates
   useEffect(() => {
     if (validationStatus === 'running') {
+      setIsValidationInitializing(false); // End initialization
       setIsValidationRunning(true);
       setIsValidationPaused(false);
       setHasInitialized(true);
+      console.log('Validation moved from initialization to RUNNING');
     } else if (validationStatus === 'completed') {
+      setIsValidationInitializing(false);
+      setIsValidationRunning(false);
+      setIsValidationPaused(false);
+    } else if (validationStatus === 'stopped') {
+      setIsValidationInitializing(false);
       setIsValidationRunning(false);
       setIsValidationPaused(false);
     }
-    // Don't reset on 'idle' - let server state determine this
   }, [validationStatus]);
 
   const handleStartValidation = async () => {
-    // RESET all progress for NEW start (not resume!)
-    setIsValidationRunning(true);
+    // Start with initialization status
+    setIsValidationInitializing(true);
+    setIsValidationRunning(false);
     setIsValidationPaused(false);
-    setValidationProgress(null); // Reset to 0 for new start
-    console.log('NEW START: Reset validation progress to null');
+    setValidationProgress(null);
+    console.log('Starting validation - INITIALIZATION phase');
     
     try {
       const response = await fetch('/api/validation/bulk/start', {
@@ -176,13 +184,13 @@ export default function Dashboard() {
       });
       
       if (!response.ok) {
-        setIsValidationRunning(false);
+        setIsValidationInitializing(false);
         console.error('Failed to start validation');
       }
-      // Keep validation running state - WebSocket will update with real status
+      // WebSocket will update status to running when validation actually starts
     } catch (error) {
       console.error('Failed to start validation:', error);
-      setIsValidationRunning(false);
+      setIsValidationInitializing(false);
     }
   };
 
@@ -194,6 +202,7 @@ export default function Dashboard() {
       });
       
       if (response.ok) {
+        setIsValidationInitializing(false);
         setIsValidationRunning(false);
         setIsValidationPaused(true);
       }
@@ -210,6 +219,7 @@ export default function Dashboard() {
       });
       
       if (response.ok) {
+        setIsValidationInitializing(false);
         setIsValidationRunning(true);
         setIsValidationPaused(false);
       }
@@ -226,6 +236,7 @@ export default function Dashboard() {
       });
       
       if (response.ok) {
+        setIsValidationInitializing(false);
         setIsValidationRunning(false);
         setIsValidationPaused(false);
         setValidationProgress(null);
@@ -269,6 +280,8 @@ export default function Dashboard() {
       <Card className={`border-2 transition-colors duration-300 ${
         isValidationRunning 
           ? 'border-green-500 bg-green-50/50 dark:border-green-400 dark:bg-green-950/20' 
+          : isValidationInitializing
+          ? 'border-yellow-500 bg-yellow-50/50 dark:border-yellow-400 dark:bg-yellow-950/20'
           : 'border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20'
       }`}>
         <CardHeader>
@@ -276,12 +289,18 @@ export default function Dashboard() {
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Activity className={`h-5 w-5 transition-colors duration-300 ${
-                  isValidationRunning ? 'text-green-500 animate-pulse' : 'text-blue-500'
+                  isValidationRunning ? 'text-green-500 animate-pulse' : 
+                  isValidationInitializing ? 'text-yellow-500 animate-spin' : 'text-blue-500'
                 }`} />
                 Validation Engine
                 {isValidationRunning && (
                   <Badge variant="secondary" className="bg-green-100 text-green-800 animate-pulse">
                     RUNNING
+                  </Badge>
+                )}
+                {isValidationInitializing && (
+                  <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 animate-pulse">
+                    INITIALISIERUNG
                   </Badge>
                 )}
               </CardTitle>
@@ -290,10 +309,17 @@ export default function Dashboard() {
               </CardDescription>
             </div>
             <div className="flex gap-2">
-              {!isValidationRunning && !isValidationPaused && (
+              {!isValidationRunning && !isValidationPaused && !isValidationInitializing && (
                 <Button onClick={handleStartValidation} size="sm" className="gap-2">
                   <Play className="h-4 w-4" />
                   Start Validation
+                </Button>
+              )}
+              
+              {isValidationInitializing && (
+                <Button disabled size="sm" className="gap-2 opacity-50">
+                  <Activity className="h-4 w-4 animate-spin" />
+                  Initialisierung...
                 </Button>
               )}
               
@@ -323,7 +349,7 @@ export default function Dashboard() {
           </div>
         </CardHeader>
         <CardContent>
-          {(isValidationRunning || isValidationPaused) ? (
+          {(isValidationRunning || isValidationPaused || isValidationInitializing) ? (
             <div className="space-y-4">
               {/* Primary Progress Bar */}
               {(() => {
@@ -443,7 +469,7 @@ export default function Dashboard() {
               
 
             </div>
-          ) : !isValidationRunning && !isValidationPaused && hasInitialized ? (
+          ) : !isValidationRunning && !isValidationPaused && !isValidationInitializing && hasInitialized ? (
             <div className="text-center py-8">
               <div className="text-muted-foreground mb-4">Validation engine is idle</div>
               <div className="text-sm text-muted-foreground">

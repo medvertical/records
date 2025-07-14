@@ -768,10 +768,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (realTotalResources === 0) {
         throw new Error('No resources found on FHIR server. Cannot start validation.');
       }
-      
-      // Broadcast validation start via WebSocket
+
+      // Send "running" status now that initialization is complete
       if (validationWebSocket) {
         validationWebSocket.broadcastValidationStart();
+      }
+      
+      // Broadcast initializing status via WebSocket
+      if (validationWebSocket) {
+        validationWebSocket.broadcastValidationProgress({
+          totalResources: 0,
+          processedResources: 0,
+          validResources: 0,
+          errorResources: 0,
+          currentResourceType: 'Initializing...',
+          startTime: new Date(),
+          estimatedTimeRemaining: undefined,
+          isComplete: false,
+          errors: []
+        });
       }
 
       // Start real FHIR server validation using authentic data
