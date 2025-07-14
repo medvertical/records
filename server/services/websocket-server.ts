@@ -66,10 +66,21 @@ export class ValidationWebSocketServer {
     });
   }
 
-  broadcastValidationComplete(summary: any) {
+  broadcastValidationStopped() {
+    const message = {
+      type: 'validation_stopped',
+      data: { timestamp: new Date().toISOString() }
+    };
+
+    this.clients.forEach(client => {
+      this.sendToClient(client, message);
+    });
+  }
+
+  broadcastValidationComplete(progress: any) {
     const message = {
       type: 'validation_complete',
-      data: summary
+      data: progress
     };
 
     this.clients.forEach(client => {
@@ -80,7 +91,7 @@ export class ValidationWebSocketServer {
   broadcastError(error: string) {
     const message = {
       type: 'validation_error',
-      data: { error }
+      data: { error, timestamp: new Date().toISOString() }
     };
 
     this.clients.forEach(client => {
@@ -88,15 +99,9 @@ export class ValidationWebSocketServer {
     });
   }
 
-  broadcastValidationStopped() {
-    const message = {
-      type: 'validation_stopped',
-      data: { timestamp: new Date().toISOString() }
-    };
-
-    this.clients.forEach(client => {
-      this.sendToClient(client, message);
-    });
+  // Add alias methods for compatibility with old code
+  broadcastValidationProgress(progress: any) {
+    this.broadcastProgress(progress);
   }
 }
 

@@ -167,7 +167,7 @@ export class BulkValidationService {
 
       // Broadcast final completion via WebSocket
       if (validationWebSocket) {
-        validationWebSocket.broadcastValidationComplete(this.currentProgress);
+        validationWebSocket.broadcastProgress({ ...this.currentProgress, isComplete: true });
       }
 
       return this.currentProgress;
