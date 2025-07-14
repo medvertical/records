@@ -1321,58 +1321,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/validation/bulk/stop", async (req, res) => {
-    try {
-      if (!globalValidationState.isRunning && !globalValidationState.isPaused) {
-        return res.status(400).json({ message: "No FHIR server configured" });
-      }
 
-      if (robustValidationService.getState() !== 'paused') {
-        return res.status(400).json({ message: "No paused validation to resume" });
-      }
-
-
-
-      // Broadcast validation start when resuming
-      if (validationWebSocket) {
-        validationWebSocket.broadcastValidationStart();
-      }
-
-      // Resume the validation with robust implementation
-      const resumedProgress = await robustValidationService.resumeValidation({
-        batchSize: 20,
-        maxRetries: 3,
-        skipUnchanged: true,
-        onProgress: (progress) => {
-          if (validationWebSocket) {
-            validationWebSocket.broadcastProgress(progress);
-          }
-        }
-      });
-      
-      // Broadcast initial resume progress
-      if (validationWebSocket && resumedProgress) {
-        validationWebSocket.broadcastProgress(resumedProgress);
-      }
-
-      res.json({ message: "Validation resumed successfully" });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
 
   app.post("/api/validation/bulk/stop", async (req, res) => {
     try {
-      if (!globalValidationState.isRunning) {
-        return res.status(400).json({ message: "No validation is currently running" });
-      }
-
+      // Allow stopping at any time (running, paused, or initializing)
       // Stop validation completely (not pause)
       globalValidationState.shouldStop = true;
       globalValidationState.isRunning = false;
       globalValidationState.isPaused = false; // Clear paused state
       globalValidationState.resumeData = null; // Clear resume data
       console.log('Validation stop requested - clearing all state');
+      
+      // Also stop the robust validation service
+      if (robustValidationService) {
+        robustValidationService.stopValidation();
+      }
       
       // Broadcast validation stopped via WebSocket to clear frontend state
       if (validationWebSocket) {
