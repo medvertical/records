@@ -45,6 +45,7 @@ export default function Dashboard() {
   const [validationProgress, setValidationProgress] = useState<ValidationProgress | null>(null);
   const [isValidationRunning, setIsValidationRunning] = useState(false);
   const [isValidationPaused, setIsValidationPaused] = useState(false);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   // Get current validation progress from server
   const { data: currentValidationProgress } = useQuery({
@@ -120,6 +121,9 @@ export default function Dashboard() {
         setIsValidationPaused(false);
         // Keep last validation progress for display
       }
+      
+      // Mark as initialized after first server response
+      setHasInitialized(true);
     }
   }, [currentValidationProgress]);
 
@@ -397,7 +401,7 @@ export default function Dashboard() {
               
 
             </div>
-          ) : !isValidationRunning && !isValidationPaused ? (
+          ) : !isValidationRunning && !isValidationPaused && hasInitialized ? (
             <div className="text-center py-8">
               <div className="text-muted-foreground mb-4">Validation engine is idle</div>
               <div className="text-sm text-muted-foreground">

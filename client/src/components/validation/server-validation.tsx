@@ -150,6 +150,9 @@ export default function ServerValidation() {
   };
 
   const getValidationStatus = () => {
+    // Don't show status until we have server data
+    if (!updatedSummary && !progress) return 'Loading...';
+    
     if (validationStatus === 'running' || progress?.status === 'running') return 'Running';
     if (validationStatus === 'completed' || progress?.status === 'completed') return 'Completed';
     if (validationStatus === 'error') return 'Error';
@@ -164,6 +167,7 @@ export default function ServerValidation() {
       case 'Completed': return 'green';
       case 'Not Started': return 'gray';
       case 'Partial': return 'yellow';
+      case 'Loading...': return 'gray';
       default: return 'gray';
     }
   };
