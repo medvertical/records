@@ -287,12 +287,22 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
   // Convert database validation results to the format expected by the UI
   const displayValidationResult = hasExistingValidation ? {
     isValid: existingValidationResults.every(vr => vr.isValid),
-    issues: existingValidationResults.flatMap(vr => vr.issues || []),
+    issues: existingValidationResults.flatMap(vr => (vr.issues || []).map(issue => ({
+      ...issue,
+      location: Array.isArray(issue.location) ? issue.location : [issue.location || 'resource'],
+      expression: Array.isArray(issue.expression) ? issue.expression : issue.expression ? [issue.expression] : []
+    }))),
     summary: {
+      totalIssues: existingValidationResults.reduce((sum, vr) => sum + (vr.issues?.length || 0), 0),
       errorCount: existingValidationResults.reduce((sum, vr) => sum + (vr.errorCount || 0), 0),
       warningCount: existingValidationResults.reduce((sum, vr) => sum + (vr.warningCount || 0), 0),
-      fatalCount: 0
-    }
+      informationCount: existingValidationResults.reduce((sum, vr) => sum + (vr.issues?.filter(i => i.severity === 'information').length || 0), 0),
+      fatalCount: 0,
+      score: existingValidationResults.length > 0 ? Math.round(existingValidationResults[0].validationScore || 0) : 0
+    },
+    resourceType: resource?.resourceType || 'Unknown',
+    resourceId: resource?.resourceId,
+    validatedAt: new Date(existingValidationResults[0]?.validatedAt || new Date())
   } : validationResult;
 
   const validateResource = async () => {
