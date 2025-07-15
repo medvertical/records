@@ -359,30 +359,31 @@ export default function SettingsPage() {
     })
   );
 
+  // Move settings management to the main component to prevent re-mounting issues
+  const { data: serverSettings, isLoading } = useValidationSettings();
+  const updateSettings = useUpdateValidationSettings();
+  
+  // Use refs that won't be reset by component re-renders
+  const settingsRef = React.useRef<any>(null);
+  const hasInitialized = React.useRef(false);
+  const [validationForceUpdate, setValidationForceUpdate] = React.useState(0);
+  
+  // Initialize settings once from server - PERMANENTLY
+  React.useEffect(() => {
+    if (serverSettings && !hasInitialized.current) {
+      console.log('[Settings] PERMANENT initialization from server - WILL NEVER HAPPEN AGAIN');
+      settingsRef.current = { ...serverSettings };
+      hasInitialized.current = true;
+      setValidationForceUpdate(prev => prev + 1);
+    } else if (serverSettings && hasInitialized.current) {
+      console.log('[Settings] REJECTING server data - local state is protected');
+    }
+  }, [serverSettings]);
+
   // Create a completely new settings management approach
   const ValidationSettingsContent = () => {
-    const { data: serverSettings, isLoading } = useValidationSettings();
-    const updateSettings = useUpdateValidationSettings();
-    const { toast } = useToast();
     
-    // Use a ref to store the actual settings - this prevents React re-renders from affecting our data
-    const settingsRef = React.useRef<any>(null);
-    const hasInitialized = React.useRef(false);
-    const [, forceUpdate] = React.useReducer(x => x + 1, 0);
-    
-    // Initialize settings once from server - but only once!
-    React.useEffect(() => {
-      if (serverSettings && !hasInitialized.current) {
-        console.log('[Settings] Initializing settings from server (first time only)');
-        settingsRef.current = { ...serverSettings };
-        hasInitialized.current = true;
-        forceUpdate(); // Trigger a render with the new settings
-      } else if (serverSettings && hasInitialized.current) {
-        console.log('[Settings] Skipping re-initialization - already initialized');
-      }
-    }, [serverSettings]);
-    
-    // Get current settings from ref with a clean getter
+    // Get current settings from ref with a clean getter  
     const getSettings = () => settingsRef.current || {
       // Enhanced Validation Engine - 6 Aspects
       enableStructuralValidation: true,
@@ -499,7 +500,7 @@ export default function SettingsPage() {
       settingsRef.current = { ...settingsRef.current, [key]: value };
       
       // Force React to re-render with new settings
-      forceUpdate();
+      setValidationForceUpdate(prev => prev + 1);
       
       // Save to server - but maintain local state dominance
       updateSettings.mutate(settingsRef.current, {
@@ -668,7 +669,7 @@ export default function SettingsPage() {
       }
     };
 
-    if (isLoading || !settingsRef.current) {
+    if (isLoading && !settingsRef.current) {
       return <div className="text-center py-8">Loading Enhanced Validation Engine settings...</div>;
     }
 
