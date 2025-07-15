@@ -269,6 +269,14 @@ export class UnifiedValidationService {
   }
 
   /**
+   * Update configuration settings for the validation engine
+   */
+  updateConfig(config: any) {
+    console.log('[UnifiedValidation] Updating configuration:', config);
+    this.enhancedValidationEngine.updateConfig(config);
+  }
+
+  /**
    * Check and potentially revalidate a resource with validation results
    */
   async checkAndRevalidateResource(resourceWithValidation: FhirResource & { validationResults?: ValidationResult[] }): Promise<{

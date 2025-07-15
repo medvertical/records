@@ -176,6 +176,14 @@ export class EnhancedValidationEngine {
    */
   async validateResource(resource: any): Promise<EnhancedValidationResult> {
     console.log(`[EnhancedValidation] Starting comprehensive validation for ${resource.resourceType}/${resource.id}`);
+    console.log(`[EnhancedValidation] Active validation aspects:`, {
+      structural: this.config.enableStructuralValidation,
+      profile: this.config.enableProfileValidation,
+      terminology: this.config.enableTerminologyValidation,
+      reference: this.config.enableReferenceValidation,
+      businessRule: this.config.enableBusinessRuleValidation,
+      metadata: this.config.enableMetadataValidation
+    });
     
     const result: EnhancedValidationResult = {
       isValid: true,

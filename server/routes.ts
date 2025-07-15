@@ -767,6 +767,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test endpoint to verify validation settings are applied
+  app.post("/api/validation/test-settings", async (req, res) => {
+    try {
+      if (!unifiedValidationService) {
+        return res.status(400).json({ message: "Validation service not initialized" });
+      }
+
+      const { resource } = req.body;
+      
+      console.log('[TestValidation] Testing validation with current settings on resource:', resource.resourceType + '/' + resource.id);
+      
+      // Perform validation using unified validation service
+      const result = await unifiedValidationService.validateResource(resource, true, true);
+      
+      res.json({
+        message: "Test validation complete",
+        validationResults: result.validationResults,
+        wasRevalidated: result.wasRevalidated
+      });
+    } catch (error: any) {
+      console.error('[TestValidation] Test validation failed:', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Bulk validation endpoints
   app.post("/api/validation/bulk/start", async (req, res) => {
     try {
