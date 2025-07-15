@@ -447,17 +447,27 @@ export default function SettingsPage() {
       errorSeverityThreshold: 'warning'
     });
 
-    // Update local settings when data loads
+    // Update local settings when data loads - but only if we don't have local changes
+    const [hasLocalChanges, setHasLocalChanges] = React.useState(false);
+    
     React.useEffect(() => {
-      if (settings) {
+      if (settings && !hasLocalChanges) {
         setLocalSettings(settings);
       }
-    }, [settings]);
+    }, [settings, hasLocalChanges]);
 
     const handleSettingChange = (key: string, value: any) => {
       const newSettings = { ...localSettings, [key]: value };
       setLocalSettings(newSettings);
-      updateSettings.mutate(newSettings);
+      setHasLocalChanges(true);
+      updateSettings.mutate(newSettings, {
+        onSuccess: () => {
+          setHasLocalChanges(false);
+        },
+        onError: () => {
+          setHasLocalChanges(false);
+        }
+      });
     };
 
     const handleNestedSettingChange = (parent: string, key: string, value: any) => {
