@@ -3,26 +3,33 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight, Shield, CheckCircle, AlertTriangle, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, Shield, CheckCircle, AlertTriangle, RefreshCw, Info, AlertCircle } from "lucide-react";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ValidationResults } from '@/components/validation/validation-results';
 
 // Validation issue indicator component
 function ValidationIssueIndicator({ issue }: { issue: any }) {
-  const getSeverityColor = (severity: string) => {
+  const getSeverityConfig = (severity: string) => {
     switch(severity) {
-      case 'error': return 'text-red-500';
-      case 'warning': return 'text-yellow-500';
-      case 'information': return 'text-blue-500';
-      default: return 'text-gray-500';
+      case 'error': 
+        return { color: 'text-red-500', icon: AlertCircle };
+      case 'warning': 
+        return { color: 'text-yellow-500', icon: AlertTriangle };
+      case 'information': 
+        return { color: 'text-blue-500', icon: Info };
+      default: 
+        return { color: 'text-gray-500', icon: AlertTriangle };
     }
   };
 
+  const config = getSeverityConfig(issue.severity);
+  const Icon = config.icon;
+
   return (
     <div className="flex items-center">
-      <AlertTriangle className={`h-4 w-4 ${getSeverityColor(issue.severity)}`} />
-      <span className={`text-xs ml-1 ${getSeverityColor(issue.severity)}`}>
+      <Icon className={`h-4 w-4 ${config.color}`} />
+      <span className={`text-xs ml-1 ${config.color}`}>
         {issue.severity}
       </span>
     </div>
@@ -71,6 +78,20 @@ interface CollapsibleNodeProps {
 
 function CollapsibleNode({ keyName, value, level = 0, validationIssues = [], path = '' }: CollapsibleNodeProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  
+  // Helper function to get the highest severity color for a set of issues
+  const getHighestSeverityColor = (issues: any[]) => {
+    if (issues.length === 0) return null;
+    
+    const hasError = issues.some(issue => issue.severity === 'error');
+    const hasWarning = issues.some(issue => issue.severity === 'warning');
+    const hasInformation = issues.some(issue => issue.severity === 'information');
+    
+    if (hasError) return 'text-red-700';
+    if (hasWarning) return 'text-yellow-700';
+    if (hasInformation) return 'text-blue-700';
+    return 'text-gray-700';
+  };
   
   // Build current path for this node
   const currentPath = path ? `${path}.${keyName}` : keyName;
@@ -157,7 +178,7 @@ function CollapsibleNode({ keyName, value, level = 0, validationIssues = [], pat
       <div style={{ paddingLeft }} className="py-1">
         <div className="flex items-center">
           <span className={`font-medium min-w-0 flex-shrink-0 mr-2 ${
-            nodeIssues.length > 0 ? 'text-red-700' : 'text-gray-700'
+            getHighestSeverityColor(nodeIssues) || 'text-gray-700'
           }`}>
             {keyName}:
           </span>
@@ -170,9 +191,10 @@ function CollapsibleNode({ keyName, value, level = 0, validationIssues = [], pat
             {getSummary(value)}
           </span>
           {nodeIssues.length > 0 && (
-            <div className="ml-2 flex items-center">
-              <AlertTriangle className="h-4 w-4 text-red-500" />
-              <span className="text-xs text-red-600 ml-1">{nodeIssues.length}</span>
+            <div className="ml-2 flex items-center space-x-1">
+              {nodeIssues.map((issue, index) => (
+                <ValidationIssueIndicator key={index} issue={issue} />
+              ))}
             </div>
           )}
         </div>
@@ -203,7 +225,7 @@ function CollapsibleNode({ keyName, value, level = 0, validationIssues = [], pat
           )}
         </Button>
         <span className={`font-medium mr-2 ${
-          nodeIssues.length > 0 ? 'text-red-700' : 'text-gray-700'
+          getHighestSeverityColor(nodeIssues) || 'text-gray-700'
         }`}>
           {keyName}:
         </span>
@@ -214,9 +236,10 @@ function CollapsibleNode({ keyName, value, level = 0, validationIssues = [], pat
           {getValueType(value)}
         </span>
         {nodeIssues.length > 0 && (
-          <div className="ml-2 flex items-center">
-            <AlertTriangle className="h-4 w-4 text-red-500" />
-            <span className="text-xs text-red-600 ml-1">{nodeIssues.length}</span>
+          <div className="ml-2 flex items-center space-x-1">
+            {nodeIssues.map((issue, index) => (
+              <ValidationIssueIndicator key={index} issue={issue} />
+            ))}
           </div>
         )}
       </div>
