@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -26,7 +26,7 @@ import {
   X
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useValidationSettings, useUpdateValidationSettings } from '@/hooks/use-fhir-data';
+import { useValidationSettings, useUpdateValidationSettings, useFhirServers } from '@/hooks/use-fhir-data';
 import {
   DndContext,
   closestCenter,
@@ -324,6 +324,12 @@ export default function SettingsPage() {
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const { data: fhirServers } = useFhirServers();
   const activeServer = fhirServers?.find(server => server.isActive);
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('[Settings] FHIR Servers:', fhirServers);
+    console.log('[Settings] Active Server:', activeServer);
+  }, [fhirServers, activeServer]);
   const [notifications, setNotifications] = useState({
     validationErrors: true,
     connectionIssues: true,
@@ -1208,10 +1214,10 @@ export default function SettingsPage() {
                   <div className="w-3 h-3 bg-green-500 rounded-full"></div>
                   <div>
                     <p className="font-medium">
-                      Connected to {activeServer?.name || 'FHIR Server'}
+                      Connected to {activeServer?.name || 'Loading...'}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {activeServer?.url || 'No server connected'}
+                      {activeServer?.url || 'Loading server information...'}
                     </p>
                   </div>
                 </div>
