@@ -225,9 +225,16 @@ function SortableProfileServer({ server, index, localSettings, handleSettingChan
           <Switch
             checked={server.enabled}
             onCheckedChange={(checked) => {
+              console.log(`[ProfileServer] Toggling ${server.name} from ${server.enabled} to ${checked}`);
               const newServers = [...(localSettings.profileResolutionServers || [])];
               newServers[index] = { ...server, enabled: checked };
+              console.log(`[ProfileServer] Updated servers:`, newServers);
               handleSettingChange('profileResolutionServers', newServers);
+              
+              toast({
+                title: `${server.name} ${checked ? 'Enabled' : 'Disabled'}`,
+                description: `Profile resolution server has been ${checked ? 'activated' : 'deactivated'}.`,
+              });
             }}
           />
           <Button
