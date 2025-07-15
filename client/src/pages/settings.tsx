@@ -346,9 +346,12 @@ export default function SettingsPage() {
   );
 
   const ValidationSettingsContent = () => {
-    const { data: settings, isLoading, refetch } = useValidationSettings();
+    const { data: settings, isLoading } = useValidationSettings();
     const updateSettings = useUpdateValidationSettings();
-    const [localSettings, setLocalSettings] = useState(settings || {
+    
+    // Store settings independently with initial load flag
+    const [hasLoaded, setHasLoaded] = useState(false);
+    const [localSettings, setLocalSettings] = useState({
       // Enhanced Validation Engine - 6 Aspects
       enableStructuralValidation: true,
       enableProfileValidation: true,
@@ -446,18 +449,15 @@ export default function SettingsPage() {
       minValidationScore: 70,
       errorSeverityThreshold: 'warning'
     });
-
-    // Use ref to track if this is the initial load
-    const initialLoadRef = React.useRef(true);
     
-    // Only sync from server on initial load
+    // Load settings only once when component mounts and data is available
     React.useEffect(() => {
-      if (settings && initialLoadRef.current) {
-        console.log('[Settings] Initial settings load from server');
+      if (settings && !hasLoaded) {
+        console.log('[Settings] Loading settings from server - one time only');
         setLocalSettings(settings);
-        initialLoadRef.current = false;
+        setHasLoaded(true);
       }
-    }, [settings]);
+    }, [settings, hasLoaded]);
 
     const handleSettingChange = (key: string, value: any) => {
       console.log('[Settings] Handling setting change:', key, value);
