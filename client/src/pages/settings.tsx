@@ -337,6 +337,12 @@ export default function SettingsPage() {
     cacheDuration: 300
   });
 
+  // General settings state
+  const [generalSettings, setGeneralSettings] = useState({
+    autoRefreshDashboard: true,
+    rememberLastPage: true
+  });
+
   // Drag and Drop sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -1039,6 +1045,24 @@ export default function SettingsPage() {
     setFhirSettings(prev => ({ ...prev, [key]: value }));
   };
 
+  const handleGeneralSettingChange = (key: string, value: any) => {
+    setGeneralSettings(prev => ({ ...prev, [key]: value }));
+    
+    // Create user-friendly labels for settings
+    const settingLabels: Record<string, string> = {
+      autoRefreshDashboard: 'Auto-refresh Dashboard',
+      rememberLastPage: 'Remember Last Page'
+    };
+    
+    const label = settingLabels[key] || key;
+    const action = typeof value === 'boolean' ? (value ? 'enabled' : 'disabled') : 'updated';
+    
+    toast({
+      title: 'Settings Saved',
+      description: `${label} has been ${action} successfully.`,
+    });
+  };
+
   const resetToDefaults = () => {
     setFhirSettings({
       defaultPageSize: 50,
@@ -1119,8 +1143,8 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <Switch 
-                  checked={settings.autoRefreshDashboard}
-                  onCheckedChange={(checked) => handleSettingChange('autoRefreshDashboard', checked)}
+                  checked={generalSettings.autoRefreshDashboard}
+                  onCheckedChange={(checked) => handleGeneralSettingChange('autoRefreshDashboard', checked)}
                 />
               </div>
 
@@ -1134,8 +1158,8 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <Switch 
-                  checked={settings.rememberLastPage}
-                  onCheckedChange={(checked) => handleSettingChange('rememberLastPage', checked)}
+                  checked={generalSettings.rememberLastPage}
+                  onCheckedChange={(checked) => handleGeneralSettingChange('rememberLastPage', checked)}
                 />
               </div>
 
