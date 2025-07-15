@@ -610,6 +610,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           description: 'CSIRO OntoServer (Public)'
         },
         
+        // Profile Resolution Servers
+        profileResolutionServers: [
+          {
+            priority: 1,
+            enabled: true,
+            url: 'https://packages.simplifier.net',
+            type: 'simplifier',
+            name: 'Simplifier.net',
+            description: 'Firely Simplifier - Community profile registry with thousands of FHIR profiles',
+            capabilities: ['FHIR Profiles', 'Implementation Guides', 'Extensions', 'US Core', 'IPS', 'Custom Profiles']
+          },
+          {
+            priority: 2,
+            enabled: true,
+            url: 'https://build.fhir.org',
+            type: 'fhir-ci',
+            name: 'FHIR CI Build',
+            description: 'Official FHIR continuous integration server with latest profiles',
+            capabilities: ['Official FHIR Profiles', 'Core Profiles', 'Development Versions']
+          },
+          {
+            priority: 3,
+            enabled: true,
+            url: 'https://registry.fhir.org',
+            type: 'fhir-registry',
+            name: 'FHIR Package Registry',
+            description: 'Official FHIR package registry for stable profile versions',
+            capabilities: ['Stable Profiles', 'Published IGs', 'Official Packages']
+          }
+        ],
+        
         // Performance settings
         batchSize: 20,
         maxRetries: 3,
@@ -642,6 +673,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           strictMode: settings.strictMode ?? false,
           profiles: settings.validationProfiles ?? [],
           terminologyServers: settings.terminologyServers ?? [],
+          profileResolutionServers: settings.profileResolutionServers ?? [],
           // Legacy single server for backwards compatibility
           terminologyServer: settings.terminologyServer
         };

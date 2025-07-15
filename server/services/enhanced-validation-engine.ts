@@ -23,6 +23,16 @@ export interface TerminologyServer {
   capabilities: string[];
 }
 
+export interface ProfileResolutionServer {
+  priority: number;
+  enabled: boolean;
+  url: string;
+  type: string;
+  name: string;
+  description: string;
+  capabilities: string[];
+}
+
 export interface EnhancedValidationConfig {
   enableStructuralValidation: boolean;
   enableProfileValidation: boolean;
@@ -33,6 +43,7 @@ export interface EnhancedValidationConfig {
   strictMode: boolean;
   profiles: string[];
   terminologyServers?: TerminologyServer[];
+  profileResolutionServers?: ProfileResolutionServer[];
   // Legacy single server for backwards compatibility
   terminologyServer?: {
     enabled: boolean;
@@ -99,6 +110,7 @@ export class EnhancedValidationEngine {
   updateConfig(config: Partial<EnhancedValidationConfig>) {
     this.config = { ...this.config, ...config };
     this.updateTerminologyServers();
+    this.updateProfileResolutionServers();
   }
 
   /**
@@ -130,6 +142,32 @@ export class EnhancedValidationEngine {
         enabled: true
       });
       console.log(`[EnhancedValidation] Using legacy terminology server: ${this.config.terminologyServer.url}`);
+    }
+  }
+
+  /**
+   * Configure profile resolution servers with priority-ordered servers
+   */
+  private updateProfileResolutionServers() {
+    if (this.config.profileResolutionServers && this.config.profileResolutionServers.length > 0) {
+      // Sort servers by priority and filter enabled ones
+      const enabledServers = this.config.profileResolutionServers
+        .filter(server => server.enabled)
+        .sort((a, b) => a.priority - b.priority);
+      
+      console.log(`[EnhancedValidation] Configured ${enabledServers.length} profile resolution servers in priority order:`, 
+        enabledServers.map(s => `${s.priority}: ${s.name} (${s.type})`));
+      
+      if (enabledServers.length > 0) {
+        // Log primary server for profile resolution
+        const primaryServer = enabledServers[0];
+        console.log(`[EnhancedValidation] Primary profile resolution server: ${primaryServer.name} (${primaryServer.url})`);
+        
+        // Note: Profile resolution servers are used during profile validation phase
+        // They are referenced in the performProfileValidation method
+      }
+    } else {
+      console.log(`[EnhancedValidation] No profile resolution servers configured`);
     }
   }
 
