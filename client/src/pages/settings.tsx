@@ -447,42 +447,34 @@ export default function SettingsPage() {
       errorSeverityThreshold: 'warning'
     });
 
-    // Prevent automatic sync from overriding user changes
-    const [hasLocalChanges, setHasLocalChanges] = React.useState(false);
-    const [isUpdating, setIsUpdating] = React.useState(false);
+    // Use ref to track if this is the initial load
+    const initialLoadRef = React.useRef(true);
     
+    // Only sync from server on initial load
     React.useEffect(() => {
-      if (settings && !hasLocalChanges && !isUpdating) {
-        console.log('[Settings] Syncing from server:', settings);
+      if (settings && initialLoadRef.current) {
+        console.log('[Settings] Initial settings load from server');
         setLocalSettings(settings);
-      } else if (hasLocalChanges || isUpdating) {
-        console.log('[Settings] Blocked sync - hasLocalChanges:', hasLocalChanges, 'isUpdating:', isUpdating);
+        initialLoadRef.current = false;
       }
-    }, [settings, hasLocalChanges, isUpdating]);
+    }, [settings]);
 
     const handleSettingChange = (key: string, value: any) => {
       console.log('[Settings] Handling setting change:', key, value);
       const newSettings = { ...localSettings, [key]: value };
-      setLocalSettings(newSettings);
-      setHasLocalChanges(true);
-      setIsUpdating(true);
       
+      // Immediately update local state and keep it that way
+      setLocalSettings(newSettings);
+      
+      // Save to server without affecting local state
       updateSettings.mutate(newSettings, {
         onSuccess: () => {
-          console.log('[Settings] Update successful, waiting before sync...');
-          // Wait longer and manually refetch to ensure we get the latest state
-          setTimeout(() => {
-            refetch().then(() => {
-              setHasLocalChanges(false);
-              setIsUpdating(false);
-              console.log('[Settings] Sync re-enabled after successful update');
-            });
-          }, 1000);
+          console.log('[Settings] Update saved to server successfully');
         },
         onError: (error) => {
           console.error('[Settings] Update failed:', error);
-          setHasLocalChanges(false);
-          setIsUpdating(false);
+          // On error, revert to previous state
+          setLocalSettings(localSettings);
         }
       });
     };
@@ -546,19 +538,14 @@ export default function SettingsPage() {
 
         const newSettings = { ...localSettings, profileResolutionServers: updatedServers };
         setLocalSettings(newSettings);
-        setHasLocalChanges(true);
-        setIsUpdating(true);
         
         updateSettings.mutate(newSettings, {
           onSuccess: () => {
-            setTimeout(() => {
-              setHasLocalChanges(false);
-              setIsUpdating(false);
-            }, 500);
+            console.log('[Settings] Drag reorder saved to server successfully');
           },
           onError: () => {
-            setHasLocalChanges(false);
-            setIsUpdating(false);
+            console.error('[Settings] Drag reorder failed, reverting');
+            setLocalSettings(localSettings);
           }
         });
 

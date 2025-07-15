@@ -312,6 +312,10 @@ export function useFhirErrorHandler() {
 export function useValidationSettings() {
   return useQuery({
     queryKey: ['/api/validation/settings'],
+    staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh longer
+    refetchOnWindowFocus: false, // Disable automatic refetch on window focus
+    refetchOnReconnect: false, // Disable automatic refetch on reconnect
+    refetchInterval: false, // Disable automatic periodic refetch
   });
 }
 
