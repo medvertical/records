@@ -481,6 +481,33 @@ export default function SettingsPage() {
       
       // Save to server - fire and forget approach
       updateSettings.mutate(settingsRef.current, {
+        onSuccess: () => {
+          // Create user-friendly labels for settings
+          const settingLabels: Record<string, string> = {
+            enableStructuralValidation: 'Structural Validation',
+            enableProfileValidation: 'Profile Validation',
+            enableTerminologyValidation: 'Terminology Validation',
+            enableReferenceValidation: 'Reference Validation',
+            enableBusinessRuleValidation: 'Business Rule Validation',
+            enableVersionValidation: 'Version & Metadata Validation',
+            strictMode: 'Strict Mode',
+            warnOnMissingProfiles: 'Warn on Missing Profiles',
+            validateDisplayValues: 'Validate Display Values',
+            checkCodeSystemMembership: 'Check Code System Membership',
+            checkReferenceTargets: 'Check Reference Targets',
+            detectCircularReferences: 'Detect Circular References',
+            validateExternal: 'Validate External Resources',
+            validateExternalReferences: 'Validate External References'
+          };
+          
+          const label = settingLabels[key] || key;
+          const action = typeof value === 'boolean' ? (value ? 'enabled' : 'disabled') : 'updated';
+          
+          toast({
+            title: 'Settings Saved',
+            description: `${label} has been ${action} successfully.`,
+          });
+        },
         onError: (error) => {
           console.error('[Settings] Save failed:', error);
           toast({
@@ -506,6 +533,24 @@ export default function SettingsPage() {
       forceUpdate();
       
       updateSettings.mutate(settingsRef.current, {
+        onSuccess: () => {
+          // Create user-friendly labels for nested settings
+          const nestedLabels: Record<string, Record<string, string>> = {
+            terminologyServer: {
+              enabled: 'Terminology Server',
+              url: 'Terminology Server URL',
+              type: 'Terminology Server Type'
+            }
+          };
+          
+          const label = nestedLabels[parent]?.[key] || `${parent}.${key}`;
+          const action = typeof value === 'boolean' ? (value ? 'enabled' : 'disabled') : 'updated';
+          
+          toast({
+            title: 'Settings Saved',
+            description: `${label} has been ${action} successfully.`,
+          });
+        },
         onError: (error) => {
           console.error('[Settings] Save failed:', error);
           toast({
