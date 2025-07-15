@@ -240,14 +240,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (cachedResources.length > 0) {
             console.log(`[Resources] Serving ${cachedResources.length} cached resources (${allCachedForType.length} total in cache)`);
             
-            // Include validation results with each resource
+            // Include validation results with each resource - ensure validation is up-to-date
             const resourcesWithValidation = await Promise.all(
               cachedResources.map(async (resource) => {
                 try {
-                  const validationResults = await storage.getValidationResultsByResourceId(resource.id);
+                  // Check if validation is outdated and revalidate if needed (same as detail view)
+                  let resourceWithValidation = resource;
+                  if (unifiedValidationService && resource.data) {
+                    try {
+                      const validationResult = await unifiedValidationService.checkAndRevalidateResource(resource);
+                      resourceWithValidation = validationResult.resource;
+                      
+                      if (validationResult.wasRevalidated) {
+                        console.log(`[Resources List] Resource ${resource.resourceType}/${resource.resourceId} was revalidated for list view`);
+                      }
+                    } catch (validationError) {
+                      console.warn(`[Resources List] Validation check failed for ${resource.resourceType}/${resource.resourceId}:`, validationError);
+                      // Continue with existing validation results
+                    }
+                  }
+                  
+                  // Get current validation results (fresh or existing)
+                  const validationResults = await storage.getValidationResultsByResourceId(resourceWithValidation.id);
                   return {
-                    ...resource.data,
-                    _dbId: resource.id, // Include database ID for validation lookup
+                    ...resourceWithValidation.data,
+                    _dbId: resourceWithValidation.id, // Include database ID for validation lookup
                     _validationResults: validationResults,
                     _validationSummary: {
                       hasErrors: validationResults.some(vr => !vr.isValid && vr.errors && vr.errors.length > 0),
