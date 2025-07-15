@@ -367,14 +367,18 @@ export default function SettingsPage() {
     
     // Use a ref to store the actual settings - this prevents React re-renders from affecting our data
     const settingsRef = React.useRef<any>(null);
+    const hasInitialized = React.useRef(false);
     const [, forceUpdate] = React.useReducer(x => x + 1, 0);
     
-    // Initialize settings once from server
+    // Initialize settings once from server - but only once!
     React.useEffect(() => {
-      if (serverSettings && !settingsRef.current) {
-        console.log('[Settings] Initializing settings from server');
+      if (serverSettings && !hasInitialized.current) {
+        console.log('[Settings] Initializing settings from server (first time only)');
         settingsRef.current = { ...serverSettings };
+        hasInitialized.current = true;
         forceUpdate(); // Trigger a render with the new settings
+      } else if (serverSettings && hasInitialized.current) {
+        console.log('[Settings] Skipping re-initialization - already initialized');
       }
     }, [serverSettings]);
     
@@ -497,9 +501,11 @@ export default function SettingsPage() {
       // Force React to re-render with new settings
       forceUpdate();
       
-      // Save to server - fire and forget approach
+      // Save to server - but maintain local state dominance
       updateSettings.mutate(settingsRef.current, {
         onSuccess: () => {
+          console.log('[Settings] Server save successful - LOCAL STATE REMAINS UNCHANGED');
+          
           // Create user-friendly labels for settings
           const settingLabels: Record<string, string> = {
             enableStructuralValidation: 'Structural Validation',
