@@ -7,7 +7,8 @@ import {
   CheckCircle, 
   XCircle, 
   AlertTriangle,
-  Eye 
+  Eye,
+  Loader2
 } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
@@ -98,6 +99,16 @@ export default function ResourceList({
   const renderValidationBadge = (resource: any) => {
     const validationSummary = resource._validationSummary;
     const status = getValidationStatus(resource);
+    
+    // Show loading indicator for resources that need validation
+    if (validationSummary?.needsValidation) {
+      return (
+        <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50">
+          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+          Validating...
+        </Badge>
+      );
+    }
     
     switch (status) {
       case 'valid':

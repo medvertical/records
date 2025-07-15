@@ -238,33 +238,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const allCachedForType = await storage.getFhirResources(undefined, resourceType as string, 10000, 0);
           
           if (cachedResources.length > 0) {
-            console.log(`[Resources] Serving ${cachedResources.length} cached resources (${allCachedForType.length} total in cache)`);
+            console.log(`[Resources] Serving ${cachedResources.length} cached resources immediately (${allCachedForType.length} total in cache)`);
             
-            // Include validation results with each resource - ensure validation is up-to-date
-            const resourcesWithValidation = await Promise.all(
+            // Return resources immediately with cached validation data only
+            const resourcesWithCachedValidation = await Promise.all(
               cachedResources.map(async (resource) => {
                 try {
-                  // Check if validation is outdated and revalidate if needed (same as detail view)
-                  let resourceWithValidation = resource;
-                  if (unifiedValidationService && resource.data) {
-                    try {
-                      const validationResult = await unifiedValidationService.checkAndRevalidateResource(resource);
-                      resourceWithValidation = validationResult.resource;
-                      
-                      if (validationResult.wasRevalidated) {
-                        console.log(`[Resources List] Resource ${resource.resourceType}/${resource.resourceId} was revalidated for list view`);
-                      }
-                    } catch (validationError) {
-                      console.warn(`[Resources List] Validation check failed for ${resource.resourceType}/${resource.resourceId}:`, validationError);
-                      // Continue with existing validation results
-                    }
-                  }
-                  
-                  // Get current validation results (fresh or existing)
-                  const validationResults = await storage.getValidationResultsByResourceId(resourceWithValidation.id);
+                  // Get existing validation results from cache (no revalidation)
+                  const validationResults = await storage.getValidationResultsByResourceId(resource.id);
                   return {
-                    ...resourceWithValidation.data,
-                    _dbId: resourceWithValidation.id, // Include database ID for validation lookup
+                    ...resource.data,
+                    _dbId: resource.id,
                     _validationResults: validationResults,
                     _validationSummary: {
                       hasErrors: validationResults.some(vr => !vr.isValid && vr.errors && vr.errors.length > 0),
@@ -272,7 +256,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       errorCount: validationResults.reduce((sum, vr) => sum + (vr.errors?.length || 0), 0),
                       warningCount: validationResults.reduce((sum, vr) => sum + (vr.warnings?.length || 0), 0),
                       isValid: validationResults.length > 0 && validationResults.every(vr => vr.isValid),
-                      lastValidated: validationResults.length > 0 ? new Date(Math.max(...validationResults.map(vr => new Date(vr.validatedAt).getTime()))) : null
+                      lastValidated: validationResults.length > 0 ? new Date(Math.max(...validationResults.map(vr => new Date(vr.validatedAt).getTime()))) : null,
+                      needsValidation: validationResults.length === 0 // Flag resources that need validation
                     }
                   };
                 } catch (error) {
@@ -287,17 +272,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       errorCount: 0,
                       warningCount: 0,
                       isValid: false,
-                      lastValidated: null
+                      lastValidated: null,
+                      needsValidation: true
                     }
                   };
                 }
               })
             );
             
+            // Send immediate response
             res.json({
-              resources: resourcesWithValidation,
+              resources: resourcesWithCachedValidation,
               total: allCachedForType.length,
             });
+            
+            // Trigger background validation for resources that need it
+            setTimeout(async () => {
+              console.log(`[Resources] Starting background validation for ${cachedResources.length} resources`);
+              
+              for (const resource of cachedResources) {
+                try {
+                  if (unifiedValidationService && resource.data) {
+                    // Check if validation is outdated and revalidate if needed
+                    const validationResult = await unifiedValidationService.checkAndRevalidateResource(resource);
+                    
+                    if (validationResult.wasRevalidated) {
+                      console.log(`[Resources Background] Resource ${resource.resourceType}/${resource.resourceId} was revalidated`);
+                      
+                      // Broadcast update via WebSocket if available
+                      if (validationWebSocket) {
+                        const updatedValidation = await storage.getValidationResultsByResourceId(resource.id);
+                        const updateMessage = {
+                          type: 'resource_validation_updated',
+                          resourceId: resource.id,
+                          fhirResourceId: resource.resourceId,
+                          resourceType: resource.resourceType,
+                          validationSummary: {
+                            hasErrors: updatedValidation.some(vr => !vr.isValid && vr.errors && vr.errors.length > 0),
+                            hasWarnings: updatedValidation.some(vr => vr.warnings && vr.warnings.length > 0),
+                            errorCount: updatedValidation.reduce((sum, vr) => sum + (vr.errors?.length || 0), 0),
+                            warningCount: updatedValidation.reduce((sum, vr) => sum + (vr.warnings?.length || 0), 0),
+                            isValid: updatedValidation.length > 0 && updatedValidation.every(vr => vr.isValid),
+                            lastValidated: new Date()
+                          }
+                        };
+                        
+                        validationWebSocket.broadcast(JSON.stringify(updateMessage));
+                      }
+                    }
+                  }
+                } catch (error) {
+                  console.warn(`[Resources Background] Background validation failed for ${resource.resourceType}/${resource.resourceId}:`, error);
+                }
+              }
+              
+              console.log(`[Resources] Background validation completed for ${cachedResources.length} resources`);
+            }, 100); // Start background validation after 100ms
           } else {
             // No cached data, fall back to FHIR server
             if (fhirClient) {

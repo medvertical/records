@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import ResourceSearch from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
@@ -10,11 +10,27 @@ interface ResourcesResponse {
   total: number;
 }
 
+interface ValidationUpdateMessage {
+  type: 'resource_validation_updated';
+  resourceId: number;
+  fhirResourceId: string;
+  resourceType: string;
+  validationSummary: {
+    hasErrors: boolean;
+    hasWarnings: boolean;
+    errorCount: number;
+    warningCount: number;
+    isValid: boolean;
+    lastValidated: Date;
+  };
+}
+
 export default function ResourceBrowser() {
   const [location] = useLocation();
   const [resourceType, setResourceType] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [page, setPage] = useState(0);
+  const queryClient = useQueryClient();
 
   // Parse URL parameters on component mount
   useEffect(() => {
@@ -29,6 +45,65 @@ export default function ResourceBrowser() {
       setSearchQuery(searchParam);
     }
   }, [location]);
+
+  // WebSocket connection for real-time validation updates
+  useEffect(() => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    console.log('[Resource Browser] Connecting to WebSocket for validation updates:', wsUrl);
+    const socket = new WebSocket(wsUrl);
+    
+    socket.onopen = () => {
+      console.log('[Resource Browser] WebSocket connected for validation updates');
+    };
+    
+    socket.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data) as ValidationUpdateMessage;
+        
+        if (message.type === 'resource_validation_updated') {
+          console.log('[Resource Browser] Received validation update for resource:', message.fhirResourceId);
+          
+          // Update the cached resource data with new validation summary
+          const queryKey = ["/api/fhir/resources", { resourceType, search: searchQuery, page }];
+          queryClient.setQueryData(queryKey, (oldData: ResourcesResponse | undefined) => {
+            if (!oldData) return oldData;
+            
+            return {
+              ...oldData,
+              resources: oldData.resources.map(resource => {
+                if (resource._dbId === message.resourceId) {
+                  return {
+                    ...resource,
+                    _validationSummary: {
+                      ...message.validationSummary,
+                      needsValidation: false // Clear the validation pending flag
+                    }
+                  };
+                }
+                return resource;
+              })
+            };
+          });
+        }
+      } catch (error) {
+        console.warn('[Resource Browser] Failed to parse WebSocket message:', error);
+      }
+    };
+    
+    socket.onclose = () => {
+      console.log('[Resource Browser] WebSocket disconnected');
+    };
+    
+    socket.onerror = (error) => {
+      console.error('[Resource Browser] WebSocket error:', error);
+    };
+    
+    return () => {
+      socket.close();
+    };
+  }, [queryClient, resourceType, searchQuery, page]);
 
   const { data: resourceTypes } = useQuery<string[]>({
     queryKey: ["/api/fhir/resource-types"],
