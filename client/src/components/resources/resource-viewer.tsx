@@ -280,8 +280,20 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Validation is now handled proactively in list view and detail endpoint
-  // No need for automatic validation since resources come with fresh validation results
+  // Use existing validation results from resource instead of internal state
+  const existingValidationResults = resource?.validationResults || [];
+  const hasExistingValidation = existingValidationResults.length > 0;
+  
+  // Convert database validation results to the format expected by the UI
+  const displayValidationResult = hasExistingValidation ? {
+    isValid: existingValidationResults.every(vr => vr.isValid),
+    issues: existingValidationResults.flatMap(vr => vr.issues || []),
+    summary: {
+      errorCount: existingValidationResults.reduce((sum, vr) => sum + (vr.errorCount || 0), 0),
+      warningCount: existingValidationResults.reduce((sum, vr) => sum + (vr.warningCount || 0), 0),
+      fatalCount: 0
+    }
+  } : validationResult;
 
   const validateResource = async () => {
     if (!resourceData) return;
@@ -331,8 +343,8 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
     if (validationError) {
       return <Badge variant="destructive">Validation Error</Badge>;
     }
-    if (validationResult) {
-      if (validationResult.isValid) {
+    if (displayValidationResult) {
+      if (displayValidationResult.isValid) {
         return (
           <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
             <CheckCircle className="w-3 h-3 mr-1" />
@@ -340,7 +352,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
           </Badge>
         );
       } else {
-        const errorCount = (validationResult.summary?.errorCount || 0) + (validationResult.summary?.fatalCount || 0);
+        const errorCount = (displayValidationResult.summary?.errorCount || 0) + (displayValidationResult.summary?.fatalCount || 0);
         return (
           <Badge variant="destructive">
             <AlertTriangle className="w-3 h-3 mr-1" />
@@ -377,7 +389,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
             <TabsContent value="form" className="mt-4">
               <FormView 
                 data={resourceData} 
-                validationIssues={validationResult?.issues || []}
+                validationIssues={displayValidationResult?.issues || []}
               />
             </TabsContent>
             
@@ -420,7 +432,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
         </Card>
       )}
 
-      {validationResult && !isValidating && !validationError && (
+      {displayValidationResult && !isValidating && !validationError && (
         <Card className="mt-6">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -441,14 +453,14 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
           </CardHeader>
           <CardContent>
             <ValidationResults 
-              result={validationResult} 
+              result={displayValidationResult} 
               onRetry={validateResource}
             />
           </CardContent>
         </Card>
       )}
 
-      {!validationResult && !isValidating && !validationError && (
+      {!displayValidationResult && !isValidating && !validationError && (
         <Card className="mt-6">
           <CardContent className="pt-6">
             <div className="text-center py-8">
