@@ -527,13 +527,15 @@ export class EnhancedValidationEngine {
    */
   private async fetchFromSimplifier(profileUrl: string, baseUrl: string): Promise<any | null> {
     try {
+      const axios = require('axios');
+      
       // Extract profile identifier from URL for Simplifier API
       const profileId = this.extractProfileIdentifier(profileUrl);
       const apiUrl = `${baseUrl}/api/fhir/StructureDefinition/${profileId}`;
       
       console.log(`[ProfileResolution] Fetching from Simplifier: ${apiUrl}`);
       
-      const response = await fetch(apiUrl, {
+      const response = await axios.get(apiUrl, {
         headers: {
           'Accept': 'application/fhir+json',
           'User-Agent': 'Records-FHIR-Validator/1.0'
@@ -541,8 +543,8 @@ export class EnhancedValidationEngine {
         timeout: 10000
       });
 
-      if (response.ok) {
-        const profile = await response.json();
+      if (response.status === 200 && response.data) {
+        const profile = response.data;
         if (profile.resourceType === 'StructureDefinition') {
           return profile;
         }
@@ -560,11 +562,13 @@ export class EnhancedValidationEngine {
    */
   private async fetchFromFhirCI(profileUrl: string, baseUrl: string): Promise<any | null> {
     try {
+      const axios = require('axios');
+      
       // Try direct URL first, then construct API endpoint
       const directUrl = profileUrl.replace('http://hl7.org/fhir/', `${baseUrl}/`);
       console.log(`[ProfileResolution] Fetching from FHIR CI: ${directUrl}`);
       
-      const response = await fetch(directUrl, {
+      const response = await axios.get(directUrl, {
         headers: {
           'Accept': 'application/fhir+json',
           'User-Agent': 'Records-FHIR-Validator/1.0'
@@ -572,8 +576,8 @@ export class EnhancedValidationEngine {
         timeout: 10000
       });
 
-      if (response.ok) {
-        const profile = await response.json();
+      if (response.status === 200 && response.data) {
+        const profile = response.data;
         if (profile.resourceType === 'StructureDefinition') {
           return profile;
         }
@@ -591,6 +595,8 @@ export class EnhancedValidationEngine {
    */
   private async fetchFromFhirRegistry(profileUrl: string, baseUrl: string): Promise<any | null> {
     try {
+      const axios = require('axios');
+      
       // FHIR Package Registry typically uses a different approach
       // This is a simplified implementation
       const profileId = this.extractProfileIdentifier(profileUrl);
@@ -598,7 +604,7 @@ export class EnhancedValidationEngine {
       
       console.log(`[ProfileResolution] Fetching from Package Registry: ${apiUrl}`);
       
-      const response = await fetch(apiUrl, {
+      const response = await axios.get(apiUrl, {
         headers: {
           'Accept': 'application/fhir+json',
           'User-Agent': 'Records-FHIR-Validator/1.0'
@@ -606,8 +612,8 @@ export class EnhancedValidationEngine {
         timeout: 10000
       });
 
-      if (response.ok) {
-        const profile = await response.json();
+      if (response.status === 200 && response.data) {
+        const profile = response.data;
         if (profile.resourceType === 'StructureDefinition') {
           return profile;
         }
@@ -625,12 +631,14 @@ export class EnhancedValidationEngine {
    */
   private async fetchFromGenericFhirServer(profileUrl: string, baseUrl: string): Promise<any | null> {
     try {
+      const axios = require('axios');
+      
       const profileId = this.extractProfileIdentifier(profileUrl);
       const apiUrl = `${baseUrl}/StructureDefinition/${profileId}`;
       
       console.log(`[ProfileResolution] Fetching from generic server: ${apiUrl}`);
       
-      const response = await fetch(apiUrl, {
+      const response = await axios.get(apiUrl, {
         headers: {
           'Accept': 'application/fhir+json',
           'User-Agent': 'Records-FHIR-Validator/1.0'
@@ -638,8 +646,8 @@ export class EnhancedValidationEngine {
         timeout: 10000
       });
 
-      if (response.ok) {
-        const profile = await response.json();
+      if (response.status === 200 && response.data) {
+        const profile = response.data;
         if (profile.resourceType === 'StructureDefinition') {
           return profile;
         }

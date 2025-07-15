@@ -8,6 +8,51 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ValidationResults } from '@/components/validation/validation-results';
 
+// Validation issue indicator component
+function ValidationIssueIndicator({ issue }: { issue: any }) {
+  const getSeverityColor = (severity: string) => {
+    switch(severity) {
+      case 'error': return 'text-red-500';
+      case 'warning': return 'text-yellow-500';
+      case 'information': return 'text-blue-500';
+      default: return 'text-gray-500';
+    }
+  };
+
+  return (
+    <div className="flex items-center">
+      <AlertTriangle className={`h-4 w-4 ${getSeverityColor(issue.severity)}`} />
+      <span className={`text-xs ml-1 ${getSeverityColor(issue.severity)}`}>
+        {issue.severity}
+      </span>
+    </div>
+  );
+}
+
+// Validation issue details component
+function ValidationIssueDetails({ issue }: { issue: any }) {
+  const getSeverityColor = (severity: string) => {
+    switch(severity) {
+      case 'error': return 'border-red-200 bg-red-50 text-red-600';
+      case 'warning': return 'border-yellow-200 bg-yellow-50 text-yellow-600';
+      case 'information': return 'border-blue-200 bg-blue-50 text-blue-600';
+      default: return 'border-gray-200 bg-gray-50 text-gray-600';
+    }
+  };
+
+  return (
+    <div className={`text-xs rounded px-2 py-1 border ${getSeverityColor(issue.severity)}`}>
+      <div className="font-medium">{issue.severity}: {issue.code}</div>
+      <div>{issue.message || issue.humanReadable || issue.details}</div>
+      {issue.suggestion && (
+        <div className="mt-1 text-xs opacity-80">
+          💡 {issue.suggestion}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface ResourceViewerProps {
   resource: any;
   resourceId: string;
@@ -30,21 +75,45 @@ function CollapsibleNode({ keyName, value, level = 0, validationIssues = [], pat
   // Build current path for this node
   const currentPath = path ? `${path}.${keyName}` : keyName;
   
-  // Find validation issues for this specific path
-  const nodeIssues = validationIssues.filter(issue => 
-    issue.location?.some((loc: string) => loc === currentPath || loc.startsWith(currentPath + '.') || loc.startsWith(currentPath + '['))
-  );
+  // Find validation issues for this specific path - check both path and location
+  const nodeIssues = validationIssues.filter(issue => {
+    // Check if the issue path matches the current path
+    const issuePath = issue.path || issue.location?.[0] || '';
+    
+    // Exact match or starts with current path
+    return issuePath === currentPath || 
+           issuePath.startsWith(currentPath + '.') || 
+           issuePath.startsWith(currentPath + '[') ||
+           currentPath.startsWith(issuePath + '.') ||
+           currentPath.startsWith(issuePath + '[');
+  });
   
   // Handle null/undefined values
   if (value === null || value === undefined) {
     return (
-      <div style={{ paddingLeft: level * 20 }} className="py-1 flex items-center">
-        <span className="font-medium text-gray-700 min-w-0 flex-shrink-0 mr-2">
-          {keyName}:
-        </span>
-        <span className="text-sm text-gray-400">
-          {value === null ? 'null' : 'undefined'}
-        </span>
+      <div style={{ paddingLeft: level * 20 }} className="py-1">
+        <div className="flex items-center">
+          <span className="font-medium text-gray-700 min-w-0 flex-shrink-0 mr-2">
+            {keyName}:
+          </span>
+          <span className="text-sm text-gray-400">
+            {value === null ? 'null' : 'undefined'}
+          </span>
+          {nodeIssues.length > 0 && (
+            <div className="ml-2 flex items-center space-x-1">
+              {nodeIssues.map((issue, index) => (
+                <ValidationIssueIndicator key={index} issue={issue} />
+              ))}
+            </div>
+          )}
+        </div>
+        {nodeIssues.length > 0 && (
+          <div className="mt-1">
+            {nodeIssues.map((issue, index) => (
+              <ValidationIssueDetails key={index} issue={issue} />
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -110,10 +179,7 @@ function CollapsibleNode({ keyName, value, level = 0, validationIssues = [], pat
         {nodeIssues.length > 0 && (
           <div className="mt-1 ml-4 space-y-1">
             {nodeIssues.map((issue, index) => (
-              <div key={index} className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
-                <div className="font-medium">{issue.severity}: {issue.code}</div>
-                <div>{issue.humanReadable || issue.details}</div>
-              </div>
+              <ValidationIssueDetails key={index} issue={issue} />
             ))}
           </div>
         )}
@@ -158,10 +224,7 @@ function CollapsibleNode({ keyName, value, level = 0, validationIssues = [], pat
       {nodeIssues.length > 0 && (
         <div className="mt-1 ml-4 space-y-1">
           {nodeIssues.map((issue, index) => (
-            <div key={index} className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1">
-              <div className="font-medium">{issue.severity}: {issue.code}</div>
-              <div>{issue.humanReadable || issue.details}</div>
-            </div>
+            <ValidationIssueDetails key={index} issue={issue} />
           ))}
         </div>
       )}
