@@ -971,28 +971,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // Create a simple validation promise for compatibility
-      const validationPromise = Promise.resolve({
-        totalResources: processedResources,
-        processedResources,
-        validResources,
-        errorResources,
-        isComplete: true,
-        errors,
-        startTime
-      });
-
-      // Handle completion or errors
-      validationPromise.then((finalProgress) => {
-        if (finalProgress?.isComplete && validationWebSocket) {
+      // Only broadcast completion if validation actually completed (not paused)
+      if (!globalValidationState.isPaused && !globalValidationState.shouldStop) {
+        console.log('Validation completed successfully - broadcasting completion');
+        const finalProgress = {
+          totalResources: realTotalResources,
+          processedResources,
+          validResources,
+          errorResources,
+          isComplete: true,
+          errors,
+          startTime: startTime.toISOString(),
+          status: 'completed' as const
+        };
+        
+        // Mark validation as completed
+        globalValidationState.isRunning = false;
+        globalValidationState.isPaused = false;
+        globalValidationState.resumeData = null;
+        
+        if (validationWebSocket) {
           validationWebSocket.broadcastValidationComplete(finalProgress);
         }
-      }).catch(error => {
-        console.error('Bulk validation error:', error);
+      } else if (globalValidationState.isPaused) {
+        console.log('Validation was paused - not broadcasting completion');
+        // Broadcast paused state to ensure UI shows correct status
         if (validationWebSocket) {
-          validationWebSocket.broadcastError(error.message);
+          validationWebSocket.broadcastProgress({
+            totalResources: realTotalResources,
+            processedResources,
+            validResources,
+            errorResources,
+            currentResourceType: globalValidationState.resumeData?.resourceType || 'Paused',
+            startTime: startTime.toISOString(),
+            isComplete: false,
+            errors: errors.slice(-10),
+            status: 'paused' as const
+          });
         }
-      });
+      }
 
           console.log("Background validation started successfully");
         } catch (error: any) {
