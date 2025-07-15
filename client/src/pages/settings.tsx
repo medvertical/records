@@ -346,7 +346,7 @@ export default function SettingsPage() {
   );
 
   const ValidationSettingsContent = () => {
-    const { data: settings, isLoading } = useValidationSettings();
+    const { data: settings, isLoading, refetch } = useValidationSettings();
     const updateSettings = useUpdateValidationSettings();
     const [localSettings, setLocalSettings] = useState(settings || {
       // Enhanced Validation Engine - 6 Aspects
@@ -453,11 +453,15 @@ export default function SettingsPage() {
     
     React.useEffect(() => {
       if (settings && !hasLocalChanges && !isUpdating) {
+        console.log('[Settings] Syncing from server:', settings);
         setLocalSettings(settings);
+      } else if (hasLocalChanges || isUpdating) {
+        console.log('[Settings] Blocked sync - hasLocalChanges:', hasLocalChanges, 'isUpdating:', isUpdating);
       }
     }, [settings, hasLocalChanges, isUpdating]);
 
     const handleSettingChange = (key: string, value: any) => {
+      console.log('[Settings] Handling setting change:', key, value);
       const newSettings = { ...localSettings, [key]: value };
       setLocalSettings(newSettings);
       setHasLocalChanges(true);
@@ -465,13 +469,18 @@ export default function SettingsPage() {
       
       updateSettings.mutate(newSettings, {
         onSuccess: () => {
-          // Wait a moment before allowing automatic sync
+          console.log('[Settings] Update successful, waiting before sync...');
+          // Wait longer and manually refetch to ensure we get the latest state
           setTimeout(() => {
-            setHasLocalChanges(false);
-            setIsUpdating(false);
-          }, 500);
+            refetch().then(() => {
+              setHasLocalChanges(false);
+              setIsUpdating(false);
+              console.log('[Settings] Sync re-enabled after successful update');
+            });
+          }, 1000);
         },
-        onError: () => {
+        onError: (error) => {
+          console.error('[Settings] Update failed:', error);
           setHasLocalChanges(false);
           setIsUpdating(false);
         }

@@ -331,7 +331,9 @@ export function useUpdateValidationSettings() {
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/validation/settings'] });
+      // Don't automatically invalidate - let the component handle refetching
+      // This prevents race conditions with local state
+      console.log('[UseUpdateValidationSettings] Update successful, not auto-invalidating');
       toast({
         title: 'Settings Updated',
         description: 'Validation settings have been updated successfully.',
