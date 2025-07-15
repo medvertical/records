@@ -461,7 +461,11 @@ export default function SettingsPage() {
       
       // Quality thresholds
       minValidationScore: 70,
-      errorSeverityThreshold: 'warning'
+      errorSeverityThreshold: 'warning',
+      
+      // General Settings
+      autoRefreshDashboard: true,
+      rememberLastPage: true
     };
     
     // Use a memoized version for rendering
@@ -497,7 +501,9 @@ export default function SettingsPage() {
             checkReferenceTargets: 'Check Reference Targets',
             detectCircularReferences: 'Detect Circular References',
             validateExternal: 'Validate External Resources',
-            validateExternalReferences: 'Validate External References'
+            validateExternalReferences: 'Validate External References',
+            autoRefreshDashboard: 'Auto-refresh Dashboard',
+            rememberLastPage: 'Remember Last Page'
           };
           
           const label = settingLabels[key] || key;
@@ -1112,7 +1118,10 @@ export default function SettingsPage() {
                     Automatically refresh dashboard data every 30 seconds
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={settings.autoRefreshDashboard}
+                  onCheckedChange={(checked) => handleSettingChange('autoRefreshDashboard', checked)}
+                />
               </div>
 
               <div className="flex items-center justify-between">
@@ -1124,7 +1133,10 @@ export default function SettingsPage() {
                     Return to your last visited page when reopening the application
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={settings.rememberLastPage}
+                  onCheckedChange={(checked) => handleSettingChange('rememberLastPage', checked)}
+                />
               </div>
 
               <div className="space-y-2">
