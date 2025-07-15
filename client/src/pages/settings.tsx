@@ -179,6 +179,138 @@ function SortableTerminologyServer({ server, index, localSettings, handleSetting
   );
 }
 
+// Sortable Profile Resolution Server Component
+function SortableProfileServer({ server, index, localSettings, handleSettingChange }: any) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: server.priority.toString() });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <Card
+      ref={setNodeRef}
+      className={`p-4 border-l-4 ${isDragging ? 'opacity-50' : ''}`}
+      style={{
+        borderLeftColor: server.enabled ? '#10b981' : '#d1d5db',
+        ...style
+      }}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center space-x-3">
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing p-1 rounded hover:bg-gray-100"
+          >
+            <GripVertical className="h-4 w-4 text-gray-400" />
+          </div>
+          <Badge variant={server.enabled ? "default" : "secondary"} className="text-xs">
+            Priority {server.priority}
+          </Badge>
+          <h5 className="font-medium text-sm">{server.name}</h5>
+          <Badge variant="outline" className="text-xs">
+            {server.type}
+          </Badge>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Switch
+            checked={server.enabled}
+            onCheckedChange={(checked) => {
+              const newServers = [...(localSettings.profileResolutionServers || [])];
+              newServers[index] = { ...server, enabled: checked };
+              handleSettingChange('profileResolutionServers', newServers);
+            }}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const newServers = (localSettings.profileResolutionServers || []).filter((_, i) => i !== index);
+              // Re-adjust priorities
+              const reorderedServers = newServers.map((server, i) => ({
+                ...server,
+                priority: i + 1
+              }));
+              handleSettingChange('profileResolutionServers', reorderedServers);
+            }}
+            className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      
+      <p className="text-xs text-muted-foreground mb-3">{server.description}</p>
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+        <div>
+          <Label className="text-xs font-medium">URL</Label>
+          <Input
+            value={server.url}
+            onChange={(e) => {
+              const newServers = [...(localSettings.profileResolutionServers || [])];
+              newServers[index] = { ...server, url: e.target.value };
+              handleSettingChange('profileResolutionServers', newServers);
+            }}
+            className="text-xs h-8"
+            disabled={!server.enabled}
+          />
+        </div>
+        
+        <div>
+          <Label className="text-xs font-medium">Priority</Label>
+          <Input
+            type="number"
+            min="1"
+            max="10"
+            value={server.priority}
+            onChange={(e) => {
+              const newServers = [...(localSettings.profileResolutionServers || [])];
+              newServers[index] = { ...server, priority: parseInt(e.target.value) || 1 };
+              // Re-sort servers by priority
+              newServers.sort((a, b) => a.priority - b.priority);
+              handleSettingChange('profileResolutionServers', newServers);
+            }}
+            className="text-xs h-8"
+            disabled={!server.enabled}
+          />
+        </div>
+        
+        <div>
+          <Label className="text-xs font-medium">Name</Label>
+          <Input
+            value={server.name}
+            onChange={(e) => {
+              const newServers = [...(localSettings.profileResolutionServers || [])];
+              newServers[index] = { ...server, name: e.target.value };
+              handleSettingChange('profileResolutionServers', newServers);
+            }}
+            className="text-xs h-8"
+            disabled={!server.enabled}
+          />
+        </div>
+      </div>
+      
+      <div className="flex flex-wrap gap-1">
+        {server.capabilities?.map((capability, capIndex) => (
+          <Badge key={capIndex} variant="outline" className="text-xs">
+            {capability}
+          </Badge>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 export default function SettingsPage() {
   const { toast } = useToast();
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -267,6 +399,37 @@ export default function SettingsPage() {
         description: 'CSIRO OntoServer (Public)'
       },
       
+      // Profile Resolution Servers
+      profileResolutionServers: [
+        {
+          priority: 1,
+          enabled: true,
+          url: 'https://packages.simplifier.net',
+          type: 'simplifier',
+          name: 'Simplifier.net',
+          description: 'Firely Simplifier - Community profile registry with thousands of FHIR profiles',
+          capabilities: ['FHIR Profiles', 'Implementation Guides', 'Extensions', 'US Core', 'IPS', 'Custom Profiles']
+        },
+        {
+          priority: 2,
+          enabled: true,
+          url: 'https://build.fhir.org',
+          type: 'fhir-ci',
+          name: 'FHIR CI Build',
+          description: 'Official FHIR continuous integration server with latest profiles',
+          capabilities: ['Official FHIR Profiles', 'Core Profiles', 'Development Versions']
+        },
+        {
+          priority: 3,
+          enabled: true,
+          url: 'https://registry.fhir.org',
+          type: 'fhir-registry',
+          name: 'FHIR Package Registry',
+          description: 'Official FHIR package registry for stable profile versions',
+          capabilities: ['Stable Profiles', 'Published IGs', 'Official Packages']
+        }
+      ],
+      
       // Performance settings
       batchSize: 20,
       maxRetries: 3,
@@ -325,6 +488,34 @@ export default function SettingsPage() {
 
         toast({
           title: 'Terminology Servers Reordered',
+          description: 'Priority order has been updated successfully.',
+        });
+      }
+    };
+
+    // Handle drag end for profile resolution servers
+    const handleProfileDragEnd = (event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (active.id !== over?.id) {
+        const servers = localSettings.profileResolutionServers || [];
+        const oldIndex = servers.findIndex(server => server.priority.toString() === active.id);
+        const newIndex = servers.findIndex(server => server.priority.toString() === over?.id);
+
+        const newServers = arrayMove(servers, oldIndex, newIndex);
+        
+        // Update priorities based on new positions
+        const updatedServers = newServers.map((server, index) => ({
+          ...server,
+          priority: index + 1
+        }));
+
+        const newSettings = { ...localSettings, profileResolutionServers: updatedServers };
+        setLocalSettings(newSettings);
+        updateSettings.mutate(newSettings);
+
+        toast({
+          title: 'Profile Resolution Servers Reordered',
           description: 'Priority order has been updated successfully.',
         });
       }
@@ -613,6 +804,87 @@ export default function SettingsPage() {
               <Info className="h-4 w-4" />
               <AlertDescription className="text-xs">
                 <strong>SNOMED International:</strong> Official SNOMED CT server with full ECL support and concept maps.
+              </AlertDescription>
+            </Alert>
+          </div>
+        </Card>
+
+        {/* Profile Resolution Servers */}
+        <Card className="p-6">
+          <h4 className="text-lg font-medium mb-4 flex items-center">
+            <Server className="h-5 w-5 mr-2 text-emerald-600" />
+            Profile Resolution Servers
+          </h4>
+          <p className="text-sm text-muted-foreground mb-6">
+            Servers for resolving FHIR profiles and structure definitions. Validation engine tries servers in priority order to find the best matching profiles for resources.
+          </p>
+          
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleProfileDragEnd}
+          >
+            <SortableContext
+              items={localSettings.profileResolutionServers?.map(server => server.priority.toString()) || []}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-4">
+                {localSettings.profileResolutionServers?.map((server, index) => (
+                  <SortableProfileServer
+                    key={server.priority}
+                    server={server}
+                    index={index}
+                    localSettings={localSettings}
+                    handleSettingChange={handleSettingChange}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
+
+          {/* Add New Profile Server */}
+          <div className="mt-6 p-4 border-2 border-dashed border-gray-300 rounded-lg">
+            <Button
+              variant="outline"
+              onClick={() => {
+                const newServer = {
+                  priority: (localSettings.profileResolutionServers?.length || 0) + 1,
+                  enabled: true,
+                  url: '',
+                  type: 'custom',
+                  name: 'New Profile Server',
+                  description: 'Custom profile resolution server',
+                  capabilities: ['Custom Profiles']
+                };
+                const newServers = [...(localSettings.profileResolutionServers || []), newServer];
+                handleSettingChange('profileResolutionServers', newServers);
+              }}
+              className="w-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add New Profile Resolution Server
+            </Button>
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <strong>Simplifier.net:</strong> Community-driven FHIR profile registry with thousands of implementation guides and profiles from organizations worldwide.
+              </AlertDescription>
+            </Alert>
+            
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <strong>FHIR CI Build:</strong> Official FHIR continuous integration server with the latest development versions of profiles and implementation guides.
+              </AlertDescription>
+            </Alert>
+            
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                <strong>FHIR Package Registry:</strong> Official package registry containing stable, published versions of FHIR profiles and implementation guides.
               </AlertDescription>
             </Alert>
           </div>
