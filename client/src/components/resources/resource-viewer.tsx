@@ -8,6 +8,252 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ValidationResults } from '@/components/validation/validation-results';
 
+// Validation summary badge component
+function ValidationSummaryBadge({ result }: { result: any }) {
+  const { summary } = result;
+  const totalIssues = summary?.totalIssues || 0;
+  const errorCount = summary?.errorCount || 0;
+  const warningCount = summary?.warningCount || 0;
+  const score = summary?.score || 0;
+
+  if (totalIssues === 0) {
+    return (
+      <Badge className="bg-green-100 text-green-800 border-green-200">
+        <CheckCircle className="w-3 h-3 mr-1" />
+        Valid ({score}%)
+      </Badge>
+    );
+  }
+
+  if (errorCount > 0) {
+    return (
+      <Badge variant="destructive">
+        <AlertCircle className="w-3 h-3 mr-1" />
+        {errorCount} errors, {warningCount} warnings ({score}%)
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">
+      <AlertTriangle className="w-3 h-3 mr-1" />
+      {warningCount} warnings ({score}%)
+    </Badge>
+  );
+}
+
+// Optimized validation results component
+function OptimizedValidationResults({ result, onRevalidate, isValidating }: { result: any; onRevalidate: () => void; isValidating: boolean }) {
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
+
+  // Group issues by category and severity
+  const groupedIssues = result.issues.reduce((acc: any, issue: any) => {
+    const category = issue.category || 'general';
+    const severity = issue.severity || 'information';
+    
+    if (!acc[category]) acc[category] = {};
+    if (!acc[category][severity]) acc[category][severity] = [];
+    acc[category][severity].push(issue);
+    
+    return acc;
+  }, {});
+
+  // Filter issues based on selected filters
+  const filteredIssues = result.issues.filter((issue: any) => {
+    const categoryMatch = selectedCategory === 'all' || issue.category === selectedCategory;
+    const severityMatch = selectedSeverity === 'all' || issue.severity === selectedSeverity;
+    return categoryMatch && severityMatch;
+  });
+
+  // Get unique categories and severities
+  const categories = ['all', ...new Set(result.issues.map((issue: any) => issue.category || 'general'))];
+  const severities = ['all', 'error', 'warning', 'information'];
+
+  const getCategoryIcon = (category: string) => {
+    switch(category) {
+      case 'structural': return <Shield className="w-4 h-4" />;
+      case 'profile': return <CheckCircle className="w-4 h-4" />;
+      case 'terminology': return <AlertTriangle className="w-4 h-4" />;
+      case 'reference': return <Info className="w-4 h-4" />;
+      case 'business-rule': return <AlertCircle className="w-4 h-4" />;
+      case 'metadata': return <Shield className="w-4 h-4" />;
+      default: return <Info className="w-4 h-4" />;
+    }
+  };
+
+  const getCategoryDescription = (category: string) => {
+    switch(category) {
+      case 'structural': return 'FHIR structure, data types, and cardinality rules';
+      case 'profile': return 'Profile conformance (US Core, HL7 profiles)';
+      case 'terminology': return 'Code systems, terminology bindings, and vocabulary';
+      case 'reference': return 'Resource references and relationship integrity';
+      case 'business-rule': return 'Clinical logic and healthcare business rules';
+      case 'metadata': return 'Resource metadata, security labels, and extensions';
+      case 'general': return 'General validation findings';
+      default: return 'Validation checks';
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="flex items-center">
+              <Shield className="w-5 h-5 mr-2" />
+              FHIR Validation Results
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Validation Score: {result.summary?.score || 0}% • {result.issues.length} total issues found
+            </CardDescription>
+          </div>
+          <Button 
+            onClick={onRevalidate} 
+            disabled={isValidating}
+            variant="outline"
+            size="sm"
+          >
+            {isValidating ? (
+              <>
+                <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                Validating...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4 mr-1" />
+                Revalidate
+              </>
+            )}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {/* Validation Score Progress */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Validation Score</span>
+              <span className="font-medium">{result.summary?.score || 0}%</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className={`h-2 rounded-full transition-all duration-300 ${
+                  (result.summary?.score || 0) >= 80 ? 'bg-green-500' :
+                  (result.summary?.score || 0) >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                }`}
+                style={{ width: `${result.summary?.score || 0}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Issue Summary Cards */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+              <div className="text-lg font-bold text-red-700">{result.summary?.errorCount || 0}</div>
+              <div className="text-xs text-red-600">Errors</div>
+              <div className="text-xs text-red-500 mt-1">Must be fixed</div>
+            </div>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
+              <div className="text-lg font-bold text-yellow-700">{result.summary?.warningCount || 0}</div>
+              <div className="text-xs text-yellow-600">Warnings</div>
+              <div className="text-xs text-yellow-500 mt-1">Should address</div>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+              <div className="text-lg font-bold text-blue-700">{result.summary?.informationCount || 0}</div>
+              <div className="text-xs text-blue-600">Information</div>
+              <div className="text-xs text-blue-500 mt-1">Recommendations</div>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className="flex gap-4 items-center text-sm">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Category:</span>
+              <select 
+                value={selectedCategory} 
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="border rounded px-2 py-1 text-xs"
+              >
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>
+                    {cat === 'all' ? 'All Categories' : cat}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Severity:</span>
+              <select 
+                value={selectedSeverity} 
+                onChange={(e) => setSelectedSeverity(e.target.value)}
+                className="border rounded px-2 py-1 text-xs"
+              >
+                {severities.map(sev => (
+                  <option key={sev} value={sev}>
+                    {sev === 'all' ? 'All Severities' : sev}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <span className="text-gray-500">
+              Showing {filteredIssues.length} of {result.issues.length} issues
+            </span>
+          </div>
+
+          {/* Issues by Category */}
+          <div className="space-y-4 max-h-96 overflow-y-auto">
+            {Object.entries(groupedIssues).map(([category, severityGroups]: [string, any]) => {
+              const categoryIssues = Object.values(severityGroups).flat();
+              const visibleCategoryIssues = categoryIssues.filter((issue: any) => {
+                const categoryMatch = selectedCategory === 'all' || category === selectedCategory;
+                const severityMatch = selectedSeverity === 'all' || issue.severity === selectedSeverity;
+                return categoryMatch && severityMatch;
+              });
+
+              if (visibleCategoryIssues.length === 0) return null;
+
+              return (
+                <div key={category} className="border rounded-lg p-4">
+                  <div className="flex items-center mb-3">
+                    {getCategoryIcon(category)}
+                    <div className="ml-2">
+                      <div className="font-medium text-sm capitalize">{category} Validation</div>
+                      <div className="text-xs text-gray-600">{getCategoryDescription(category)}</div>
+                    </div>
+                    <Badge variant="outline" className="ml-auto">
+                      {visibleCategoryIssues.length}
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    {visibleCategoryIssues.map((issue: any, index: number) => (
+                      <ValidationIssueDetails key={index} issue={issue} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {filteredIssues.length === 0 && result.issues.length > 0 && (
+            <div className="text-center py-8 text-gray-500">
+              No issues match the selected filters
+            </div>
+          )}
+
+          {result.issues.length === 0 && (
+            <div className="text-center py-8 text-green-600">
+              <CheckCircle className="w-8 h-8 mx-auto mb-2" />
+              <div className="font-medium">Validation Passed!</div>
+              <div className="text-sm text-gray-600">This resource conforms to FHIR standards</div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Validation issue indicator component
 function ValidationIssueIndicator({ issue }: { issue: any }) {
   const getSeverityConfig = (severity: string) => {
@@ -38,22 +284,76 @@ function ValidationIssueIndicator({ issue }: { issue: any }) {
 
 // Validation issue details component
 function ValidationIssueDetails({ issue }: { issue: any }) {
-  const getSeverityColor = (severity: string) => {
+  const getSeverityConfig = (severity: string) => {
     switch(severity) {
-      case 'error': return 'border-red-200 bg-red-50 text-red-600';
-      case 'warning': return 'border-yellow-200 bg-yellow-50 text-yellow-600';
-      case 'information': return 'border-blue-200 bg-blue-50 text-blue-600';
-      default: return 'border-gray-200 bg-gray-50 text-gray-600';
+      case 'error': 
+        return { 
+          color: 'border-red-200 bg-red-50 text-red-700',
+          label: 'Error',
+          description: 'Must be fixed for FHIR compliance'
+        };
+      case 'warning': 
+        return { 
+          color: 'border-yellow-200 bg-yellow-50 text-yellow-700',
+          label: 'Warning', 
+          description: 'Should be addressed for best practices'
+        };
+      case 'information': 
+        return { 
+          color: 'border-blue-200 bg-blue-50 text-blue-700',
+          label: 'Information',
+          description: 'Recommendation for optimal FHIR usage'
+        };
+      default: 
+        return { 
+          color: 'border-gray-200 bg-gray-50 text-gray-600',
+          label: 'Issue',
+          description: 'Validation finding'
+        };
+    }
+  };
+
+  const config = getSeverityConfig(issue.severity);
+  
+  // Get category explanation
+  const getCategoryDescription = (category: string) => {
+    switch(category) {
+      case 'structural': return 'FHIR structure and data types';
+      case 'profile': return 'Profile conformance (US Core, etc.)';
+      case 'terminology': return 'Code systems and terminology';
+      case 'reference': return 'Resource references and relationships';
+      case 'business-rule': return 'Clinical logic and business rules';
+      case 'metadata': return 'Resource metadata and extensions';
+      default: return 'Validation check';
     }
   };
 
   return (
-    <div className={`text-xs rounded px-2 py-1 border ${getSeverityColor(issue.severity)}`}>
-      <div className="font-medium">{issue.severity}: {issue.code}</div>
-      <div>{issue.message || issue.humanReadable || issue.details}</div>
+    <div className={`text-xs rounded-lg px-3 py-2 border-l-4 ${config.color}`}>
+      <div className="flex items-center justify-between mb-1">
+        <div className="font-semibold flex items-center">
+          <span className="uppercase tracking-wide">{config.label}</span>
+          <span className="mx-1">•</span>
+          <span className="font-normal opacity-75">{issue.code}</span>
+        </div>
+        {issue.category && (
+          <span className="text-xs bg-white bg-opacity-50 px-1 py-0.5 rounded">
+            {getCategoryDescription(issue.category)}
+          </span>
+        )}
+      </div>
+      <div className="mb-2 leading-relaxed">
+        {issue.message || issue.humanReadable || issue.details}
+      </div>
       {issue.suggestion && (
-        <div className="mt-1 text-xs opacity-80">
-          💡 {issue.suggestion}
+        <div className="mt-2 p-2 bg-white bg-opacity-30 rounded text-xs">
+          <div className="font-medium mb-1">💡 Recommendation:</div>
+          <div>{issue.suggestion}</div>
+        </div>
+      )}
+      {issue.path && (
+        <div className="mt-1 text-xs opacity-60">
+          Path: <code className="bg-black bg-opacity-10 px-1 rounded">{issue.path}</code>
         </div>
       )}
     </div>
@@ -548,9 +848,10 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
             </div>
           </CardHeader>
           <CardContent>
-            <ValidationResults 
+            <OptimizedValidationResults 
               result={displayValidationResult} 
-              onRetry={validateResource}
+              onRevalidate={validateResource}
+              isValidating={isValidating}
             />
           </CardContent>
         </Card>
