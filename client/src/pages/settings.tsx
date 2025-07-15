@@ -93,7 +93,7 @@ function SortableTerminologyServer({ server, index, localSettings, handleSetting
           <Switch
             checked={server.enabled}
             onCheckedChange={(checked) => {
-              const newServers = [...(localSettings.terminologyServers || [])];
+              const newServers = [...(settings.terminologyServers || [])];
               newServers[index] = { ...server, enabled: checked };
               handleSettingChange('terminologyServers', newServers);
             }}
@@ -102,7 +102,7 @@ function SortableTerminologyServer({ server, index, localSettings, handleSetting
             variant="ghost"
             size="sm"
             onClick={() => {
-              const newServers = (localSettings.terminologyServers || []).filter((_, i) => i !== index);
+              const newServers = (settings.terminologyServers || []).filter((_, i) => i !== index);
               // Re-adjust priorities
               const reorderedServers = newServers.map((server, i) => ({
                 ...server,
@@ -125,7 +125,7 @@ function SortableTerminologyServer({ server, index, localSettings, handleSetting
           <Input
             value={server.url}
             onChange={(e) => {
-              const newServers = [...(localSettings.terminologyServers || [])];
+              const newServers = [...(settings.terminologyServers || [])];
               newServers[index] = { ...server, url: e.target.value };
               handleSettingChange('terminologyServers', newServers);
             }}
@@ -142,7 +142,7 @@ function SortableTerminologyServer({ server, index, localSettings, handleSetting
             max="10"
             value={server.priority}
             onChange={(e) => {
-              const newServers = [...(localSettings.terminologyServers || [])];
+              const newServers = [...(settings.terminologyServers || [])];
               newServers[index] = { ...server, priority: parseInt(e.target.value) || 1 };
               // Re-sort servers by priority
               newServers.sort((a, b) => a.priority - b.priority);
@@ -158,7 +158,7 @@ function SortableTerminologyServer({ server, index, localSettings, handleSetting
           <Input
             value={server.name}
             onChange={(e) => {
-              const newServers = [...(localSettings.terminologyServers || [])];
+              const newServers = [...(settings.terminologyServers || [])];
               newServers[index] = { ...server, name: e.target.value };
               handleSettingChange('terminologyServers', newServers);
             }}
@@ -226,7 +226,7 @@ function SortableProfileServer({ server, index, localSettings, handleSettingChan
             checked={server.enabled}
             onCheckedChange={(checked) => {
               console.log(`[ProfileServer] Toggling ${server.name} from ${server.enabled} to ${checked}`);
-              const newServers = [...(localSettings.profileResolutionServers || [])];
+              const newServers = [...(settings.profileResolutionServers || [])];
               newServers[index] = { ...server, enabled: checked };
               console.log(`[ProfileServer] Updated servers:`, newServers);
               handleSettingChange('profileResolutionServers', newServers);
@@ -241,7 +241,7 @@ function SortableProfileServer({ server, index, localSettings, handleSettingChan
             variant="ghost"
             size="sm"
             onClick={() => {
-              const newServers = (localSettings.profileResolutionServers || []).filter((_, i) => i !== index);
+              const newServers = (settings.profileResolutionServers || []).filter((_, i) => i !== index);
               // Re-adjust priorities
               const reorderedServers = newServers.map((server, i) => ({
                 ...server,
@@ -264,7 +264,7 @@ function SortableProfileServer({ server, index, localSettings, handleSettingChan
           <Input
             value={server.url}
             onChange={(e) => {
-              const newServers = [...(localSettings.profileResolutionServers || [])];
+              const newServers = [...(settings.profileResolutionServers || [])];
               newServers[index] = { ...server, url: e.target.value };
               handleSettingChange('profileResolutionServers', newServers);
             }}
@@ -281,7 +281,7 @@ function SortableProfileServer({ server, index, localSettings, handleSettingChan
             max="10"
             value={server.priority}
             onChange={(e) => {
-              const newServers = [...(localSettings.profileResolutionServers || [])];
+              const newServers = [...(settings.profileResolutionServers || [])];
               newServers[index] = { ...server, priority: parseInt(e.target.value) || 1 };
               // Re-sort servers by priority
               newServers.sort((a, b) => a.priority - b.priority);
@@ -297,7 +297,7 @@ function SortableProfileServer({ server, index, localSettings, handleSettingChan
           <Input
             value={server.name}
             onChange={(e) => {
-              const newServers = [...(localSettings.profileResolutionServers || [])];
+              const newServers = [...(settings.profileResolutionServers || [])];
               newServers[index] = { ...server, name: e.target.value };
               handleSettingChange('profileResolutionServers', newServers);
             }}
@@ -345,13 +345,27 @@ export default function SettingsPage() {
     })
   );
 
+  // Create a completely new settings management approach
   const ValidationSettingsContent = () => {
-    const { data: settings, isLoading } = useValidationSettings();
+    const { data: serverSettings, isLoading } = useValidationSettings();
     const updateSettings = useUpdateValidationSettings();
+    const { toast } = useToast();
     
-    // Store settings independently with initial load flag
-    const [hasLoaded, setHasLoaded] = useState(false);
-    const [localSettings, setLocalSettings] = useState({
+    // Use a ref to store the actual settings - this prevents React re-renders from affecting our data
+    const settingsRef = React.useRef<any>(null);
+    const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+    
+    // Initialize settings once from server
+    React.useEffect(() => {
+      if (serverSettings && !settingsRef.current) {
+        console.log('[Settings] Initializing settings from server');
+        settingsRef.current = { ...serverSettings };
+        forceUpdate(); // Trigger a render with the new settings
+      }
+    }, [serverSettings]);
+    
+    // Get current settings from ref with a clean getter
+    const getSettings = () => settingsRef.current || {
       // Enhanced Validation Engine - 6 Aspects
       enableStructuralValidation: true,
       enableProfileValidation: true,
@@ -448,55 +462,69 @@ export default function SettingsPage() {
       // Quality thresholds
       minValidationScore: 70,
       errorSeverityThreshold: 'warning'
-    });
+    };
     
-    // Load settings only once when component mounts and data is available
-    React.useEffect(() => {
-      if (settings && !hasLoaded) {
-        console.log('[Settings] Loading settings from server - one time only');
-        setLocalSettings(settings);
-        setHasLoaded(true);
-      }
-    }, [settings, hasLoaded]);
-
+    // Use a memoized version for rendering
+    const settings = getSettings();
+    
+    // Completely new save mechanism - direct and simple
     const handleSettingChange = (key: string, value: any) => {
-      console.log('[Settings] Handling setting change:', key, value);
-      const newSettings = { ...localSettings, [key]: value };
+      if (!settingsRef.current) return;
       
-      // Immediately update local state and keep it that way
-      setLocalSettings(newSettings);
+      console.log('[Settings] Updating:', key, value);
       
-      // Save to server without affecting local state
-      updateSettings.mutate(newSettings, {
-        onSuccess: () => {
-          console.log('[Settings] Update saved to server successfully');
-        },
+      // Update the ref directly
+      settingsRef.current = { ...settingsRef.current, [key]: value };
+      
+      // Force React to re-render with new settings
+      forceUpdate();
+      
+      // Save to server - fire and forget approach
+      updateSettings.mutate(settingsRef.current, {
         onError: (error) => {
-          console.error('[Settings] Update failed:', error);
-          // On error, revert to previous state
-          setLocalSettings(localSettings);
+          console.error('[Settings] Save failed:', error);
+          toast({
+            title: 'Save Failed',
+            description: 'Failed to save settings. Please try again.',
+            variant: 'destructive'
+          });
         }
       });
     };
 
     const handleNestedSettingChange = (parent: string, key: string, value: any) => {
-      const newSettings = { 
-        ...localSettings, 
+      if (!settingsRef.current) return;
+      
+      settingsRef.current = { 
+        ...settingsRef.current, 
         [parent]: { 
-          ...localSettings[parent], 
+          ...settingsRef.current[parent], 
           [key]: value 
         } 
       };
-      setLocalSettings(newSettings);
-      updateSettings.mutate(newSettings);
+      
+      forceUpdate();
+      
+      updateSettings.mutate(settingsRef.current, {
+        onError: (error) => {
+          console.error('[Settings] Save failed:', error);
+          toast({
+            title: 'Save Failed',
+            description: 'Failed to save settings. Please try again.',
+            variant: 'destructive'
+          });
+        }
+      });
     };
 
     // Handle drag end for terminology servers
     const handleDragEnd = (event: DragEndEvent) => {
+      if (!settingsRef.current) return;
+      
       const { active, over } = event;
 
       if (active.id !== over?.id) {
-        const servers = localSettings.terminologyServers || [];
+        const servers = settingsRef.current.terminologyServers || [];
         const oldIndex = servers.findIndex(server => server.priority.toString() === active.id);
         const newIndex = servers.findIndex(server => server.priority.toString() === over?.id);
 
@@ -508,9 +536,19 @@ export default function SettingsPage() {
           priority: index + 1
         }));
 
-        const newSettings = { ...localSettings, terminologyServers: updatedServers };
-        setLocalSettings(newSettings);
-        updateSettings.mutate(newSettings);
+        settingsRef.current = { ...settingsRef.current, terminologyServers: updatedServers };
+        forceUpdate();
+        
+        updateSettings.mutate(settingsRef.current, {
+          onError: (error) => {
+            console.error('[Settings] Drag reorder save failed:', error);
+            toast({
+              title: 'Save Failed',
+              description: 'Failed to save server order. Please try again.',
+              variant: 'destructive'
+            });
+          }
+        });
 
         toast({
           title: 'Terminology Servers Reordered',
@@ -521,10 +559,12 @@ export default function SettingsPage() {
 
     // Handle drag end for profile resolution servers
     const handleProfileDragEnd = (event: DragEndEvent) => {
+      if (!settingsRef.current) return;
+      
       const { active, over } = event;
 
       if (active.id !== over?.id) {
-        const servers = localSettings.profileResolutionServers || [];
+        const servers = settingsRef.current.profileResolutionServers || [];
         const oldIndex = servers.findIndex(server => server.priority.toString() === active.id);
         const newIndex = servers.findIndex(server => server.priority.toString() === over?.id);
 
@@ -536,16 +576,17 @@ export default function SettingsPage() {
           priority: index + 1
         }));
 
-        const newSettings = { ...localSettings, profileResolutionServers: updatedServers };
-        setLocalSettings(newSettings);
+        settingsRef.current = { ...settingsRef.current, profileResolutionServers: updatedServers };
+        forceUpdate();
         
-        updateSettings.mutate(newSettings, {
-          onSuccess: () => {
-            console.log('[Settings] Drag reorder saved to server successfully');
-          },
-          onError: () => {
-            console.error('[Settings] Drag reorder failed, reverting');
-            setLocalSettings(localSettings);
+        updateSettings.mutate(settingsRef.current, {
+          onError: (error) => {
+            console.error('[Settings] Drag reorder save failed:', error);
+            toast({
+              title: 'Save Failed',
+              description: 'Failed to save server order. Please try again.',
+              variant: 'destructive'
+            });
           }
         });
 
@@ -556,7 +597,7 @@ export default function SettingsPage() {
       }
     };
 
-    if (isLoading) {
+    if (isLoading || !settingsRef.current) {
       return <div className="text-center py-8">Loading Enhanced Validation Engine settings...</div>;
     }
 
@@ -578,7 +619,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-medium text-sm">Structural Validation</h4>
                 <Switch
-                  checked={localSettings.enableStructuralValidation}
+                  checked={settings.enableStructuralValidation}
                   onCheckedChange={(checked) => handleSettingChange('enableStructuralValidation', checked)}
                 />
               </div>
@@ -586,8 +627,8 @@ export default function SettingsPage() {
                 Validates FHIR syntax, cardinality rules, and data types
               </p>
               <div className="mt-2">
-                <Badge variant={localSettings.enableStructuralValidation ? "default" : "secondary"} className="text-xs">
-                  {localSettings.enableStructuralValidation ? "Active" : "Disabled"}
+                <Badge variant={settings.enableStructuralValidation ? "default" : "secondary"} className="text-xs">
+                  {settings.enableStructuralValidation ? "Active" : "Disabled"}
                 </Badge>
               </div>
             </Card>
@@ -597,7 +638,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-medium text-sm">Profile Validation</h4>
                 <Switch
-                  checked={localSettings.enableProfileValidation}
+                  checked={settings.enableProfileValidation}
                   onCheckedChange={(checked) => handleSettingChange('enableProfileValidation', checked)}
                 />
               </div>
@@ -605,8 +646,8 @@ export default function SettingsPage() {
                 Validates against FHIR profiles (US Core, IPS, custom profiles)
               </p>
               <div className="mt-2">
-                <Badge variant={localSettings.enableProfileValidation ? "default" : "secondary"} className="text-xs">
-                  {localSettings.enableProfileValidation ? "Active" : "Disabled"}
+                <Badge variant={settings.enableProfileValidation ? "default" : "secondary"} className="text-xs">
+                  {settings.enableProfileValidation ? "Active" : "Disabled"}
                 </Badge>
               </div>
             </Card>
@@ -616,7 +657,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-medium text-sm">Terminology Validation</h4>
                 <Switch
-                  checked={localSettings.enableTerminologyValidation}
+                  checked={settings.enableTerminologyValidation}
                   onCheckedChange={(checked) => handleSettingChange('enableTerminologyValidation', checked)}
                 />
               </div>
@@ -624,8 +665,8 @@ export default function SettingsPage() {
                 Validates codes against ValueSets (SNOMED CT, LOINC, ICD-10)
               </p>
               <div className="mt-2">
-                <Badge variant={localSettings.enableTerminologyValidation ? "default" : "secondary"} className="text-xs">
-                  {localSettings.enableTerminologyValidation ? "Active" : "Disabled"}
+                <Badge variant={settings.enableTerminologyValidation ? "default" : "secondary"} className="text-xs">
+                  {settings.enableTerminologyValidation ? "Active" : "Disabled"}
                 </Badge>
               </div>
             </Card>
@@ -635,7 +676,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-medium text-sm">Reference Validation</h4>
                 <Switch
-                  checked={localSettings.enableReferenceValidation}
+                  checked={settings.enableReferenceValidation}
                   onCheckedChange={(checked) => handleSettingChange('enableReferenceValidation', checked)}
                 />
               </div>
@@ -643,8 +684,8 @@ export default function SettingsPage() {
                 Validates resource references and circular dependency checks
               </p>
               <div className="mt-2">
-                <Badge variant={localSettings.enableReferenceValidation ? "default" : "secondary"} className="text-xs">
-                  {localSettings.enableReferenceValidation ? "Active" : "Disabled"}
+                <Badge variant={settings.enableReferenceValidation ? "default" : "secondary"} className="text-xs">
+                  {settings.enableReferenceValidation ? "Active" : "Disabled"}
                 </Badge>
               </div>
             </Card>
@@ -654,7 +695,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-medium text-sm">Business Rule Validation</h4>
                 <Switch
-                  checked={localSettings.enableBusinessRuleValidation}
+                  checked={settings.enableBusinessRuleValidation}
                   onCheckedChange={(checked) => handleSettingChange('enableBusinessRuleValidation', checked)}
                 />
               </div>
@@ -662,8 +703,8 @@ export default function SettingsPage() {
                 Cross-field logic validation (birthDate &lt; deathDate, etc.)
               </p>
               <div className="mt-2">
-                <Badge variant={localSettings.enableBusinessRuleValidation ? "default" : "secondary"} className="text-xs">
-                  {localSettings.enableBusinessRuleValidation ? "Active" : "Disabled"}
+                <Badge variant={settings.enableBusinessRuleValidation ? "default" : "secondary"} className="text-xs">
+                  {settings.enableBusinessRuleValidation ? "Active" : "Disabled"}
                 </Badge>
               </div>
             </Card>
@@ -673,7 +714,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-medium text-sm">Metadata Validation</h4>
                 <Switch
-                  checked={localSettings.enableMetadataValidation}
+                  checked={settings.enableMetadataValidation}
                   onCheckedChange={(checked) => handleSettingChange('enableMetadataValidation', checked)}
                 />
               </div>
@@ -681,8 +722,8 @@ export default function SettingsPage() {
                 Validates FHIR version, security labels, and meta elements
               </p>
               <div className="mt-2">
-                <Badge variant={localSettings.enableMetadataValidation ? "default" : "secondary"} className="text-xs">
-                  {localSettings.enableMetadataValidation ? "Active" : "Disabled"}
+                <Badge variant={settings.enableMetadataValidation ? "default" : "secondary"} className="text-xs">
+                  {settings.enableMetadataValidation ? "Active" : "Disabled"}
                 </Badge>
               </div>
             </Card>
@@ -706,7 +747,7 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <Switch
-                  checked={localSettings.strictMode}
+                  checked={settings.strictMode}
                   onCheckedChange={(checked) => handleSettingChange('strictMode', checked)}
                 />
               </div>
@@ -719,7 +760,7 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <Switch
-                  checked={localSettings.autoDetectProfiles}
+                  checked={settings.autoDetectProfiles}
                   onCheckedChange={(checked) => handleSettingChange('autoDetectProfiles', checked)}
                 />
               </div>
@@ -735,7 +776,7 @@ export default function SettingsPage() {
                   type="number"
                   min="0"
                   max="100"
-                  value={localSettings.minValidationScore}
+                  value={settings.minValidationScore}
                   onChange={(e) => handleSettingChange('minValidationScore', parseInt(e.target.value))}
                 />
                 <p className="text-sm text-muted-foreground">
@@ -752,7 +793,7 @@ export default function SettingsPage() {
                   type="number"
                   min="1"
                   max="100"
-                  value={localSettings.batchSize}
+                  value={settings.batchSize}
                   onChange={(e) => handleSettingChange('batchSize', parseInt(e.target.value))}
                 />
                 <p className="text-sm text-muted-foreground">
@@ -779,11 +820,11 @@ export default function SettingsPage() {
             onDragEnd={handleDragEnd}
           >
             <SortableContext
-              items={localSettings.terminologyServers?.map(server => server.priority.toString()) || []}
+              items={settings.terminologyServers?.map(server => server.priority.toString()) || []}
               strategy={verticalListSortingStrategy}
             >
               <div className="space-y-4">
-                {localSettings.terminologyServers?.map((server, index) => (
+                {settings.terminologyServers?.map((server, index) => (
                   <SortableTerminologyServer
                     key={server.priority}
                     server={server}
@@ -802,7 +843,7 @@ export default function SettingsPage() {
               variant="outline"
               onClick={() => {
                 const newServer = {
-                  priority: (localSettings.terminologyServers?.length || 0) + 1,
+                  priority: (settings.terminologyServers?.length || 0) + 1,
                   enabled: true,
                   url: '',
                   type: 'custom',
@@ -810,7 +851,7 @@ export default function SettingsPage() {
                   description: 'Custom terminology server',
                   capabilities: ['Custom']
                 };
-                const newServers = [...(localSettings.terminologyServers || []), newServer];
+                const newServers = [...(settings.terminologyServers || []), newServer];
                 handleSettingChange('terminologyServers', newServers);
               }}
               className="w-full"
@@ -860,11 +901,11 @@ export default function SettingsPage() {
             onDragEnd={handleProfileDragEnd}
           >
             <SortableContext
-              items={localSettings.profileResolutionServers?.map(server => server.priority.toString()) || []}
+              items={settings.profileResolutionServers?.map(server => server.priority.toString()) || []}
               strategy={verticalListSortingStrategy}
             >
               <div className="space-y-4">
-                {localSettings.profileResolutionServers?.map((server, index) => (
+                {settings.profileResolutionServers?.map((server, index) => (
                   <SortableProfileServer
                     key={server.priority}
                     server={server}
@@ -883,7 +924,7 @@ export default function SettingsPage() {
               variant="outline"
               onClick={() => {
                 const newServer = {
-                  priority: (localSettings.profileResolutionServers?.length || 0) + 1,
+                  priority: (settings.profileResolutionServers?.length || 0) + 1,
                   enabled: true,
                   url: '',
                   type: 'custom',
@@ -891,7 +932,7 @@ export default function SettingsPage() {
                   description: 'Custom profile resolution server',
                   capabilities: ['Custom Profiles']
                 };
-                const newServers = [...(localSettings.profileResolutionServers || []), newServer];
+                const newServers = [...(settings.profileResolutionServers || []), newServer];
                 handleSettingChange('profileResolutionServers', newServers);
               }}
               className="w-full"
