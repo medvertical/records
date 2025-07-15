@@ -447,25 +447,33 @@ export default function SettingsPage() {
       errorSeverityThreshold: 'warning'
     });
 
-    // Update local settings when data loads - but only if we don't have local changes
+    // Prevent automatic sync from overriding user changes
     const [hasLocalChanges, setHasLocalChanges] = React.useState(false);
+    const [isUpdating, setIsUpdating] = React.useState(false);
     
     React.useEffect(() => {
-      if (settings && !hasLocalChanges) {
+      if (settings && !hasLocalChanges && !isUpdating) {
         setLocalSettings(settings);
       }
-    }, [settings, hasLocalChanges]);
+    }, [settings, hasLocalChanges, isUpdating]);
 
     const handleSettingChange = (key: string, value: any) => {
       const newSettings = { ...localSettings, [key]: value };
       setLocalSettings(newSettings);
       setHasLocalChanges(true);
+      setIsUpdating(true);
+      
       updateSettings.mutate(newSettings, {
         onSuccess: () => {
-          setHasLocalChanges(false);
+          // Wait a moment before allowing automatic sync
+          setTimeout(() => {
+            setHasLocalChanges(false);
+            setIsUpdating(false);
+          }, 500);
         },
         onError: () => {
           setHasLocalChanges(false);
+          setIsUpdating(false);
         }
       });
     };
@@ -529,7 +537,21 @@ export default function SettingsPage() {
 
         const newSettings = { ...localSettings, profileResolutionServers: updatedServers };
         setLocalSettings(newSettings);
-        updateSettings.mutate(newSettings);
+        setHasLocalChanges(true);
+        setIsUpdating(true);
+        
+        updateSettings.mutate(newSettings, {
+          onSuccess: () => {
+            setTimeout(() => {
+              setHasLocalChanges(false);
+              setIsUpdating(false);
+            }, 500);
+          },
+          onError: () => {
+            setHasLocalChanges(false);
+            setIsUpdating(false);
+          }
+        });
 
         toast({
           title: 'Profile Resolution Servers Reordered',
