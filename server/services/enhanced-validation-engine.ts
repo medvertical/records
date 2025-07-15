@@ -440,13 +440,362 @@ export class EnhancedValidationEngine {
   }
 
   /**
-   * Validate against a specific FHIR profile
+   * Validate against a specific FHIR profile using configured profile resolution servers
    */
   private async validateAgainstProfile(resource: any, profileUrl: string, issues: ValidationIssue[]): Promise<void> {
     try {
       console.log(`[EnhancedValidation] Validating against profile: ${profileUrl}`);
       
-      // Use FHIR server for profile validation if available
+      // Step 1: Try to resolve the profile using configured profile resolution servers
+      const profile = await this.resolveProfile(profileUrl);
+      
+      if (profile) {
+        console.log(`[EnhancedValidation] Profile resolved successfully, performing detailed validation`);
+        await this.validateResourceAgainstResolvedProfile(resource, profile, profileUrl, issues);
+      } else {
+        console.log(`[EnhancedValidation] Profile not resolved, falling back to FHIR server validation`);
+        // Step 2: Fallback to FHIR server validation if profile resolution fails
+        await this.fallbackFhirServerValidation(resource, profileUrl, issues);
+      }
+      
+    } catch (error: any) {
+      console.warn(`[EnhancedValidation] Profile validation failed for ${profileUrl}:`, error.message);
+      issues.push({
+        severity: 'warning',
+        code: 'profile-validation-failed',
+        category: 'profile',
+        message: `Could not validate against profile ${profileUrl}: ${error.message}`,
+        path: '',
+        suggestion: 'Ensure the profile is accessible and valid'
+      });
+    }
+  }
+
+  /**
+   * Resolve a FHIR profile using configured profile resolution servers
+   */
+  private async resolveProfile(profileUrl: string): Promise<any | null> {
+    if (!this.config.profileResolutionServers) {
+      console.log(`[ProfileResolution] No profile resolution servers configured`);
+      return null;
+    }
+
+    // Sort servers by priority and filter enabled ones
+    const enabledServers = this.config.profileResolutionServers
+      .filter(server => server.enabled)
+      .sort((a, b) => a.priority - b.priority);
+
+    console.log(`[ProfileResolution] Attempting to resolve ${profileUrl} using ${enabledServers.length} servers`);
+
+    for (const server of enabledServers) {
+      try {
+        console.log(`[ProfileResolution] Trying ${server.name} (${server.type})`);
+        const profile = await this.fetchProfileFromServer(profileUrl, server);
+        
+        if (profile) {
+          console.log(`[ProfileResolution] Profile successfully resolved from ${server.name}`);
+          return profile;
+        }
+      } catch (error: any) {
+        console.warn(`[ProfileResolution] Failed to resolve from ${server.name}:`, error.message);
+        continue; // Try next server
+      }
+    }
+
+    console.log(`[ProfileResolution] Profile ${profileUrl} could not be resolved from any server`);
+    return null;
+  }
+
+  /**
+   * Fetch a profile from a specific profile resolution server
+   */
+  private async fetchProfileFromServer(profileUrl: string, server: ProfileResolutionServer): Promise<any | null> {
+    switch (server.type) {
+      case 'simplifier':
+        return await this.fetchFromSimplifier(profileUrl, server.url);
+      case 'fhir-ci':
+        return await this.fetchFromFhirCI(profileUrl, server.url);
+      case 'fhir-registry':
+        return await this.fetchFromFhirRegistry(profileUrl, server.url);
+      default:
+        return await this.fetchFromGenericFhirServer(profileUrl, server.url);
+    }
+  }
+
+  /**
+   * Fetch profile from Simplifier.net
+   */
+  private async fetchFromSimplifier(profileUrl: string, baseUrl: string): Promise<any | null> {
+    try {
+      // Extract profile identifier from URL for Simplifier API
+      const profileId = this.extractProfileIdentifier(profileUrl);
+      const apiUrl = `${baseUrl}/api/fhir/StructureDefinition/${profileId}`;
+      
+      console.log(`[ProfileResolution] Fetching from Simplifier: ${apiUrl}`);
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Accept': 'application/fhir+json',
+          'User-Agent': 'Records-FHIR-Validator/1.0'
+        },
+        timeout: 10000
+      });
+
+      if (response.ok) {
+        const profile = await response.json();
+        if (profile.resourceType === 'StructureDefinition') {
+          return profile;
+        }
+      }
+      
+      return null;
+    } catch (error: any) {
+      console.warn(`[ProfileResolution] Simplifier fetch failed:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch profile from FHIR CI Build server
+   */
+  private async fetchFromFhirCI(profileUrl: string, baseUrl: string): Promise<any | null> {
+    try {
+      // Try direct URL first, then construct API endpoint
+      const directUrl = profileUrl.replace('http://hl7.org/fhir/', `${baseUrl}/`);
+      console.log(`[ProfileResolution] Fetching from FHIR CI: ${directUrl}`);
+      
+      const response = await fetch(directUrl, {
+        headers: {
+          'Accept': 'application/fhir+json',
+          'User-Agent': 'Records-FHIR-Validator/1.0'
+        },
+        timeout: 10000
+      });
+
+      if (response.ok) {
+        const profile = await response.json();
+        if (profile.resourceType === 'StructureDefinition') {
+          return profile;
+        }
+      }
+      
+      return null;
+    } catch (error: any) {
+      console.warn(`[ProfileResolution] FHIR CI fetch failed:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch profile from FHIR Package Registry
+   */
+  private async fetchFromFhirRegistry(profileUrl: string, baseUrl: string): Promise<any | null> {
+    try {
+      // FHIR Package Registry typically uses a different approach
+      // This is a simplified implementation
+      const profileId = this.extractProfileIdentifier(profileUrl);
+      const apiUrl = `${baseUrl}/StructureDefinition/${profileId}`;
+      
+      console.log(`[ProfileResolution] Fetching from Package Registry: ${apiUrl}`);
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Accept': 'application/fhir+json',
+          'User-Agent': 'Records-FHIR-Validator/1.0'
+        },
+        timeout: 10000
+      });
+
+      if (response.ok) {
+        const profile = await response.json();
+        if (profile.resourceType === 'StructureDefinition') {
+          return profile;
+        }
+      }
+      
+      return null;
+    } catch (error: any) {
+      console.warn(`[ProfileResolution] Package Registry fetch failed:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch profile from a generic FHIR server
+   */
+  private async fetchFromGenericFhirServer(profileUrl: string, baseUrl: string): Promise<any | null> {
+    try {
+      const profileId = this.extractProfileIdentifier(profileUrl);
+      const apiUrl = `${baseUrl}/StructureDefinition/${profileId}`;
+      
+      console.log(`[ProfileResolution] Fetching from generic server: ${apiUrl}`);
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Accept': 'application/fhir+json',
+          'User-Agent': 'Records-FHIR-Validator/1.0'
+        },
+        timeout: 10000
+      });
+
+      if (response.ok) {
+        const profile = await response.json();
+        if (profile.resourceType === 'StructureDefinition') {
+          return profile;
+        }
+      }
+      
+      return null;
+    } catch (error: any) {
+      console.warn(`[ProfileResolution] Generic server fetch failed:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Extract profile identifier from URL
+   */
+  private extractProfileIdentifier(profileUrl: string): string {
+    // Extract the last part of the URL as the profile identifier
+    const parts = profileUrl.split('/');
+    return parts[parts.length - 1] || 'unknown';
+  }
+
+  /**
+   * Validate resource against a resolved profile
+   */
+  private async validateResourceAgainstResolvedProfile(
+    resource: any, 
+    profile: any, 
+    profileUrl: string, 
+    issues: ValidationIssue[]
+  ): Promise<void> {
+    console.log(`[ProfileValidation] Validating ${resource.resourceType} against ${profile.name || profileUrl}`);
+
+    // Check if resource type matches profile base type
+    const baseResourceType = this.extractBaseResourceType(profile);
+    if (baseResourceType && baseResourceType !== resource.resourceType) {
+      issues.push({
+        severity: 'error',
+        code: 'resource-type-mismatch',
+        category: 'profile',
+        message: `Resource type '${resource.resourceType}' does not match profile base type '${baseResourceType}'`,
+        path: 'resourceType',
+        suggestion: `This profile is for ${baseResourceType} resources only`
+      });
+      return;
+    }
+
+    // Validate must support elements
+    const mustSupportElements = this.extractMustSupportElements(profile);
+    for (const element of mustSupportElements) {
+      if (!this.resourceHasElement(resource, element.path)) {
+        issues.push({
+          severity: 'error',
+          code: 'missing-must-support',
+          category: 'profile',
+          message: `Missing required element: ${element.path}`,
+          path: element.path,
+          suggestion: 'This element is marked as mustSupport in the profile'
+        });
+      }
+    }
+
+    // Validate cardinality constraints
+    await this.validateProfileCardinality(resource, profile, issues);
+
+    // Validate binding constraints  
+    await this.validateProfileBindings(resource, profile, issues);
+  }
+
+  /**
+   * Extract base resource type from profile
+   */
+  private extractBaseResourceType(profile: any): string | null {
+    return profile.type || profile.baseDefinition?.split('/').pop() || null;
+  }
+
+  /**
+   * Extract mustSupport elements from profile
+   */
+  private extractMustSupportElements(profile: any): Array<{path: string, min: number}> {
+    const elements: Array<{path: string, min: number}> = [];
+    
+    if (profile.differential?.element) {
+      for (const element of profile.differential.element) {
+        if (element.mustSupport === true && element.min > 0) {
+          elements.push({
+            path: element.path,
+            min: element.min
+          });
+        }
+      }
+    }
+    
+    return elements;
+  }
+
+  /**
+   * Check if resource has a specific element path
+   */
+  private resourceHasElement(resource: any, elementPath: string): boolean {
+    const pathParts = elementPath.split('.');
+    let current = resource;
+    
+    for (let i = 1; i < pathParts.length; i++) { // Skip first part (resource type)
+      const part = pathParts[i];
+      if (current === null || current === undefined) {
+        return false;
+      }
+      current = current[part];
+    }
+    
+    return current !== null && current !== undefined;
+  }
+
+  /**
+   * Validate cardinality constraints from profile
+   */
+  private async validateProfileCardinality(resource: any, profile: any, issues: ValidationIssue[]): Promise<void> {
+    if (!profile.differential?.element) return;
+
+    for (const element of profile.differential.element) {
+      if (element.min !== undefined && element.min > 0) {
+        const hasElement = this.resourceHasElement(resource, element.path);
+        if (!hasElement) {
+          issues.push({
+            severity: 'error',
+            code: 'cardinality-violation',
+            category: 'profile',
+            message: `Element ${element.path} is required (min cardinality: ${element.min})`,
+            path: element.path,
+            suggestion: 'Add the required element to the resource'
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * Validate binding constraints from profile
+   */
+  private async validateProfileBindings(resource: any, profile: any, issues: ValidationIssue[]): Promise<void> {
+    if (!profile.differential?.element) return;
+
+    for (const element of profile.differential.element) {
+      if (element.binding?.valueSet) {
+        // This is a simplified binding validation
+        // In a full implementation, you would validate against the actual ValueSet
+        console.log(`[ProfileValidation] Found binding for ${element.path} to ValueSet ${element.binding.valueSet}`);
+      }
+    }
+  }
+
+  /**
+   * Fallback to FHIR server validation when profile resolution fails
+   */
+  private async fallbackFhirServerValidation(resource: any, profileUrl: string, issues: ValidationIssue[]): Promise<void> {
+    try {
       if (this.fhirClient) {
         const outcome = await this.fhirClient.validateResource(resource, profileUrl);
         
@@ -463,16 +812,26 @@ export class EnhancedValidationEngine {
             });
           }
         }
+      } else {
+        // Basic profile validation without external servers
+        issues.push({
+          severity: 'information',
+          code: 'profile-validation-skipped',
+          category: 'profile',
+          message: `Profile validation skipped for ${profileUrl} - no FHIR server available`,
+          path: '',
+          suggestion: 'Configure a FHIR server or profile resolution servers for complete validation'
+        });
       }
     } catch (error: any) {
-      console.warn(`[EnhancedValidation] Profile validation failed for ${profileUrl}:`, error.message);
+      console.warn(`[EnhancedValidation] Fallback FHIR server validation failed:`, error.message);
       issues.push({
         severity: 'warning',
         code: 'profile-validation-failed',
         category: 'profile',
-        message: `Could not validate against profile ${profileUrl}: ${error.message}`,
+        message: `Fallback profile validation failed: ${error.message}`,
         path: '',
-        suggestion: 'Ensure the profile is accessible and valid'
+        suggestion: 'Check profile URL and server connectivity'
       });
     }
   }
