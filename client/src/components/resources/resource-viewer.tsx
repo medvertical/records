@@ -280,12 +280,8 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Auto-validate when resourceData changes
-  useEffect(() => {
-    if (resourceData) {
-      validateResource();
-    }
-  }, [resourceData]);
+  // Validation is now handled proactively in list view and detail endpoint
+  // No need for automatic validation since resources come with fresh validation results
 
   const validateResource = async () => {
     if (!resourceData) return;
