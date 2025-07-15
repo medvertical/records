@@ -246,17 +246,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 try {
                   // Get existing validation results from cache (no revalidation)
                   const validationResults = await storage.getValidationResultsByResourceId(resource.id);
+                  
+                  // Calculate validation summary based on latest validation result
+                  const latestValidation = validationResults.length > 0 ? 
+                    validationResults.reduce((latest, current) => 
+                      new Date(current.validatedAt) > new Date(latest.validatedAt) ? current : latest
+                    ) : null;
+                  
                   return {
                     ...resource.data,
                     _dbId: resource.id,
                     _validationResults: validationResults,
                     _validationSummary: {
-                      hasErrors: validationResults.some(vr => !vr.isValid && vr.errors && vr.errors.length > 0),
-                      hasWarnings: validationResults.some(vr => vr.warnings && vr.warnings.length > 0),
-                      errorCount: validationResults.reduce((sum, vr) => sum + (vr.errors?.length || 0), 0),
-                      warningCount: validationResults.reduce((sum, vr) => sum + (vr.warnings?.length || 0), 0),
-                      isValid: validationResults.length > 0 && validationResults.every(vr => vr.isValid),
-                      lastValidated: validationResults.length > 0 ? new Date(Math.max(...validationResults.map(vr => new Date(vr.validatedAt).getTime()))) : null,
+                      hasErrors: latestValidation ? !latestValidation.isValid && latestValidation.errorCount > 0 : false,
+                      hasWarnings: latestValidation ? latestValidation.warningCount > 0 : false,
+                      errorCount: latestValidation ? latestValidation.errorCount : 0,
+                      warningCount: latestValidation ? latestValidation.warningCount : 0,
+                      isValid: latestValidation ? latestValidation.isValid : false,
+                      validationScore: latestValidation ? latestValidation.validationScore : 0,
+                      lastValidated: latestValidation ? new Date(latestValidation.validatedAt) : null,
                       needsValidation: validationResults.length === 0 // Flag resources that need validation
                     }
                   };
@@ -272,6 +280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       errorCount: 0,
                       warningCount: 0,
                       isValid: false,
+                      validationScore: 0,
                       lastValidated: null,
                       needsValidation: true
                     }
@@ -302,22 +311,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       // Broadcast update via WebSocket if available
                       if (validationWebSocket) {
                         const updatedValidation = await storage.getValidationResultsByResourceId(resource.id);
+                        
+                        // Use latest validation result for consistency
+                        const latestValidation = updatedValidation.length > 0 ? 
+                          updatedValidation.reduce((latest, current) => 
+                            new Date(current.validatedAt) > new Date(latest.validatedAt) ? current : latest
+                          ) : null;
+                        
                         const updateMessage = {
                           type: 'resource_validation_updated',
                           resourceId: resource.id,
                           fhirResourceId: resource.resourceId,
                           resourceType: resource.resourceType,
                           validationSummary: {
-                            hasErrors: updatedValidation.some(vr => !vr.isValid && vr.errors && vr.errors.length > 0),
-                            hasWarnings: updatedValidation.some(vr => vr.warnings && vr.warnings.length > 0),
-                            errorCount: updatedValidation.reduce((sum, vr) => sum + (vr.errors?.length || 0), 0),
-                            warningCount: updatedValidation.reduce((sum, vr) => sum + (vr.warnings?.length || 0), 0),
-                            isValid: updatedValidation.length > 0 && updatedValidation.every(vr => vr.isValid),
-                            lastValidated: new Date()
+                            hasErrors: latestValidation ? !latestValidation.isValid && latestValidation.errorCount > 0 : false,
+                            hasWarnings: latestValidation ? latestValidation.warningCount > 0 : false,
+                            errorCount: latestValidation ? latestValidation.errorCount : 0,
+                            warningCount: latestValidation ? latestValidation.warningCount : 0,
+                            isValid: latestValidation ? latestValidation.isValid : false,
+                            validationScore: latestValidation ? latestValidation.validationScore : 0,
+                            lastValidated: latestValidation ? new Date(latestValidation.validatedAt) : new Date()
                           }
                         };
                         
-                        validationWebSocket.broadcast(JSON.stringify(updateMessage));
+                        validationWebSocket.broadcastMessage(JSON.stringify(updateMessage));
                       }
                     }
                   }

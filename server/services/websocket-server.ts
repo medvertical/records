@@ -77,6 +77,19 @@ export class ValidationWebSocketServer {
     });
   }
 
+  broadcastMessage(message: string) {
+    this.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        try {
+          client.send(message);
+        } catch (error) {
+          console.error('Error broadcasting message:', error);
+          this.clients.delete(client);
+        }
+      }
+    });
+  }
+
   broadcastValidationComplete(progress: any) {
     const message = {
       type: 'validation_complete',

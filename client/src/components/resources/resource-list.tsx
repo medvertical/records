@@ -113,10 +113,15 @@ export default function ResourceList({
     switch (status) {
       case 'valid':
         return (
-          <Badge className="bg-green-50 text-fhir-success border-green-200 hover:bg-green-50">
-            <CheckCircle className="h-3 w-3 mr-1" />
-            Valid
-          </Badge>
+          <div className="flex flex-col items-end space-y-1">
+            <Badge className="bg-green-50 text-fhir-success border-green-200 hover:bg-green-50">
+              <CheckCircle className="h-3 w-3 mr-1" />
+              Valid
+            </Badge>
+            <Badge variant="outline" className="text-xs">
+              {validationSummary?.validationScore || 0}%
+            </Badge>
+          </div>
         );
       case 'error':
         return (
@@ -130,20 +135,33 @@ export default function ResourceList({
                 {validationSummary.warningCount} Warning{validationSummary.warningCount !== 1 ? 's' : ''}
               </Badge>
             )}
+            <Badge variant="outline" className="text-xs">
+              {validationSummary?.validationScore || 0}%
+            </Badge>
           </div>
         );
       case 'warning':
         return (
-          <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50">
-            <AlertTriangle className="h-3 w-3 mr-1" />
-            {validationSummary?.warningCount || 0} Warning{(validationSummary?.warningCount || 0) !== 1 ? 's' : ''}
-          </Badge>
+          <div className="flex flex-col items-end space-y-1">
+            <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50">
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              {validationSummary?.warningCount || 0} Warning{(validationSummary?.warningCount || 0) !== 1 ? 's' : ''}
+            </Badge>
+            <Badge variant="outline" className="text-xs">
+              {validationSummary?.validationScore || 0}%
+            </Badge>
+          </div>
         );
       default:
         return (
-          <Badge variant="secondary" className="text-xs">
-            Not Validated
-          </Badge>
+          <div className="flex flex-col items-end space-y-1">
+            <Badge variant="secondary" className="text-xs">
+              Not Validated
+            </Badge>
+            <Badge variant="outline" className="text-xs">
+              {validationSummary?.validationScore || 0}%
+            </Badge>
+          </div>
         );
     }
   };

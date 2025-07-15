@@ -26,8 +26,9 @@ const navigationItems = [
   { href: "/", label: "Dashboard", icon: ChartPie },
   { href: "/resources", label: "Browse Resources", icon: Database },
   { href: "/profiles", label: "Profile Management", icon: Package },
-  { href: "/settings", label: "Settings", icon: Settings },
 ];
+
+const settingsItem = { href: "/settings", label: "Settings", icon: Settings };
 
 const quickAccessItems = [
   { href: "/resources?type=Patient", label: "Patients", resourceType: "Patient" },
@@ -231,6 +232,24 @@ function SidebarContent({
           </ul>
         </div>
       </nav>
+
+      {/* Settings at Bottom */}
+      <div className="p-4 border-t border-gray-200 mt-auto">
+        <Link href={settingsItem.href}>
+          <div 
+            className={cn(
+              "flex items-center space-x-3 p-2 rounded-lg font-medium transition-colors cursor-pointer",
+              location === settingsItem.href 
+                ? "text-fhir-blue bg-blue-50" 
+                : "text-gray-700 hover:bg-gray-100"
+            )}
+            onClick={onItemClick}
+          >
+            <Settings className="w-4 h-4" />
+            <span>{settingsItem.label}</span>
+          </div>
+        </Link>
+      </div>
     </div>
   );
 }
