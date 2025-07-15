@@ -48,7 +48,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 // Sortable Terminology Server Component
-function SortableTerminologyServer({ server, index, localSettings, handleSettingChange }: any) {
+function SortableTerminologyServer({ server, index, settings, handleSettingChange }: any) {
   const {
     attributes,
     listeners,
@@ -180,7 +180,7 @@ function SortableTerminologyServer({ server, index, localSettings, handleSetting
 }
 
 // Sortable Profile Resolution Server Component
-function SortableProfileServer({ server, index, localSettings, handleSettingChange }: any) {
+function SortableProfileServer({ server, index, settings, handleSettingChange }: any) {
   const {
     attributes,
     listeners,
@@ -829,7 +829,7 @@ export default function SettingsPage() {
                     key={server.priority}
                     server={server}
                     index={index}
-                    localSettings={localSettings}
+                    settings={settings}
                     handleSettingChange={handleSettingChange}
                   />
                 ))}
@@ -910,7 +910,7 @@ export default function SettingsPage() {
                     key={server.priority}
                     server={server}
                     index={index}
-                    localSettings={localSettings}
+                    settings={settings}
                     handleSettingChange={handleSettingChange}
                   />
                 ))}
