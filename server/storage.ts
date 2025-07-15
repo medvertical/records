@@ -18,7 +18,7 @@ import {
   type ResourceStats,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, gt, sql, getTableColumns } from "drizzle-orm";
 
 export interface IStorage {
   // FHIR Servers
@@ -47,7 +47,7 @@ export interface IStorage {
   // Validation Results
   getValidationResultsByResourceId(resourceId: number): Promise<ValidationResult[]>;
   createValidationResult(result: InsertValidationResult): Promise<ValidationResult>;
-  getRecentValidationErrors(limit?: number): Promise<ValidationResult[]>;
+  getRecentValidationErrors(limit?: number, serverId?: number): Promise<ValidationResult[]>;
 
   // Dashboard
   getDashboardCards(): Promise<DashboardCard[]>;
@@ -55,7 +55,7 @@ export interface IStorage {
   updateDashboardCard(id: number, config: any): Promise<void>;
 
   // Statistics
-  getResourceStats(): Promise<ResourceStats>;
+  getResourceStats(serverId?: number): Promise<ResourceStats>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -157,18 +157,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getFhirResources(serverId?: number, resourceType?: string, limit = 50, offset = 0): Promise<FhirResource[]> {
-    let query = db.select().from(fhirResources);
-    
     const conditions = [];
+    
+    // Always filter by active server if no specific server is provided
     if (serverId) {
       conditions.push(eq(fhirResources.serverId, serverId));
+    } else {
+      // Get active server and filter by it
+      const activeServer = await this.getActiveFhirServer();
+      if (activeServer) {
+        conditions.push(eq(fhirResources.serverId, activeServer.id));
+      }
     }
+    
     if (resourceType) {
       conditions.push(eq(fhirResources.resourceType, resourceType));
     }
     
+    const query = db.select().from(fhirResources);
+    
     if (conditions.length > 0) {
-      query = query.where(and(...conditions));
+      return await query
+        .where(and(...conditions))
+        .limit(limit)
+        .offset(offset);
     }
     
     return await query.limit(limit).offset(offset);
@@ -224,16 +236,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getValidationProfiles(resourceType?: string): Promise<ValidationProfile[]> {
-    let query = db.select().from(validationProfiles).where(eq(validationProfiles.isActive, true));
+    const conditions = [eq(validationProfiles.isActive, true)];
     
     if (resourceType) {
-      query = query.where(and(
-        eq(validationProfiles.isActive, true),
-        eq(validationProfiles.resourceType, resourceType)
-      ));
+      conditions.push(eq(validationProfiles.resourceType, resourceType));
     }
     
-    return await query;
+    return await db.select()
+      .from(validationProfiles)
+      .where(and(...conditions));
   }
 
   async createValidationProfile(profile: InsertValidationProfile): Promise<ValidationProfile> {
@@ -272,8 +283,11 @@ export class DatabaseStorage implements IStorage {
     return newResult;
   }
 
-  async getRecentValidationErrors(limit = 10): Promise<ValidationResult[]> {
-    return await db.select({
+  async getRecentValidationErrors(limit = 10, serverId?: number): Promise<ValidationResult[]> {
+    // Get active server if none specified
+    const targetServerId = serverId || (await this.getActiveFhirServer())?.id;
+    
+    const query = db.select({
       id: validationResults.id,
       resourceId: validationResults.resourceId,
       profileId: validationResults.profileId,
@@ -291,9 +305,18 @@ export class DatabaseStorage implements IStorage {
     })
       .from(validationResults)
       .leftJoin(fhirResources, eq(validationResults.resourceId, fhirResources.id))
-      .where(eq(validationResults.isValid, false))
+      .where(
+        targetServerId 
+          ? and(
+              eq(validationResults.isValid, false),
+              eq(fhirResources.serverId, targetServerId)
+            )
+          : eq(validationResults.isValid, false)
+      )
       .orderBy(desc(validationResults.validatedAt))
       .limit(limit);
+
+    return await query;
   }
 
   async getDashboardCards(): Promise<DashboardCard[]> {
@@ -317,9 +340,23 @@ export class DatabaseStorage implements IStorage {
       .where(eq(dashboardCards.id, id));
   }
 
-  async getResourceStats(): Promise<ResourceStats> {
-    const resources = await db.select().from(fhirResources);
-    const allValidationResults = await db.select().from(validationResults);
+  async getResourceStats(serverId?: number): Promise<ResourceStats> {
+    // Get active server if none specified
+    const targetServerId = serverId || (await this.getActiveFhirServer())?.id;
+    
+    // Get resources for specific server
+    const resources = await db.select().from(fhirResources)
+      .where(targetServerId ? eq(fhirResources.serverId, targetServerId) : undefined);
+    
+    // Get validation results for resources on this server
+    const allValidationResults = await db.select({
+      ...getTableColumns(validationResults),
+      resourceType: fhirResources.resourceType,
+    })
+      .from(validationResults)
+      .innerJoin(fhirResources, eq(validationResults.resourceId, fhirResources.id))
+      .where(targetServerId ? eq(fhirResources.serverId, targetServerId) : undefined);
+    
     const activeProfiles = await db.select().from(validationProfiles).where(eq(validationProfiles.isActive, true));
     
     const totalResources = resources.length;
@@ -338,10 +375,10 @@ export class DatabaseStorage implements IStorage {
     
     // Calculate validation stats per resource type
     allValidationResults.forEach(result => {
-      const resource = resources.find(r => r.id === result.resourceId);
-      if (resource && resourceBreakdown[resource.resourceType]) {
+      const type = result.resourceType;
+      if (resourceBreakdown[type]) {
         if (result.isValid) {
-          resourceBreakdown[resource.resourceType].valid++;
+          resourceBreakdown[type].valid++;
         }
       }
     });
