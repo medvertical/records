@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ChevronRight, ChevronDown, AlertCircle, AlertTriangle, Info, Hash, Calendar, User, Link2, List, FileText, Code } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -69,9 +69,26 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   const isExpanded = expandedPaths.has(path);
   
   // Filter issues for this exact path
-  const directIssues = validationIssues.filter(issue => 
-    issue.path === path || issue.path.startsWith(`${path}.`)
-  );
+  const directIssues = validationIssues.filter(issue => {
+    // For root level, only match issues without a path or with the resource type itself
+    if (path === '') {
+      return !issue.path || issue.path === nodeKey;
+    }
+    
+    // For nested paths, match exact path or child paths
+    const normalizedIssuePath = issue.path.toLowerCase();
+    const normalizedCurrentPath = path.toLowerCase();
+    
+    // Debug logging for first few levels
+    if (depth < 2) {
+      console.log(`[TreeNode] Checking path "${path}" against issue path "${issue.path}"`);
+    }
+    
+    // Match exact path or child paths
+    return normalizedIssuePath === normalizedCurrentPath || 
+           normalizedIssuePath.startsWith(`${normalizedCurrentPath}.`) ||
+           normalizedIssuePath.startsWith(`${normalizedCurrentPath}[`);
+  });
   
   const hasErrors = directIssues.some(i => i.severity === 'error');
   const hasWarnings = directIssues.some(i => i.severity === 'warning');
@@ -284,10 +301,46 @@ export default function ResourceTreeViewer({ resourceData, validationResults }: 
     validationResults.forEach(result => {
       if (result.issues) {
         result.issues.forEach((issue: any) => {
+          // Extract path from various formats
+          let path = '';
+          
+          // Try different path formats
+          if (issue.path) {
+            // Handle complex paths like "Patient.identifier, element Patient(...).identifier"
+            // Extract the simple field path after the resource type
+            const pathMatch = issue.path.match(/^[A-Z][a-zA-Z]+\.(.+?)(?:,|$)/);
+            if (pathMatch) {
+              path = pathMatch[1];
+            } else {
+              // Handle simple paths that are already in the right format
+              path = issue.path;
+            }
+            
+            // Remove any resource type prefix (e.g., "Patient." from "Patient.identifier")
+            path = path.replace(/^[A-Z][a-zA-Z]+\./, '');
+            
+            // Clean up any remaining complex parts
+            if (path.includes(', element')) {
+              path = path.split(', element')[0];
+            }
+          } else if (issue.expression) {
+            // Handle expression-based paths
+            path = issue.expression;
+          } else if (issue.location && Array.isArray(issue.location)) {
+            // Handle location arrays
+            path = issue.location.join('.');
+          }
+          
+          console.log('Validation issue:', { 
+            originalPath: issue.path, 
+            normalizedPath: path, 
+            message: issue.message 
+          });
+          
           issues.push({
             severity: issue.severity || 'information',
             message: issue.message || '',
-            path: issue.path || issue.expression || '',
+            path: path,
             category: issue.category,
             recommendation: issue.recommendation
           });
@@ -295,6 +348,7 @@ export default function ResourceTreeViewer({ resourceData, validationResults }: 
       }
     });
     
+    console.log('All validation issues:', issues);
     return issues;
   }, [validationResults]);
 
@@ -343,6 +397,15 @@ export default function ResourceTreeViewer({ resourceData, validationResults }: 
   const errorCount = validationIssues.filter(i => i.severity === 'error').length;
   const warningCount = validationIssues.filter(i => i.severity === 'warning').length;
   const infoCount = validationIssues.filter(i => i.severity === 'information').length;
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('[ResourceTreeViewer] Resource data keys:', Object.keys(resourceData || {}));
+    console.log('[ResourceTreeViewer] Validation issues count:', validationIssues.length);
+    if (validationIssues.length > 0) {
+      console.log('[ResourceTreeViewer] Sample issues:', validationIssues.slice(0, 3));
+    }
+  }, [resourceData, validationIssues]);
 
   return (
     <div className="space-y-4">
@@ -391,6 +454,35 @@ export default function ResourceTreeViewer({ resourceData, validationResults }: 
           />
         </CardContent>
       </Card>
+      
+      {/* Debug: Show all validation issues */}
+      {validationIssues.length > 0 && (
+        <Card className="border-dashed border-gray-300">
+          <CardContent className="p-4">
+            <h3 className="text-sm font-semibold mb-2">Debug: All Validation Issues ({validationIssues.length})</h3>
+            <div className="space-y-2 text-xs">
+              {validationIssues.map((issue, idx) => (
+                <div key={idx} className={cn(
+                  "p-2 rounded",
+                  issue.severity === 'error' && "bg-red-50",
+                  issue.severity === 'warning' && "bg-orange-50",
+                  issue.severity === 'information' && "bg-blue-50"
+                )}>
+                  <div>
+                    <strong>Path:</strong> "{issue.path || 'NO PATH'}"
+                  </div>
+                  <div>
+                    <strong>Severity:</strong> {issue.severity}
+                  </div>
+                  <div>
+                    <strong>Message:</strong> {issue.message}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
