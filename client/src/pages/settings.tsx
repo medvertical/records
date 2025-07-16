@@ -367,6 +367,11 @@ export default function SettingsPage() {
   const [localSettings, setLocalSettings] = React.useState<any>(null);
   const [validationForceUpdate, setValidationForceUpdate] = React.useState(0);
   
+  // Remember selected tab
+  const [selectedTab, setSelectedTab] = React.useState(() => {
+    return localStorage.getItem('settings-selected-tab') || 'general';
+  });
+  
   // Initialize settings from server when component mounts or data changes
   React.useEffect(() => {
     // Force refetch settings when component mounts to ensure fresh data
@@ -1128,7 +1133,14 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="general" className="space-y-6">
+      <Tabs 
+        value={selectedTab} 
+        onValueChange={(value) => {
+          setSelectedTab(value);
+          localStorage.setItem('settings-selected-tab', value);
+        }}
+        className="space-y-6"
+      >
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="fhir">FHIR Server</TabsTrigger>
