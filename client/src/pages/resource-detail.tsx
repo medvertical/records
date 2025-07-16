@@ -101,49 +101,7 @@ export default function ResourceDetail() {
               </div>
             </div>
             
-            {/* Validation Summary */}
-            {validationSummary && (
-              <div className="space-y-4">
-                {/* Score Progress Bar */}
-                <div className="flex items-center gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium">Validation Score</span>
-                      <span className="text-lg font-bold">{validationSummary.score}%</span>
-                    </div>
-                    <Progress value={validationSummary.score} className="h-2" />
-                  </div>
-                </div>
-                
-                {/* Issue Summary */}
-                <div className="flex items-center gap-4">
-                  {validationSummary.errorCount > 0 && (
-                    <Badge variant="destructive" className="flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
-                      {validationSummary.errorCount} Error{validationSummary.errorCount !== 1 ? 's' : ''}
-                    </Badge>
-                  )}
-                  {validationSummary.warningCount > 0 && (
-                    <Badge className="bg-orange-100 text-orange-800 border-orange-200 flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" />
-                      {validationSummary.warningCount} Warning{validationSummary.warningCount !== 1 ? 's' : ''}
-                    </Badge>
-                  )}
-                  {validationSummary.informationCount > 0 && (
-                    <Badge className="bg-blue-100 text-blue-800 border-blue-200 flex items-center gap-1">
-                      <Info className="h-3 w-3" />
-                      {validationSummary.informationCount} Info
-                    </Badge>
-                  )}
-                  {validationSummary.totalIssues === 0 && (
-                    <Badge className="bg-green-100 text-green-800 border-green-200 flex items-center gap-1">
-                      <CheckCircle className="h-3 w-3" />
-                      Valid
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            )}
+            
           </CardContent>
         </Card>
 
