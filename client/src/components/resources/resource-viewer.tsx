@@ -203,7 +203,7 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating }: { re
           </div>
 
           {/* Issues by Category */}
-          <div className="space-y-4 max-h-96 overflow-y-auto">
+          <div className="space-y-4">
             {Object.entries(groupedIssues).map(([category, severityGroups]: [string, any]) => {
               const categoryIssues = Object.values(severityGroups).flat();
               const visibleCategoryIssues = categoryIssues.filter((issue: any) => {
