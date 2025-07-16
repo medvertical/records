@@ -105,6 +105,13 @@ export class EnhancedValidationEngine {
   }
 
   /**
+   * Get current configuration
+   */
+  getConfig(): EnhancedValidationConfig {
+    return { ...this.config };
+  }
+
+  /**
    * Update configuration and terminology servers
    */
   updateConfig(config: Partial<EnhancedValidationConfig>) {

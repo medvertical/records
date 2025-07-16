@@ -6,7 +6,7 @@ import { ValidationEngine } from "./services/validation-engine.js";
 import { UnifiedValidationService } from "./services/unified-validation.js";
 import { profileManager } from "./services/profile-manager.js";
 import { RobustValidationService } from "./services/robust-validation.js";
-import { insertFhirServerSchema, insertFhirResourceSchema, insertValidationProfileSchema } from "@shared/schema.js";
+import { insertFhirServerSchema, insertFhirResourceSchema, insertValidationProfileSchema, type ValidationResult } from "@shared/schema.js";
 import { validationWebSocket, initializeWebSocket } from "./services/websocket-server.js";
 import { z } from "zod";
 
@@ -24,6 +24,55 @@ let globalValidationState = {
   shouldStop: false,
   resumeData: null as any | null
 };
+
+// Filter validation issues based on active settings
+function filterValidationIssues(validationResults: ValidationResult[], activeSettings: any): ValidationResult[] {
+  if (!activeSettings) return validationResults;
+  
+  return validationResults.map(result => {
+    if (!result.issues || result.issues.length === 0) return result;
+    
+    // Filter issues based on their category and active settings
+    const filteredIssues = result.issues.filter((issue: any) => {
+      const category = issue.category || 'structural';
+      
+      switch (category) {
+        case 'structural':
+          return activeSettings.enableStructuralValidation !== false;
+        case 'profile':
+          return activeSettings.enableProfileValidation !== false;
+        case 'terminology':
+          return activeSettings.enableTerminologyValidation !== false;
+        case 'reference':
+          return activeSettings.enableReferenceValidation !== false;
+        case 'business-rule':
+          return activeSettings.enableBusinessRuleValidation !== false;
+        case 'metadata':
+          return activeSettings.enableMetadataValidation !== false;
+        default:
+          return true; // Show unknown categories by default
+      }
+    });
+    
+    // Recalculate error and warning counts based on filtered issues
+    const errorCount = filteredIssues.filter((issue: any) => issue.severity === 'error').length;
+    const warningCount = filteredIssues.filter((issue: any) => issue.severity === 'warning').length;
+    
+    return {
+      ...result,
+      issues: filteredIssues,
+      errors: filteredIssues.filter((issue: any) => issue.severity === 'error'),
+      warnings: filteredIssues.filter((issue: any) => issue.severity === 'warning'),
+      errorCount,
+      warningCount,
+      // Recalculate validation score based on filtered issues
+      validationScore: errorCount === 0 && warningCount === 0 ? 100 : 
+                      errorCount > 0 ? 0 : 
+                      Math.max(0, 100 - (warningCount * 10)),
+      isValid: errorCount === 0
+    };
+  });
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize FHIR client with active server
@@ -278,6 +327,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (cachedResources.length > 0) {
             console.log(`[Resources] Serving ${cachedResources.length} cached resources immediately (${allCachedForType.length} total in cache)`);
             
+            // Get current validation settings for filtering
+            const validationSettings = await storage.getValidationSettings();
+            
             // Return resources immediately with cached validation data only
             const resourcesWithCachedValidation = await Promise.all(
               cachedResources.map(async (resource) => {
@@ -285,16 +337,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   // Get existing validation results from cache (no revalidation)
                   const validationResults = await storage.getValidationResultsByResourceId(resource.id);
                   
-                  // Calculate validation summary based on latest validation result
-                  const latestValidation = validationResults.length > 0 ? 
-                    validationResults.reduce((latest, current) => 
+                  // Filter validation results based on active settings
+                  const filteredResults = filterValidationIssues(validationResults, validationSettings);
+                  
+                  // Calculate validation summary based on latest FILTERED validation result
+                  const latestValidation = filteredResults.length > 0 ? 
+                    filteredResults.reduce((latest, current) => 
                       new Date(current.validatedAt) > new Date(latest.validatedAt) ? current : latest
                     ) : null;
                   
                   return {
                     ...resource.data,
                     _dbId: resource.id,
-                    _validationResults: validationResults,
+                    _validationResults: filteredResults,
                     _validationSummary: {
                       hasErrors: latestValidation ? !latestValidation.isValid && latestValidation.errorCount > 0 : false,
                       hasWarnings: latestValidation ? latestValidation.warningCount > 0 : false,
@@ -491,6 +546,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.warn(`[Resource Detail] Validation check failed for ${resource.resourceType}/${resource.resourceId}:`, validationError);
           // Continue with existing validation results
         }
+      }
+      
+      // Get validation settings for filtering
+      const validationSettings = await storage.getValidationSettings();
+      
+      // Filter validation results based on active settings
+      if (resource.validationResults) {
+        resource.validationResults = filterValidationIssues(resource.validationResults, validationSettings);
       }
       
       console.log(`[Resource Detail] Returning resource:`, resource.resourceType, resource.resourceId);

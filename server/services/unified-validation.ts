@@ -64,6 +64,8 @@ export class UnifiedValidationService {
 
   /**
    * Validate a single resource with smart caching and timestamp-based invalidation
+   * ALWAYS performs ALL validation categories when saving to database
+   * Display filtering happens at the API layer
    */
   async validateResource(
     resource: any, 
@@ -115,8 +117,28 @@ export class UnifiedValidationService {
       wasRevalidated = true;
 
       try {
+        console.log(`[UnifiedValidation] Performing FULL validation for ${resource.resourceType}/${resource.id} (ALL categories for database storage)`);
+        
+        // ALWAYS use full validation configuration when saving to database
+        const originalConfig = this.enhancedValidationEngine.getConfig();
+        const fullValidationConfig = {
+          ...originalConfig,
+          enableStructuralValidation: true,
+          enableProfileValidation: true,
+          enableTerminologyValidation: true,
+          enableReferenceValidation: true,
+          enableBusinessRuleValidation: true,
+          enableMetadataValidation: true
+        };
+        
+        // Temporarily enable all validations for database storage
+        this.enhancedValidationEngine.updateConfig(fullValidationConfig);
+        
         // Use enhanced validation engine for comprehensive validation
         const enhancedResult = await this.enhancedValidationEngine.validateResource(resource);
+        
+        // Restore original configuration
+        this.enhancedValidationEngine.updateConfig(originalConfig);
         
         console.log(`[UnifiedValidation] Enhanced validation completed with score: ${enhancedResult.validationScore}`);
         console.log(`[UnifiedValidation] Validation aspects performed:`, {
