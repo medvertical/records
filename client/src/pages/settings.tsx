@@ -363,28 +363,24 @@ export default function SettingsPage() {
   const { data: serverSettings, isLoading } = useValidationSettings();
   const updateSettings = useUpdateValidationSettings();
   
-  // Use refs that won't be reset by component re-renders
-  const settingsRef = React.useRef<any>(null);
-  const hasInitialized = React.useRef(false);
+  // Use local state that syncs with server data
+  const [localSettings, setLocalSettings] = React.useState<any>(null);
   const [validationForceUpdate, setValidationForceUpdate] = React.useState(0);
   
-  // Initialize settings once from server - PERMANENTLY
+  // Initialize settings from server when component mounts or data changes
   React.useEffect(() => {
-    if (serverSettings && !hasInitialized.current) {
-      console.log('[Settings] PERMANENT initialization from server - WILL NEVER HAPPEN AGAIN');
-      settingsRef.current = { ...serverSettings };
-      hasInitialized.current = true;
+    if (serverSettings) {
+      console.log('[Settings] Loading settings from server');
+      setLocalSettings({ ...serverSettings });
       setValidationForceUpdate(prev => prev + 1);
-    } else if (serverSettings && hasInitialized.current) {
-      console.log('[Settings] REJECTING server data - local state is protected');
     }
   }, [serverSettings]);
 
   // Create a completely new settings management approach
   const ValidationSettingsContent = () => {
     
-    // Get current settings from ref with a clean getter  
-    const getSettings = () => settingsRef.current || {
+    // Get current settings from state with defaults
+    const getSettings = () => localSettings || {
       // Enhanced Validation Engine - 6 Aspects
       enableStructuralValidation: true,
       enableProfileValidation: true,
@@ -492,20 +488,18 @@ export default function SettingsPage() {
     
     // Completely new save mechanism - direct and simple
     const handleSettingChange = (key: string, value: any) => {
-      if (!settingsRef.current) return;
+      if (!localSettings) return;
       
       console.log('[Settings] Updating:', key, value);
       
-      // Update the ref directly
-      settingsRef.current = { ...settingsRef.current, [key]: value };
+      // Update local state
+      const newSettings = { ...localSettings, [key]: value };
+      setLocalSettings(newSettings);
       
-      // Force React to re-render with new settings
-      setValidationForceUpdate(prev => prev + 1);
-      
-      // Save to server - but maintain local state dominance
-      updateSettings.mutate(settingsRef.current, {
+      // Save to server
+      updateSettings.mutate(newSettings, {
         onSuccess: () => {
-          console.log('[Settings] Server save successful - LOCAL STATE REMAINS UNCHANGED');
+          console.log('[Settings] Server save successful');
           
           // Create user-friendly labels for settings
           const settingLabels: Record<string, string> = {
@@ -547,19 +541,19 @@ export default function SettingsPage() {
     };
 
     const handleNestedSettingChange = (parent: string, key: string, value: any) => {
-      if (!settingsRef.current) return;
+      if (!localSettings) return;
       
-      settingsRef.current = { 
-        ...settingsRef.current, 
+      const newSettings = { 
+        ...localSettings, 
         [parent]: { 
-          ...settingsRef.current[parent], 
+          ...localSettings[parent], 
           [key]: value 
         } 
       };
       
-      forceUpdate();
+      setLocalSettings(newSettings);
       
-      updateSettings.mutate(settingsRef.current, {
+      updateSettings.mutate(newSettings, {
         onSuccess: () => {
           // Create user-friendly labels for nested settings
           const nestedLabels: Record<string, Record<string, string>> = {
@@ -591,12 +585,12 @@ export default function SettingsPage() {
 
     // Handle drag end for terminology servers
     const handleDragEnd = (event: DragEndEvent) => {
-      if (!settingsRef.current) return;
+      if (!localSettings) return;
       
       const { active, over } = event;
 
       if (active.id !== over?.id) {
-        const servers = settingsRef.current.terminologyServers || [];
+        const servers = localSettings.terminologyServers || [];
         const oldIndex = servers.findIndex(server => server.priority.toString() === active.id);
         const newIndex = servers.findIndex(server => server.priority.toString() === over?.id);
 
@@ -608,10 +602,10 @@ export default function SettingsPage() {
           priority: index + 1
         }));
 
-        settingsRef.current = { ...settingsRef.current, terminologyServers: updatedServers };
-        forceUpdate();
+        const newSettings = { ...localSettings, terminologyServers: updatedServers };
+        setLocalSettings(newSettings);
         
-        updateSettings.mutate(settingsRef.current, {
+        updateSettings.mutate(newSettings, {
           onError: (error) => {
             console.error('[Settings] Drag reorder save failed:', error);
             toast({
@@ -631,12 +625,12 @@ export default function SettingsPage() {
 
     // Handle drag end for profile resolution servers
     const handleProfileDragEnd = (event: DragEndEvent) => {
-      if (!settingsRef.current) return;
+      if (!localSettings) return;
       
       const { active, over } = event;
 
       if (active.id !== over?.id) {
-        const servers = settingsRef.current.profileResolutionServers || [];
+        const servers = localSettings.profileResolutionServers || [];
         const oldIndex = servers.findIndex(server => server.priority.toString() === active.id);
         const newIndex = servers.findIndex(server => server.priority.toString() === over?.id);
 
@@ -648,10 +642,10 @@ export default function SettingsPage() {
           priority: index + 1
         }));
 
-        settingsRef.current = { ...settingsRef.current, profileResolutionServers: updatedServers };
-        forceUpdate();
+        const newSettings = { ...localSettings, profileResolutionServers: updatedServers };
+        setLocalSettings(newSettings);
         
-        updateSettings.mutate(settingsRef.current, {
+        updateSettings.mutate(newSettings, {
           onError: (error) => {
             console.error('[Settings] Drag reorder save failed:', error);
             toast({
@@ -669,7 +663,7 @@ export default function SettingsPage() {
       }
     };
 
-    if (isLoading && !settingsRef.current) {
+    if (isLoading && !localSettings) {
       return <div className="text-center py-8">Loading Enhanced Validation Engine settings...</div>;
     }
 
