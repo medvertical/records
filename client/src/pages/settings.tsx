@@ -360,7 +360,7 @@ export default function SettingsPage() {
   );
 
   // Move settings management to the main component to prevent re-mounting issues
-  const { data: serverSettings, isLoading } = useValidationSettings();
+  const { data: serverSettings, isLoading, refetch } = useValidationSettings();
   const updateSettings = useUpdateValidationSettings();
   
   // Use local state that syncs with server data
@@ -368,6 +368,11 @@ export default function SettingsPage() {
   const [validationForceUpdate, setValidationForceUpdate] = React.useState(0);
   
   // Initialize settings from server when component mounts or data changes
+  React.useEffect(() => {
+    // Force refetch settings when component mounts to ensure fresh data
+    refetch();
+  }, []);
+  
   React.useEffect(() => {
     if (serverSettings) {
       console.log('[Settings] Loading settings from server');
