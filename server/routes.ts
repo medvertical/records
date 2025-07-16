@@ -790,7 +790,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (savedSettings) {
         // Return saved settings from database
         console.log('[ValidationSettings] Returning saved settings from database');
-        res.json(savedSettings);
+        
+        // Merge the config object with the main settings to create a flat structure
+        const flatSettings = {
+          ...savedSettings,
+          ...(savedSettings.config as any || {}),
+          // Remove the nested config to avoid confusion
+          config: undefined
+        };
+        
+        res.json(flatSettings);
       } else {
         // Return default settings if no saved settings exist
         console.log('[ValidationSettings] No saved settings, returning defaults');
@@ -917,7 +926,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validationProfiles: settings.validationProfiles ?? [],
         terminologyServers: settings.terminologyServers ?? [],
         profileResolutionServers: settings.profileResolutionServers ?? [],
-        config: settings
+        config: {
+          // Only store additional settings not in the main columns
+          fetchFromSimplifier: settings.fetchFromSimplifier,
+          fetchFromFhirServer: settings.fetchFromFhirServer,
+          autoDetectProfiles: settings.autoDetectProfiles,
+          maxProfiles: settings.maxProfiles,
+          cacheDuration: settings.cacheDuration,
+          terminologyServer: settings.terminologyServer,
+          batchSize: settings.batchSize,
+          maxRetries: settings.maxRetries,
+          timeout: settings.timeout,
+          minValidationScore: settings.minValidationScore,
+          errorSeverityThreshold: settings.errorSeverityThreshold,
+          autoRefreshDashboard: settings.autoRefreshDashboard,
+          rememberLastPage: settings.rememberLastPage
+        }
       });
       
       console.log('[ValidationSettings] Settings persisted to database');
