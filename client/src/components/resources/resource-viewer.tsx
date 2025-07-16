@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight, Shield, CheckCircle, AlertTriangle, RefreshC
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ValidationResults } from '@/components/validation/validation-results';
+import ResourceTreeViewer from '@/components/resources/resource-tree-viewer';
 
 // Validation summary badge component
 function ValidationSummaryBadge({ result }: { result: any }) {
@@ -776,16 +777,16 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="form" className="w-full">
+          <Tabs defaultValue="tree" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="form">Hierarchy</TabsTrigger>
+              <TabsTrigger value="tree">Interactive View</TabsTrigger>
               <TabsTrigger value="json">JSON</TabsTrigger>
             </TabsList>
             
-            <TabsContent value="form" className="mt-4">
-              <FormView 
-                data={resourceData} 
-                validationIssues={displayValidationResult?.issues || []}
+            <TabsContent value="tree" className="mt-4">
+              <ResourceTreeViewer 
+                resourceData={resourceData} 
+                validationResults={existingValidationResults || []}
               />
             </TabsContent>
             
