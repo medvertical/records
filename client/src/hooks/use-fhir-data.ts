@@ -337,6 +337,10 @@ export function useUpdateValidationSettings() {
     onSuccess: (data) => {
       // Invalidate the settings query to ensure fresh data on next visit
       queryClient.invalidateQueries({ queryKey: ['/api/validation/settings'] });
+      // Invalidate resource list to show updated error counts with new filters
+      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+      // Also invalidate dashboard stats
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
       console.log('[UseUpdateValidationSettings] Update successful, cache invalidated');
       toast({
         title: 'Settings Updated',
