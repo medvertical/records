@@ -4,6 +4,7 @@ import {
   validationProfiles,
   validationResults,
   dashboardCards,
+  validationSettings,
   type FhirServer,
   type InsertFhirServer,
   type FhirResource,
@@ -14,6 +15,8 @@ import {
   type InsertValidationResult,
   type DashboardCard,
   type InsertDashboardCard,
+  type ValidationSettings,
+  type InsertValidationSettings,
   type FhirResourceWithValidation,
   type ResourceStats,
 } from "@shared/schema";
@@ -56,6 +59,10 @@ export interface IStorage {
 
   // Statistics
   getResourceStats(serverId?: number): Promise<ResourceStats>;
+
+  // Validation Settings
+  getValidationSettings(): Promise<ValidationSettings | undefined>;
+  createOrUpdateValidationSettings(settings: InsertValidationSettings): Promise<ValidationSettings>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -396,6 +403,35 @@ export class DatabaseStorage implements IStorage {
       activeProfiles: activeProfiles.length,
       resourceBreakdown,
     };
+  }
+
+  async getValidationSettings(): Promise<ValidationSettings | undefined> {
+    const [settings] = await db.select().from(validationSettings);
+    return settings || undefined;
+  }
+
+  async createOrUpdateValidationSettings(settings: InsertValidationSettings): Promise<ValidationSettings> {
+    const existing = await this.getValidationSettings();
+    
+    if (existing) {
+      // Update existing settings
+      const [updated] = await db
+        .update(validationSettings)
+        .set({
+          ...settings,
+          updatedAt: new Date(),
+        })
+        .where(eq(validationSettings.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      // Create new settings
+      const [created] = await db
+        .insert(validationSettings)
+        .values(settings)
+        .returning();
+      return created;
+    }
   }
 }
 

@@ -63,6 +63,22 @@ export const dashboardCards = pgTable("dashboard_cards", {
   isVisible: boolean("is_visible").default(true),
 });
 
+export const validationSettings = pgTable("validation_settings", {
+  id: serial("id").primaryKey(),
+  enableStructuralValidation: boolean("enable_structural_validation").default(true),
+  enableProfileValidation: boolean("enable_profile_validation").default(true),
+  enableTerminologyValidation: boolean("enable_terminology_validation").default(true),
+  enableReferenceValidation: boolean("enable_reference_validation").default(true),
+  enableBusinessRuleValidation: boolean("enable_business_rule_validation").default(true),
+  enableMetadataValidation: boolean("enable_metadata_validation").default(true),
+  strictMode: boolean("strict_mode").default(false),
+  validationProfiles: jsonb("validation_profiles").default([]),
+  terminologyServers: jsonb("terminology_servers").default([]),
+  profileResolutionServers: jsonb("profile_resolution_servers").default([]),
+  config: jsonb("config").default({}),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Insert schemas
 export const insertFhirServerSchema = createInsertSchema(fhirServers).omit({
   id: true,
@@ -86,6 +102,11 @@ export const insertDashboardCardSchema = createInsertSchema(dashboardCards).omit
   id: true,
 });
 
+export const insertValidationSettingsSchema = createInsertSchema(validationSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
 // Types
 export type FhirServer = typeof fhirServers.$inferSelect;
 export type InsertFhirServer = z.infer<typeof insertFhirServerSchema>;
@@ -101,6 +122,9 @@ export type InsertValidationResult = z.infer<typeof insertValidationResultSchema
 
 export type DashboardCard = typeof dashboardCards.$inferSelect;
 export type InsertDashboardCard = z.infer<typeof insertDashboardCardSchema>;
+
+export type ValidationSettings = typeof validationSettings.$inferSelect;
+export type InsertValidationSettings = z.infer<typeof insertValidationSettingsSchema>;
 
 // Additional types for FHIR resources
 export interface FhirResourceWithValidation extends FhirResource {

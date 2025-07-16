@@ -33,6 +33,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     validationEngine = new ValidationEngine(fhirClient);
     unifiedValidationService = new UnifiedValidationService(fhirClient, validationEngine);
     robustValidationService = new RobustValidationService(fhirClient, validationEngine);
+    
+    // Load and apply saved validation settings
+    const savedSettings = await storage.getValidationSettings();
+    if (savedSettings && unifiedValidationService) {
+      console.log('[Routes] Loading saved validation settings from database');
+      const config = {
+        enableStructuralValidation: savedSettings.enableStructuralValidation,
+        enableProfileValidation: savedSettings.enableProfileValidation,
+        enableTerminologyValidation: savedSettings.enableTerminologyValidation,
+        enableReferenceValidation: savedSettings.enableReferenceValidation,
+        enableBusinessRuleValidation: savedSettings.enableBusinessRuleValidation,
+        enableMetadataValidation: savedSettings.enableMetadataValidation,
+        strictMode: savedSettings.strictMode,
+        profiles: savedSettings.validationProfiles as string[],
+        terminologyServers: savedSettings.terminologyServers as any[],
+        profileResolutionServers: savedSettings.profileResolutionServers as any[]
+      };
+      unifiedValidationService.updateConfig(config);
+      console.log('[Routes] Applied saved validation settings to services');
+    }
   }
 
   // FHIR Server endpoints
@@ -68,6 +88,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validationEngine = new ValidationEngine(fhirClient);
         unifiedValidationService = new UnifiedValidationService(fhirClient, validationEngine);
         robustValidationService = new RobustValidationService(fhirClient, validationEngine);
+        
+        // Reapply saved validation settings
+        const savedSettings = await storage.getValidationSettings();
+        if (savedSettings && unifiedValidationService) {
+          const config = {
+            enableStructuralValidation: savedSettings.enableStructuralValidation,
+            enableProfileValidation: savedSettings.enableProfileValidation,
+            enableTerminologyValidation: savedSettings.enableTerminologyValidation,
+            enableReferenceValidation: savedSettings.enableReferenceValidation,
+            enableBusinessRuleValidation: savedSettings.enableBusinessRuleValidation,
+            enableMetadataValidation: savedSettings.enableMetadataValidation,
+            strictMode: savedSettings.strictMode,
+            profiles: savedSettings.validationProfiles as string[],
+            terminologyServers: savedSettings.terminologyServers as any[],
+            profileResolutionServers: savedSettings.profileResolutionServers as any[]
+          };
+          unifiedValidationService.updateConfig(config);
+        }
       }
       
       res.json({ success: true });
@@ -597,44 +635,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/validation/settings", async (req, res) => {
     try {
-      // Return comprehensive Enhanced Validation Engine settings
-      const settings = {
-        // Enhanced Validation Engine - 6 Aspects
-        enableStructuralValidation: true,
-        enableProfileValidation: true,
-        enableTerminologyValidation: true,
-        enableReferenceValidation: true,
-        enableBusinessRuleValidation: true,
-        enableMetadataValidation: true,
-        
-        // Legacy settings for backwards compatibility
-        fetchFromSimplifier: true,
-        fetchFromFhirServer: true,
-        autoDetectProfiles: true,
-        strictMode: false,
-        maxProfiles: 3,
-        cacheDuration: 3600, // 1 hour in seconds
-        
-        // Advanced settings
-        validationProfiles: [
-          'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient',
-          'http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab'
-        ],
-        terminologyServers: [
-          {
-            priority: 1,
-            enabled: true,
-            url: 'https://r4.ontoserver.csiro.au/fhir',
-            type: 'ontoserver',
-            name: 'CSIRO OntoServer',
-            description: 'Primary terminology server with SNOMED CT, LOINC, extensions',
-            capabilities: ['SNOMED CT', 'LOINC', 'ICD-10', 'Extensions', 'ValueSets']
-          },
-          {
-            priority: 2,
-            enabled: true,
-            url: 'https://tx.fhir.org/r4',
-            type: 'fhir-terminology',
+      // Load settings from database first
+      const savedSettings = await storage.getValidationSettings();
+      
+      if (savedSettings) {
+        // Return saved settings from database
+        console.log('[ValidationSettings] Returning saved settings from database');
+        res.json(savedSettings);
+      } else {
+        // Return default settings if no saved settings exist
+        console.log('[ValidationSettings] No saved settings, returning defaults');
+        const defaultSettings = {
+          // Enhanced Validation Engine - 6 Aspects
+          enableStructuralValidation: true,
+          enableProfileValidation: true,
+          enableTerminologyValidation: true,
+          enableReferenceValidation: true,
+          enableBusinessRuleValidation: true,
+          enableMetadataValidation: true,
+          
+          // Legacy settings for backwards compatibility
+          fetchFromSimplifier: true,
+          fetchFromFhirServer: true,
+          autoDetectProfiles: true,
+          strictMode: false,
+          maxProfiles: 3,
+          cacheDuration: 3600, // 1 hour in seconds
+          
+          // Advanced settings
+          validationProfiles: [
+            'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient',
+            'http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab'
+          ],
+          terminologyServers: [
+            {
+              priority: 1,
+              enabled: true,
+              url: 'https://r4.ontoserver.csiro.au/fhir',
+              type: 'ontoserver',
+              name: 'CSIRO OntoServer',
+              description: 'Primary terminology server with SNOMED CT, LOINC, extensions',
+              capabilities: ['SNOMED CT', 'LOINC', 'ICD-10', 'Extensions', 'ValueSets']
+            },
+            {
+              priority: 2,
+              enabled: true,
+              url: 'https://tx.fhir.org/r4',
+              type: 'fhir-terminology',
             name: 'HL7 FHIR Terminology Server',
             description: 'Official HL7 terminology server for FHIR standards',
             capabilities: ['US Core', 'FHIR Base', 'HL7 Standards', 'ValueSets']
@@ -696,8 +743,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Quality thresholds
         minValidationScore: 70,
         errorSeverityThreshold: 'warning' // 'information', 'warning', 'error', 'fatal'
-      };
-      res.json(settings);
+        };
+        res.json(defaultSettings);
+      }
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -708,19 +756,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settings = req.body;
       console.log('[ValidationSettings] Updating Enhanced Validation Engine configuration:', settings);
       
+      // Persist settings to database
+      const savedSettings = await storage.createOrUpdateValidationSettings({
+        enableStructuralValidation: settings.enableStructuralValidation ?? true,
+        enableProfileValidation: settings.enableProfileValidation ?? true,
+        enableTerminologyValidation: settings.enableTerminologyValidation ?? true,
+        enableReferenceValidation: settings.enableReferenceValidation ?? true,
+        enableBusinessRuleValidation: settings.enableBusinessRuleValidation ?? true,
+        enableMetadataValidation: settings.enableMetadataValidation ?? true,
+        strictMode: settings.strictMode ?? false,
+        validationProfiles: settings.validationProfiles ?? [],
+        terminologyServers: settings.terminologyServers ?? [],
+        profileResolutionServers: settings.profileResolutionServers ?? [],
+        config: settings
+      });
+      
+      console.log('[ValidationSettings] Settings persisted to database');
+      
       // Update Enhanced Validation Engine configuration
       if (unifiedValidationService) {
         const enhancedConfig = {
-          enableStructuralValidation: settings.enableStructuralValidation ?? true,
-          enableProfileValidation: settings.enableProfileValidation ?? true,
-          enableTerminologyValidation: settings.enableTerminologyValidation ?? true,
-          enableReferenceValidation: settings.enableReferenceValidation ?? true,
-          enableBusinessRuleValidation: settings.enableBusinessRuleValidation ?? true,
-          enableMetadataValidation: settings.enableMetadataValidation ?? true,
-          strictMode: settings.strictMode ?? false,
-          profiles: settings.validationProfiles ?? [],
-          terminologyServers: settings.terminologyServers ?? [],
-          profileResolutionServers: settings.profileResolutionServers ?? [],
+          enableStructuralValidation: savedSettings.enableStructuralValidation,
+          enableProfileValidation: savedSettings.enableProfileValidation,
+          enableTerminologyValidation: savedSettings.enableTerminologyValidation,
+          enableReferenceValidation: savedSettings.enableReferenceValidation,
+          enableBusinessRuleValidation: savedSettings.enableBusinessRuleValidation,
+          enableMetadataValidation: savedSettings.enableMetadataValidation,
+          strictMode: savedSettings.strictMode,
+          profiles: savedSettings.validationProfiles as string[],
+          terminologyServers: savedSettings.terminologyServers as any[],
+          profileResolutionServers: savedSettings.profileResolutionServers as any[],
           // Legacy single server for backwards compatibility
           terminologyServer: settings.terminologyServer
         };
