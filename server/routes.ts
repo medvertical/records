@@ -34,7 +34,38 @@ function filterValidationIssues(validationResults: ValidationResult[], activeSet
     
     // Filter issues based on their category and active settings
     const filteredIssues = result.issues.filter((issue: any) => {
-      const category = issue.category || 'structural';
+      // If issue has no category, try to infer it from the message
+      let category = issue.category;
+      
+      if (!category) {
+        // Try to infer category from issue message/code
+        const message = (issue.message || '').toLowerCase();
+        const code = (issue.code || '').toLowerCase();
+        
+        if (message.includes('cardinality') || message.includes('instance count') || 
+            message.includes('declared type') || message.includes('incompatible') ||
+            code.includes('structure')) {
+          category = 'structural';
+        } else if (message.includes('profile') || message.includes('constraint') ||
+                   code.includes('profile')) {
+          category = 'profile';
+        } else if (message.includes('code') || message.includes('terminology') ||
+                   message.includes('valueset') || code.includes('terminology')) {
+          category = 'terminology';
+        } else if (message.includes('reference') || message.includes('target') ||
+                   code.includes('reference')) {
+          category = 'reference';
+        } else if (message.includes('business') || message.includes('logic') ||
+                   code.includes('business')) {
+          category = 'business-rule';
+        } else if (message.includes('metadata') || message.includes('security') ||
+                   message.includes('narrative') || code.includes('metadata')) {
+          category = 'metadata';
+        } else {
+          // Default to structural for unknown issues
+          category = 'structural';
+        }
+      }
       
       switch (category) {
         case 'structural':
@@ -55,7 +86,7 @@ function filterValidationIssues(validationResults: ValidationResult[], activeSet
     });
     
     // Recalculate error and warning counts based on filtered issues
-    const errorCount = filteredIssues.filter((issue: any) => issue.severity === 'error').length;
+    const errorCount = filteredIssues.filter((issue: any) => issue.severity === 'error' || issue.severity === 'fatal').length;
     const warningCount = filteredIssues.filter((issue: any) => issue.severity === 'warning').length;
     
     return {
@@ -346,17 +377,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       new Date(current.validatedAt) > new Date(latest.validatedAt) ? current : latest
                     ) : null;
                   
+                  // Recalculate counts based on filtered issues
+                  let filteredErrorCount = 0;
+                  let filteredWarningCount = 0;
+                  let filteredInfoCount = 0;
+                  
+                  if (latestValidation && latestValidation.issues) {
+                    latestValidation.issues.forEach(issue => {
+                      if (issue.severity === 'error' || issue.severity === 'fatal') {
+                        filteredErrorCount++;
+                      } else if (issue.severity === 'warning') {
+                        filteredWarningCount++;
+                      } else if (issue.severity === 'information') {
+                        filteredInfoCount++;
+                      }
+                    });
+                  }
+                  
+                  // Calculate validation score based on filtered issues
+                  let filteredScore = 100;
+                  if (latestValidation && latestValidation.issues) {
+                    latestValidation.issues.forEach(issue => {
+                      if (issue.severity === 'error' || issue.severity === 'fatal') {
+                        filteredScore -= 10;
+                      } else if (issue.severity === 'warning') {
+                        filteredScore -= 2;
+                      } else if (issue.severity === 'information') {
+                        filteredScore -= 0.5;
+                      }
+                    });
+                    filteredScore = Math.max(0, filteredScore);
+                  }
+                  
                   return {
                     ...resource.data,
                     _dbId: resource.id,
                     _validationResults: filteredResults,
                     _validationSummary: {
-                      hasErrors: latestValidation ? !latestValidation.isValid && latestValidation.errorCount > 0 : false,
-                      hasWarnings: latestValidation ? latestValidation.warningCount > 0 : false,
-                      errorCount: latestValidation ? latestValidation.errorCount : 0,
-                      warningCount: latestValidation ? latestValidation.warningCount : 0,
-                      isValid: latestValidation ? latestValidation.isValid : false,
-                      validationScore: latestValidation ? latestValidation.validationScore : 0,
+                      hasErrors: filteredErrorCount > 0,
+                      hasWarnings: filteredWarningCount > 0,
+                      errorCount: filteredErrorCount,
+                      warningCount: filteredWarningCount,
+                      isValid: filteredErrorCount === 0,
+                      validationScore: filteredScore,
                       lastValidated: latestValidation ? new Date(latestValidation.validatedAt) : null,
                       needsValidation: validationResults.length === 0 // Flag resources that need validation
                     }

@@ -174,7 +174,8 @@ export class UnifiedValidationService {
             message: issue.message,
             path: issue.path,
             expression: issue.expression,
-            code: issue.code
+            code: issue.code,
+            category: issue.category // Include category in stored issues
           })),
           profileUrl: enhancedResult.validationAspects.profile.profilesChecked[0] || null,
           errorCount: enhancedResult.issues.filter(i => i.severity === 'error' || i.severity === 'fatal').length,
