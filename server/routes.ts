@@ -89,6 +89,16 @@ function filterValidationIssues(validationResults: ValidationResult[], activeSet
     const errorCount = filteredIssues.filter((issue: any) => issue.severity === 'error' || issue.severity === 'fatal').length;
     const warningCount = filteredIssues.filter((issue: any) => issue.severity === 'warning').length;
     
+    console.log(`[FilterValidation] Original issues: ${result.issues?.length || 0}, Filtered issues: ${filteredIssues.length}`);
+    console.log(`[FilterValidation] Active settings:`, {
+      structural: activeSettings.enableStructuralValidation !== false,
+      profile: activeSettings.enableProfileValidation !== false,
+      terminology: activeSettings.enableTerminologyValidation !== false,
+      reference: activeSettings.enableReferenceValidation !== false,
+      businessRule: activeSettings.enableBusinessRuleValidation !== false,
+      metadata: activeSettings.enableMetadataValidation !== false
+    });
+    
     return {
       ...result,
       issues: filteredIssues,
@@ -614,9 +624,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get validation settings for filtering
       const validationSettings = await storage.getValidationSettings();
       
-      // Filter validation results based on active settings
-      if (resource.validationResults) {
-        resource.validationResults = filterValidationIssues(resource.validationResults, validationSettings);
+      // Get only the latest validation result (like in list view)
+      if (resource.validationResults && resource.validationResults.length > 0) {
+        console.log(`[Resource Detail] Total validation results: ${resource.validationResults.length}`);
+        
+        // Sort by validatedAt descending and take only the latest
+        const sortedResults = resource.validationResults.sort((a: any, b: any) => 
+          new Date(b.validatedAt).getTime() - new Date(a.validatedAt).getTime()
+        );
+        
+        // Keep only the latest validation result
+        const latestResult = sortedResults[0];
+        console.log(`[Resource Detail] Using latest validation from ${latestResult.validatedAt}`);
+        
+        // Filter the latest validation result based on active settings
+        resource.validationResults = filterValidationIssues([latestResult], validationSettings);
+        console.log(`[Resource Detail] After filtering: ${resource.validationResults[0]?.issues?.length || 0} issues`);
       }
       
       console.log(`[Resource Detail] Returning resource:`, resource.resourceType, resource.resourceId);
