@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { ValidationResult } from '@shared/schema';
 
@@ -293,10 +294,12 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 export default function ResourceTreeViewer({ resourceData, validationResults }: ResourceTreeViewerProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['']));
   const [expandAll, setExpandAll] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
 
-  // Process validation results into a more usable format
-  const validationIssues = useMemo(() => {
-    const issues: ValidationIssue[] = [];
+  // Process validation results into a more usable format and deduplicate
+  const allValidationIssues = useMemo(() => {
+    const issuesMap = new Map<string, ValidationIssue>();
     
     validationResults.forEach(result => {
       if (result.issues) {
@@ -331,26 +334,42 @@ export default function ResourceTreeViewer({ resourceData, validationResults }: 
             path = issue.location.join('.');
           }
           
-          console.log('Validation issue:', { 
-            originalPath: issue.path, 
-            normalizedPath: path, 
-            message: issue.message 
-          });
+          // Create unique key for deduplication
+          const issueKey = `${path}|${issue.severity}|${issue.message}`;
           
-          issues.push({
-            severity: issue.severity || 'information',
-            message: issue.message || '',
-            path: path,
-            category: issue.category,
-            recommendation: issue.recommendation
-          });
+          // Only add if not already present (deduplication)
+          if (!issuesMap.has(issueKey)) {
+            issuesMap.set(issueKey, {
+              severity: issue.severity || 'information',
+              message: issue.message || '',
+              path: path,
+              category: issue.category || 'structural',
+              recommendation: issue.recommendation
+            });
+          }
         });
       }
     });
     
-    console.log('All validation issues:', issues);
-    return issues;
+    return Array.from(issuesMap.values());
   }, [validationResults]);
+  
+  // Apply filters to validation issues
+  const validationIssues = useMemo(() => {
+    return allValidationIssues.filter(issue => {
+      // Filter by category
+      if (selectedCategory !== 'all' && issue.category !== selectedCategory) {
+        return false;
+      }
+      
+      // Filter by severity
+      if (selectedSeverity !== 'all' && issue.severity !== selectedSeverity) {
+        return false;
+      }
+      
+      return true;
+    });
+  }, [allValidationIssues, selectedCategory, selectedSeverity]);
 
   const togglePath = (path: string) => {
     setExpandedPaths(prev => {
@@ -398,46 +417,90 @@ export default function ResourceTreeViewer({ resourceData, validationResults }: 
   const warningCount = validationIssues.filter(i => i.severity === 'warning').length;
   const infoCount = validationIssues.filter(i => i.severity === 'information').length;
   
-  // Debug logging
-  useEffect(() => {
-    console.log('[ResourceTreeViewer] Resource data keys:', Object.keys(resourceData || {}));
-    console.log('[ResourceTreeViewer] Validation issues count:', validationIssues.length);
-    if (validationIssues.length > 0) {
-      console.log('[ResourceTreeViewer] Sample issues:', validationIssues.slice(0, 3));
-    }
-  }, [resourceData, validationIssues]);
+  // Get unique categories from all issues
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    allValidationIssues.forEach(issue => {
+      if (issue.category) cats.add(issue.category);
+    });
+    return Array.from(cats).sort();
+  }, [allValidationIssues]);
 
   return (
     <div className="space-y-4">
       {/* Controls and Summary */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExpandAll}
-          >
-            {expandAll ? 'Collapse All' : 'Expand All'}
-          </Button>
-          
-          <div className="flex items-center gap-2">
-            {errorCount > 0 && (
-              <Badge variant="destructive">
-                {errorCount} Error{errorCount !== 1 ? 's' : ''}
-              </Badge>
-            )}
-            {warningCount > 0 && (
-              <Badge className="bg-orange-100 text-orange-800">
-                {warningCount} Warning{warningCount !== 1 ? 's' : ''}
-              </Badge>
-            )}
-            {infoCount > 0 && (
-              <Badge className="bg-blue-100 text-blue-800">
-                {infoCount} Info
-              </Badge>
-            )}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExpandAll}
+            >
+              {expandAll ? 'Collapse All' : 'Expand All'}
+            </Button>
+            
+            <div className="flex items-center gap-2">
+              {errorCount > 0 && (
+                <Badge variant="destructive">
+                  {errorCount} Error{errorCount !== 1 ? 's' : ''}
+                </Badge>
+              )}
+              {warningCount > 0 && (
+                <Badge className="bg-orange-100 text-orange-800">
+                  {warningCount} Warning{warningCount !== 1 ? 's' : ''}
+                </Badge>
+              )}
+              {infoCount > 0 && (
+                <Badge className="bg-blue-100 text-blue-800">
+                  {infoCount} Info
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
+        
+        {/* Filtering Controls */}
+        {allValidationIssues.length > 0 && (
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Category:</span>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="structural">Structural</SelectItem>
+                  <SelectItem value="profile">Profile</SelectItem>
+                  <SelectItem value="terminology">Terminology</SelectItem>
+                  <SelectItem value="reference">Reference</SelectItem>
+                  <SelectItem value="business-rule">Business Rule</SelectItem>
+                  <SelectItem value="metadata">Metadata</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Severity:</span>
+              <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="All severities" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Severities</SelectItem>
+                  <SelectItem value="error">Errors</SelectItem>
+                  <SelectItem value="warning">Warnings</SelectItem>
+                  <SelectItem value="information">Information</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="text-sm text-muted-foreground">
+              Showing {validationIssues.length} of {allValidationIssues.length} issues
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tree View */}
@@ -455,34 +518,7 @@ export default function ResourceTreeViewer({ resourceData, validationResults }: 
         </CardContent>
       </Card>
       
-      {/* Debug: Show all validation issues */}
-      {validationIssues.length > 0 && (
-        <Card className="border-dashed border-gray-300">
-          <CardContent className="p-4">
-            <h3 className="text-sm font-semibold mb-2">Debug: All Validation Issues ({validationIssues.length})</h3>
-            <div className="space-y-2 text-xs">
-              {validationIssues.map((issue, idx) => (
-                <div key={idx} className={cn(
-                  "p-2 rounded",
-                  issue.severity === 'error' && "bg-red-50",
-                  issue.severity === 'warning' && "bg-orange-50",
-                  issue.severity === 'information' && "bg-blue-50"
-                )}>
-                  <div>
-                    <strong>Path:</strong> "{issue.path || 'NO PATH'}"
-                  </div>
-                  <div>
-                    <strong>Severity:</strong> {issue.severity}
-                  </div>
-                  <div>
-                    <strong>Message:</strong> {issue.message}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+
     </div>
   );
 }
