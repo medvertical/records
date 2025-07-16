@@ -119,13 +119,13 @@ export class UnifiedValidationService {
         const enhancedResult = await this.enhancedValidationEngine.validateResource(resource);
         
         console.log(`[UnifiedValidation] Enhanced validation completed with score: ${enhancedResult.validationScore}`);
-        console.log(`[UnifiedValidation] Validation aspects:`, {
-          structural: enhancedResult.validationAspects.structural.passed,
-          profile: enhancedResult.validationAspects.profile.passed,
-          terminology: enhancedResult.validationAspects.terminology.passed,
-          reference: enhancedResult.validationAspects.reference.passed,
-          businessRule: enhancedResult.validationAspects.businessRule.passed,
-          metadata: enhancedResult.validationAspects.metadata.passed
+        console.log(`[UnifiedValidation] Validation aspects performed:`, {
+          structural: enhancedResult.validationAspects.structural.issues.length > 0 || enhancedResult.validationAspects.structural.passed,
+          profile: enhancedResult.validationAspects.profile.profilesChecked.length > 0,
+          terminology: enhancedResult.validationAspects.terminology.codesChecked > 0,
+          reference: enhancedResult.validationAspects.reference.referencesChecked > 0,
+          businessRule: enhancedResult.validationAspects.businessRule.rulesChecked > 0,
+          metadata: enhancedResult.validationAspects.metadata.issues.length > 0
         });
         
         // Convert enhanced validation result to our database format
