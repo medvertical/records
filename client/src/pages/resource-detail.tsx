@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FhirResourceWithValidation } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, XCircle, ArrowLeft } from "lucide-react";
+import { CheckCircle, XCircle, ArrowLeft, AlertCircle, AlertTriangle, Info } from "lucide-react";
 import { Link } from "wouter";
+import { Progress } from "@/components/ui/progress";
 
 export default function ResourceDetail() {
   const { id } = useParams<{ id: string }>();
@@ -68,42 +69,83 @@ export default function ResourceDetail() {
 
   const hasValidationResults = resource.validationResults && resource.validationResults.length > 0;
   const hasErrors = hasValidationResults && resource.validationResults?.some(r => !r.isValid);
+  
+  // Calculate validation summary
+  const validationSummary = hasValidationResults ? {
+    totalIssues: resource.validationResults.reduce((sum, vr) => sum + (vr.issues?.length || 0), 0),
+    errorCount: resource.validationResults.reduce((sum, vr) => sum + (vr.errorCount || 0), 0),
+    warningCount: resource.validationResults.reduce((sum, vr) => sum + (vr.warningCount || 0), 0),
+    informationCount: resource.validationResults.reduce((sum, vr) => sum + (vr.issues?.filter(i => i.severity === 'information').length || 0), 0),
+    score: resource.validationResults.length > 0 ? Math.round(resource.validationResults[0].validationScore || 0) : 0
+  } : null;
 
   return (
     <div className="p-6 h-full overflow-y-auto">
       <div className="space-y-6">
-        {/* Header section with back button and resource info */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Link href="/resources">
-              <Button variant="outline" size="sm" className="inline-flex items-center">
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {resource.resourceType} Resource
-              </h1>
-              <p className="text-gray-600">ID: {resource.resourceId}</p>
+        {/* Header section with validation summary */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-4">
+                <Link href="/resources">
+                  <Button variant="outline" size="sm" className="inline-flex items-center">
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {resource.resourceType} Resource
+                  </h1>
+                  <p className="text-gray-600">ID: {resource.resourceId}</p>
+                </div>
+              </div>
             </div>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            {hasValidationResults && (
-              <Badge 
-                variant={hasErrors ? "destructive" : "secondary"}
-                className="flex items-center space-x-1"
-              >
-                {hasErrors ? (
-                  <XCircle className="h-3 w-3" />
-                ) : (
-                  <CheckCircle className="h-3 w-3" />
-                )}
-                <span>{hasErrors ? "Has Errors" : "Valid"}</span>
-              </Badge>
+            
+            {/* Validation Summary */}
+            {validationSummary && (
+              <div className="space-y-4">
+                {/* Score Progress Bar */}
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Validation Score</span>
+                      <span className="text-lg font-bold">{validationSummary.score}%</span>
+                    </div>
+                    <Progress value={validationSummary.score} className="h-2" />
+                  </div>
+                </div>
+                
+                {/* Issue Summary */}
+                <div className="flex items-center gap-4">
+                  {validationSummary.errorCount > 0 && (
+                    <Badge variant="destructive" className="flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      {validationSummary.errorCount} Error{validationSummary.errorCount !== 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                  {validationSummary.warningCount > 0 && (
+                    <Badge className="bg-orange-100 text-orange-800 border-orange-200 flex items-center gap-1">
+                      <AlertTriangle className="h-3 w-3" />
+                      {validationSummary.warningCount} Warning{validationSummary.warningCount !== 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                  {validationSummary.informationCount > 0 && (
+                    <Badge className="bg-blue-100 text-blue-800 border-blue-200 flex items-center gap-1">
+                      <Info className="h-3 w-3" />
+                      {validationSummary.informationCount} Info
+                    </Badge>
+                  )}
+                  {validationSummary.totalIssues === 0 && (
+                    <Badge className="bg-green-100 text-green-800 border-green-200 flex items-center gap-1">
+                      <CheckCircle className="h-3 w-3" />
+                      Valid
+                    </Badge>
+                  )}
+                </div>
+              </div>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* Main content - single column with integrated validation */}
         <div>

@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +7,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ValidationResults } from '@/components/validation/validation-results';
 import ResourceTreeViewer from '@/components/resources/resource-tree-viewer';
+import { Progress } from "@/components/ui/progress";
 
 // Validation summary badge component
 function ValidationSummaryBadge({ result }: { result: any }) {
@@ -667,7 +667,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Use existing validation results from resource instead of internal state
+  // Use existing validation results from resource
   const existingValidationResults = resource?.validationResults || [];
   const hasExistingValidation = existingValidationResults.length > 0;
   
@@ -769,31 +769,13 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
       {/* Resource Structure Card */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>{title}</CardTitle>
-            <div className="flex items-center gap-2">
-              {getValidationBadge()}
-            </div>
-          </div>
+          <CardTitle>{title}</CardTitle>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="tree" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="tree">Interactive View</TabsTrigger>
-              <TabsTrigger value="json">JSON</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="tree" className="mt-4">
-              <ResourceTreeViewer 
-                resourceData={resourceData} 
-                validationResults={existingValidationResults || []}
-              />
-            </TabsContent>
-            
-            <TabsContent value="json" className="mt-4">
-              <JsonView data={resourceData} />
-            </TabsContent>
-          </Tabs>
+          <ResourceTreeViewer 
+            resourceData={resourceData} 
+            validationResults={existingValidationResults || []}
+          />
         </CardContent>
       </Card>
 
@@ -829,46 +811,14 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
         </Card>
       )}
 
-      {displayValidationResult && !isValidating && !validationError && (
-        <Card className="mt-6">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="w-5 h-5" />
-                Validation Results
-              </CardTitle>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={validateResource}
-                disabled={isValidating}
-              >
-                <RefreshCw className="w-4 h-4 sm:mr-1" />
-                <span className="hidden sm:inline">Revalidate</span>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <OptimizedValidationResults 
-              result={displayValidationResult} 
-              onRevalidate={validateResource}
-              isValidating={isValidating}
-            />
-          </CardContent>
-        </Card>
-      )}
-
-      {!displayValidationResult && !isValidating && !validationError && (
-        <Card className="mt-6">
-          <CardContent className="pt-6">
-            <div className="text-center py-8">
-              <Shield className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">
-                This resource will be automatically validated against FHIR standards and installed profiles.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      {displayValidationResult && displayValidationResult.issues.length > 0 && (
+        <div className="mt-6">
+          <OptimizedValidationResults 
+            result={displayValidationResult}
+            onRevalidate={validateResource}
+            isValidating={isValidating}
+          />
+        </div>
       )}
     </>
   );
