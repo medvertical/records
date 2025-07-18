@@ -7,6 +7,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { ValidationResult } from '@shared/schema';
+import { 
+  getCategoryIcon, 
+  getSeverityIcon, 
+  getCategoryColor, 
+  getSeverityColor
+} from "@/lib/validation-icons";
 
 interface ResourceTreeViewerProps {
   resourceData: any;
@@ -167,7 +173,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
               <Tooltip>
                 <TooltipTrigger>
                   <Badge variant="destructive" className="text-xs">
-                    <AlertCircle className="h-3 w-3 mr-1" />
+                    {getSeverityIcon('error', "h-3 w-3 mr-1")}
                     {directIssues.filter(i => i.severity === 'error').length}
                   </Badge>
                 </TooltipTrigger>
@@ -185,7 +191,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
               <Tooltip>
                 <TooltipTrigger>
                   <Badge className="bg-orange-100 text-orange-800 text-xs">
-                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    {getSeverityIcon('warning', "h-3 w-3 mr-1")}
                     {directIssues.filter(i => i.severity === 'warning').length}
                   </Badge>
                 </TooltipTrigger>
@@ -203,7 +209,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
               <Tooltip>
                 <TooltipTrigger>
                   <Badge className="bg-blue-100 text-blue-800 text-xs">
-                    <Info className="h-3 w-3 mr-1" />
+                    {getSeverityIcon('information', "h-3 w-3 mr-1")}
                     {directIssues.filter(i => i.severity === 'information').length}
                   </Badge>
                 </TooltipTrigger>
@@ -233,9 +239,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
             )}>
               <CardContent className="p-3">
                 <div className="flex items-start gap-2">
-                  {issue.severity === 'error' && <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />}
-                  {issue.severity === 'warning' && <AlertTriangle className="h-4 w-4 text-orange-600 mt-0.5" />}
-                  {issue.severity === 'information' && <Info className="h-4 w-4 text-blue-600 mt-0.5" />}
+                  <span className={`${getSeverityColor(issue.severity)} mt-0.5`}>
+                    {getSeverityIcon(issue.severity, "h-4 w-4")}
+                  </span>
                   
                   <div className="flex-1">
                     <p className="text-sm">{issue.message}</p>

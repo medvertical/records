@@ -8,6 +8,13 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ValidationResults } from '@/components/validation/validation-results';
 import ResourceTreeViewer from '@/components/resources/resource-tree-viewer';
 import { Progress } from "@/components/ui/progress";
+import { 
+  getCategoryIcon, 
+  getSeverityIcon, 
+  getCategoryColor, 
+  getSeverityColor,
+  categoryDescriptions
+} from "@/lib/validation-icons";
 
 // Validation summary badge component
 function ValidationSummaryBadge({ result }: { result: any }) {
@@ -101,29 +108,10 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
     { value: 'information', label: 'Information', count: severityCounts.information || 0 }
   ].filter(sev => sev.value === 'all' || sev.count > 0);
 
-  const getCategoryIcon = (category: string) => {
-    switch(category) {
-      case 'structural': return <Shield className="w-4 h-4" />;
-      case 'profile': return <CheckCircle className="w-4 h-4" />;
-      case 'terminology': return <AlertTriangle className="w-4 h-4" />;
-      case 'reference': return <Info className="w-4 h-4" />;
-      case 'business-rule': return <AlertCircle className="w-4 h-4" />;
-      case 'metadata': return <Shield className="w-4 h-4" />;
-      default: return <Info className="w-4 h-4" />;
-    }
-  };
+
 
   const getCategoryDescription = (category: string) => {
-    switch(category) {
-      case 'structural': return 'FHIR structure, data types, and cardinality rules';
-      case 'profile': return 'Profile conformance (US Core, HL7 profiles)';
-      case 'terminology': return 'Code systems, terminology bindings, and vocabulary';
-      case 'reference': return 'Resource references and relationship integrity';
-      case 'business-rule': return 'Clinical logic and healthcare business rules';
-      case 'metadata': return 'Resource metadata, security labels, and extensions';
-      case 'general': return 'General validation findings';
-      default: return 'Validation checks';
-    }
+    return categoryDescriptions[category] || categoryDescriptions.general;
   };
 
   return (
@@ -217,7 +205,7 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
               return (
                 <div key={category} className="border rounded-lg p-4">
                   <div className="flex items-center mb-3">
-                    {getCategoryIcon(category)}
+                    {getCategoryIcon(category, "w-4 h-4")}
                     <div className="ml-2">
                       <div className="font-medium text-sm capitalize">{category} Validation</div>
                       <div className="text-xs text-gray-600">{getCategoryDescription(category)}</div>
@@ -257,26 +245,12 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
 
 // Validation issue indicator component
 function ValidationIssueIndicator({ issue }: { issue: any }) {
-  const getSeverityConfig = (severity: string) => {
-    switch(severity) {
-      case 'error': 
-        return { color: 'text-red-500', icon: AlertCircle };
-      case 'warning': 
-        return { color: 'text-yellow-500', icon: AlertTriangle };
-      case 'information': 
-        return { color: 'text-blue-500', icon: Info };
-      default: 
-        return { color: 'text-gray-500', icon: AlertTriangle };
-    }
-  };
-
-  const config = getSeverityConfig(issue.severity);
-  const Icon = config.icon;
-
   return (
     <div className="flex items-center">
-      <Icon className={`h-4 w-4 ${config.color}`} />
-      <span className={`text-xs ml-1 ${config.color}`}>
+      <span className={getSeverityColor(issue.severity)}>
+        {getSeverityIcon(issue.severity, "h-4 w-4")}
+      </span>
+      <span className={`text-xs ml-1 ${getSeverityColor(issue.severity)}`}>
         {issue.severity}
       </span>
     </div>
@@ -316,18 +290,7 @@ function ValidationIssueDetails({ issue }: { issue: any }) {
 
   const config = getSeverityConfig(issue.severity);
   
-  // Get category explanation
-  const getCategoryDescription = (category: string) => {
-    switch(category) {
-      case 'structural': return 'FHIR structure and data types';
-      case 'profile': return 'Profile conformance (US Core, etc.)';
-      case 'terminology': return 'Code systems and terminology';
-      case 'reference': return 'Resource references and relationships';
-      case 'business-rule': return 'Clinical logic and business rules';
-      case 'metadata': return 'Resource metadata and extensions';
-      default: return 'Validation check';
-    }
-  };
+
 
   return (
     <div className={`text-xs rounded-lg px-3 py-2 border-l-4 ${config.color}`}>
@@ -339,7 +302,7 @@ function ValidationIssueDetails({ issue }: { issue: any }) {
         </div>
         {issue.category && (
           <span className="text-xs bg-white bg-opacity-50 px-1 py-0.5 rounded">
-            {getCategoryDescription(issue.category)}
+            {categoryDescriptions[issue.category] || categoryDescriptions.general}
           </span>
         )}
       </div>
