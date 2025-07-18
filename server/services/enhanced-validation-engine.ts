@@ -898,6 +898,7 @@ export class EnhancedValidationEngine {
     const totalIssues = result.issues.length;
     const errorCount = result.issues.filter(i => i.severity === 'error' || i.severity === 'fatal').length;
     const warningCount = result.issues.filter(i => i.severity === 'warning').length;
+    const informationCount = result.issues.filter(i => i.severity === 'information').length;
 
     // Calculate validation score (0-100)
     if (errorCount > 0) {
@@ -905,14 +906,15 @@ export class EnhancedValidationEngine {
       result.isValid = false;
     } else if (warningCount > 0) {
       result.validationScore = Math.max(70, 100 - (warningCount * 5));
-      result.isValid = false; // Changed: warnings also make resource invalid
+      result.isValid = false; // Warnings make resource invalid
     } else {
+      // Only information-level issues - resource is still valid
       result.validationScore = 100;
       result.isValid = true;
     }
 
     // Log validation result for debugging
-    console.log(`[EnhancedValidation] Validation result: score=${result.validationScore}, valid=${result.isValid}, errors=${errorCount}, warnings=${warningCount}`);
+    console.log(`[EnhancedValidation] Validation result: score=${result.validationScore}, valid=${result.isValid}, errors=${errorCount}, warnings=${warningCount}, information=${informationCount}`);
   }
 
   // Placeholder methods for remaining validation aspects (to be implemented in next steps)
