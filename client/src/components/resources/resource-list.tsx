@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
+import { CircularProgress } from "@/components/ui/circular-progress";
 
 interface ResourceListProps {
   resources: any[];
@@ -113,54 +114,60 @@ export default function ResourceList({
     switch (status) {
       case 'valid':
         return (
-          <div className="flex flex-col items-end space-y-1">
+          <div className="flex items-center gap-2">
             <Badge className="bg-green-50 text-fhir-success border-green-200 hover:bg-green-50">
               <CheckCircle className="h-3 w-3 mr-1" />
               Valid
             </Badge>
-            <Badge variant="outline" className="text-xs">
-              {validationSummary?.validationScore || 0}%
-            </Badge>
+            <CircularProgress 
+              value={validationSummary?.validationScore || 0} 
+              size="sm"
+            />
           </div>
         );
       case 'error':
         return (
-          <div className="flex flex-col items-end space-y-1">
-            <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50">
-              <XCircle className="h-3 w-3 mr-1" />
-              {validationSummary?.errorCount || 0} Error{(validationSummary?.errorCount || 0) !== 1 ? 's' : ''}
-            </Badge>
-            {validationSummary?.hasWarnings && (
-              <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
-                {validationSummary.warningCount} Warning{validationSummary.warningCount !== 1 ? 's' : ''}
+          <div className="flex items-center gap-2">
+            <div className="flex flex-col items-end space-y-1">
+              <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50">
+                <XCircle className="h-3 w-3 mr-1" />
+                {validationSummary?.errorCount || 0} Error{(validationSummary?.errorCount || 0) !== 1 ? 's' : ''}
               </Badge>
-            )}
-            <Badge variant="outline" className="text-xs">
-              {validationSummary?.validationScore || 0}%
-            </Badge>
+              {validationSummary?.hasWarnings && (
+                <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
+                  {validationSummary.warningCount} Warning{validationSummary.warningCount !== 1 ? 's' : ''}
+                </Badge>
+              )}
+            </div>
+            <CircularProgress 
+              value={validationSummary?.validationScore || 0} 
+              size="sm"
+            />
           </div>
         );
       case 'warning':
         return (
-          <div className="flex flex-col items-end space-y-1">
+          <div className="flex items-center gap-2">
             <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50">
               <AlertTriangle className="h-3 w-3 mr-1" />
               {validationSummary?.warningCount || 0} Warning{(validationSummary?.warningCount || 0) !== 1 ? 's' : ''}
             </Badge>
-            <Badge variant="outline" className="text-xs">
-              {validationSummary?.validationScore || 0}%
-            </Badge>
+            <CircularProgress 
+              value={validationSummary?.validationScore || 0} 
+              size="sm"
+            />
           </div>
         );
       default:
         return (
-          <div className="flex flex-col items-end space-y-1">
+          <div className="flex items-center gap-2">
             <Badge variant="secondary" className="text-xs">
               Not Validated
             </Badge>
-            <Badge variant="outline" className="text-xs">
-              {validationSummary?.validationScore || 0}%
-            </Badge>
+            <CircularProgress 
+              value={validationSummary?.validationScore || 0} 
+              size="sm"
+            />
           </div>
         );
     }

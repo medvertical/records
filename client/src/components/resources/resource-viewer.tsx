@@ -15,6 +15,7 @@ import {
   getSeverityColor,
   categoryDescriptions
 } from "@/lib/validation-icons";
+import { CircularProgress } from "@/components/ui/circular-progress";
 
 // Validation summary badge component
 function ValidationSummaryBadge({ result }: { result: any }) {
@@ -832,17 +833,20 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
           <div className="flex items-center justify-between">
             <CardTitle>{title}</CardTitle>
             {displayValidationResult && (
-              <div className="flex flex-col items-end space-y-1">
-                {getValidationBadge()}
-                {/* Show warning badge separately if there are errors AND warnings */}
-                {displayValidationResult.summary?.errorCount > 0 && displayValidationResult.summary?.warningCount > 0 && (
-                  <Badge className="bg-orange-50 text-orange-600 border-orange-200 text-xs">
-                    {displayValidationResult.summary.warningCount} Warning{displayValidationResult.summary.warningCount !== 1 ? 's' : ''}
-                  </Badge>
-                )}
-                <Badge variant="outline" className="text-xs">
-                  {displayValidationResult.summary?.score || 0}%
-                </Badge>
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col items-end space-y-1">
+                  {getValidationBadge()}
+                  {/* Show warning badge separately if there are errors AND warnings */}
+                  {displayValidationResult.summary?.errorCount > 0 && displayValidationResult.summary?.warningCount > 0 && (
+                    <Badge className="bg-orange-50 text-orange-600 border-orange-200 text-xs">
+                      {displayValidationResult.summary.warningCount} Warning{displayValidationResult.summary.warningCount !== 1 ? 's' : ''}
+                    </Badge>
+                  )}
+                </div>
+                <CircularProgress 
+                  value={displayValidationResult.summary?.score || 0} 
+                  size="md"
+                />
               </div>
             )}
           </div>
