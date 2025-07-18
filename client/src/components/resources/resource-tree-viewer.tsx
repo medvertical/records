@@ -449,76 +449,107 @@ export default function ResourceTreeViewer({
   }, [allValidationIssues]);
 
   return (
-    <div className="space-y-4">
-      {/* Controls and Summary */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExpandAll}
-            >
-              {expandAll ? 'Collapse All' : 'Expand All'}
-            </Button>
-            
-            <div className="flex items-center gap-2">
-              {totalErrorCount > 0 && (
-                <Badge variant="destructive">
-                  {(selectedCategory !== 'all' || selectedSeverity !== 'all') && filteredErrorCount !== totalErrorCount 
-                    ? `${filteredErrorCount} of ${totalErrorCount}` 
-                    : totalErrorCount} Error{totalErrorCount !== 1 ? 's' : ''}
-                </Badge>
-              )}
-              {totalWarningCount > 0 && (
-                <Badge className="bg-orange-100 text-orange-800">
-                  {(selectedCategory !== 'all' || selectedSeverity !== 'all') && filteredWarningCount !== totalWarningCount
-                    ? `${filteredWarningCount} of ${totalWarningCount}` 
-                    : totalWarningCount} Warning{totalWarningCount !== 1 ? 's' : ''}
-                </Badge>
-              )}
-              {totalInfoCount > 0 && (
-                <Badge className="bg-blue-100 text-blue-800">
-                  {(selectedCategory !== 'all' || selectedSeverity !== 'all') && filteredInfoCount !== totalInfoCount
-                    ? `${filteredInfoCount} of ${totalInfoCount}` 
-                    : totalInfoCount} Info
-                </Badge>
-              )}
-            </div>
-          </div>
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between mb-3">
+          <CardTitle className="text-base">Resource Structure</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExpandAll}
+            className="text-xs"
+          >
+            {expandAll ? 'Collapse All' : 'Expand All'}
+          </Button>
         </div>
         
-        {/* Active Filter Summary */}
+        {/* Filters */}
         {allValidationIssues.length > 0 && (
-          <div className="text-sm text-muted-foreground">
-            Showing {validationIssues.length} of {allValidationIssues.length} issues
-            {(selectedCategory !== 'all' || selectedSeverity !== 'all') && (
-              <span className="ml-2">
-                (filtered by {selectedCategory !== 'all' && `category: ${selectedCategory}`}
-                {selectedCategory !== 'all' && selectedSeverity !== 'all' && ', '}
-                {selectedSeverity !== 'all' && `severity: ${selectedSeverity}`})
-              </span>
-            )}
+          <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Categories:</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => onCategoryChange?.('all')}
+                  className={`px-2 py-0.5 text-xs rounded-md border transition-colors ${
+                    selectedCategory === 'all'
+                      ? 'bg-blue-500 text-white border-blue-500'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  All ({allValidationIssues.length})
+                </button>
+                {categories.map(category => {
+                  const count = allValidationIssues.filter(i => i.category === category).length;
+                  return (
+                    <button
+                      key={category}
+                      onClick={() => onCategoryChange?.(category)}
+                      className={`px-2 py-0.5 text-xs rounded-md border transition-colors flex items-center gap-1 ${
+                        selectedCategory === category
+                          ? 'bg-blue-500 text-white border-blue-500'
+                          : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      {getCategoryIcon(category, "h-3 w-3")}
+                      {category} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Severity:</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => onSeverityChange?.('all')}
+                  className={`px-2 py-0.5 text-xs rounded-md border transition-colors ${
+                    selectedSeverity === 'all'
+                      ? 'bg-gray-600 text-white border-gray-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  All ({allValidationIssues.length})
+                </button>
+                {['error', 'warning', 'information'].map(severity => {
+                  const count = allValidationIssues.filter(i => i.severity === severity).length;
+                  if (count === 0) return null;
+                  return (
+                    <button
+                      key={severity}
+                      onClick={() => onSeverityChange?.(severity)}
+                      className={`px-2 py-0.5 text-xs rounded-md border transition-colors flex items-center gap-1 ${
+                        selectedSeverity === severity
+                          ? severity === 'error' ? 'bg-red-500 text-white border-red-500' :
+                            severity === 'warning' ? 'bg-yellow-500 text-white border-yellow-500' :
+                            'bg-blue-500 text-white border-blue-500'
+                          : severity === 'error' ? 'bg-white text-red-600 border-red-300 hover:border-red-400' :
+                            severity === 'warning' ? 'bg-white text-yellow-600 border-yellow-300 hover:border-yellow-400' :
+                            'bg-white text-blue-600 border-blue-300 hover:border-blue-400'
+                      }`}
+                    >
+                      {getSeverityIcon(severity, "h-3 w-3")}
+                      {severity === 'error' ? 'Errors' : severity === 'warning' ? 'Warnings' : 'Information'} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
-      </div>
-
-      {/* Tree View */}
-      <Card>
-        <CardContent className="p-4">
-          <TreeNode
-            nodeKey={resourceData.resourceType || 'Resource'}
-            value={resourceData}
-            path=""
-            depth={0}
-            validationIssues={validationIssues}
-            expandedPaths={expandedPaths}
-            togglePath={togglePath}
-          />
-        </CardContent>
-      </Card>
-      
-
-    </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <TreeNode
+          nodeKey={resourceData.resourceType || 'Resource'}
+          value={resourceData}
+          path=""
+          depth={0}
+          validationIssues={validationIssues}
+          expandedPaths={expandedPaths}
+          togglePath={togglePath}
+        />
+      </CardContent>
+    </Card>
   );
 }
