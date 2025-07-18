@@ -67,9 +67,35 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating }: { re
     return categoryMatch && severityMatch;
   });
 
-  // Get unique categories and severities
-  const categories = ['all', ...new Set(result.issues.map((issue: any) => issue.category || 'general'))];
-  const severities = ['all', 'error', 'warning', 'information'];
+  // Get unique categories and severities with counts
+  const categoryCounts = result.issues.reduce((acc: any, issue: any) => {
+    const category = issue.category || 'general';
+    acc[category] = (acc[category] || 0) + 1;
+    return acc;
+  }, {});
+  
+  const severityCounts = result.issues.reduce((acc: any, issue: any) => {
+    const severity = issue.severity || 'information';
+    acc[severity] = (acc[severity] || 0) + 1;
+    return acc;
+  }, {});
+
+  const categories = [
+    { value: 'all', label: 'All', count: result.issues.length },
+    { value: 'structural', label: 'Structural', count: categoryCounts.structural || 0 },
+    { value: 'profile', label: 'Profile', count: categoryCounts.profile || 0 },
+    { value: 'terminology', label: 'Terminology', count: categoryCounts.terminology || 0 },
+    { value: 'reference', label: 'Reference', count: categoryCounts.reference || 0 },
+    { value: 'business-rule', label: 'Business Rule', count: categoryCounts['business-rule'] || 0 },
+    { value: 'metadata', label: 'Metadata', count: categoryCounts.metadata || 0 }
+  ].filter(cat => cat.value === 'all' || cat.count > 0);
+
+  const severities = [
+    { value: 'all', label: 'All', count: result.issues.length },
+    { value: 'error', label: 'Errors', count: severityCounts.error || 0 },
+    { value: 'warning', label: 'Warnings', count: severityCounts.warning || 0 },
+    { value: 'information', label: 'Information', count: severityCounts.information || 0 }
+  ].filter(sev => sev.value === 'all' || sev.count > 0);
 
   const getCategoryIcon = (category: string) => {
     switch(category) {
@@ -168,38 +194,54 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating }: { re
           </div>
 
           {/* Filters */}
-          <div className="flex gap-4 items-center text-sm">
-            <div className="flex items-center gap-2">
-              <span className="font-medium">Category:</span>
-              <select 
-                value={selectedCategory} 
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="border rounded px-2 py-1 text-xs"
-              >
+          <div className="space-y-3">
+            {/* Category Filter */}
+            <div>
+              <div className="text-xs font-medium text-gray-700 mb-2">Categories:</div>
+              <div className="flex flex-wrap gap-1">
                 {categories.map(cat => (
-                  <option key={cat} value={cat}>
-                    {cat === 'all' ? 'All Categories' : cat}
-                  </option>
+                  <button
+                    key={cat.value}
+                    onClick={() => setSelectedCategory(cat.value)}
+                    className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                      selectedCategory === cat.value
+                        ? 'bg-blue-500 text-white border-blue-500'
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    {cat.label} ({cat.count})
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="font-medium">Severity:</span>
-              <select 
-                value={selectedSeverity} 
-                onChange={(e) => setSelectedSeverity(e.target.value)}
-                className="border rounded px-2 py-1 text-xs"
-              >
+            
+            {/* Severity Filter */}
+            <div>
+              <div className="text-xs font-medium text-gray-700 mb-2">Severity:</div>
+              <div className="flex flex-wrap gap-1">
                 {severities.map(sev => (
-                  <option key={sev} value={sev}>
-                    {sev === 'all' ? 'All Severities' : sev}
-                  </option>
+                  <button
+                    key={sev.value}
+                    onClick={() => setSelectedSeverity(sev.value)}
+                    className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                      selectedSeverity === sev.value
+                        ? sev.value === 'error' ? 'bg-red-500 text-white border-red-500' :
+                          sev.value === 'warning' ? 'bg-yellow-500 text-white border-yellow-500' :
+                          sev.value === 'information' ? 'bg-blue-500 text-white border-blue-500' :
+                          'bg-gray-600 text-white border-gray-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    {sev.label} ({sev.count})
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
-            <span className="text-gray-500">
+            
+            {/* Results summary */}
+            <div className="text-sm text-gray-500 pt-1">
               Showing {filteredIssues.length} of {result.issues.length} issues
-            </span>
+            </div>
           </div>
 
           {/* Issues by Category */}
