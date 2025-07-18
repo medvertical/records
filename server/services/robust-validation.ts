@@ -1,5 +1,6 @@
 import { FhirClient } from './fhir-client';
 import { ValidationEngine } from './validation-engine';
+import { UnifiedValidationService } from './unified-validation';
 import { storage } from '../storage';
 import { InsertFhirResource, InsertValidationResult } from '../../shared/schema';
 import { validationWebSocket } from './websocket-server';
@@ -45,6 +46,7 @@ interface ValidationCheckpoint {
 export class RobustValidationService {
   private fhirClient: FhirClient;
   private validationEngine: ValidationEngine;
+  private unifiedValidationService: UnifiedValidationService;
   private state: ValidationState = 'idle';
   private checkpoint: ValidationCheckpoint | null = null;
   private shouldStop = false;
@@ -54,6 +56,7 @@ export class RobustValidationService {
   constructor(fhirClient: FhirClient, validationEngine: ValidationEngine) {
     this.fhirClient = fhirClient;
     this.validationEngine = validationEngine;
+    this.unifiedValidationService = new UnifiedValidationService(fhirClient, validationEngine);
   }
 
   async startValidation(options: RobustValidationOptions = {}): Promise<RobustValidationProgress> {
@@ -414,16 +417,15 @@ export class RobustValidationService {
       dbResource = await storage.createFhirResource(resourceData);
     }
 
-    // Perform basic validation without external calls for now
-    const validationResult: InsertValidationResult = {
-      resourceId: dbResource.id,
-      profileId: null,
-      isValid: true, // Assume valid for now to avoid external validation issues
-      errors: [],
-      validatedAt: new Date()
-    };
-
-    await storage.createValidationResult(validationResult);
+    // Use unified validation service which respects user's validation settings
+    const { wasRevalidated } = await this.unifiedValidationService.validateResource(
+      resource,
+      skipUnchanged,
+      false // Don't force revalidation if not needed
+    );
+    
+    // Validation results are already saved by the unified validation service
+    console.log(`Resource ${resource.resourceType}/${resource.id} validated, revalidation: ${wasRevalidated}`);
   }
 
   private createResourceHash(resource: any): string {

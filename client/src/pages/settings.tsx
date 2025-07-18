@@ -81,7 +81,7 @@ function SortableTerminologyServer({ server, index, settings, handleSettingChang
           >
             <GripVertical className="h-4 w-4 text-gray-400" />
           </div>
-          <Badge variant={server.enabled ? "default" : "secondary"} className="text-xs">
+          <Badge variant="success" className="text-xs">
             Priority {server.priority}
           </Badge>
           <h5 className="font-medium text-sm">{server.name}</h5>
@@ -213,7 +213,7 @@ function SortableProfileServer({ server, index, settings, handleSettingChange }:
           >
             <GripVertical className="h-4 w-4 text-gray-400" />
           </div>
-          <Badge variant={server.enabled ? "default" : "secondary"} className="text-xs">
+          <Badge variant="success" className="text-xs">
             Priority {server.priority}
           </Badge>
           <h5 className="font-medium text-sm">{server.name}</h5>
@@ -703,7 +703,7 @@ export default function SettingsPage() {
                 Validates FHIR syntax, cardinality rules, and data types
               </p>
               <div className="mt-2">
-                <Badge variant={settings.enableStructuralValidation ? "default" : "secondary"} className="text-xs">
+                <Badge variant={settings.enableStructuralValidation ? "success" : "secondary"} className="text-xs">
                   {settings.enableStructuralValidation ? "Active" : "Disabled"}
                 </Badge>
               </div>
@@ -722,7 +722,7 @@ export default function SettingsPage() {
                 Validates against FHIR profiles (US Core, IPS, custom profiles)
               </p>
               <div className="mt-2">
-                <Badge variant={settings.enableProfileValidation ? "default" : "secondary"} className="text-xs">
+                <Badge variant={settings.enableProfileValidation ? "success" : "secondary"} className="text-xs">
                   {settings.enableProfileValidation ? "Active" : "Disabled"}
                 </Badge>
               </div>
@@ -741,7 +741,7 @@ export default function SettingsPage() {
                 Validates codes against ValueSets (SNOMED CT, LOINC, ICD-10)
               </p>
               <div className="mt-2">
-                <Badge variant={settings.enableTerminologyValidation ? "default" : "secondary"} className="text-xs">
+                <Badge variant={settings.enableTerminologyValidation ? "success" : "secondary"} className="text-xs">
                   {settings.enableTerminologyValidation ? "Active" : "Disabled"}
                 </Badge>
               </div>
@@ -760,7 +760,7 @@ export default function SettingsPage() {
                 Validates resource references and circular dependency checks
               </p>
               <div className="mt-2">
-                <Badge variant={settings.enableReferenceValidation ? "default" : "secondary"} className="text-xs">
+                <Badge variant={settings.enableReferenceValidation ? "success" : "secondary"} className="text-xs">
                   {settings.enableReferenceValidation ? "Active" : "Disabled"}
                 </Badge>
               </div>
@@ -779,7 +779,7 @@ export default function SettingsPage() {
                 Cross-field logic validation (birthDate &lt; deathDate, etc.)
               </p>
               <div className="mt-2">
-                <Badge variant={settings.enableBusinessRuleValidation ? "default" : "secondary"} className="text-xs">
+                <Badge variant={settings.enableBusinessRuleValidation ? "success" : "secondary"} className="text-xs">
                   {settings.enableBusinessRuleValidation ? "Active" : "Disabled"}
                 </Badge>
               </div>
@@ -798,7 +798,7 @@ export default function SettingsPage() {
                 Validates FHIR version, security labels, and meta elements
               </p>
               <div className="mt-2">
-                <Badge variant={settings.enableMetadataValidation ? "default" : "secondary"} className="text-xs">
+                <Badge variant={settings.enableMetadataValidation ? "success" : "secondary"} className="text-xs">
                   {settings.enableMetadataValidation ? "Active" : "Disabled"}
                 </Badge>
               </div>
@@ -1437,20 +1437,7 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  Theme Color
-                </Label>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="bg-blue-500 w-8 h-8 p-0"></Button>
-                  <Button variant="outline" size="sm" className="bg-green-500 w-8 h-8 p-0"></Button>
-                  <Button variant="outline" size="sm" className="bg-purple-500 w-8 h-8 p-0"></Button>
-                  <Button variant="outline" size="sm" className="bg-orange-500 w-8 h-8 p-0"></Button>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Choose your preferred accent color
-                </p>
-              </div>
+
 
               <div className="space-y-2">
                 <Label htmlFor="font-size" className="text-sm font-medium">

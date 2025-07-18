@@ -16,7 +16,8 @@ export class UnifiedValidationService {
     private fhirClient: FhirClient,
     private validationEngine: ValidationEngine
   ) {
-    // Initialize enhanced validation engine with comprehensive validation
+    // Initialize enhanced validation engine with default settings
+    // Actual settings will be loaded from database when needed
     this.enhancedValidationEngine = new EnhancedValidationEngine(fhirClient, {
       enableStructuralValidation: true,
       enableProfileValidation: true,
@@ -30,6 +31,39 @@ export class UnifiedValidationService {
         'http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab'
       ]
     });
+  }
+
+  /**
+   * Load validation settings from database and update engine configuration
+   */
+  async loadValidationSettings(): Promise<void> {
+    const settings = await storage.getValidationSettings();
+    if (settings) {
+      console.log('[UnifiedValidation] Loading validation settings from database:', {
+        enableStructuralValidation: settings.enableStructuralValidation,
+        enableProfileValidation: settings.enableProfileValidation,
+        enableTerminologyValidation: settings.enableTerminologyValidation,
+        enableReferenceValidation: settings.enableReferenceValidation,
+        enableBusinessRuleValidation: settings.enableBusinessRuleValidation,
+        enableMetadataValidation: settings.enableMetadataValidation
+      });
+      
+      this.enhancedValidationEngine.updateConfig({
+        enableStructuralValidation: settings.enableStructuralValidation ?? true,
+        enableProfileValidation: settings.enableProfileValidation ?? true,
+        enableTerminologyValidation: settings.enableTerminologyValidation ?? true,
+        enableReferenceValidation: settings.enableReferenceValidation ?? true,
+        enableBusinessRuleValidation: settings.enableBusinessRuleValidation ?? true,
+        enableMetadataValidation: settings.enableMetadataValidation ?? true,
+        strictMode: settings.strictMode ?? false,
+        profiles: settings.validationProfiles ?? [
+          'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient',
+          'http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab'
+        ],
+        terminologyServers: settings.terminologyServers ?? [],
+        profileResolutionServers: settings.profileResolutionServers ?? []
+      });
+    }
   }
 
   /**
@@ -117,28 +151,13 @@ export class UnifiedValidationService {
       wasRevalidated = true;
 
       try {
-        console.log(`[UnifiedValidation] Performing FULL validation for ${resource.resourceType}/${resource.id} (ALL categories for database storage)`);
+        console.log(`[UnifiedValidation] Performing validation for ${resource.resourceType}/${resource.id} using current settings`);
         
-        // ALWAYS use full validation configuration when saving to database
-        const originalConfig = this.enhancedValidationEngine.getConfig();
-        const fullValidationConfig = {
-          ...originalConfig,
-          enableStructuralValidation: true,
-          enableProfileValidation: true,
-          enableTerminologyValidation: true,
-          enableReferenceValidation: true,
-          enableBusinessRuleValidation: true,
-          enableMetadataValidation: true
-        };
+        // Load latest validation settings from database
+        await this.loadValidationSettings();
         
-        // Temporarily enable all validations for database storage
-        this.enhancedValidationEngine.updateConfig(fullValidationConfig);
-        
-        // Use enhanced validation engine for comprehensive validation
+        // Use enhanced validation engine with current settings
         const enhancedResult = await this.enhancedValidationEngine.validateResource(resource);
-        
-        // Restore original configuration
-        this.enhancedValidationEngine.updateConfig(originalConfig);
         
         console.log(`[UnifiedValidation] Enhanced validation completed with score: ${enhancedResult.validationScore}`);
         console.log(`[UnifiedValidation] Validation aspects performed:`, {
