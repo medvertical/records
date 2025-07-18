@@ -507,6 +507,11 @@ function JsonView({ data }: { data: any }) {
 export default function ResourceViewer({ resource, resourceId, resourceType, data, title = "Resource Structure" }: ResourceViewerProps) {
   // Use data if provided, otherwise use resource.data
   const resourceData = data || resource?.data;
+  
+  // Debug: Check what's in the resource object
+  console.log('Resource object:', resource);
+  console.log('Resource _validationSummary:', resource?._validationSummary);
+  console.log('Resource validationResults:', resource?.validationResults);
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -531,7 +536,9 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
       warningCount: existingValidationResults.reduce((sum, vr) => sum + (vr.warningCount || 0), 0),
       informationCount: existingValidationResults.reduce((sum, vr) => sum + (vr.issues?.filter(i => i.severity === 'information').length || 0), 0),
       fatalCount: 0,
-      score: resource?._validationSummary?.validationScore || 0
+      score: resource?._validationSummary?.validationScore || 
+             (existingValidationResults[0]?.validationScore) || 
+             (existingValidationResults[0]?.isValid ? 100 : 0)
     },
     resourceType: resource?.resourceType || 'Unknown',
     resourceId: resource?.resourceId,
@@ -652,19 +659,11 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
   return (
     <div className="space-y-4">
       {/* Header with circular score and filters */}
-      <Card>
-        <CardHeader className="pb-4">
-          <div className="flex items-center gap-4">
-            {/* Circular validation score on the left */}
-            {displayValidationResult && (
-              <CircularProgress 
-                value={displayValidationResult.summary?.score || 0} 
-                size="lg"
-              />
-            )}
-            
-            {/* Title and badges */}
-            <div className="flex-1">
+      <div className="bg-white rounded-lg border">
+        <div className="p-4 pb-4">
+          <div className="flex items-center justify-between">
+            {/* Title and badges on the left */}
+            <div>
               <h2 className="text-xl font-semibold">{title}</h2>
               <div className="flex items-center gap-2 mt-2">
                 {getValidationBadge()}
@@ -676,12 +675,21 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
                 )}
               </div>
             </div>
+            
+            {/* Circular validation score on the right */}
+            {(displayValidationResult || resource?.validationResults?.length > 0) && (
+              <CircularProgress 
+                value={displayValidationResult?.summary?.score || resource?.validationResults?.[0]?.validationScore || 0} 
+                size="lg"
+                showValue={true}
+              />
+            )}
           </div>
-        </CardHeader>
+        </div>
         
         {/* Horizontal filters in 2 columns */}
         {displayValidationResult?.issues?.length > 0 && (
-          <CardContent className="border-t pt-4">
+          <div className="border-t pt-4 px-4 pb-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Category Filter Column */}
               <div>
@@ -731,9 +739,9 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
                 </div>
               </div>
             </div>
-          </CardContent>
+          </div>
         )}
-      </Card>
+      </div>
 
       {/* Main content: Resource structure on left, validation messages on right */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
