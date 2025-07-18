@@ -2,6 +2,7 @@ import { FhirClient, FhirOperationOutcome } from './fhir-client.js';
 import { ValidationError } from '@shared/schema.js';
 import { TerminologyClient, defaultTerminologyConfig } from './terminology-client.js';
 import { storage } from '../storage.js';
+import axios from 'axios';
 
 /**
  * Enhanced FHIR Validation Engine with 6 comprehensive validation aspects:
@@ -542,7 +543,6 @@ export class EnhancedValidationEngine {
    */
   private async fetchFromSimplifier(profileUrl: string, baseUrl: string): Promise<any | null> {
     try {
-      const axios = require('axios');
       
       // Extract profile identifier from URL for Simplifier API
       const profileId = this.extractProfileIdentifier(profileUrl);
@@ -577,7 +577,6 @@ export class EnhancedValidationEngine {
    */
   private async fetchFromFhirCI(profileUrl: string, baseUrl: string): Promise<any | null> {
     try {
-      const axios = require('axios');
       
       // Try direct URL first, then construct API endpoint
       const directUrl = profileUrl.replace('http://hl7.org/fhir/', `${baseUrl}/`);
@@ -610,7 +609,6 @@ export class EnhancedValidationEngine {
    */
   private async fetchFromFhirRegistry(profileUrl: string, baseUrl: string): Promise<any | null> {
     try {
-      const axios = require('axios');
       
       // FHIR Package Registry typically uses a different approach
       // This is a simplified implementation
@@ -646,7 +644,6 @@ export class EnhancedValidationEngine {
    */
   private async fetchFromGenericFhirServer(profileUrl: string, baseUrl: string): Promise<any | null> {
     try {
-      const axios = require('axios');
       
       const profileId = this.extractProfileIdentifier(profileUrl);
       const apiUrl = `${baseUrl}/StructureDefinition/${profileId}`;
