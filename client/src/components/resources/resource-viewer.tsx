@@ -687,14 +687,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
               </div>
             </div>
             
-            {/* Circular validation score on the right */}
-            {(displayValidationResult || resource?.validationResults?.length > 0) && (
-              <CircularProgress 
-                value={displayValidationResult?.summary?.score || resource?.validationResults?.[0]?.validationScore || 0} 
-                size="lg"
-                showValue={true}
-              />
-            )}
+            
           </div>
         </div>
         
