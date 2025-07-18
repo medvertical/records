@@ -519,27 +519,42 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
   const hasExistingValidation = existingValidationResults.length > 0;
   
   // Convert database validation results to the format expected by the UI
-  const displayValidationResult = hasExistingValidation ? {
-    isValid: existingValidationResults.every(vr => vr.isValid),
-    issues: existingValidationResults.flatMap(vr => (vr.issues || []).map(issue => ({
+  const displayValidationResult = hasExistingValidation ? (() => {
+    const allIssues = existingValidationResults.flatMap(vr => (vr.issues || []).map(issue => ({
       ...issue,
       location: Array.isArray(issue.location) ? issue.location : [issue.location || 'resource'],
       expression: Array.isArray(issue.expression) ? issue.expression : issue.expression ? [issue.expression] : []
-    }))),
-    summary: {
-      totalIssues: existingValidationResults.reduce((sum, vr) => sum + (vr.issues?.length || 0), 0),
-      errorCount: existingValidationResults.reduce((sum, vr) => sum + (vr.errorCount || 0), 0),
-      warningCount: existingValidationResults.reduce((sum, vr) => sum + (vr.warningCount || 0), 0),
-      informationCount: existingValidationResults.reduce((sum, vr) => sum + (vr.issues?.filter(i => i.severity === 'information').length || 0), 0),
-      fatalCount: 0,
-      score: resource?._validationSummary?.validationScore || 
-             (existingValidationResults[0]?.validationScore) || 
-             (existingValidationResults[0]?.isValid ? 100 : 0)
-    },
-    resourceType: resource?.resourceType || 'Unknown',
-    resourceId: resource?.resourceId,
-    validatedAt: new Date(existingValidationResults[0]?.validatedAt || new Date())
-  } : validationResult;
+    })));
+    
+    // Calculate score from issues (same logic as list view)
+    let calculatedScore = 100;
+    allIssues.forEach(issue => {
+      if (issue.severity === 'error' || issue.severity === 'fatal') {
+        calculatedScore -= 10;
+      } else if (issue.severity === 'warning') {
+        calculatedScore -= 2;
+      } else if (issue.severity === 'information') {
+        calculatedScore -= 0.5;
+      }
+    });
+    calculatedScore = Math.max(0, calculatedScore);
+    
+    return {
+      isValid: existingValidationResults.every(vr => vr.isValid),
+      issues: allIssues,
+      summary: {
+        totalIssues: existingValidationResults.reduce((sum, vr) => sum + (vr.issues?.length || 0), 0),
+        errorCount: existingValidationResults.reduce((sum, vr) => sum + (vr.errorCount || 0), 0),
+        warningCount: existingValidationResults.reduce((sum, vr) => sum + (vr.warningCount || 0), 0),
+        informationCount: existingValidationResults.reduce((sum, vr) => sum + (vr.issues?.filter(i => i.severity === 'information').length || 0), 0),
+        fatalCount: 0,
+        score: resource?._validationSummary?.validationScore || calculatedScore
+      },
+      resourceType: resource?.resourceType || 'Unknown',
+      resourceId: resource?.resourceId,
+      validatedAt: new Date(existingValidationResults[0]?.validatedAt || new Date())
+    };
+  })() : validationResult;
 
   const validateResource = async () => {
     if (!resourceData) return;

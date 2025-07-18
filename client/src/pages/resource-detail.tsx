@@ -71,13 +71,30 @@ export default function ResourceDetail() {
   const hasErrors = hasValidationResults && resource.validationResults?.some(r => !r.isValid);
   
   // Calculate validation summary
-  const validationSummary = hasValidationResults ? {
-    totalIssues: resource.validationResults.reduce((sum, vr) => sum + (vr.issues?.length || 0), 0),
-    errorCount: resource.validationResults.reduce((sum, vr) => sum + (vr.errorCount || 0), 0),
-    warningCount: resource.validationResults.reduce((sum, vr) => sum + (vr.warningCount || 0), 0),
-    informationCount: resource.validationResults.reduce((sum, vr) => sum + (vr.issues?.filter(i => i.severity === 'information').length || 0), 0),
-    score: resource.validationResults.length > 0 ? Math.round(resource.validationResults[0].validationScore || 0) : 0
-  } : null;
+  const validationSummary = hasValidationResults ? (() => {
+    const allIssues = resource.validationResults.flatMap(vr => vr.issues || []);
+    
+    // Calculate score from issues (same logic as list view)
+    let calculatedScore = 100;
+    allIssues.forEach(issue => {
+      if (issue.severity === 'error' || issue.severity === 'fatal') {
+        calculatedScore -= 10;
+      } else if (issue.severity === 'warning') {
+        calculatedScore -= 2;
+      } else if (issue.severity === 'information') {
+        calculatedScore -= 0.5;
+      }
+    });
+    calculatedScore = Math.max(0, Math.round(calculatedScore));
+    
+    return {
+      totalIssues: resource.validationResults.reduce((sum, vr) => sum + (vr.issues?.length || 0), 0),
+      errorCount: resource.validationResults.reduce((sum, vr) => sum + (vr.errorCount || 0), 0),
+      warningCount: resource.validationResults.reduce((sum, vr) => sum + (vr.warningCount || 0), 0),
+      informationCount: resource.validationResults.reduce((sum, vr) => sum + (vr.issues?.filter(i => i.severity === 'information').length || 0), 0),
+      score: calculatedScore
+    };
+  })() : null;
 
   return (
     <div className="p-6 h-full overflow-y-auto">
