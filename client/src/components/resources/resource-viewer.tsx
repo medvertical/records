@@ -60,18 +60,6 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
   selectedSeverity: string;
 }) {
 
-  // Group issues by category and severity
-  const groupedIssues = result.issues.reduce((acc: any, issue: any) => {
-    const category = issue.category || 'general';
-    const severity = issue.severity || 'information';
-    
-    if (!acc[category]) acc[category] = {};
-    if (!acc[category][severity]) acc[category][severity] = [];
-    acc[category][severity].push(issue);
-    
-    return acc;
-  }, {});
-
   // Filter issues based on selected filters
   const filteredIssues = result.issues.filter((issue: any) => {
     const categoryMatch = selectedCategory === 'all' || issue.category === selectedCategory;
@@ -79,168 +67,60 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
     return categoryMatch && severityMatch;
   });
 
-  // Get unique categories and severities with counts
-  const categoryCounts = result.issues.reduce((acc: any, issue: any) => {
-    const category = issue.category || 'general';
-    acc[category] = (acc[category] || 0) + 1;
-    return acc;
-  }, {});
-  
-  const severityCounts = result.issues.reduce((acc: any, issue: any) => {
-    const severity = issue.severity || 'information';
-    acc[severity] = (acc[severity] || 0) + 1;
-    return acc;
-  }, {});
-
-  const categories = [
-    { value: 'all', label: 'All', count: result.issues.length },
-    { value: 'structural', label: 'Structural', count: categoryCounts.structural || 0 },
-    { value: 'profile', label: 'Profile', count: categoryCounts.profile || 0 },
-    { value: 'terminology', label: 'Terminology', count: categoryCounts.terminology || 0 },
-    { value: 'reference', label: 'Reference', count: categoryCounts.reference || 0 },
-    { value: 'business-rule', label: 'Business Rule', count: categoryCounts['business-rule'] || 0 },
-    { value: 'metadata', label: 'Metadata', count: categoryCounts.metadata || 0 }
-  ].filter(cat => cat.value === 'all' || cat.count > 0);
-
-  const severities = [
-    { value: 'all', label: 'All', count: result.issues.length },
-    { value: 'error', label: 'Errors', count: severityCounts.error || 0 },
-    { value: 'warning', label: 'Warnings', count: severityCounts.warning || 0 },
-    { value: 'information', label: 'Information', count: severityCounts.information || 0 }
-  ].filter(sev => sev.value === 'all' || sev.count > 0);
-
-
-
   const getCategoryDescription = (category: string) => {
     return categoryDescriptions[category] || categoryDescriptions.general;
   };
 
+  // Group issues by category
+  const groupedIssues = filteredIssues.reduce((acc: any, issue: any) => {
+    const category = issue.category || 'general';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(issue);
+    return acc;
+  }, {});
+
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center">
-              <Shield className="w-5 h-5 mr-2" />
-              FHIR Validation Results
-            </CardTitle>
-            <CardDescription className="mt-1">
-              Validation Score: {result.summary?.score || 0}% • {result.issues.length} total issues found
-            </CardDescription>
+    <div className="space-y-4">
+      {/* Results summary */}
+      <div className="text-sm text-gray-500">
+        Showing {filteredIssues.length} of {result.issues.length} issues
+      </div>
+
+      {/* Issues by Category */}
+      {Object.entries(groupedIssues).map(([category, categoryIssues]: [string, any]) => (
+        <div key={category} className="border rounded-lg p-4">
+          <div className="flex items-center mb-3">
+            {getCategoryIcon(category, "w-4 h-4")}
+            <div className="ml-2">
+              <div className="font-medium text-sm capitalize">{category} Validation</div>
+              <div className="text-xs text-gray-600">{getCategoryDescription(category)}</div>
+            </div>
+            <Badge variant="outline" className="ml-auto">
+              {categoryIssues.length}
+            </Badge>
           </div>
-          <Button 
-            onClick={onRevalidate} 
-            disabled={isValidating}
-            variant="outline"
-            size="sm"
-          >
-            {isValidating ? (
-              <>
-                <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
-                Validating...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4 mr-1" />
-                Revalidate
-              </>
-            )}
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {/* Validation Score Progress */}
           <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Validation Score</span>
-              <span className="font-medium">{result.summary?.score || 0}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
-                className={`h-2 rounded-full transition-all duration-300 ${
-                  (result.summary?.score || 0) >= 80 ? 'bg-green-500' :
-                  (result.summary?.score || 0) >= 60 ? 'bg-yellow-500' : 'bg-red-500'
-                }`}
-                style={{ width: `${result.summary?.score || 0}%` }}
-              />
-            </div>
+            {categoryIssues.map((issue: any, index: number) => (
+              <ValidationIssueDetails key={index} issue={issue} />
+            ))}
           </div>
-
-          {/* Issue Summary Cards */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
-              <div className="text-lg font-bold text-red-700">{result.summary?.errorCount || 0}</div>
-              <div className="text-xs text-red-600">Errors</div>
-              <div className="text-xs text-red-500 mt-1">Must be fixed</div>
-            </div>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
-              <div className="text-lg font-bold text-yellow-700">{result.summary?.warningCount || 0}</div>
-              <div className="text-xs text-yellow-600">Warnings</div>
-              <div className="text-xs text-yellow-500 mt-1">Should address</div>
-            </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
-              <div className="text-lg font-bold text-blue-700">{result.summary?.informationCount || 0}</div>
-              <div className="text-xs text-blue-600">Information</div>
-              <div className="text-xs text-blue-500 mt-1">Recommendations</div>
-            </div>
-          </div>
-
-          {/* Results summary */}
-          <div className="text-sm text-gray-500">
-            Showing {filteredIssues.length} of {result.issues.length} issues
-          </div>
-
-          {/* Issues by Category */}
-          <div className="space-y-4">
-            {Object.entries(groupedIssues).map(([category, severityGroups]: [string, any]) => {
-              const categoryIssues = Object.values(severityGroups).flat();
-              const visibleCategoryIssues = categoryIssues.filter((issue: any) => {
-                const categoryMatch = selectedCategory === 'all' || category === selectedCategory;
-                const severityMatch = selectedSeverity === 'all' || issue.severity === selectedSeverity;
-                return categoryMatch && severityMatch;
-              });
-
-              if (visibleCategoryIssues.length === 0) return null;
-
-              return (
-                <div key={category} className="border rounded-lg p-4">
-                  <div className="flex items-center mb-3">
-                    {getCategoryIcon(category, "w-4 h-4")}
-                    <div className="ml-2">
-                      <div className="font-medium text-sm capitalize">{category} Validation</div>
-                      <div className="text-xs text-gray-600">{getCategoryDescription(category)}</div>
-                    </div>
-                    <Badge variant="outline" className="ml-auto">
-                      {visibleCategoryIssues.length}
-                    </Badge>
-                  </div>
-                  <div className="space-y-2">
-                    {visibleCategoryIssues.map((issue: any, index: number) => (
-                      <ValidationIssueDetails key={index} issue={issue} />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {filteredIssues.length === 0 && result.issues.length > 0 && (
-            <div className="text-center py-8 text-gray-500">
-              No issues match the selected filters
-            </div>
-          )}
-
-          {result.issues.length === 0 && (
-            <div className="text-center py-8 text-green-600">
-              <CheckCircle className="w-8 h-8 mx-auto mb-2" />
-              <div className="font-medium">Validation Passed!</div>
-              <div className="text-sm text-gray-600">This resource conforms to FHIR standards</div>
-            </div>
-          )}
         </div>
-      </CardContent>
-    </Card>
+      ))}
+
+      {filteredIssues.length === 0 && result.issues.length > 0 && (
+        <div className="text-center py-8 text-gray-500">
+          No issues match the selected filters
+        </div>
+      )}
+
+      {result.issues.length === 0 && (
+        <div className="text-center py-8 text-green-600">
+          <CheckCircle className="w-8 h-8 mx-auto mb-2" />
+          <div className="font-medium">Validation Passed!</div>
+          <div className="text-sm text-gray-600">This resource conforms to FHIR standards</div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -770,13 +650,40 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
   ].filter(sev => sev.value === 'all' || sev.count > 0);
 
   return (
-    <>
-      {/* Validation Filters */}
-      {displayValidationResult?.issues?.length > 0 && (
-        <Card className="mb-4">
-          <CardContent className="pt-4">
-            <div className="space-y-3">
-              {/* Category Filter */}
+    <div className="space-y-4">
+      {/* Header with circular score and filters */}
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-4">
+            {/* Circular validation score on the left */}
+            {displayValidationResult && (
+              <CircularProgress 
+                value={displayValidationResult.summary?.score || 0} 
+                size="lg"
+              />
+            )}
+            
+            {/* Title and badges */}
+            <div className="flex-1">
+              <h2 className="text-xl font-semibold">{title}</h2>
+              <div className="flex items-center gap-2 mt-2">
+                {getValidationBadge()}
+                {/* Show warning badge separately if there are errors AND warnings */}
+                {displayValidationResult?.summary?.errorCount > 0 && displayValidationResult?.summary?.warningCount > 0 && (
+                  <Badge className="bg-orange-50 text-orange-600 border-orange-200 text-xs">
+                    {displayValidationResult.summary.warningCount} Warning{displayValidationResult.summary.warningCount !== 1 ? 's' : ''}
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        
+        {/* Horizontal filters in 2 columns */}
+        {displayValidationResult?.issues?.length > 0 && (
+          <CardContent className="border-t pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Category Filter Column */}
               <div>
                 <div className="text-xs font-medium text-gray-700 mb-2">Categories:</div>
                 <div className="flex flex-wrap gap-1">
@@ -797,7 +704,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
                 </div>
               </div>
               
-              {/* Severity Filter */}
+              {/* Severity Filter Column */}
               <div>
                 <div className="text-xs font-medium text-gray-700 mb-2">Severity:</div>
                 <div className="flex flex-wrap gap-1">
@@ -825,87 +732,81 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
               </div>
             </div>
           </CardContent>
-        </Card>
-      )}
-      {/* Resource Structure Card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>{title}</CardTitle>
-            {displayValidationResult && (
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col items-end space-y-1">
-                  {getValidationBadge()}
-                  {/* Show warning badge separately if there are errors AND warnings */}
-                  {displayValidationResult.summary?.errorCount > 0 && displayValidationResult.summary?.warningCount > 0 && (
-                    <Badge className="bg-orange-50 text-orange-600 border-orange-200 text-xs">
-                      {displayValidationResult.summary.warningCount} Warning{displayValidationResult.summary.warningCount !== 1 ? 's' : ''}
-                    </Badge>
-                  )}
-                </div>
-                <CircularProgress 
-                  value={displayValidationResult.summary?.score || 0} 
-                  size="md"
-                />
-              </div>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          <ResourceTreeViewer 
-            resourceData={resourceData} 
-            validationResults={existingValidationResults || []}
-            selectedCategory={selectedCategory}
-            selectedSeverity={selectedSeverity}
-            onCategoryChange={setSelectedCategory}
-            onSeverityChange={setSelectedSeverity}
-          />
-        </CardContent>
+        )}
       </Card>
 
-      {/* Validation Results */}
-      {isValidating && (
-        <Card className="mt-6">
-          <CardContent className="pt-6">
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
-              <p className="text-muted-foreground">Validating resource...</p>
-            </div>
+      {/* Main content: Resource structure on left, validation messages on right */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Resource Structure - Left side */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Resource Structure</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResourceTreeViewer 
+              resourceData={resourceData} 
+              validationResults={existingValidationResults || []}
+              selectedCategory={selectedCategory}
+              selectedSeverity={selectedSeverity}
+              onCategoryChange={setSelectedCategory}
+              onSeverityChange={setSelectedSeverity}
+            />
           </CardContent>
         </Card>
-      )}
-      
-      {validationError && (
-        <Card className="mt-6 border-red-200 bg-red-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-red-800">
-              <AlertTriangle className="w-4 h-4" />
-              <p className="font-medium">Validation Error</p>
-            </div>
-            <p className="text-sm text-red-700 mt-1">{validationError}</p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={validateResource}
-              className="mt-3"
-            >
-              Try Again
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
-      {displayValidationResult && displayValidationResult.issues.length > 0 && (
-        <div className="mt-6">
-          <OptimizedValidationResults 
-            result={displayValidationResult}
-            onRevalidate={validateResource}
-            isValidating={isValidating}
-            selectedCategory={selectedCategory}
-            selectedSeverity={selectedSeverity}
-          />
-        </div>
-      )}
-    </>
+        {/* Validation Messages - Right side */}
+        {displayValidationResult && displayValidationResult.issues.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Validation Messages</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <OptimizedValidationResults 
+                result={displayValidationResult}
+                onRevalidate={validateResource}
+                isValidating={isValidating}
+                selectedCategory={selectedCategory}
+                selectedSeverity={selectedSeverity}
+              />
+            </CardContent>
+          </Card>
+        )}
+        
+        {/* Show validation loading or error in right column if no validation results */}
+        {!displayValidationResult && (isValidating || validationError) && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Validation Messages</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isValidating && (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
+                  <p className="text-muted-foreground">Validating resource...</p>
+                </div>
+              )}
+              
+              {validationError && (
+                <div className="bg-red-50 p-4 rounded">
+                  <div className="flex items-center gap-2 text-red-800">
+                    <AlertTriangle className="w-4 h-4" />
+                    <p className="font-medium">Validation Error</p>
+                  </div>
+                  <p className="text-sm text-red-700 mt-1">{validationError}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={validateResource}
+                    className="mt-3"
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
   );
 }
