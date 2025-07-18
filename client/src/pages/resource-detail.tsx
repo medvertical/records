@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle, XCircle, ArrowLeft, AlertCircle, AlertTriangle, Info } from "lucide-react";
 import { Link } from "wouter";
 import { Progress } from "@/components/ui/progress";
+import { CircularProgress } from "@/components/ui/circular-progress";
 
 export default function ResourceDetail() {
   const { id } = useParams<{ id: string }>();
@@ -115,6 +116,13 @@ export default function ResourceDetail() {
                 <p className="text-gray-600">ID: {resource.resourceId}</p>
               </div>
             </div>
+            {validationSummary && (
+              <CircularProgress 
+                value={validationSummary.score} 
+                size="lg"
+                showValue={true}
+              />
+            )}
           </div>
         </div>
 
