@@ -428,9 +428,16 @@ export default function ResourceTreeViewer({
     setExpandAll(!expandAll);
   };
 
-  const errorCount = validationIssues.filter(i => i.severity === 'error').length;
-  const warningCount = validationIssues.filter(i => i.severity === 'warning').length;
-  const infoCount = validationIssues.filter(i => i.severity === 'information').length;
+  // Get raw counts from validation results to match counts shown elsewhere
+  const totalErrorCount = validationResults.reduce((sum, vr) => sum + (vr.errorCount || 0), 0);
+  const totalWarningCount = validationResults.reduce((sum, vr) => sum + (vr.warningCount || 0), 0);
+  const totalInfoCount = validationResults.reduce((sum, vr) => 
+    sum + (vr.issues?.filter(i => i.severity === 'information').length || 0), 0);
+  
+  // Count from filtered issues (for display when filters are active)
+  const filteredErrorCount = validationIssues.filter(i => i.severity === 'error').length;
+  const filteredWarningCount = validationIssues.filter(i => i.severity === 'warning').length;
+  const filteredInfoCount = validationIssues.filter(i => i.severity === 'information').length;
   
   // Get unique categories from all issues
   const categories = useMemo(() => {
@@ -456,19 +463,25 @@ export default function ResourceTreeViewer({
             </Button>
             
             <div className="flex items-center gap-2">
-              {errorCount > 0 && (
+              {totalErrorCount > 0 && (
                 <Badge variant="destructive">
-                  {errorCount} Error{errorCount !== 1 ? 's' : ''}
+                  {(selectedCategory !== 'all' || selectedSeverity !== 'all') && filteredErrorCount !== totalErrorCount 
+                    ? `${filteredErrorCount} of ${totalErrorCount}` 
+                    : totalErrorCount} Error{totalErrorCount !== 1 ? 's' : ''}
                 </Badge>
               )}
-              {warningCount > 0 && (
+              {totalWarningCount > 0 && (
                 <Badge className="bg-orange-100 text-orange-800">
-                  {warningCount} Warning{warningCount !== 1 ? 's' : ''}
+                  {(selectedCategory !== 'all' || selectedSeverity !== 'all') && filteredWarningCount !== totalWarningCount
+                    ? `${filteredWarningCount} of ${totalWarningCount}` 
+                    : totalWarningCount} Warning{totalWarningCount !== 1 ? 's' : ''}
                 </Badge>
               )}
-              {infoCount > 0 && (
+              {totalInfoCount > 0 && (
                 <Badge className="bg-blue-100 text-blue-800">
-                  {infoCount} Info
+                  {(selectedCategory !== 'all' || selectedSeverity !== 'all') && filteredInfoCount !== totalInfoCount
+                    ? `${filteredInfoCount} of ${totalInfoCount}` 
+                    : totalInfoCount} Info
                 </Badge>
               )}
             </div>
