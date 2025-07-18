@@ -44,9 +44,13 @@ function ValidationSummaryBadge({ result }: { result: any }) {
 }
 
 // Optimized validation results component
-function OptimizedValidationResults({ result, onRevalidate, isValidating }: { result: any; onRevalidate: () => void; isValidating: boolean }) {
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
+function OptimizedValidationResults({ result, onRevalidate, isValidating, selectedCategory, selectedSeverity }: { 
+  result: any; 
+  onRevalidate: () => void; 
+  isValidating: boolean;
+  selectedCategory: string;
+  selectedSeverity: string;
+}) {
 
   // Group issues by category and severity
   const groupedIssues = result.issues.reduce((acc: any, issue: any) => {
@@ -193,55 +197,9 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating }: { re
             </div>
           </div>
 
-          {/* Filters */}
-          <div className="space-y-3">
-            {/* Category Filter */}
-            <div>
-              <div className="text-xs font-medium text-gray-700 mb-2">Categories:</div>
-              <div className="flex flex-wrap gap-1">
-                {categories.map(cat => (
-                  <button
-                    key={cat.value}
-                    onClick={() => setSelectedCategory(cat.value)}
-                    className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                      selectedCategory === cat.value
-                        ? 'bg-blue-500 text-white border-blue-500'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    {cat.label} ({cat.count})
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            {/* Severity Filter */}
-            <div>
-              <div className="text-xs font-medium text-gray-700 mb-2">Severity:</div>
-              <div className="flex flex-wrap gap-1">
-                {severities.map(sev => (
-                  <button
-                    key={sev.value}
-                    onClick={() => setSelectedSeverity(sev.value)}
-                    className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                      selectedSeverity === sev.value
-                        ? sev.value === 'error' ? 'bg-red-500 text-white border-red-500' :
-                          sev.value === 'warning' ? 'bg-yellow-500 text-white border-yellow-500' :
-                          sev.value === 'information' ? 'bg-blue-500 text-white border-blue-500' :
-                          'bg-gray-600 text-white border-gray-600'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    {sev.label} ({sev.count})
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            {/* Results summary */}
-            <div className="text-sm text-gray-500 pt-1">
-              Showing {filteredIssues.length} of {result.issues.length} issues
-            </div>
+          {/* Results summary */}
+          <div className="text-sm text-gray-500">
+            Showing {filteredIssues.length} of {result.issues.length} issues
           </div>
 
           {/* Issues by Category */}
@@ -708,6 +666,8 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
 
   // Use existing validation results from resource
   const existingValidationResults = resource?.validationResults || [];
@@ -806,8 +766,89 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
 
 
 
+  // Calculate filter counts from displayValidationResult
+  const categoryCounts = displayValidationResult?.issues?.reduce((acc: any, issue: any) => {
+    const category = issue.category || 'general';
+    acc[category] = (acc[category] || 0) + 1;
+    return acc;
+  }, {}) || {};
+  
+  const severityCounts = displayValidationResult?.issues?.reduce((acc: any, issue: any) => {
+    const severity = issue.severity || 'information';
+    acc[severity] = (acc[severity] || 0) + 1;
+    return acc;
+  }, {}) || {};
+
+  const categories = [
+    { value: 'all', label: 'All', count: displayValidationResult?.issues?.length || 0 },
+    { value: 'structural', label: 'Structural', count: categoryCounts.structural || 0 },
+    { value: 'profile', label: 'Profile', count: categoryCounts.profile || 0 },
+    { value: 'terminology', label: 'Terminology', count: categoryCounts.terminology || 0 },
+    { value: 'reference', label: 'Reference', count: categoryCounts.reference || 0 },
+    { value: 'business-rule', label: 'Business Rule', count: categoryCounts['business-rule'] || 0 },
+    { value: 'metadata', label: 'Metadata', count: categoryCounts.metadata || 0 }
+  ].filter(cat => cat.value === 'all' || cat.count > 0);
+
+  const severities = [
+    { value: 'all', label: 'All', count: displayValidationResult?.issues?.length || 0 },
+    { value: 'error', label: 'Errors', count: severityCounts.error || 0 },
+    { value: 'warning', label: 'Warnings', count: severityCounts.warning || 0 },
+    { value: 'information', label: 'Information', count: severityCounts.information || 0 }
+  ].filter(sev => sev.value === 'all' || sev.count > 0);
+
   return (
     <>
+      {/* Validation Filters */}
+      {displayValidationResult?.issues?.length > 0 && (
+        <Card className="mb-4">
+          <CardContent className="pt-4">
+            <div className="space-y-3">
+              {/* Category Filter */}
+              <div>
+                <div className="text-xs font-medium text-gray-700 mb-2">Categories:</div>
+                <div className="flex flex-wrap gap-1">
+                  {categories.map(cat => (
+                    <button
+                      key={cat.value}
+                      onClick={() => setSelectedCategory(cat.value)}
+                      className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                        selectedCategory === cat.value
+                          ? 'bg-blue-500 text-white border-blue-500'
+                          : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      {cat.label} ({cat.count})
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Severity Filter */}
+              <div>
+                <div className="text-xs font-medium text-gray-700 mb-2">Severity:</div>
+                <div className="flex flex-wrap gap-1">
+                  {severities.map(sev => (
+                    <button
+                      key={sev.value}
+                      onClick={() => setSelectedSeverity(sev.value)}
+                      className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                        selectedSeverity === sev.value
+                          ? sev.value === 'error' ? 'bg-red-500 text-white border-red-500' :
+                            sev.value === 'warning' ? 'bg-yellow-500 text-white border-yellow-500' :
+                            sev.value === 'information' ? 'bg-blue-500 text-white border-blue-500' :
+                            'bg-gray-600 text-white border-gray-600'
+                          : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      {sev.label} ({sev.count})
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       {/* Resource Structure Card */}
       <Card>
         <CardHeader>
@@ -817,6 +858,10 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
           <ResourceTreeViewer 
             resourceData={resourceData} 
             validationResults={existingValidationResults || []}
+            selectedCategory={selectedCategory}
+            selectedSeverity={selectedSeverity}
+            onCategoryChange={setSelectedCategory}
+            onSeverityChange={setSelectedSeverity}
           />
         </CardContent>
       </Card>
@@ -859,6 +904,8 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
             result={displayValidationResult}
             onRevalidate={validateResource}
             isValidating={isValidating}
+            selectedCategory={selectedCategory}
+            selectedSeverity={selectedSeverity}
           />
         </div>
       )}

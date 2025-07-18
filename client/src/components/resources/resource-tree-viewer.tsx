@@ -11,6 +11,10 @@ import { ValidationResult } from '@shared/schema';
 interface ResourceTreeViewerProps {
   resourceData: any;
   validationResults: ValidationResult[];
+  selectedCategory?: string;
+  selectedSeverity?: string;
+  onCategoryChange?: (category: string) => void;
+  onSeverityChange?: (severity: string) => void;
 }
 
 interface TreeNodeProps {
@@ -291,11 +295,16 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   );
 };
 
-export default function ResourceTreeViewer({ resourceData, validationResults }: ResourceTreeViewerProps) {
+export default function ResourceTreeViewer({ 
+  resourceData, 
+  validationResults,
+  selectedCategory = 'all',
+  selectedSeverity = 'all',
+  onCategoryChange,
+  onSeverityChange
+}: ResourceTreeViewerProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['']));
   const [expandAll, setExpandAll] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
 
   // Process validation results into a more usable format and deduplicate
   const allValidationIssues = useMemo(() => {
@@ -460,45 +469,17 @@ export default function ResourceTreeViewer({ resourceData, validationResults }: 
           </div>
         </div>
         
-        {/* Filtering Controls */}
+        {/* Active Filter Summary */}
         {allValidationIssues.length > 0 && (
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Category:</span>
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All categories" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="structural">Structural</SelectItem>
-                  <SelectItem value="profile">Profile</SelectItem>
-                  <SelectItem value="terminology">Terminology</SelectItem>
-                  <SelectItem value="reference">Reference</SelectItem>
-                  <SelectItem value="business-rule">Business Rule</SelectItem>
-                  <SelectItem value="metadata">Metadata</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Severity:</span>
-              <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="All severities" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Severities</SelectItem>
-                  <SelectItem value="error">Errors</SelectItem>
-                  <SelectItem value="warning">Warnings</SelectItem>
-                  <SelectItem value="information">Information</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="text-sm text-muted-foreground">
-              Showing {validationIssues.length} of {allValidationIssues.length} issues
-            </div>
+          <div className="text-sm text-muted-foreground">
+            Showing {validationIssues.length} of {allValidationIssues.length} issues
+            {(selectedCategory !== 'all' || selectedSeverity !== 'all') && (
+              <span className="ml-2">
+                (filtered by {selectedCategory !== 'all' && `category: ${selectedCategory}`}
+                {selectedCategory !== 'all' && selectedSeverity !== 'all' && ', '}
+                {selectedSeverity !== 'all' && `severity: ${selectedSeverity}`})
+              </span>
+            )}
           </div>
         )}
       </div>
