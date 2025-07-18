@@ -508,10 +508,6 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
   // Use data if provided, otherwise use resource.data
   const resourceData = data || resource?.data;
   
-  // Debug: Check what's in the resource object
-  console.log('Resource object:', resource);
-  console.log('Resource _validationSummary:', resource?._validationSummary);
-  console.log('Resource validationResults:', resource?.validationResults);
   const [validationResult, setValidationResult] = useState<any>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);

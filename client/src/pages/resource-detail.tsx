@@ -83,27 +83,23 @@ export default function ResourceDetail() {
     <div className="p-6 h-full overflow-y-auto">
       <div className="space-y-6">
         {/* Header section with validation summary */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-4">
-                <Link href="/resources">
-                  <Button variant="outline" size="sm" className="inline-flex items-center">
-                    <ArrowLeft className="h-4 w-4" />
-                  </Button>
-                </Link>
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {resource.resourceType} Resource
-                  </h1>
-                  <p className="text-gray-600">ID: {resource.resourceId}</p>
-                </div>
+        <div className="bg-white rounded-lg border p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <Link href="/resources">
+                <Button variant="outline" size="sm" className="inline-flex items-center">
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              </Link>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {resource.resourceType} Resource
+                </h1>
+                <p className="text-gray-600">ID: {resource.resourceId}</p>
               </div>
             </div>
-            
-            
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Main content - single column with integrated validation */}
         <div>
