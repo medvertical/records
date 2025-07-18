@@ -651,7 +651,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
       warningCount: existingValidationResults.reduce((sum, vr) => sum + (vr.warningCount || 0), 0),
       informationCount: existingValidationResults.reduce((sum, vr) => sum + (vr.issues?.filter(i => i.severity === 'information').length || 0), 0),
       fatalCount: 0,
-      score: existingValidationResults.length > 0 ? Math.round(existingValidationResults[0].validationScore || 0) : 0
+      score: resource?._validationSummary?.validationScore || 0
     },
     resourceType: resource?.resourceType || 'Unknown',
     resourceId: resource?.resourceId,
