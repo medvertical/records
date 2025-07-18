@@ -706,19 +706,28 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
       return <Badge variant="destructive">Validation Error</Badge>;
     }
     if (displayValidationResult) {
+      const errorCount = (displayValidationResult.summary?.errorCount || 0) + (displayValidationResult.summary?.fatalCount || 0);
+      const warningCount = displayValidationResult.summary?.warningCount || 0;
+      
       if (displayValidationResult.isValid) {
         return (
-          <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
+          <Badge className="bg-green-50 text-green-600 border-green-200">
             <CheckCircle className="w-3 h-3 mr-1" />
             Valid
           </Badge>
         );
-      } else {
-        const errorCount = (displayValidationResult.summary?.errorCount || 0) + (displayValidationResult.summary?.fatalCount || 0);
+      } else if (errorCount > 0) {
         return (
-          <Badge variant="destructive">
-            <AlertTriangle className="w-3 h-3 mr-1" />
+          <Badge className="bg-red-50 text-red-600 border-red-200">
+            <AlertCircle className="w-3 h-3 mr-1" />
             {errorCount} Error{errorCount !== 1 ? 's' : ''}
+          </Badge>
+        );
+      } else if (warningCount > 0) {
+        return (
+          <Badge className="bg-orange-50 text-orange-600 border-orange-200">
+            <AlertTriangle className="w-3 h-3 mr-1" />
+            {warningCount} Warning{warningCount !== 1 ? 's' : ''}
           </Badge>
         );
       }
@@ -820,7 +829,23 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
       {/* Resource Structure Card */}
       <Card>
         <CardHeader>
-          <CardTitle>{title}</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>{title}</CardTitle>
+            {displayValidationResult && (
+              <div className="flex flex-col items-end space-y-1">
+                {getValidationBadge()}
+                {/* Show warning badge separately if there are errors AND warnings */}
+                {displayValidationResult.summary?.errorCount > 0 && displayValidationResult.summary?.warningCount > 0 && (
+                  <Badge className="bg-orange-50 text-orange-600 border-orange-200 text-xs">
+                    {displayValidationResult.summary.warningCount} Warning{displayValidationResult.summary.warningCount !== 1 ? 's' : ''}
+                  </Badge>
+                )}
+                <Badge variant="outline" className="text-xs">
+                  {displayValidationResult.summary?.score || 0}%
+                </Badge>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <ResourceTreeViewer 
