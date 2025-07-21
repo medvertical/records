@@ -461,56 +461,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               total: allCachedForType.length,
             });
             
-            // Trigger background validation for resources that need it
-            setTimeout(async () => {
-              console.log(`[Resources] Starting background validation for ${cachedResources.length} resources`);
-              
-              for (const resource of cachedResources) {
-                try {
-                  if (unifiedValidationService && resource.data) {
-                    // Check if validation is outdated and revalidate if needed
-                    const validationResult = await unifiedValidationService.checkAndRevalidateResource(resource);
-                    
-                    if (validationResult.wasRevalidated) {
-                      console.log(`[Resources Background] Resource ${resource.resourceType}/${resource.resourceId} was revalidated`);
-                      
-                      // Broadcast update via WebSocket if available
-                      if (validationWebSocket) {
-                        const updatedValidation = await storage.getValidationResultsByResourceId(resource.id);
-                        
-                        // Use latest validation result for consistency
-                        const latestValidation = updatedValidation.length > 0 ? 
-                          updatedValidation.reduce((latest, current) => 
-                            new Date(current.validatedAt) > new Date(latest.validatedAt) ? current : latest
-                          ) : null;
-                        
-                        const updateMessage = {
-                          type: 'resource_validation_updated',
-                          resourceId: resource.id,
-                          fhirResourceId: resource.resourceId,
-                          resourceType: resource.resourceType,
-                          validationSummary: {
-                            hasErrors: latestValidation ? !latestValidation.isValid && latestValidation.errorCount > 0 : false,
-                            hasWarnings: latestValidation ? latestValidation.warningCount > 0 : false,
-                            errorCount: latestValidation ? latestValidation.errorCount : 0,
-                            warningCount: latestValidation ? latestValidation.warningCount : 0,
-                            isValid: latestValidation ? latestValidation.isValid : false,
-                            validationScore: latestValidation ? latestValidation.validationScore : 0,
-                            lastValidated: latestValidation ? new Date(latestValidation.validatedAt) : new Date()
-                          }
-                        };
-                        
-                        validationWebSocket.broadcastMessage(JSON.stringify(updateMessage));
-                      }
-                    }
-                  }
-                } catch (error) {
-                  console.warn(`[Resources Background] Background validation failed for ${resource.resourceType}/${resource.resourceId}:`, error);
-                }
-              }
-              
-              console.log(`[Resources] Background validation completed for ${cachedResources.length} resources`);
-            }, 100); // Start background validation after 100ms
+            // DISABLED: Background validation in list view for performance
+            // Background validation causes significant UI delays when loading resource lists
+            // Resources will be validated on-demand when opened in detail view
+            console.log(`[Resources] Background validation disabled for list view performance`);
+            
+            // Previously, background validation was causing the list view to show
+            // "Validating..." for extended periods, making the UI feel unresponsive
           } else {
             // No cached data, fall back to FHIR server
             if (fhirClient) {

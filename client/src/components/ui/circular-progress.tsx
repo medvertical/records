@@ -21,7 +21,7 @@ export function CircularProgress({
   
   // Size configurations
   const sizeConfig = {
-    sm: { diameter: 32, fontSize: 'text-xs', strokeWidth: strokeWidth || 3 },
+    sm: { diameter: 40, fontSize: 'text-xs', strokeWidth: strokeWidth || 3 },
     md: { diameter: 48, fontSize: 'text-sm', strokeWidth: strokeWidth || 4 },
     lg: { diameter: 64, fontSize: 'text-base', strokeWidth: strokeWidth || 5 },
   };
