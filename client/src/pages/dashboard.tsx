@@ -335,8 +335,8 @@ export default function Dashboard() {
 
   // Calculate real-time metrics
   const validationCoverage = validationSummary?.validationCoverage || 0;
-  const totalValidated = validationSummary?.totalValidated || dashboardStats?.totalResources || 0;
-  const totalResources = validationSummary?.totalResources || resourceCounts?.total || 0;
+  const totalValidated = validationSummary?.totalValidated || dashboardStats?.totalValidated || 0;
+  const totalResources = dashboardStats?.totalResources || validationSummary?.totalResources || resourceCounts?.total || 0;
   
   // Real-time progress calculations
   const currentProgressPercent = validationProgress 
