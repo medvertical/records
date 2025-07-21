@@ -6,7 +6,6 @@ import { ChevronDown, ChevronRight, Shield, CheckCircle, AlertTriangle, RefreshC
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ValidationResults } from '@/components/validation/validation-results';
-import ResourceTreeViewer from '@/components/resources/resource-tree-viewer';
 import { Progress } from "@/components/ui/progress";
 import { 
   getCategoryIcon, 
@@ -835,83 +834,61 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
         )}
       </div>
 
-      {/* Main content: Resource structure on left, validation messages on right */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Resource Structure - Left side */}
+      {/* Validation Messages */}
+      {displayValidationResult && displayValidationResult.issues.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Resource Structure</CardTitle>
+            <CardTitle>Validation Messages</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResourceTreeViewer 
-              resourceData={resourceData} 
-              validationResults={existingValidationResults || []}
+            <OptimizedValidationResults 
+              result={displayValidationResult}
+              onRevalidate={validateResource}
+              isValidating={isValidating}
               selectedCategory={selectedCategory}
               selectedSeverity={selectedSeverity}
               selectedPath={selectedPath}
-              onCategoryChange={setSelectedCategory}
-              onSeverityChange={handleSeverityChange}
-              onIssueClick={setHighlightedIssueId}
+              highlightedIssueId={highlightedIssueId}
+              onClearFilters={handleClearFilters}
             />
           </CardContent>
         </Card>
-
-        {/* Validation Messages - Right side */}
-        {displayValidationResult && displayValidationResult.issues.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Validation Messages</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <OptimizedValidationResults 
-                result={displayValidationResult}
-                onRevalidate={validateResource}
-                isValidating={isValidating}
-                selectedCategory={selectedCategory}
-                selectedSeverity={selectedSeverity}
-                selectedPath={selectedPath}
-                highlightedIssueId={highlightedIssueId}
-                onClearFilters={handleClearFilters}
-              />
-            </CardContent>
-          </Card>
-        )}
-        
-        {/* Show validation loading or error in right column if no validation results */}
-        {!displayValidationResult && (isValidating || validationError) && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Validation Messages</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isValidating && (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
-                  <p className="text-muted-foreground">Validating resource...</p>
+      )}
+      
+      {/* Show validation loading or error if no validation results */}
+      {!displayValidationResult && (isValidating || validationError) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Validation Messages</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isValidating && (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
+                <p className="text-muted-foreground">Validating resource...</p>
+              </div>
+            )}
+            
+            {validationError && (
+              <div className="bg-red-50 p-4 rounded">
+                <div className="flex items-center gap-2 text-red-800">
+                  <AlertTriangle className="w-4 h-4" />
+                  <p className="font-medium">Validation Error</p>
                 </div>
-              )}
-              
-              {validationError && (
-                <div className="bg-red-50 p-4 rounded">
-                  <div className="flex items-center gap-2 text-red-800">
-                    <AlertTriangle className="w-4 h-4" />
-                    <p className="font-medium">Validation Error</p>
-                  </div>
-                  <p className="text-sm text-red-700 mt-1">{validationError}</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={validateResource}
-                    className="mt-3"
-                  >
-                    Try Again
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+                <p className="text-sm text-red-700 mt-1">{validationError}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={validateResource}
+                  className="mt-3"
+                >
+                  Try Again
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
