@@ -19,8 +19,9 @@ interface ResourceTreeViewerProps {
   validationResults: ValidationResult[];
   selectedCategory?: string;
   selectedSeverity?: string;
+  selectedPath?: string;
   onCategoryChange?: (category: string) => void;
-  onSeverityChange?: (severity: string) => void;
+  onSeverityChange?: (severity: string, path?: string) => void;
   onIssueClick?: (issueId: string) => void;
 }
 
@@ -34,7 +35,8 @@ interface TreeNodeProps {
   togglePath: (path: string) => void;
   onIssueClick?: (issueId: string) => void;
   selectedSeverity?: string;
-  onSeverityChange?: (severity: string) => void;
+  selectedPath?: string;
+  onSeverityChange?: (severity: string, path?: string) => void;
 }
 
 interface ValidationIssue {
@@ -80,6 +82,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   togglePath,
   onIssueClick,
   selectedSeverity,
+  selectedPath,
   onSeverityChange
 }) => {
   const isObject = value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -187,12 +190,20 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                     onClick={(e) => {
                       e.stopPropagation();
                       if (onSeverityChange) {
-                        // Toggle severity filter
-                        onSeverityChange(selectedSeverity === 'error' ? 'all' : 'error');
+                        // Toggle severity filter with path
+                        const isActive = selectedSeverity === 'error' && selectedPath === path;
+                        onSeverityChange(isActive ? 'all' : 'error', isActive ? undefined : path);
                       }
                     }}
                   >
-                    <Badge variant="destructive" className="text-xs cursor-pointer">
+                    <Badge 
+                      variant="destructive" 
+                      className={`text-xs cursor-pointer ${
+                        selectedSeverity === 'error' && selectedPath === path 
+                          ? 'bg-red-700 hover:bg-red-800' 
+                          : ''
+                      }`}
+                    >
                       {getSeverityIcon('error', "h-3 w-3 mr-1")}
                       {directIssues.filter(i => i.severity === 'error').length}
                     </Badge>
@@ -222,12 +233,19 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                     onClick={(e) => {
                       e.stopPropagation();
                       if (onSeverityChange) {
-                        // Toggle severity filter
-                        onSeverityChange(selectedSeverity === 'warning' ? 'all' : 'warning');
+                        // Toggle severity filter with path
+                        const isActive = selectedSeverity === 'warning' && selectedPath === path;
+                        onSeverityChange(isActive ? 'all' : 'warning', isActive ? undefined : path);
                       }
                     }}
                   >
-                    <Badge className="bg-orange-100 text-orange-800 text-xs cursor-pointer">
+                    <Badge 
+                      className={`text-xs cursor-pointer ${
+                        selectedSeverity === 'warning' && selectedPath === path
+                          ? 'bg-orange-600 text-white hover:bg-orange-700'
+                          : 'bg-orange-100 text-orange-800'
+                      }`}
+                    >
                       {getSeverityIcon('warning', "h-3 w-3 mr-1")}
                       {directIssues.filter(i => i.severity === 'warning').length}
                     </Badge>
@@ -257,12 +275,19 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                     onClick={(e) => {
                       e.stopPropagation();
                       if (onSeverityChange) {
-                        // Toggle severity filter
-                        onSeverityChange(selectedSeverity === 'information' ? 'all' : 'information');
+                        // Toggle severity filter with path
+                        const isActive = selectedSeverity === 'information' && selectedPath === path;
+                        onSeverityChange(isActive ? 'all' : 'information', isActive ? undefined : path);
                       }
                     }}
                   >
-                    <Badge className="bg-blue-100 text-blue-800 text-xs cursor-pointer">
+                    <Badge 
+                      className={`text-xs cursor-pointer ${
+                        selectedSeverity === 'information' && selectedPath === path
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}
+                    >
                       {getSeverityIcon('information', "h-3 w-3 mr-1")}
                       {directIssues.filter(i => i.severity === 'information').length}
                     </Badge>
@@ -301,6 +326,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                 togglePath={togglePath}
                 onIssueClick={onIssueClick}
                 selectedSeverity={selectedSeverity}
+                selectedPath={selectedPath}
                 onSeverityChange={onSeverityChange}
               />
             ))
@@ -317,6 +343,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                 togglePath={togglePath}
                 onIssueClick={onIssueClick}
                 selectedSeverity={selectedSeverity}
+                selectedPath={selectedPath}
                 onSeverityChange={onSeverityChange}
               />
             ))
@@ -332,6 +359,7 @@ export default function ResourceTreeViewer({
   validationResults,
   selectedCategory = 'all',
   selectedSeverity = 'all',
+  selectedPath,
   onCategoryChange,
   onSeverityChange,
   onIssueClick
@@ -410,9 +438,17 @@ export default function ResourceTreeViewer({
         return false;
       }
       
+      // Filter by path if specified
+      if (selectedPath !== undefined) {
+        // Check if the issue path starts with the selected path or is a child of it
+        if (!issue.path.startsWith(selectedPath) && !issue.path.includes(`.${selectedPath}`)) {
+          return false;
+        }
+      }
+      
       return true;
     });
-  }, [allValidationIssues, selectedCategory, selectedSeverity]);
+  }, [allValidationIssues, selectedCategory, selectedSeverity, selectedPath]);
 
   const togglePath = (path: string) => {
     setExpandedPaths(prev => {
@@ -501,6 +537,7 @@ export default function ResourceTreeViewer({
           togglePath={togglePath}
           onIssueClick={onIssueClick}
           selectedSeverity={selectedSeverity}
+          selectedPath={selectedPath}
           onSeverityChange={onSeverityChange}
         />
       </div>

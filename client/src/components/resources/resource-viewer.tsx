@@ -520,7 +520,14 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
   const [validationError, setValidationError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
+  const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined);
   const [highlightedIssueId, setHighlightedIssueId] = useState<string | null>(null);
+
+  // Handler for severity changes that can also handle path
+  const handleSeverityChange = (severity: string, path?: string) => {
+    setSelectedSeverity(severity);
+    setSelectedPath(path);
+  };
 
   // Use existing validation results from resource
   const existingValidationResults = resource?.validationResults || [];
@@ -768,8 +775,9 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
               validationResults={existingValidationResults || []}
               selectedCategory={selectedCategory}
               selectedSeverity={selectedSeverity}
+              selectedPath={selectedPath}
               onCategoryChange={setSelectedCategory}
-              onSeverityChange={setSelectedSeverity}
+              onSeverityChange={handleSeverityChange}
               onIssueClick={setHighlightedIssueId}
             />
           </CardContent>
