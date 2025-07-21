@@ -55,7 +55,7 @@ export interface EnhancedValidationConfig {
 export interface ValidationIssue {
   severity: 'fatal' | 'error' | 'warning' | 'information';
   code: string;
-  category: 'structural' | 'profile' | 'terminology' | 'reference' | 'business-rule' | 'metadata';
+  category: 'structural' | 'profile' | 'terminology' | 'reference' | 'business-rule' | 'metadata' | 'general';
   message: string;
   path: string;
   expression?: string;

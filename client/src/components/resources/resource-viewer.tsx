@@ -167,7 +167,8 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
             {category === 'reference' && <Link className="w-4 h-4" />}
             {category === 'business-rule' && <Shield className="w-4 h-4" />}
             {category === 'metadata' && <FileText className="w-4 h-4" />}
-            {!['structural', 'profile', 'terminology', 'reference', 'business-rule', 'metadata'].includes(category) && <Info className="w-4 h-4" />}
+            {category === 'general' && <AlertCircle className="w-4 h-4" />}
+            {!['structural', 'profile', 'terminology', 'reference', 'business-rule', 'metadata', 'general'].includes(category) && <Info className="w-4 h-4" />}
             <div className="ml-2">
               <div className="font-medium text-sm capitalize">{category} Validation</div>
               <div className="text-xs text-gray-600">{getCategoryDescription(category)}</div>
@@ -776,7 +777,8 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
     { value: 'terminology', label: 'Terminology', count: categoryCounts.terminology || 0 },
     { value: 'reference', label: 'Reference', count: categoryCounts.reference || 0 },
     { value: 'business-rule', label: 'Business Rule', count: categoryCounts['business-rule'] || 0 },
-    { value: 'metadata', label: 'Metadata', count: categoryCounts.metadata || 0 }
+    { value: 'metadata', label: 'Metadata', count: categoryCounts.metadata || 0 },
+    { value: 'general', label: 'General', count: categoryCounts.general || 0 }
   ].filter(cat => cat.value === 'all' || cat.count > 0);
 
   const severities = [
@@ -837,6 +839,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
                     {cat.value === 'reference' && <Link className="h-3 w-3" />}
                     {cat.value === 'business-rule' && <Shield className="h-3 w-3" />}
                     {cat.value === 'metadata' && <FileText className="h-3 w-3" />}
+                    {cat.value === 'general' && <AlertCircle className="h-3 w-3" />}
                     {cat.value === 'all' ? 'All Categories' : cat.label} ({cat.count})
                   </button>
                 ))}

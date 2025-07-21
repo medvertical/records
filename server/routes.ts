@@ -61,6 +61,11 @@ function filterValidationIssues(validationResults: ValidationResult[], activeSet
         } else if (message.includes('metadata') || message.includes('security') ||
                    message.includes('narrative') || code.includes('metadata')) {
           category = 'metadata';
+        } else if (message.includes('unable to resolve reference to profile') || 
+                   message.includes('unable to resolve profile') ||
+                   message.includes('profile resolution') ||
+                   message.includes('unresolved profile')) {
+          category = 'general';
         } else {
           // Default to structural for unknown issues
           category = 'structural';
@@ -80,6 +85,8 @@ function filterValidationIssues(validationResults: ValidationResult[], activeSet
           return activeSettings.enableBusinessRuleValidation !== false;
         case 'metadata':
           return activeSettings.enableMetadataValidation !== false;
+        case 'general':
+          return true; // Always show general category issues
         default:
           return true; // Show unknown categories by default
       }
