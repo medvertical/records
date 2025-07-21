@@ -178,19 +178,22 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         </div>
 
         {/* Right column: Value display and validation badges */}
-        <div className="flex items-center gap-2 justify-end">
+        <div className="flex items-center gap-2 justify-between">
           {/* Value display for simple types */}
           {!isExpandable && (
             <div className="flex items-center gap-1">
               {getValueIcon(value)}
-              <span className="font-mono text-sm text-gray-900 max-w-[300px] truncate">
+              <span className="font-mono text-sm text-gray-900 max-w-[400px] truncate text-left">
                 {formatValue(value)}
               </span>
             </div>
           )}
           
+          {/* Empty div for expandable items to push badges to the right */}
+          {isExpandable && <div />}
+          
           {/* Validation Indicators */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-shrink-0">
           {hasErrors && (
             <TooltipProvider>
               <Tooltip>
