@@ -533,6 +533,8 @@ export class EnhancedValidationEngine {
         return await this.fetchFromFhirCI(profileUrl, server.url);
       case 'fhir-registry':
         return await this.fetchFromFhirRegistry(profileUrl, server.url);
+      case 'ihe-profiles':
+        return await this.fetchFromIheProfiles(profileUrl, server.url);
       default:
         return await this.fetchFromGenericFhirServer(profileUrl, server.url);
     }
@@ -668,6 +670,87 @@ export class EnhancedValidationEngine {
       return null;
     } catch (error: any) {
       console.warn(`[ProfileResolution] Generic server fetch failed:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Fetch profile from IHE Profiles server
+   */
+  private async fetchFromIheProfiles(profileUrl: string, baseUrl: string): Promise<any | null> {
+    try {
+      // Check if this is an IHE profile URL
+      if (!profileUrl.includes('profiles.ihe.net')) {
+        return null;
+      }
+      
+      console.log(`[ProfileResolution] Fetching IHE profile: ${profileUrl}`);
+      
+      // IHE profiles follow a specific URL pattern
+      // https://profiles.ihe.net/ITI/BALP/StructureDefinition/IHE.BasicAudit.Query
+      // becomes
+      // https://profiles.ihe.net/ITI/BALP/1.1.3/StructureDefinition-IHE.BasicAudit.Query.json
+      
+      // Extract the profile path components
+      const urlMatch = profileUrl.match(/^https:\/\/profiles\.ihe\.net\/([^\/]+)\/([^\/]+)\/StructureDefinition\/(.+)$/);
+      if (urlMatch) {
+        const [, domain, guide, profileName] = urlMatch;
+        
+        // Try with latest version (typically 1.1.3 for BALP)
+        const jsonPatterns = [
+          `https://profiles.ihe.net/${domain}/${guide}/1.1.3/StructureDefinition-${profileName}.json`,
+          `https://profiles.ihe.net/${domain}/${guide}/1.1.0/StructureDefinition-${profileName}.json`,
+          `https://profiles.ihe.net/${domain}/${guide}/current/StructureDefinition-${profileName}.json`,
+          `https://profiles.ihe.net/${domain}/${guide}/StructureDefinition-${profileName}.json`
+        ];
+        
+        for (const pattern of jsonPatterns) {
+          try {
+            console.log(`[ProfileResolution] Trying IHE JSON pattern: ${pattern}`);
+            const response = await axios.get(pattern, {
+              headers: {
+                'Accept': 'application/fhir+json, application/json',
+                'User-Agent': 'Records-FHIR-Validator/1.0'
+              },
+              timeout: 10000
+            });
+
+            if (response.status === 200 && response.data && response.data.resourceType === 'StructureDefinition') {
+              console.log(`[ProfileResolution] Successfully fetched IHE profile from: ${pattern}`);
+              return response.data;
+            }
+          } catch (error: any) {
+            console.log(`[ProfileResolution] Pattern failed: ${pattern} - ${error.message}`);
+            continue;
+          }
+        }
+      }
+      
+      // If URL patterns didn't work, try direct approaches
+      try {
+        // Try adding .json to the end
+        const directJsonUrl = `${profileUrl}.json`;
+        console.log(`[ProfileResolution] Trying direct JSON URL: ${directJsonUrl}`);
+        
+        const response = await axios.get(directJsonUrl, {
+          headers: {
+            'Accept': 'application/fhir+json, application/json',
+            'User-Agent': 'Records-FHIR-Validator/1.0'
+          },
+          timeout: 10000
+        });
+
+        if (response.status === 200 && response.data && response.data.resourceType === 'StructureDefinition') {
+          console.log(`[ProfileResolution] Successfully fetched IHE profile from direct JSON URL: ${directJsonUrl}`);
+          return response.data;
+        }
+      } catch (error: any) {
+        console.warn(`[ProfileResolution] Direct JSON fetch failed: ${error.message}`);
+      }
+      
+      return null;
+    } catch (error: any) {
+      console.warn(`[ProfileResolution] IHE profiles fetch failed:`, error.message);
       return null;
     }
   }

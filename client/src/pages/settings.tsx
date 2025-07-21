@@ -471,6 +471,15 @@ export default function SettingsPage() {
         {
           priority: 3,
           enabled: true,
+          url: 'https://profiles.ihe.net',
+          type: 'ihe-profiles',
+          name: 'IHE Profiles',
+          description: 'IHE (Integrating the Healthcare Enterprise) profile registry for interoperability standards',
+          capabilities: ['IHE Profiles', 'BALP', 'ITI Profiles', 'Radiology', 'Cardiology', 'Interoperability']
+        },
+        {
+          priority: 4,
+          enabled: true,
           url: 'https://registry.fhir.org',
           type: 'fhir-registry',
           name: 'FHIR Package Registry',
