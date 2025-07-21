@@ -90,95 +90,107 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   const isExpandable = isObject || isArray;
   const isExpanded = expandedPaths.has(path);
   
-  // Filter issues for this exact path
-  const directIssues = validationIssues.filter(issue => {
-    // For root level, only match issues without a path or with the resource type itself
-    if (path === '') {
-      return !issue.path || issue.path === nodeKey;
-    }
-    
-    // For nested paths, match exact path or child paths
-    const normalizedIssuePath = issue.path.toLowerCase();
-    const normalizedCurrentPath = path.toLowerCase();
-    
-    // Debug logging for first few levels
-    if (depth < 2) {
-      console.log(`[TreeNode] Checking path "${path}" against issue path "${issue.path}"`);
-    }
-    
-    // Match exact path or child paths
-    return normalizedIssuePath === normalizedCurrentPath || 
-           normalizedIssuePath.startsWith(`${normalizedCurrentPath}.`) ||
-           normalizedIssuePath.startsWith(`${normalizedCurrentPath}[`);
-  });
+  // Get all issues for this path and its descendants
+  const getAllDescendantIssues = (currentPath: string) => {
+    return validationIssues.filter(issue => {
+      if (currentPath === '') {
+        return !issue.path || issue.path === nodeKey;
+      }
+      const normalizedIssuePath = issue.path.toLowerCase();
+      const normalizedCurrentPath = currentPath.toLowerCase();
+      return normalizedIssuePath === normalizedCurrentPath || 
+             normalizedIssuePath.startsWith(`${normalizedCurrentPath}.`) ||
+             normalizedIssuePath.startsWith(`${normalizedCurrentPath}[`);
+    });
+  };
+
+  // Get issues to display at this level
+  // If not expanded and has children, show all descendant issues
+  // If expanded, only show direct issues
+  const displayIssues = isExpanded || !isExpandable
+    ? getAllDescendantIssues(path).filter(issue => {
+        const normalizedIssuePath = issue.path.toLowerCase();
+        const normalizedCurrentPath = path.toLowerCase();
+        if (path === '') {
+          return !issue.path || issue.path === nodeKey;
+        }
+        // Only show direct issues when expanded
+        const segments = normalizedIssuePath.split(/[\.\[\]]+/).filter(Boolean);
+        const currentSegments = normalizedCurrentPath.split(/[\.\[\]]+/).filter(Boolean);
+        return segments.length === currentSegments.length + 1 || 
+               normalizedIssuePath === normalizedCurrentPath;
+      })
+    : getAllDescendantIssues(path);
   
-  const hasErrors = directIssues.some(i => i.severity === 'error');
-  const hasWarnings = directIssues.some(i => i.severity === 'warning');
-  const hasInfo = directIssues.some(i => i.severity === 'information');
+  const hasErrors = displayIssues.some(i => i.severity === 'error');
+  const hasWarnings = displayIssues.some(i => i.severity === 'warning');
+  const hasInfo = displayIssues.some(i => i.severity === 'information');
 
   return (
     <div className="group">
       <div 
         className={cn(
-          "flex items-start py-1 hover:bg-gray-50 rounded px-2 -mx-2 cursor-pointer",
+          "grid grid-cols-[1fr,auto] gap-4 py-1 hover:bg-gray-50 rounded px-2 -mx-2 cursor-pointer",
           hasErrors && "bg-red-50 hover:bg-red-100",
           !hasErrors && hasWarnings && "bg-orange-50 hover:bg-orange-100",
           !hasErrors && !hasWarnings && hasInfo && "bg-blue-50 hover:bg-blue-100"
         )}
-        style={{ paddingLeft: `${depth * 1.5}rem` }}
         onClick={() => isExpandable && togglePath(path)}
       >
-        {/* Expand/Collapse Icon */}
-        {isExpandable && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-5 w-5 p-0 mr-1"
-            onClick={(e) => {
-              e.stopPropagation();
-              togglePath(path);
-            }}
-          >
-            {isExpanded ? 
-              <ChevronDown className="h-3 w-3" /> : 
-              <ChevronRight className="h-3 w-3" />
-            }
-          </Button>
-        )}
-        {!isExpandable && <div className="w-6" />}
-        
-        {/* Property Name */}
-        <span className="font-mono text-sm font-semibold text-gray-700 mr-2">
-          {nodeKey}
-        </span>
+        {/* Left column: Hierarchy */}
+        <div className="flex items-center" style={{ paddingLeft: `${depth * 1.5}rem` }}>
+          {/* Expand/Collapse Icon */}
+          {isExpandable && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-5 w-5 p-0 mr-1"
+              onClick={(e) => {
+                e.stopPropagation();
+                togglePath(path);
+              }}
+            >
+              {isExpanded ? 
+                <ChevronDown className="h-3 w-3" /> : 
+                <ChevronRight className="h-3 w-3" />
+              }
+            </Button>
+          )}
+          {!isExpandable && <div className="w-6" />}
+          
+          {/* Property Name */}
+          <span className="font-mono text-sm font-semibold text-gray-700 mr-2">
+            {nodeKey}
+          </span>
+          
+          {/* Type indicators for complex types */}
+          {isArray && (
+            <Badge variant="outline" className="ml-2 text-xs">
+              Array [{value.length}]
+            </Badge>
+          )}
+          
+          {isObject && !isArray && (
+            <Badge variant="outline" className="ml-2 text-xs">
+              Object
+            </Badge>
+          )}
+        </div>
 
-        {/* Value or Summary */}
-        {!isExpandable && (
-          <>
-            <span className="text-gray-500 mr-2">:</span>
+        {/* Right column: Value display and validation badges */}
+        <div className="flex items-center gap-2 justify-end">
+          {/* Value display for simple types */}
+          {!isExpandable && (
             <div className="flex items-center gap-1">
               {getValueIcon(value)}
-              <span className="font-mono text-sm text-gray-900">
+              <span className="font-mono text-sm text-gray-900 max-w-[300px] truncate">
                 {formatValue(value)}
               </span>
             </div>
-          </>
-        )}
-        
-        {isArray && (
-          <Badge variant="outline" className="ml-2 text-xs">
-            {value.length} items
-          </Badge>
-        )}
-        
-        {isObject && !isArray && (
-          <Badge variant="outline" className="ml-2 text-xs">
-            {Object.keys(value).length} properties
-          </Badge>
-        )}
-
-        {/* Validation Indicators */}
-        <div className="ml-auto flex items-center gap-1">
+          )}
+          
+          {/* Validation Indicators */}
+          <div className="flex items-center gap-1">
           {hasErrors && (
             <TooltipProvider>
               <Tooltip>
@@ -205,13 +217,13 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                       }`}
                     >
                       {getSeverityIcon('error', "h-3 w-3 mr-1")}
-                      {directIssues.filter(i => i.severity === 'error').length}
+                      {displayIssues.filter(i => i.severity === 'error').length}
                     </Badge>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <div className="text-sm">
-                    {directIssues.filter(i => i.severity === 'error').length} validation error(s)
+                    {displayIssues.filter(i => i.severity === 'error').length} validation error(s)
                     <br />
                     <span className="text-xs text-gray-400">
                       Click to {selectedSeverity === 'error' ? 'remove filter' : 'filter by errors'}
@@ -247,13 +259,13 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                       }`}
                     >
                       {getSeverityIcon('warning', "h-3 w-3 mr-1")}
-                      {directIssues.filter(i => i.severity === 'warning').length}
+                      {displayIssues.filter(i => i.severity === 'warning').length}
                     </Badge>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <div className="text-sm">
-                    {directIssues.filter(i => i.severity === 'warning').length} warning(s)
+                    {displayIssues.filter(i => i.severity === 'warning').length} warning(s)
                     <br />
                     <span className="text-xs text-gray-400">
                       Click to {selectedSeverity === 'warning' ? 'remove filter' : 'filter by warnings'}
@@ -289,13 +301,13 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                       }`}
                     >
                       {getSeverityIcon('information', "h-3 w-3 mr-1")}
-                      {directIssues.filter(i => i.severity === 'information').length}
+                      {displayIssues.filter(i => i.severity === 'information').length}
                     </Badge>
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <div className="text-sm">
-                    {directIssues.filter(i => i.severity === 'information').length} information message(s)
+                    {displayIssues.filter(i => i.severity === 'information').length} information message(s)
                     <br />
                     <span className="text-xs text-gray-400">
                       Click to {selectedSeverity === 'information' ? 'remove filter' : 'filter by information'}
@@ -305,10 +317,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
               </Tooltip>
             </TooltipProvider>
           )}
+          </div>
         </div>
       </div>
-
-
 
       {/* Render children if expanded */}
       {isExpanded && isExpandable && (
