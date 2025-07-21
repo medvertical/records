@@ -440,9 +440,24 @@ export default function ResourceTreeViewer({
       
       // Filter by path if specified
       if (selectedPath !== undefined) {
-        // Check if the issue path starts with the selected path or is a child of it
-        if (!issue.path.startsWith(selectedPath) && !issue.path.includes(`.${selectedPath}`)) {
-          return false;
+        // For exact path match or child paths
+        // If selectedPath is empty string, it's the root level
+        if (selectedPath === '') {
+          // Root level - only show issues without dots in the path
+          if (issue.path.includes('.')) {
+            return false;
+          }
+        } else {
+          // Check if the issue path matches exactly or is a child
+          // e.g., selectedPath "agent" should match "agent", "agent.type", "agent[0]", etc.
+          // but NOT "entity.agent" or other paths containing "agent" elsewhere
+          const isExactMatch = issue.path === selectedPath;
+          const isChildPath = issue.path.startsWith(selectedPath + '.') || 
+                             issue.path.startsWith(selectedPath + '[');
+          
+          if (!isExactMatch && !isChildPath) {
+            return false;
+          }
         }
       }
       

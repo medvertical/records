@@ -52,12 +52,13 @@ function ValidationSummaryBadge({ result }: { result: any }) {
 }
 
 // Optimized validation results component
-function OptimizedValidationResults({ result, onRevalidate, isValidating, selectedCategory, selectedSeverity, highlightedIssueId }: { 
+function OptimizedValidationResults({ result, onRevalidate, isValidating, selectedCategory, selectedSeverity, selectedPath, highlightedIssueId }: { 
   result: any; 
   onRevalidate: () => void; 
   isValidating: boolean;
   selectedCategory: string;
   selectedSeverity: string;
+  selectedPath?: string;
   highlightedIssueId?: string | null;
 }) {
 
@@ -65,7 +66,25 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
   const filteredIssues = result.issues.filter((issue: any) => {
     const categoryMatch = selectedCategory === 'all' || issue.category === selectedCategory;
     const severityMatch = selectedSeverity === 'all' || issue.severity === selectedSeverity;
-    return categoryMatch && severityMatch;
+    
+    // Apply path filter if specified
+    let pathMatch = true;
+    if (selectedPath !== undefined) {
+      const issuePath = issue.path || (issue.location && issue.location[0]) || '';
+      
+      if (selectedPath === '') {
+        // Root level - only show issues without dots in the path
+        pathMatch = !issuePath.includes('.');
+      } else {
+        // Check if the issue path matches exactly or is a child
+        const isExactMatch = issuePath === selectedPath;
+        const isChildPath = issuePath.startsWith(selectedPath + '.') || 
+                           issuePath.startsWith(selectedPath + '[');
+        pathMatch = isExactMatch || isChildPath;
+      }
+    }
+    
+    return categoryMatch && severityMatch && pathMatch;
   });
 
   const getCategoryDescription = (category: string) => {
@@ -796,6 +815,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
                 isValidating={isValidating}
                 selectedCategory={selectedCategory}
                 selectedSeverity={selectedSeverity}
+                selectedPath={selectedPath}
                 highlightedIssueId={highlightedIssueId}
               />
             </CardContent>
