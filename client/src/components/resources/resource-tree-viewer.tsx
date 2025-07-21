@@ -33,6 +33,8 @@ interface TreeNodeProps {
   expandedPaths: Set<string>;
   togglePath: (path: string) => void;
   onIssueClick?: (issueId: string) => void;
+  selectedSeverity?: string;
+  onSeverityChange?: (severity: string) => void;
 }
 
 interface ValidationIssue {
@@ -76,7 +78,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   validationIssues,
   expandedPaths,
   togglePath,
-  onIssueClick
+  onIssueClick,
+  selectedSeverity,
+  onSeverityChange
 }) => {
   const isObject = value !== null && typeof value === 'object' && !Array.isArray(value);
   const isArray = Array.isArray(value);
@@ -182,9 +186,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                     className="h-auto p-0"
                     onClick={(e) => {
                       e.stopPropagation();
-                      const errorIssues = directIssues.filter(i => i.severity === 'error');
-                      if (errorIssues.length > 0 && onIssueClick) {
-                        onIssueClick(errorIssues[0].id);
+                      if (onSeverityChange) {
+                        // Toggle severity filter
+                        onSeverityChange(selectedSeverity === 'error' ? 'all' : 'error');
                       }
                     }}
                   >
@@ -198,7 +202,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                   <div className="text-sm">
                     {directIssues.filter(i => i.severity === 'error').length} validation error(s)
                     <br />
-                    <span className="text-xs text-gray-400">Click to view details</span>
+                    <span className="text-xs text-gray-400">
+                      Click to {selectedSeverity === 'error' ? 'remove filter' : 'filter by errors'}
+                    </span>
                   </div>
                 </TooltipContent>
               </Tooltip>
@@ -215,9 +221,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                     className="h-auto p-0"
                     onClick={(e) => {
                       e.stopPropagation();
-                      const warningIssues = directIssues.filter(i => i.severity === 'warning');
-                      if (warningIssues.length > 0 && onIssueClick) {
-                        onIssueClick(warningIssues[0].id);
+                      if (onSeverityChange) {
+                        // Toggle severity filter
+                        onSeverityChange(selectedSeverity === 'warning' ? 'all' : 'warning');
                       }
                     }}
                   >
@@ -231,7 +237,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                   <div className="text-sm">
                     {directIssues.filter(i => i.severity === 'warning').length} warning(s)
                     <br />
-                    <span className="text-xs text-gray-400">Click to view details</span>
+                    <span className="text-xs text-gray-400">
+                      Click to {selectedSeverity === 'warning' ? 'remove filter' : 'filter by warnings'}
+                    </span>
                   </div>
                 </TooltipContent>
               </Tooltip>
@@ -248,9 +256,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                     className="h-auto p-0"
                     onClick={(e) => {
                       e.stopPropagation();
-                      const infoIssues = directIssues.filter(i => i.severity === 'information');
-                      if (infoIssues.length > 0 && onIssueClick) {
-                        onIssueClick(infoIssues[0].id);
+                      if (onSeverityChange) {
+                        // Toggle severity filter
+                        onSeverityChange(selectedSeverity === 'information' ? 'all' : 'information');
                       }
                     }}
                   >
@@ -264,7 +272,9 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                   <div className="text-sm">
                     {directIssues.filter(i => i.severity === 'information').length} information message(s)
                     <br />
-                    <span className="text-xs text-gray-400">Click to view details</span>
+                    <span className="text-xs text-gray-400">
+                      Click to {selectedSeverity === 'information' ? 'remove filter' : 'filter by information'}
+                    </span>
                   </div>
                 </TooltipContent>
               </Tooltip>
@@ -290,6 +300,8 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                 expandedPaths={expandedPaths}
                 togglePath={togglePath}
                 onIssueClick={onIssueClick}
+                selectedSeverity={selectedSeverity}
+                onSeverityChange={onSeverityChange}
               />
             ))
           ) : (
@@ -304,6 +316,8 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                 expandedPaths={expandedPaths}
                 togglePath={togglePath}
                 onIssueClick={onIssueClick}
+                selectedSeverity={selectedSeverity}
+                onSeverityChange={onSeverityChange}
               />
             ))
           )}
@@ -486,6 +500,8 @@ export default function ResourceTreeViewer({
           expandedPaths={expandedPaths}
           togglePath={togglePath}
           onIssueClick={onIssueClick}
+          selectedSeverity={selectedSeverity}
+          onSeverityChange={onSeverityChange}
         />
       </div>
     </div>
