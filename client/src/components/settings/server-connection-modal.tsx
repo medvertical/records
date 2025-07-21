@@ -232,6 +232,11 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/fhir/servers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/fhir/connection/test"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fhir/resource-counts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fhir/resources"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fhir/resource-types"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/validation/bulk/summary"] });
       toast({
         title: "Server Connected",
         description: "Successfully connected to FHIR server",
@@ -255,6 +260,11 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/fhir/servers"] });
       queryClient.invalidateQueries({ queryKey: ["/api/fhir/connection/test"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fhir/resource-counts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fhir/resources"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fhir/resource-types"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/validation/bulk/summary"] });
       toast({
         title: "Server Disconnected",
         description: "Successfully disconnected from FHIR server",
