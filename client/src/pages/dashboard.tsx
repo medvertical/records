@@ -23,6 +23,55 @@ import {
 import { useValidationWebSocket } from '@/hooks/use-validation-websocket';
 import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
+import { queryClient } from '@/lib/queryClient';
+
+// Persistent storage utilities for validation data
+const VALIDATION_STORAGE_KEY = 'fhir-validation-progress';
+const DASHBOARD_CACHE_KEY = 'fhir-dashboard-cache';
+
+interface PersistedValidationData {
+  progress: ValidationProgress | null;
+  isRunning: boolean;
+  isPaused: boolean;
+  lastUpdated: number;
+  dashboardStats: any;
+  validationSummary: any;
+  resourceCounts: any;
+}
+
+const saveValidationData = (data: Partial<PersistedValidationData>) => {
+  try {
+    const existing = getValidationData();
+    const updated = { ...existing, ...data, lastUpdated: Date.now() };
+    localStorage.setItem(VALIDATION_STORAGE_KEY, JSON.stringify(updated));
+  } catch (error) {
+    console.warn('Failed to save validation data to localStorage:', error);
+  }
+};
+
+const getValidationData = (): PersistedValidationData => {
+  try {
+    const stored = localStorage.getItem(VALIDATION_STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      // Only return data if it's less than 1 hour old
+      if (Date.now() - parsed.lastUpdated < 60 * 60 * 1000) {
+        return parsed;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to load validation data from localStorage:', error);
+  }
+  return {
+    progress: null,
+    isRunning: false,
+    isPaused: false,
+    lastUpdated: 0,
+    dashboardStats: null,
+    validationSummary: null,
+    resourceCounts: null
+  };
+};
 
 interface ValidationProgress {
   totalResources: number;
@@ -37,15 +86,18 @@ interface ValidationProgress {
 }
 
 export default function Dashboard() {
+  // Load persisted data on component initialization
+  const persistedData = getValidationData();
+  
   const [connectionStatus, setConnectionStatus] = useState<{
     connected: boolean;
     version?: string;
     error?: string;
   }>({ connected: false });
 
-  const [validationProgress, setValidationProgress] = useState<ValidationProgress | null>(null);
-  const [isValidationRunning, setIsValidationRunning] = useState(false);
-  const [isValidationPaused, setIsValidationPaused] = useState(false);
+  const [validationProgress, setValidationProgress] = useState<ValidationProgress | null>(persistedData.progress);
+  const [isValidationRunning, setIsValidationRunning] = useState(persistedData.isRunning);
+  const [isValidationPaused, setIsValidationPaused] = useState(persistedData.isPaused);
   const [isValidationInitializing, setIsValidationInitializing] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
 
@@ -93,6 +145,31 @@ export default function Dashboard() {
 
   // WebSocket for real-time validation updates
   const { isConnected, progress, validationStatus } = useValidationWebSocket();
+
+  // Listen for settings changes to invalidate dashboard cache
+  useEffect(() => {
+    const handleWebSocketMessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
+          console.log('[Dashboard] Validation settings updated, invalidating cache');
+          // Invalidate dashboard-related queries
+          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/validation/bulk/summary'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/validation/errors/recent'] });
+        }
+      } catch (error) {
+        // Ignore non-JSON messages
+      }
+    };
+
+    // Add event listener for WebSocket messages
+    const ws = (window as any).validationWebSocket;
+    if (ws) {
+      ws.addEventListener('message', handleWebSocketMessage);
+      return () => ws.removeEventListener('message', handleWebSocketMessage);
+    }
+  }, []);
 
   useEffect(() => {
     if (fhirConnection) {
@@ -540,23 +617,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Live Processing Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
-              {processingRate}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              resources per minute
-            </p>
-            <div className="absolute bottom-0 left-0 w-full h-1 bg-muted">
-              <div className={`h-full bg-blue-500 transition-all duration-500 ${isValidationRunning ? 'animate-pulse' : ''}`} style={{ width: '100%' }} />
-            </div>
-          </CardContent>
-        </Card>
+
       </div>
 
       {/* FHIR Server Details */}

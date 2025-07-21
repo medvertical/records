@@ -939,6 +939,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validationEngine.updateTerminologyConfig(settings);
       }
       
+      // Broadcast settings change to trigger dashboard cache invalidation
+      if (validationWebSocket) {
+        validationWebSocket.broadcastMessage('settings_changed', {
+          type: 'validation_settings_updated',
+          timestamp: new Date().toISOString(),
+          message: 'Validation settings have been updated. Dashboard data will refresh.'
+        });
+      }
+      
       res.json({
         message: "Enhanced Validation Engine settings updated successfully",
         settings: settings,
