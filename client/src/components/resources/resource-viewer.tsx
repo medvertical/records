@@ -624,33 +624,29 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
       expression: Array.isArray(issue.expression) ? issue.expression : issue.expression ? [issue.expression] : []
     })));
     
-    // Calculate score from issues (same logic as list view)
-    let calculatedScore = 100;
-    allIssues.forEach(issue => {
-      if (issue.severity === 'error' || issue.severity === 'fatal') {
-        calculatedScore -= 10;
-      } else if (issue.severity === 'warning') {
-        calculatedScore -= 2;
-      } else if (issue.severity === 'information') {
-        calculatedScore -= 0.5;
-      }
-    });
-    calculatedScore = Math.max(0, calculatedScore);
+    // Get the latest validation result (already filtered by settings in the API)
+    const latestValidation = existingValidationResults.length > 0 ? 
+      existingValidationResults.reduce((latest, current) => 
+        new Date(current.validatedAt) > new Date(latest.validatedAt) ? current : latest
+      ) : null;
+    
+    // Use the score from the latest validation result which was already calculated with filtered issues
+    const validationScore = latestValidation?.validationScore ?? resource?._validationSummary?.validationScore ?? 0;
     
     return {
-      isValid: existingValidationResults.every(vr => vr.isValid),
+      isValid: latestValidation?.isValid ?? resource?._validationSummary?.isValid ?? false,
       issues: allIssues,
       summary: {
-        totalIssues: existingValidationResults.reduce((sum, vr) => sum + (vr.issues?.length || 0), 0),
-        errorCount: existingValidationResults.reduce((sum, vr) => sum + (vr.errorCount || 0), 0),
-        warningCount: existingValidationResults.reduce((sum, vr) => sum + (vr.warningCount || 0), 0),
-        informationCount: existingValidationResults.reduce((sum, vr) => sum + (vr.issues?.filter(i => i.severity === 'information').length || 0), 0),
+        totalIssues: allIssues.length,
+        errorCount: latestValidation?.errorCount ?? resource?._validationSummary?.errorCount ?? 0,
+        warningCount: latestValidation?.warningCount ?? resource?._validationSummary?.warningCount ?? 0,
+        informationCount: allIssues.filter(i => i.severity === 'information').length,
         fatalCount: 0,
-        score: resource?._validationSummary?.validationScore || calculatedScore
+        score: validationScore
       },
       resourceType: resource?.resourceType || 'Unknown',
       resourceId: resource?.resourceId,
-      validatedAt: new Date(existingValidationResults[0]?.validatedAt || new Date())
+      validatedAt: new Date(latestValidation?.validatedAt || new Date())
     };
   })() : validationResult;
 
@@ -703,28 +699,30 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
       return <Badge variant="destructive">Validation Error</Badge>;
     }
     if (displayValidationResult) {
-      const errorCount = (displayValidationResult.summary?.errorCount || 0) + (displayValidationResult.summary?.fatalCount || 0);
+      // Use the error and warning counts from the summary (already filtered by settings)
+      const errorCount = displayValidationResult.summary?.errorCount || 0;
       const warningCount = displayValidationResult.summary?.warningCount || 0;
+      const score = displayValidationResult.summary?.score || 0;
       
-      if (displayValidationResult.isValid) {
+      if (displayValidationResult.isValid && errorCount === 0) {
         return (
           <Badge className="bg-green-50 text-green-600 border-green-200">
             <CheckCircle className="w-3 h-3 mr-1" />
-            Valid
+            Valid ({score}%)
           </Badge>
         );
       } else if (errorCount > 0) {
         return (
           <Badge className="bg-red-50 text-red-600 border-red-200">
             <AlertCircle className="w-3 h-3 mr-1" />
-            {errorCount} Error{errorCount !== 1 ? 's' : ''}
+            {errorCount} Error{errorCount !== 1 ? 's' : ''} ({score}%)
           </Badge>
         );
       } else if (warningCount > 0) {
         return (
           <Badge className="bg-orange-50 text-orange-600 border-orange-200">
             <AlertTriangle className="w-3 h-3 mr-1" />
-            {warningCount} Warning{warningCount !== 1 ? 's' : ''}
+            {warningCount} Warning{warningCount !== 1 ? 's' : ''} ({score}%)
           </Badge>
         );
       }
