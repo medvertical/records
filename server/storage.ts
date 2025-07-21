@@ -405,6 +405,117 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async getResourceStatsWithSettings(serverId?: number): Promise<ResourceStats> {
+    // Get active server if none specified
+    const targetServerId = serverId || (await this.getActiveFhirServer())?.id;
+    
+    // Get resources for specific server
+    const resources = await db.select().from(fhirResources)
+      .where(targetServerId ? eq(fhirResources.serverId, targetServerId) : undefined);
+    
+    // Get validation results for resources on this server WITH issues
+    const allValidationResults = await db.select({
+      ...getTableColumns(validationResults),
+      resourceType: fhirResources.resourceType,
+      resourceId: fhirResources.id
+    })
+      .from(validationResults)
+      .innerJoin(fhirResources, eq(validationResults.resourceId, fhirResources.id))
+      .where(targetServerId ? eq(fhirResources.serverId, targetServerId) : undefined);
+    
+    // Get current validation settings
+    const validationSettings = await this.getValidationSettings();
+    const settings = (validationSettings?.config as any) || {
+      enableStructuralValidation: true,
+      enableProfileValidation: true,
+      enableTerminologyValidation: true,
+      enableReferenceValidation: true,
+      enableBusinessRuleValidation: true,
+      enableMetadataValidation: true
+    };
+    
+    // Count valid/error resources based on filtered issues
+    let validResourcesCount = 0;
+    let errorResourcesCount = 0;
+    const resourceBreakdown: Record<string, { total: number; valid: number; validPercent: number }> = {};
+    
+    // Group resources by type
+    resources.forEach(resource => {
+      if (!resourceBreakdown[resource.resourceType]) {
+        resourceBreakdown[resource.resourceType] = { total: 0, valid: 0, validPercent: 0 };
+      }
+      resourceBreakdown[resource.resourceType].total++;
+    });
+    
+    // Process each validated resource
+    const processedResourceIds = new Set<number>();
+    
+    allValidationResults.forEach(result => {
+      // Skip if we already processed this resource
+      if (processedResourceIds.has(result.resourceId)) return;
+      processedResourceIds.add(result.resourceId);
+      
+      // Filter issues based on active validation settings
+      let hasRelevantErrors = false;
+      
+      if (result.issues && Array.isArray(result.issues)) {
+        const filteredIssues = result.issues.filter((issue: any) => {
+          const category = issue.category || 'structural';
+          
+          // Check if this category is enabled
+          if (category === 'structural' && !settings.enableStructuralValidation) return false;
+          if (category === 'profile' && !settings.enableProfileValidation) return false;
+          if (category === 'terminology' && !settings.enableTerminologyValidation) return false;
+          if (category === 'reference' && !settings.enableReferenceValidation) return false;
+          if (category === 'business-rule' && !settings.enableBusinessRuleValidation) return false;
+          if (category === 'metadata' && !settings.enableMetadataValidation) return false;
+          
+          return true;
+        });
+        
+        // Check if any filtered issues are errors
+        hasRelevantErrors = filteredIssues.some((issue: any) => 
+          issue.severity === 'error' || issue.severity === 'fatal'
+        );
+      }
+      
+      // Update counts
+      if (hasRelevantErrors) {
+        errorResourcesCount++;
+      } else {
+        validResourcesCount++;
+        if (resourceBreakdown[result.resourceType]) {
+          resourceBreakdown[result.resourceType].valid++;
+        }
+      }
+    });
+    
+    // Handle resources that haven't been validated yet
+    const validatedResourceIds = new Set(allValidationResults.map(r => r.resourceId));
+    resources.forEach(resource => {
+      if (!validatedResourceIds.has(resource.id)) {
+        // Unvalidated resources are counted as errors
+        errorResourcesCount++;
+      }
+    });
+    
+    // Calculate percentages
+    Object.keys(resourceBreakdown).forEach(type => {
+      const breakdown = resourceBreakdown[type];
+      breakdown.validPercent = breakdown.total > 0 ? (breakdown.valid / breakdown.total) * 100 : 0;
+    });
+    
+    const activeProfiles = await db.select().from(validationProfiles).where(eq(validationProfiles.isActive, true));
+    
+    return {
+      totalResources: resources.length,
+      validResources: validResourcesCount,
+      errorResources: errorResourcesCount,
+      activeProfiles: activeProfiles.length,
+      resourceBreakdown,
+    };
+  }
+
   async getValidationSettings(): Promise<ValidationSettings | undefined> {
     const [settings] = await db.select().from(validationSettings);
     return settings || undefined;

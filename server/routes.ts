@@ -1379,7 +1379,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalResources = summary.totalResources;
       }
       
-      const summary = await storage.getResourceStats();
+      const summary = await storage.getResourceStatsWithSettings();
       // Determine actual status based on validation state
       let status = 'not_running';
       if (globalValidationState.isRunning) {
@@ -1399,7 +1399,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: status as 'running' | 'paused' | 'not_running'
       };
       
-      console.log('[ValidationProgress] Real error count from database:', summary.errorResources);
+      console.log('[ValidationProgress] Real error count from database with settings filter:', summary.errorResources);
       console.log('[ValidationProgress] Current status:', status, 'isRunning:', globalValidationState.isRunning, 'isPaused:', globalValidationState.isPaused);
       
       res.json({
@@ -1413,8 +1413,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/validation/bulk/summary", async (req, res) => {
     try {
-      // Get real validation summary from database
-      const summary = await storage.getResourceStats();
+      // Get real validation summary from database with settings filter
+      const summary = await storage.getResourceStatsWithSettings();
       
       const validationSummary = {
         totalResources: summary.totalResources,
@@ -1425,7 +1425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastValidationRun: new Date()
       };
       
-      console.log('[ValidationSummary] Real error count from database:', summary.errorResources);
+      console.log('[ValidationSummary] Real error count from database with settings filter:', summary.errorResources);
       res.json(validationSummary);
     } catch (error: any) {
       console.error('Error getting validation summary:', error);
@@ -1708,14 +1708,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Get validation stats from database (these are accurate)
-      const dbStats = await storage.getResourceStats();
+      // Get validation stats from database filtered by current validation settings
+      const dbStats = await storage.getResourceStatsWithSettings();
       
       // Combine real FHIR server totals with accurate validation counts
       const stats = {
         totalResources, // Real FHIR server total (617,442+)
-        validResources: dbStats.validResources, // Accurate validation count
-        errorResources: dbStats.errorResources, // Accurate validation count
+        validResources: dbStats.validResources, // Validation count filtered by settings
+        errorResources: dbStats.errorResources, // Validation count filtered by settings
         activeProfiles: dbStats.activeProfiles,
         resourceBreakdown: dbStats.resourceBreakdown
       };
