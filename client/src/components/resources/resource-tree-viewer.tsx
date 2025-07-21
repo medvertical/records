@@ -133,7 +133,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
     const issuePath = issue.path.toLowerCase();
     
     // Check all expanded paths to see if any of them would display this issue
-    for (const expandedPath of expandedPaths) {
+    for (const expandedPath of Array.from(expandedPaths)) {
       const expandedPathLower = expandedPath.toLowerCase();
       
       // Skip if this expanded path is not a descendant of current path
@@ -289,7 +289,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                           : ''
                       }`}
                     >
-                      {getSeverityIcon('error', "h-3 w-3 mr-1")}
+                      <AlertCircle className="h-3 w-3 mr-1" />
                       {displayIssues.filter(i => i.severity === 'error').length}
                     </Badge>
                   </Button>
@@ -331,7 +331,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                           : 'bg-orange-100 text-orange-800'
                       }`}
                     >
-                      {getSeverityIcon('warning', "h-3 w-3 mr-1")}
+                      <AlertTriangle className="h-3 w-3 mr-1" />
                       {displayIssues.filter(i => i.severity === 'warning').length}
                     </Badge>
                   </Button>
@@ -373,7 +373,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                           : 'bg-blue-100 text-blue-800'
                       }`}
                     >
-                      {getSeverityIcon('information', "h-3 w-3 mr-1")}
+                      <Info className="h-3 w-3 mr-1" />
                       {displayIssues.filter(i => i.severity === 'information').length}
                     </Badge>
                   </Button>
