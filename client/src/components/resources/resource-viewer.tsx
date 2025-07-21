@@ -789,52 +789,46 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
         {displayValidationResult?.issues?.length > 0 && (
           <div className="border-t pt-4 px-4 pb-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Category Filter Column */}
-              <div>
-                <div className="text-xs font-medium text-gray-700 mb-2">Categories:</div>
-                <div className="flex flex-wrap gap-1">
-                  {categories.map(cat => (
-                    <button
-                      key={cat.value}
-                      onClick={() => setSelectedCategory(cat.value)}
-                      className={`px-3 py-1.5 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
-                        selectedCategory === cat.value
-                          ? 'bg-blue-500 text-white border-blue-500'
-                          : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      {cat.value !== 'all' && getCategoryIcon(cat.value, "h-3 w-3")}
-                      {cat.label} ({cat.count})
-                    </button>
-                  ))}
-                </div>
+              {/* Severity Filter Column - First */}
+              <div className="flex flex-wrap gap-1">
+                {severities.map(sev => (
+                  <button
+                    key={sev.value}
+                    onClick={() => setSelectedSeverity(sev.value)}
+                    className={`px-3 py-1.5 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
+                      selectedSeverity === sev.value
+                        ? sev.value === 'error' ? 'bg-red-500 text-white border-red-500' :
+                          sev.value === 'warning' ? 'bg-yellow-500 text-white border-yellow-500' :
+                          sev.value === 'information' ? 'bg-blue-500 text-white border-blue-500' :
+                          'bg-gray-600 text-white border-gray-600'
+                        : sev.value === 'error' ? 'bg-white text-red-600 border-red-300 hover:border-red-400' :
+                          sev.value === 'warning' ? 'bg-white text-yellow-600 border-yellow-300 hover:border-yellow-400' :
+                          sev.value === 'information' ? 'bg-white text-blue-600 border-blue-300 hover:border-blue-400' :
+                          'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    {sev.value !== 'all' && getSeverityIcon(sev.value, "h-3 w-3")}
+                    {sev.value === 'all' ? 'All Severities' : sev.label} ({sev.count})
+                  </button>
+                ))}
               </div>
               
-              {/* Severity Filter Column */}
-              <div>
-                <div className="text-xs font-medium text-gray-700 mb-2">Severity:</div>
-                <div className="flex flex-wrap gap-1">
-                  {severities.map(sev => (
-                    <button
-                      key={sev.value}
-                      onClick={() => setSelectedSeverity(sev.value)}
-                      className={`px-3 py-1.5 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
-                        selectedSeverity === sev.value
-                          ? sev.value === 'error' ? 'bg-red-500 text-white border-red-500' :
-                            sev.value === 'warning' ? 'bg-yellow-500 text-white border-yellow-500' :
-                            sev.value === 'information' ? 'bg-blue-500 text-white border-blue-500' :
-                            'bg-gray-600 text-white border-gray-600'
-                          : sev.value === 'error' ? 'bg-white text-red-600 border-red-300 hover:border-red-400' :
-                            sev.value === 'warning' ? 'bg-white text-yellow-600 border-yellow-300 hover:border-yellow-400' :
-                            sev.value === 'information' ? 'bg-white text-blue-600 border-blue-300 hover:border-blue-400' :
-                            'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      {sev.value !== 'all' && getSeverityIcon(sev.value, "h-3 w-3")}
-                      {sev.label} ({sev.count})
-                    </button>
-                  ))}
-                </div>
+              {/* Category Filter Column - Second */}
+              <div className="flex flex-wrap gap-1">
+                {categories.map(cat => (
+                  <button
+                    key={cat.value}
+                    onClick={() => setSelectedCategory(cat.value)}
+                    className={`px-3 py-1.5 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
+                      selectedCategory === cat.value
+                        ? 'bg-blue-500 text-white border-blue-500'
+                        : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    {cat.value !== 'all' && getCategoryIcon(cat.value, "h-3 w-3")}
+                    {cat.value === 'all' ? 'All Categories' : cat.label} ({cat.count})
+                  </button>
+                ))}
               </div>
             </div>
           </div>
