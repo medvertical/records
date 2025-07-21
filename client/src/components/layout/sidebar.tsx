@@ -25,7 +25,7 @@ interface ServerStatus {
 const navigationItems = [
   { href: "/", label: "Dashboard", icon: ChartPie },
   { href: "/resources", label: "Browse Resources", icon: Database },
-  { href: "/profiles", label: "Profile Management", icon: Package },
+  { href: "/packages", label: "Package Management", icon: Package },
 ];
 
 const settingsItem = { href: "/settings", label: "Settings", icon: Settings };

@@ -8,11 +8,13 @@ import {
   XCircle, 
   AlertTriangle,
   Eye,
-  Loader2
+  Loader2,
+  Filter
 } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { CircularProgress } from "@/components/ui/circular-progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ResourceListProps {
   resources: any[];
@@ -177,9 +179,27 @@ export default function ResourceList({
     <div className="space-y-4">
       {/* Results Header */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-600">
-          Showing {startIndex} to {endIndex} of {validTotal} resources
-        </p>
+        <div className="flex items-center gap-4">
+          <p className="text-sm text-gray-600">
+            Showing {startIndex} to {endIndex} of {validTotal} resources
+          </p>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Not implemented yet</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
         <div className="flex items-center space-x-2">
           <Button
             variant="outline"

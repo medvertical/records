@@ -324,7 +324,7 @@ export function ProfileManagement() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Profile Management</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Package Management</h1>
         <p className="text-muted-foreground">
           Manage FHIR validation profiles and implementation guides
         </p>

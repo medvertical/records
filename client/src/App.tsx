@@ -41,7 +41,7 @@ function Router() {
     if (location === "/" || location === "/dashboard") return "Records";
     if (location === "/resources") return "Records";
     if (location.startsWith("/resources/")) return "Records";
-    if (location === "/profiles") return "Records";
+    if (location === "/packages") return "Records";
     if (location === "/settings") return "Records";
     return "Records";
   };
@@ -50,7 +50,7 @@ function Router() {
     if (location === "/" || location === "/dashboard") return "Dashboard";
     if (location === "/resources") return "Browse Resources";
     if (location.startsWith("/resources/")) return "Resource Details";
-    if (location === "/profiles") return "Profile Management";
+    if (location === "/packages") return "Package Management";
     if (location === "/settings") return "Settings";
     return undefined;
   };
@@ -100,7 +100,7 @@ function Router() {
             <Route path="/dashboard" component={DashboardComponent} />
             <Route path="/resources" component={ResourceBrowserComponent} />
             <Route path="/resources/:id" component={ResourceDetailComponent} />
-            <Route path="/profiles" component={ProfileManagementComponent} />
+            <Route path="/packages" component={ProfileManagementComponent} />
             <Route path="/settings" component={SettingsComponent} />
             <Route component={NotFound} />
           </Switch>
