@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Search, Filter } from "lucide-react";
 
 interface ResourceSearchProps {
@@ -71,10 +72,19 @@ export default function ResourceSearch({
           <span className="hidden sm:inline">Search</span>
         </Button>
         
-        <Button variant="outline">
-          <Filter className="h-4 w-4 sm:mr-2" />
-          <span className="hidden sm:inline">Filters</span>
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-block">
+              <Button variant="outline" disabled>
+                <Filter className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Filters</span>
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Not implemented yet</p>
+          </TooltipContent>
+        </Tooltip>
       </div>
       
       {(query || resourceType) && (
