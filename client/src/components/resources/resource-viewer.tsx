@@ -52,7 +52,7 @@ function ValidationSummaryBadge({ result }: { result: any }) {
 }
 
 // Optimized validation results component
-function OptimizedValidationResults({ result, onRevalidate, isValidating, selectedCategory, selectedSeverity, selectedPath, highlightedIssueId }: { 
+function OptimizedValidationResults({ result, onRevalidate, isValidating, selectedCategory, selectedSeverity, selectedPath, highlightedIssueId, onClearFilters }: { 
   result: any; 
   onRevalidate: () => void; 
   isValidating: boolean;
@@ -60,6 +60,7 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
   selectedSeverity: string;
   selectedPath?: string;
   highlightedIssueId?: string | null;
+  onClearFilters?: () => void;
 }) {
 
   // Filter issues based on selected filters
@@ -101,9 +102,45 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
 
   return (
     <div className="space-y-4">
-      {/* Results summary */}
-      <div className="text-sm text-gray-500">
-        Showing {filteredIssues.length} of {result.issues.length} issues
+      {/* Results summary and active filters */}
+      <div className="space-y-2">
+        <div className="text-sm text-gray-500">
+          Showing {filteredIssues.length} of {result.issues.length} issues
+        </div>
+        
+        {/* Active filters indicator */}
+        {(selectedCategory !== 'all' || selectedSeverity !== 'all' || selectedPath !== undefined) && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-gray-600">Active filters:</span>
+            {selectedCategory !== 'all' && (
+              <Badge variant="secondary" className="text-xs">
+                Category: {selectedCategory}
+              </Badge>
+            )}
+            {selectedSeverity !== 'all' && (
+              <Badge variant="secondary" className="text-xs">
+                Severity: {selectedSeverity}
+              </Badge>
+            )}
+            {selectedPath !== undefined && (
+              <Badge variant="secondary" className="text-xs">
+                Path: {selectedPath || 'root'}
+              </Badge>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs h-6 px-2"
+              onClick={() => {
+                if (onClearFilters) {
+                  onClearFilters();
+                }
+              }}
+            >
+              Clear all
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Issues by Category */}
@@ -132,8 +169,22 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
       ))}
 
       {filteredIssues.length === 0 && result.issues.length > 0 && (
-        <div className="text-center py-8 text-gray-500">
-          No issues match the selected filters
+        <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-lg">
+          <AlertCircle className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+          <div className="text-gray-600 font-medium">No issues match the selected filters</div>
+          <div className="text-sm text-gray-500 mt-1">
+            {result.issues.length} validation {result.issues.length === 1 ? 'message is' : 'messages are'} hidden by filters
+          </div>
+          {onClearFilters && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={onClearFilters}
+            >
+              Clear filters to see all messages
+            </Button>
+          )}
         </div>
       )}
 
@@ -548,6 +599,13 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
     setSelectedPath(path);
   };
 
+  // Handler for clearing all filters
+  const handleClearFilters = () => {
+    setSelectedCategory('all');
+    setSelectedSeverity('all');
+    setSelectedPath(undefined);
+  };
+
   // Use existing validation results from resource
   const existingValidationResults = resource?.validationResults || [];
   const hasExistingValidation = existingValidationResults.length > 0;
@@ -817,6 +875,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
                 selectedSeverity={selectedSeverity}
                 selectedPath={selectedPath}
                 highlightedIssueId={highlightedIssueId}
+                onClearFilters={handleClearFilters}
               />
             </CardContent>
           </Card>
