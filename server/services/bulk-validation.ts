@@ -48,7 +48,7 @@ export class BulkValidationService {
     this.isPaused = false;
     const {
       resourceTypes,
-      batchSize = 50,
+      batchSize = 1000, // Dramatically increased for performance
       onProgress,
       skipUnchanged = true
     } = options;
@@ -200,7 +200,7 @@ export class BulkValidationService {
         const resources = searchResult.entry?.map(entry => entry.resource) || [];
         
         // Process resources in parallel batches for better performance
-        const PARALLEL_BATCH_SIZE = 10; // Process 10 resources in parallel
+        const PARALLEL_BATCH_SIZE = 50; // Process 50 resources in parallel for much faster validation
         
         for (let i = 0; i < resources.length; i += PARALLEL_BATCH_SIZE) {
           if (!this.isRunning) {

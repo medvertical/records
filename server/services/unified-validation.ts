@@ -11,6 +11,9 @@ import type { FhirResource, InsertFhirResource, InsertValidationResult, Validati
  */
 export class UnifiedValidationService {
   private enhancedValidationEngine: EnhancedValidationEngine;
+  private cachedSettings: any = null;
+  private settingsCacheTime: number = 0;
+  private SETTINGS_CACHE_TTL = 60000; // Cache settings for 1 minute
 
   constructor(
     private fhirClient: FhirClient,
@@ -37,16 +40,22 @@ export class UnifiedValidationService {
    * Load validation settings from database and update engine configuration
    */
   async loadValidationSettings(): Promise<void> {
+    // Check if we have cached settings that are still valid
+    const now = Date.now();
+    if (this.cachedSettings && (now - this.settingsCacheTime) < this.SETTINGS_CACHE_TTL) {
+      return; // Use cached settings
+    }
+    
     const settings = await storage.getValidationSettings();
     if (settings) {
-      console.log('[UnifiedValidation] Loading validation settings from database:', {
-        enableStructuralValidation: settings.enableStructuralValidation,
-        enableProfileValidation: settings.enableProfileValidation,
-        enableTerminologyValidation: settings.enableTerminologyValidation,
-        enableReferenceValidation: settings.enableReferenceValidation,
-        enableBusinessRuleValidation: settings.enableBusinessRuleValidation,
-        enableMetadataValidation: settings.enableMetadataValidation
-      });
+      // Cache the settings
+      this.cachedSettings = settings;
+      this.settingsCacheTime = now;
+      
+      // Only log in development mode to reduce overhead
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[UnifiedValidation] Loading validation settings from database');
+      }
       
       this.enhancedValidationEngine.updateConfig({
         enableStructuralValidation: settings.enableStructuralValidation ?? true,
@@ -64,6 +73,14 @@ export class UnifiedValidationService {
         profileResolutionServers: settings.profileResolutionServers ?? []
       });
     }
+  }
+  
+  /**
+   * Clear cached settings (e.g., when settings are updated)
+   */
+  clearSettingsCache(): void {
+    this.cachedSettings = null;
+    this.settingsCacheTime = 0;
   }
 
   /**
@@ -88,10 +105,11 @@ export class UnifiedValidationService {
     const resourceDate = new Date(resourceLastUpdated);
     const validationDate = new Date(latestValidation.validatedAt);
 
-    console.log(`[UnifiedValidation] Resource ${resource.resourceType}/${resource.id}:`);
-    console.log(`  Resource lastUpdated: ${resourceDate.toISOString()}`);
-    console.log(`  Latest validation: ${validationDate.toISOString()}`);
-    console.log(`  Is outdated: ${resourceDate > validationDate}`);
+    // Disable verbose logging for performance
+    // console.log(`[UnifiedValidation] Resource ${resource.resourceType}/${resource.id}:`);
+    // console.log(`  Resource lastUpdated: ${resourceDate.toISOString()}`);
+    // console.log(`  Latest validation: ${validationDate.toISOString()}`);
+    // console.log(`  Is outdated: ${resourceDate > validationDate}`);
 
     return resourceDate > validationDate;
   }
@@ -147,27 +165,16 @@ export class UnifiedValidationService {
                            this.isValidationOutdated(resource, dbResource.validationResults);
 
     if (needsValidation) {
-      console.log(`[UnifiedValidation] Performing validation for ${resource.resourceType}/${resource.id}`);
+      // Disable verbose logging for performance
+      // console.log(`[UnifiedValidation] Performing validation for ${resource.resourceType}/${resource.id}`);
       wasRevalidated = true;
 
       try {
-        console.log(`[UnifiedValidation] Performing validation for ${resource.resourceType}/${resource.id} using current settings`);
-        
-        // Load latest validation settings from database
+        // Load latest validation settings from database (cached for performance)
         await this.loadValidationSettings();
         
         // Use enhanced validation engine with current settings
         const enhancedResult = await this.enhancedValidationEngine.validateResource(resource);
-        
-        console.log(`[UnifiedValidation] Enhanced validation completed with score: ${enhancedResult.validationScore}`);
-        console.log(`[UnifiedValidation] Validation aspects performed:`, {
-          structural: enhancedResult.validationAspects.structural.issues.length > 0 || enhancedResult.validationAspects.structural.passed,
-          profile: enhancedResult.validationAspects.profile.profilesChecked.length > 0,
-          terminology: enhancedResult.validationAspects.terminology.codesChecked > 0,
-          reference: enhancedResult.validationAspects.reference.referencesChecked > 0,
-          businessRule: enhancedResult.validationAspects.businessRule.rulesChecked > 0,
-          metadata: enhancedResult.validationAspects.metadata.issues.length > 0
-        });
         
         // Convert enhanced validation result to our database format
         const validationResult: InsertValidationResult = {
@@ -260,7 +267,8 @@ export class UnifiedValidationService {
         };
       }
     } else {
-      console.log(`[UnifiedValidation] Using cached validation for ${resource.resourceType}/${resource.id}`);
+      // Disable verbose logging for performance
+      // console.log(`[UnifiedValidation] Using cached validation for ${resource.resourceType}/${resource.id}`);
       return {
         validationResults: dbResource.validationResults || [],
         wasRevalidated: false

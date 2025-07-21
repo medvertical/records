@@ -183,15 +183,8 @@ export class EnhancedValidationEngine {
    * Comprehensive validation entry point
    */
   async validateResource(resource: any): Promise<EnhancedValidationResult> {
-    console.log(`[EnhancedValidation] Starting comprehensive validation for ${resource.resourceType}/${resource.id}`);
-    console.log(`[EnhancedValidation] Active validation aspects:`, {
-      structural: this.config.enableStructuralValidation,
-      profile: this.config.enableProfileValidation,
-      terminology: this.config.enableTerminologyValidation,
-      reference: this.config.enableReferenceValidation,
-      businessRule: this.config.enableBusinessRuleValidation,
-      metadata: this.config.enableMetadataValidation
-    });
+    // Disable verbose logging for performance
+    // console.log(`[EnhancedValidation] Starting comprehensive validation for ${resource.resourceType}/${resource.id}`);
     
     const result: EnhancedValidationResult = {
       isValid: true,
@@ -258,7 +251,7 @@ export class EnhancedValidationEngine {
       result.validationScore = 0;
     }
 
-    console.log(`[EnhancedValidation] Validation completed. Score: ${result.validationScore}, Issues: ${result.issues.length}`);
+    // console.log(`[EnhancedValidation] Validation completed. Score: ${result.validationScore}, Issues: ${result.issues.length}`);
     return result;
   }
 
@@ -266,7 +259,7 @@ export class EnhancedValidationEngine {
    * 1. Strukturelle Validierung: Prüfung auf wohlgeformtes FHIR
    */
   private async performStructuralValidation(resource: any, result: EnhancedValidationResult): Promise<void> {
-    console.log(`[EnhancedValidation] Performing structural validation...`);
+    // console.log(`[EnhancedValidation] Performing structural validation...`);
     
     const issues: ValidationIssue[] = [];
 
@@ -492,7 +485,7 @@ export class EnhancedValidationEngine {
    */
   private async resolveProfile(profileUrl: string): Promise<any | null> {
     if (!this.config.profileResolutionServers) {
-      console.log(`[ProfileResolution] No profile resolution servers configured`);
+      // console.log(`[ProfileResolution] No profile resolution servers configured`);
       return null;
     }
 
@@ -501,24 +494,25 @@ export class EnhancedValidationEngine {
       .filter(server => server.enabled)
       .sort((a, b) => a.priority - b.priority);
 
-    console.log(`[ProfileResolution] Attempting to resolve ${profileUrl} using ${enabledServers.length} servers`);
+    // Disable verbose logging for performance
+    // console.log(`[ProfileResolution] Attempting to resolve ${profileUrl} using ${enabledServers.length} servers`);
 
     for (const server of enabledServers) {
       try {
-        console.log(`[ProfileResolution] Trying ${server.name} (${server.type})`);
+        // console.log(`[ProfileResolution] Trying ${server.name} (${server.type})`);
         const profile = await this.fetchProfileFromServer(profileUrl, server);
         
         if (profile) {
-          console.log(`[ProfileResolution] Profile successfully resolved from ${server.name}`);
+          // console.log(`[ProfileResolution] Profile successfully resolved from ${server.name}`);
           return profile;
         }
       } catch (error: any) {
-        console.warn(`[ProfileResolution] Failed to resolve from ${server.name}:`, error.message);
+        // console.warn(`[ProfileResolution] Failed to resolve from ${server.name}:`, error.message);
         continue; // Try next server
       }
     }
 
-    console.log(`[ProfileResolution] Profile ${profileUrl} could not be resolved from any server`);
+    // console.log(`[ProfileResolution] Profile ${profileUrl} could not be resolved from any server`);
     return null;
   }
 
@@ -550,7 +544,7 @@ export class EnhancedValidationEngine {
       const profileId = this.extractProfileIdentifier(profileUrl);
       const apiUrl = `${baseUrl}/api/fhir/StructureDefinition/${profileId}`;
       
-      console.log(`[ProfileResolution] Fetching from Simplifier: ${apiUrl}`);
+      // console.log(`[ProfileResolution] Fetching from Simplifier: ${apiUrl}`);
       
       const response = await axios.get(apiUrl, {
         headers: {
