@@ -767,24 +767,22 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
     <div className="space-y-4">
       {/* Header with circular score and filters */}
       <div className="bg-white rounded-lg border">
-        <div className="p-4 pb-4">
-          <div className="flex items-center justify-between">
-            {/* Title and badges on the left */}
-            <div>
-              <h2 className="text-xl font-semibold">{title}</h2>
-              <div className="flex items-center gap-2 mt-2">
-                {getValidationBadge()}
-                {/* Show warning badge separately if there are errors AND warnings */}
-                {displayValidationResult?.summary?.errorCount > 0 && displayValidationResult?.summary?.warningCount > 0 && (
-                  <Badge className="bg-orange-50 text-orange-600 border-orange-200 text-xs">
-                    {displayValidationResult.summary.warningCount} Warning{displayValidationResult.summary.warningCount !== 1 ? 's' : ''}
-                  </Badge>
-                )}
-              </div>
+        <div className="flex items-center justify-between p-4">
+          {/* Title and badges on the left */}
+          <div>
+            <h2 className="text-xl font-semibold">{title}</h2>
+            <div className="flex items-center gap-2 mt-2">
+              {getValidationBadge()}
+              {/* Show warning badge separately if there are errors AND warnings */}
+              {displayValidationResult?.summary?.errorCount > 0 && displayValidationResult?.summary?.warningCount > 0 && (
+                <Badge className="bg-orange-50 text-orange-600 border-orange-200 text-xs">
+                  {displayValidationResult.summary.warningCount} Warning{displayValidationResult.summary.warningCount !== 1 ? 's' : ''}
+                </Badge>
+              )}
             </div>
-            
-            
           </div>
+          
+          
         </div>
         
         {/* Horizontal filters in 2 columns */}
