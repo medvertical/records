@@ -839,10 +839,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Resource Structure - Left side */}
         <Card>
-          <CardHeader>
-            <CardTitle>Resource Structure</CardTitle>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             <ResourceTreeViewer 
               resourceData={resourceData} 
               validationResults={existingValidationResults || []}
