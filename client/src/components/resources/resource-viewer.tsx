@@ -615,6 +615,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
   const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined);
   const [highlightedIssueId, setHighlightedIssueId] = useState<string | null>(null);
+  const [expandAll, setExpandAll] = useState(false);
 
   // Handler for severity changes that can also handle path
   const handleSeverityChange = (severity: string, path?: string) => {
@@ -627,6 +628,11 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
     setSelectedCategory('all');
     setSelectedSeverity('all');
     setSelectedPath(undefined);
+  };
+
+  // Handler for expand all button
+  const handleExpandAll = () => {
+    setExpandAll(!expandAll);
   };
 
   // Use existing validation results from resource
@@ -840,11 +846,28 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
         </div>
       )}
 
-      {/* Main content: Resource structure on left, validation messages on right */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Main content: Resource structure full width when no validation messages, otherwise two columns */}
+      <div className={`grid gap-4 ${
+        displayValidationResult && displayValidationResult.issues.length > 0 
+          ? 'grid-cols-1 lg:grid-cols-2' 
+          : 'grid-cols-1'
+      }`}>
         {/* Resource Structure - Left side */}
         <Card>
-          <CardContent className="pt-6">
+          <CardHeader className="pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>Resource Structure</CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExpandAll}
+                className="text-xs"
+              >
+                {expandAll ? 'Collapse All' : 'Expand All'}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
             <ResourceTreeViewer 
               resourceData={resourceData} 
               validationResults={existingValidationResults || []}
@@ -854,6 +877,8 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
               onCategoryChange={setSelectedCategory}
               onSeverityChange={handleSeverityChange}
               onIssueClick={setHighlightedIssueId}
+              expandAll={expandAll}
+              onExpandAll={handleExpandAll}
             />
           </CardContent>
         </Card>

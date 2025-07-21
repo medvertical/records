@@ -23,6 +23,8 @@ interface ResourceTreeViewerProps {
   onCategoryChange?: (category: string) => void;
   onSeverityChange?: (severity: string, path?: string) => void;
   onIssueClick?: (issueId: string) => void;
+  onExpandAll?: () => void;
+  expandAll?: boolean;
 }
 
 interface TreeNodeProps {
@@ -448,10 +450,19 @@ export default function ResourceTreeViewer({
   selectedPath,
   onCategoryChange,
   onSeverityChange,
-  onIssueClick
+  onIssueClick,
+  onExpandAll,
+  expandAll: externalExpandAll
 }: ResourceTreeViewerProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['']));
   const [expandAll, setExpandAll] = useState(false);
+
+  // Effect to handle external expand all trigger
+  useEffect(() => {
+    if (externalExpandAll !== undefined && externalExpandAll !== expandAll) {
+      handleExpandAll();
+    }
+  }, [externalExpandAll]);
 
   // Process validation results into a more usable format and deduplicate
   const allValidationIssues = useMemo(() => {
@@ -597,6 +608,9 @@ export default function ResourceTreeViewer({
       setExpandedPaths(allPaths);
     }
     setExpandAll(!expandAll);
+    if (onExpandAll) {
+      onExpandAll();
+    }
   };
 
   // Get raw counts from validation results to match counts shown elsewhere
@@ -624,30 +638,20 @@ export default function ResourceTreeViewer({
   }, [allValidationIssues]);
 
   return (
-    <div className="relative">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleExpandAll}
-        className="absolute right-0 top-0 text-xs z-10"
-      >
-        {expandAll ? 'Collapse All' : 'Expand All'}
-      </Button>
-      <div className="pr-24">
-        <TreeNode
-          nodeKey={resourceData.resourceType || 'Resource'}
-          value={resourceData}
-          path=""
-          depth={0}
-          validationIssues={validationIssues}
-          expandedPaths={expandedPaths}
-          togglePath={togglePath}
-          onIssueClick={onIssueClick}
-          selectedSeverity={selectedSeverity}
-          selectedPath={selectedPath}
-          onSeverityChange={onSeverityChange}
-        />
-      </div>
+    <div>
+      <TreeNode
+        nodeKey={resourceData.resourceType || 'Resource'}
+        value={resourceData}
+        path=""
+        depth={0}
+        validationIssues={validationIssues}
+        expandedPaths={expandedPaths}
+        togglePath={togglePath}
+        onIssueClick={onIssueClick}
+        selectedSeverity={selectedSeverity}
+        selectedPath={selectedPath}
+        onSeverityChange={onSeverityChange}
+      />
     </div>
   );
 }
