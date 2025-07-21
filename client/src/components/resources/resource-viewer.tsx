@@ -94,7 +94,16 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
   });
 
   const getCategoryDescription = (category: string) => {
-    return categoryDescriptions[category] || categoryDescriptions.general;
+    const descriptions = {
+      'structural': 'Issues with FHIR resource structure and data types',
+      'profile': 'Issues with profile conformance and constraints', 
+      'terminology': 'Issues with coded values and terminology bindings',
+      'reference': 'Issues with resource references and relationships',
+      'business-rule': 'Issues with business logic and validation rules',
+      'metadata': 'Issues with resource metadata and versioning',
+      'general': 'General validation issues'
+    };
+    return descriptions[category as keyof typeof descriptions] || descriptions.general;
   };
 
   // Group issues by category
@@ -152,7 +161,13 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
       {Object.entries(groupedIssues).map(([category, categoryIssues]: [string, any]) => (
         <div key={category} className="border rounded-lg p-4">
           <div className="flex items-center mb-3">
-            {getCategoryIcon(category, "w-4 h-4")}
+            {category === 'structural' && <Code className="w-4 h-4" />}
+            {category === 'profile' && <FileCheck className="w-4 h-4" />}
+            {category === 'terminology' && <BookOpen className="w-4 h-4" />}
+            {category === 'reference' && <Link className="w-4 h-4" />}
+            {category === 'business-rule' && <Shield className="w-4 h-4" />}
+            {category === 'metadata' && <FileText className="w-4 h-4" />}
+            {!['structural', 'profile', 'terminology', 'reference', 'business-rule', 'metadata'].includes(category) && <Info className="w-4 h-4" />}
             <div className="ml-2">
               <div className="font-medium text-sm capitalize">{category} Validation</div>
               <div className="text-xs text-gray-600">{getCategoryDescription(category)}</div>
@@ -209,7 +224,10 @@ function ValidationIssueIndicator({ issue }: { issue: any }) {
   return (
     <div className="flex items-center">
       <span className={getSeverityColor(issue.severity)}>
-        {getSeverityIcon(issue.severity, "h-4 w-4")}
+        {issue.severity === 'error' && <AlertCircle className="h-4 w-4" />}
+        {issue.severity === 'warning' && <AlertTriangle className="h-4 w-4" />}
+        {issue.severity === 'information' && <Info className="h-4 w-4" />}
+        {!['error', 'warning', 'information'].includes(issue.severity) && <AlertCircle className="h-4 w-4" />}
       </span>
       <span className={`text-xs ml-1 ${getSeverityColor(issue.severity)}`}>
         {issue.severity}
@@ -265,7 +283,7 @@ function ValidationIssueDetails({ issue, isHighlighted }: { issue: any; isHighli
         </div>
         {issue.category && (
           <span className="text-xs bg-white bg-opacity-50 px-1 py-0.5 rounded">
-            {categoryDescriptions[issue.category] || categoryDescriptions.general}
+            {issue.category}
           </span>
         )}
       </div>
@@ -617,7 +635,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
   
   // Convert database validation results to the format expected by the UI
   const displayValidationResult = hasExistingValidation ? (() => {
-    const allIssues = existingValidationResults.flatMap(vr => (vr.issues || []).map(issue => ({
+    const allIssues = existingValidationResults.flatMap((vr: any) => (vr.issues || []).map((issue: any) => ({
       ...issue,
       location: Array.isArray(issue.location) ? issue.location : [issue.location || 'resource'],
       expression: Array.isArray(issue.expression) ? issue.expression : issue.expression ? [issue.expression] : []
@@ -625,7 +643,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
     
     // Get the latest validation result (already filtered by settings in the API)
     const latestValidation = existingValidationResults.length > 0 ? 
-      existingValidationResults.reduce((latest, current) => 
+      existingValidationResults.reduce((latest: any, current: any) => 
         new Date(current.validatedAt) > new Date(latest.validatedAt) ? current : latest
       ) : null;
     
@@ -639,7 +657,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
         totalIssues: allIssues.length,
         errorCount: latestValidation?.errorCount ?? resource?._validationSummary?.errorCount ?? 0,
         warningCount: latestValidation?.warningCount ?? resource?._validationSummary?.warningCount ?? 0,
-        informationCount: allIssues.filter(i => i.severity === 'information').length,
+        informationCount: allIssues.filter((i: any) => i.severity === 'information').length,
         fatalCount: 0,
         score: validationScore
       },
