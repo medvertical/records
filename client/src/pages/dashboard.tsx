@@ -265,7 +265,7 @@ export default function Dashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          batchSize: 20
+          batchSize: 200
         })
       });
       

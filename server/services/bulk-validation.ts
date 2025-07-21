@@ -199,16 +199,32 @@ export class BulkValidationService {
 
         const resources = searchResult.entry?.map(entry => entry.resource) || [];
         
-        // Process each resource in the batch
-        for (const resource of resources) {
+        // Process resources in parallel batches for better performance
+        const PARALLEL_BATCH_SIZE = 10; // Process 10 resources in parallel
+        
+        for (let i = 0; i < resources.length; i += PARALLEL_BATCH_SIZE) {
           if (!this.isRunning) {
             console.log('Validation paused during resource processing');
-            this.resumeFromOffset = offset;
+            this.resumeFromOffset = offset + i;
             return;
           }
-          await this.validateSingleResource(resource, skipUnchanged);
           
-          this.currentProgress!.processedResources++;
+          // Get the next batch of resources to process in parallel
+          const parallelBatch = resources.slice(i, i + PARALLEL_BATCH_SIZE);
+          
+          // Validate resources in parallel
+          const validationPromises = parallelBatch.map(resource => 
+            this.validateSingleResource(resource, skipUnchanged).catch(error => {
+              console.error(`Error validating ${resource.resourceType}/${resource.id}:`, error);
+              return null;
+            })
+          );
+          
+          // Wait for all parallel validations to complete
+          await Promise.all(validationPromises);
+          
+          // Update progress for this parallel batch
+          this.currentProgress!.processedResources += parallelBatch.length;
           
           // Calculate estimated time remaining
           if (this.currentProgress!.processedResources > 10) {
@@ -218,20 +234,20 @@ export class BulkValidationService {
             this.currentProgress!.estimatedTimeRemaining = remaining / rate;
           }
           
-          // Report progress every 10 resources
-          if (onProgress && this.currentProgress!.processedResources % 10 === 0) {
+          // Report progress after each parallel batch
+          if (onProgress) {
             onProgress(this.currentProgress!);
           }
 
-          // Broadcast progress via WebSocket every 10 resources
-          if (validationWebSocket && this.currentProgress!.processedResources % 10 === 0) {
+          // Broadcast progress via WebSocket
+          if (validationWebSocket) {
             validationWebSocket.broadcastProgress(this.currentProgress!);
           }
           
-          // Check if paused after each resource
+          // Check if paused after each parallel batch
           if (!this.isRunning || this.isPaused) {
             console.log('Validation paused during batch processing');
-            this.resumeFromOffset = offset;
+            this.resumeFromOffset = offset + i;
             return;
           }
         }
@@ -245,8 +261,7 @@ export class BulkValidationService {
           return;
         }
         
-        // Small delay to prevent overwhelming the server
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // No delay needed - server can handle the load
         
       } catch (error) {
         this.currentProgress!.errors.push(`Error processing ${resourceType} at offset ${offset}: ${error instanceof Error ? error.message : String(error)}`);
