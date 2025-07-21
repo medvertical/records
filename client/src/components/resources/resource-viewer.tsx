@@ -890,7 +890,18 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
         {displayValidationResult && displayValidationResult.issues.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle>Validation Messages</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Validation Messages</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={validateResource}
+                  disabled={isValidating}
+                  className="text-xs"
+                >
+                  {isValidating ? 'Revalidating...' : 'Revalidate'}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <OptimizedValidationResults 
@@ -911,7 +922,18 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
         {!displayValidationResult && (isValidating || validationError) && (
           <Card>
             <CardHeader>
-              <CardTitle>Validation Messages</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Validation Messages</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={validateResource}
+                  disabled={isValidating}
+                  className="text-xs"
+                >
+                  {isValidating ? 'Revalidating...' : 'Revalidate'}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {isValidating && (
