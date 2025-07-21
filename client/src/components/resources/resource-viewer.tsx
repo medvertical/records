@@ -764,63 +764,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
 
   return (
     <div className="space-y-4">
-      {/* Horizontal filters in 2 columns */}
-      {displayValidationResult?.issues?.length > 0 && (
-        <div className="bg-white rounded-lg border">
-          <div className="pt-4 px-4 pb-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Severity Filter Column - First */}
-              <div className="flex flex-wrap gap-1">
-                {severities.map(sev => (
-                  <button
-                    key={sev.value}
-                    onClick={() => setSelectedSeverity(sev.value)}
-                    className={`px-3 py-1.5 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
-                      selectedSeverity === sev.value
-                        ? sev.value === 'error' ? 'bg-red-500 text-white border-red-500' :
-                          sev.value === 'warning' ? 'bg-yellow-500 text-white border-yellow-500' :
-                          sev.value === 'information' ? 'bg-blue-500 text-white border-blue-500' :
-                          'bg-gray-600 text-white border-gray-600'
-                        : sev.value === 'error' ? 'bg-white text-red-600 border-red-300 hover:border-red-400' :
-                          sev.value === 'warning' ? 'bg-white text-yellow-600 border-yellow-300 hover:border-yellow-400' :
-                          sev.value === 'information' ? 'bg-white text-blue-600 border-blue-300 hover:border-blue-400' :
-                          'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    {sev.value === 'error' && <AlertCircle className="h-3 w-3" />}
-                    {sev.value === 'warning' && <AlertTriangle className="h-3 w-3" />}
-                    {sev.value === 'information' && <Info className="h-3 w-3" />}
-                    {sev.value === 'all' ? 'All Severities' : sev.label} ({sev.count})
-                  </button>
-                ))}
-              </div>
-              
-              {/* Category Filter Column - Second */}
-              <div className="flex flex-wrap gap-1">
-                {categories.map(cat => (
-                  <button
-                    key={cat.value}
-                    onClick={() => setSelectedCategory(cat.value)}
-                    className={`px-3 py-1.5 text-xs rounded-full border transition-colors flex items-center gap-1.5 ${
-                      selectedCategory === cat.value
-                        ? 'bg-blue-500 text-white border-blue-500'
-                        : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-                    }`}
-                  >
-                    {cat.value === 'structural' && <Code className="h-3 w-3" />}
-                    {cat.value === 'profile' && <FileCheck className="h-3 w-3" />}
-                    {cat.value === 'terminology' && <BookOpen className="h-3 w-3" />}
-                    {cat.value === 'reference' && <Link className="h-3 w-3" />}
-                    {cat.value === 'business-rule' && <Shield className="h-3 w-3" />}
-                    {cat.value === 'metadata' && <FileText className="h-3 w-3" />}
-                    {cat.value === 'all' ? 'All Categories' : cat.label} ({cat.count})
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      
 
       {/* Main content: Resource structure on left, validation messages on right */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
