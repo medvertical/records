@@ -77,11 +77,17 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
         // Root level - only show issues without dots in the path
         pathMatch = !issuePath.includes('.');
       } else {
-        // Check if the issue path matches exactly or is a child
+        // Check if the issue path matches in various ways
         const isExactMatch = issuePath === selectedPath;
         const isChildPath = issuePath.startsWith(selectedPath + '.') || 
                            issuePath.startsWith(selectedPath + '[');
-        pathMatch = isExactMatch || isChildPath;
+        // Also check if issue path ends with the selected path (e.g., "AuditEvent.extension" ends with "extension")
+        const endsWithPath = issuePath.endsWith('.' + selectedPath) || 
+                            issuePath.endsWith('[' + selectedPath);
+        // Or if the issue path contains the selected path as a segment
+        const containsAsSegment = issuePath.split(/[\.\[\]]+/).includes(selectedPath);
+        
+        pathMatch = isExactMatch || isChildPath || endsWithPath || containsAsSegment;
       }
     }
     
