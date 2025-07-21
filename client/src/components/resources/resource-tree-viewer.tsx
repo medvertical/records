@@ -93,11 +93,19 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   // Get all issues for this path and its descendants
   const getAllDescendantIssues = (currentPath: string) => {
     return validationIssues.filter(issue => {
-      if (currentPath === '') {
-        return !issue.path || issue.path === nodeKey;
-      }
       const normalizedIssuePath = issue.path.toLowerCase();
       const normalizedCurrentPath = currentPath.toLowerCase();
+      
+      // For root level nodes (like AuditEvent), we need to check differently
+      if (currentPath === '' || depth === 0) {
+        // If this is a root node, get all issues that start with the node key
+        const rootPrefix = nodeKey.toLowerCase();
+        return normalizedIssuePath === rootPrefix || 
+               normalizedIssuePath.startsWith(`${rootPrefix}.`) ||
+               normalizedIssuePath.startsWith(`${rootPrefix}[`);
+      }
+      
+      // For nested paths, use the full path
       return normalizedIssuePath === normalizedCurrentPath || 
              normalizedIssuePath.startsWith(`${normalizedCurrentPath}.`) ||
              normalizedIssuePath.startsWith(`${normalizedCurrentPath}[`);
@@ -174,9 +182,11 @@ const TreeNode: React.FC<TreeNodeProps> = ({
       return false;
     }
     
-    // For leaf nodes, show direct issues
-    if (path === '') {
-      return !issue.path || issue.path === nodeKey;
+    // For leaf nodes at root level
+    if (path === '' || depth === 0) {
+      // For root nodes, we need to check if the issue belongs to this node
+      const rootPrefix = nodeKey.toLowerCase();
+      return normalizedIssuePath === rootPrefix;
     }
     
     return normalizedIssuePath === normalizedCurrentPath;
