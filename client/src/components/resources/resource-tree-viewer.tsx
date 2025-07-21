@@ -133,7 +133,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
     const issuePath = issue.path.toLowerCase();
     
     // Check all expanded paths to see if any of them would display this issue
-    for (const expandedPath of expandedPaths) {
+    for (const expandedPath of Array.from(expandedPaths)) {
       const expandedPathLower = expandedPath.toLowerCase();
       
       // Skip if this expanded path is not a descendant of current path
