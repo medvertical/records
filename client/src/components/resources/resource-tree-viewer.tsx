@@ -98,9 +98,11 @@ const TreeNode: React.FC<TreeNodeProps> = ({
       
       // For root level nodes (like AuditEvent), we need to check differently
       if (currentPath === '' || depth === 0) {
-        // If this is a root node, get all issues that start with the node key
+        // Root-level issues have empty path, so check for both empty path 
+        // and issues that start with the node key (for backward compatibility)
         const rootPrefix = nodeKey.toLowerCase();
-        return normalizedIssuePath === rootPrefix || 
+        return normalizedIssuePath === '' || 
+               normalizedIssuePath === rootPrefix || 
                normalizedIssuePath.startsWith(`${rootPrefix}.`) ||
                normalizedIssuePath.startsWith(`${rootPrefix}[`);
       }
@@ -473,12 +475,18 @@ export default function ResourceTreeViewer({
               path = issue.path;
             }
             
-            // Remove any resource type prefix (e.g., "Patient." from "Patient.identifier")
-            path = path.replace(/^[A-Z][a-zA-Z]+\./, '');
-            
             // Clean up any remaining complex parts
             if (path.includes(', element')) {
               path = path.split(', element')[0];
+            }
+            
+            // For root-level validation issues (just "AuditEvent", "Patient", etc.), 
+            // we should map these to empty path to match the root node
+            if (/^[A-Z][a-zA-Z]+$/.test(path)) {
+              path = '';
+            } else {
+              // Remove any resource type prefix (e.g., "Patient." from "Patient.identifier")
+              path = path.replace(/^[A-Z][a-zA-Z]+\./, '');
             }
           } else if (issue.expression) {
             // Handle expression-based paths
