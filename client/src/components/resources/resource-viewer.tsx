@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { ChevronDown, ChevronRight, Shield, CheckCircle, AlertTriangle, RefreshCw, Info, AlertCircle, Code, FileCheck, BookOpen, Link, FileText } from "lucide-react";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -50,6 +52,67 @@ function ValidationSummaryBadge({ result }: { result: any }) {
   );
 }
 
+// Function to convert technical messages to human-readable explanations
+function getHumanReadableMessage(issue: any): string {
+  const { code, message, category, path } = issue;
+  
+  // Map of common technical messages to human-readable explanations
+  const messageMap: { [key: string]: string } = {
+    // Profile resolution errors
+    'Unable to resolve reference to profile': 'The system cannot find the validation rules for this resource. This means the resource references a set of rules that aren\'t available in our system.',
+    'Profile not found': 'The validation rules (profile) this resource should follow cannot be located. Please verify the profile is installed.',
+    'Unable to resolve reference to profile https://profiles.ihe.net/ITI/BALP': 'The IHE Basic Audit Log Patterns (BALP) profile is not installed. This profile defines how audit events should be structured for healthcare interoperability.',
+    
+    // Structural errors
+    'missing-narrative': 'This resource is missing a human-readable summary. FHIR resources should include a text summary that describes the content in plain language.',
+    'invalid-cardinality': 'This field appears too many times or is missing when required. Check the resource documentation for the correct number of occurrences.',
+    'unknown-element': 'This field is not recognized as part of this resource type. It may be misspelled or not allowed here.',
+    'invalid-type': 'The data type is incorrect for this field. For example, a date field contains text or a number field contains letters.',
+    
+    // Terminology errors
+    'invalid-code': 'The code value used is not from the allowed list. Medical codes must come from specific standardized lists.',
+    'invalid-display': 'The description text doesn\'t match the code. Each medical code has a specific description that should be used.',
+    'terminology-not-found': 'The medical coding system referenced is not available for validation.',
+    
+    // Reference errors
+    'invalid-reference': 'This points to another resource that doesn\'t exist or cannot be found in the system.',
+    'broken-reference': 'The link to another resource is broken. The referenced resource may have been deleted or moved.',
+    'circular-reference': 'Resources are referencing each other in a loop, which is not allowed.',
+    
+    // Business rule errors
+    'business-rule-violation': 'This violates a healthcare business rule. For example, an end date that comes before a start date.',
+    'invariant-violation': 'A specific rule for this resource type has been broken. Check the resource documentation for requirements.',
+    
+    // Metadata errors
+    'invalid-meta': 'The resource metadata (version, last updated, etc.) is incorrect or missing required information.',
+    'missing-security-label': 'This resource should have security labels to indicate privacy or sensitivity levels.',
+  };
+  
+  // Check if we have a specific human-readable message for this code
+  for (const [key, value] of Object.entries(messageMap)) {
+    if (code?.includes(key) || message?.includes(key)) {
+      return value + (path ? ` (Location: ${path})` : '');
+    }
+  }
+  
+  // Category-based generic messages
+  const categoryMessages: { [key: string]: string } = {
+    'structural': 'There is an issue with how this resource is structured. The format or organization doesn\'t match FHIR requirements.',
+    'profile': 'This resource doesn\'t match the expected template or pattern. It may be missing required fields or have unexpected content.',
+    'terminology': 'There is an issue with medical codes or terms used. The codes need to come from approved medical vocabularies.',
+    'reference': 'There is a problem with links between resources. Some referenced resources may be missing or incorrectly linked.',
+    'business-rule': 'A healthcare business rule is not being followed. This could involve dates, quantities, or logical relationships.',
+    'metadata': 'The resource information (like version or security tags) has issues that need to be addressed.',
+    'general': 'A validation issue was found that needs attention.'
+  };
+  
+  // If no specific mapping, provide a generic human-readable version based on category
+  const baseMessage = categoryMessages[category] || categoryMessages['general'];
+  
+  // Add the original technical message as additional context
+  return `${baseMessage} Technical details: "${message}"${path ? ` (Location: ${path})` : ''}`;
+}
+
 // Optimized validation results component
 function OptimizedValidationResults({ result, onRevalidate, isValidating, selectedCategory, selectedSeverity, selectedPath, highlightedIssueId, onClearFilters }: { 
   result: any; 
@@ -61,6 +124,17 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
   highlightedIssueId?: string | null;
   onClearFilters?: () => void;
 }) {
+  // State for human-readable mode (persisted in localStorage)
+  const [humanReadableMode, setHumanReadableMode] = useState(() => {
+    const saved = localStorage.getItem('validation-human-readable-mode');
+    return saved === 'true';
+  });
+  
+  // Update localStorage when mode changes
+  const handleHumanReadableModeChange = (checked: boolean) => {
+    setHumanReadableMode(checked);
+    localStorage.setItem('validation-human-readable-mode', checked.toString());
+  };
 
   // Filter issues based on selected filters
   const filteredIssues = result.issues.filter((issue: any) => {
@@ -116,11 +190,22 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
 
   return (
     <div className="space-y-4">
-      {/* Results summary and active filters */}
-      <div className="space-y-2">
+      {/* Human-readable mode toggle */}
+      <div className="flex items-center justify-between">
         <div className="text-sm text-gray-500">
           Showing {filteredIssues.length} of {result.issues.length} issues
         </div>
+        <div className="flex items-center space-x-2">
+          <Label htmlFor="human-readable" className="text-sm text-gray-600">
+            Human-readable messages
+          </Label>
+          <Switch
+            id="human-readable"
+            checked={humanReadableMode}
+            onCheckedChange={handleHumanReadableModeChange}
+          />
+        </div>
+      </div>
         
         {/* Active filters indicator */}
         {(selectedCategory !== 'all' || selectedSeverity !== 'all' || selectedPath !== undefined) && (
@@ -155,7 +240,6 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
             </Button>
           </div>
         )}
-      </div>
 
       {/* Issues by Category */}
       {Object.entries(groupedIssues).map(([category, categoryIssues]: [string, any]) => (
@@ -183,6 +267,7 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
                 key={index} 
                 issue={issue} 
                 isHighlighted={highlightedIssueId === issue.id}
+                humanReadableMode={humanReadableMode}
               />
             ))}
           </div>
@@ -238,7 +323,7 @@ function ValidationIssueIndicator({ issue }: { issue: any }) {
 }
 
 // Validation issue details component
-function ValidationIssueDetails({ issue, isHighlighted }: { issue: any; isHighlighted?: boolean }) {
+function ValidationIssueDetails({ issue, isHighlighted, humanReadableMode = false }: { issue: any; isHighlighted?: boolean; humanReadableMode?: boolean }) {
   const getSeverityConfig = (severity: string) => {
     switch(severity) {
       case 'error': 
@@ -289,7 +374,9 @@ function ValidationIssueDetails({ issue, isHighlighted }: { issue: any; isHighli
         )}
       </div>
       <div className="mb-2 leading-relaxed">
-        {issue.message || issue.humanReadable || issue.details}
+        {humanReadableMode 
+          ? getHumanReadableMessage(issue)
+          : (issue.message || issue.humanReadable || issue.details)}
       </div>
       {issue.suggestion && (
         <div className="mt-2 p-2 bg-white bg-opacity-30 rounded text-xs">
