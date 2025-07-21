@@ -104,23 +104,64 @@ const TreeNode: React.FC<TreeNodeProps> = ({
     });
   };
 
+  // Check if a child path is currently expanded and visible
+  const isChildPathExpanded = (childPath: string) => {
+    // Check if the direct parent is expanded all the way down to this child
+    const pathSegments = childPath.split(/[\.\[\]]+/).filter(Boolean);
+    const currentSegments = path.split(/[\.\[\]]+/).filter(Boolean);
+    
+    // Build the path progressively to check each level
+    for (let i = currentSegments.length; i < pathSegments.length - 1; i++) {
+      const intermediatePath = pathSegments.slice(0, i + 1).join('.');
+      if (!expandedPaths.has(intermediatePath)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
   // Get issues to display at this level
-  // If not expanded and has children, show all descendant issues
-  // If expanded, only show direct issues
-  const displayIssues = isExpanded || !isExpandable
-    ? getAllDescendantIssues(path).filter(issue => {
-        const normalizedIssuePath = issue.path.toLowerCase();
-        const normalizedCurrentPath = path.toLowerCase();
-        if (path === '') {
-          return !issue.path || issue.path === nodeKey;
+  const displayIssues = getAllDescendantIssues(path).filter(issue => {
+    const normalizedIssuePath = issue.path.toLowerCase();
+    const normalizedCurrentPath = path.toLowerCase();
+    
+    // For collapsed nodes, show all descendant issues EXCEPT those visible in expanded children
+    if (!isExpanded && isExpandable) {
+      // Check if this issue is being displayed by a visible child
+      // First check immediate children
+      const immediateChildren = isArray 
+        ? Array.from({ length: value.length }, (_, i) => `${path}[${i}]`)
+        : Object.keys(value).map(key => path ? `${path}.${key}` : key);
+      
+      // If any immediate child is expanded and has this issue, don't show it here
+      for (const childPath of immediateChildren) {
+        if (expandedPaths.has(childPath)) {
+          // Check if the expanded child would display this issue
+          const childIssues = getAllDescendantIssues(childPath);
+          const hasIssue = childIssues.some(childIssue => 
+            childIssue.code === issue.code && 
+            childIssue.message === issue.message &&
+            childIssue.path === issue.path
+          );
+          if (hasIssue) {
+            return false; // Don't show at parent level
+          }
         }
-        // Only show direct issues when expanded
-        const segments = normalizedIssuePath.split(/[\.\[\]]+/).filter(Boolean);
-        const currentSegments = normalizedCurrentPath.split(/[\.\[\]]+/).filter(Boolean);
-        return segments.length === currentSegments.length + 1 || 
-               normalizedIssuePath === normalizedCurrentPath;
-      })
-    : getAllDescendantIssues(path);
+      }
+      
+      return true; // Show at this level
+    }
+    
+    // For expanded nodes or leaf nodes, only show direct issues
+    if (path === '') {
+      return !issue.path || issue.path === nodeKey;
+    }
+    // Only show direct issues when expanded
+    const segments = normalizedIssuePath.split(/[\.\[\]]+/).filter(Boolean);
+    const currentSegments = normalizedCurrentPath.split(/[\.\[\]]+/).filter(Boolean);
+    return segments.length === currentSegments.length || 
+           normalizedIssuePath === normalizedCurrentPath;
+  });
   
   const hasErrors = displayIssues.some(i => i.severity === 'error');
   const hasWarnings = displayIssues.some(i => i.severity === 'warning');
