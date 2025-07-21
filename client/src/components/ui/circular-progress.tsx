@@ -76,7 +76,7 @@ export function CircularProgress({
           config.fontSize,
           "font-medium"
         )}>
-          <span style={{ color }}>{percentage}%</span>
+          <span style={{ color }}>{Math.round(percentage)}%</span>
         </div>
       )}
     </div>

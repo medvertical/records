@@ -183,15 +183,22 @@ export default function ResourceList({
           <p className="text-sm text-gray-600">
             Showing {startIndex} to {endIndex} of {validTotal} resources
           </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            disabled
-          >
-            <Filter className="h-4 w-4" />
-            Filters
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Not implemented yet</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
         <div className="flex items-center space-x-2">
           <Button
