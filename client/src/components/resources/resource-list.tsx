@@ -185,15 +185,17 @@ export default function ResourceList({
           </p>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                disabled
-              >
-                <Filter className="h-4 w-4" />
-                Filters
-              </Button>
+              <span className="inline-block">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  disabled
+                >
+                  <Filter className="h-4 w-4" />
+                  Filters
+                </Button>
+              </span>
             </TooltipTrigger>
             <TooltipContent>
               <p>Not implemented yet</p>
