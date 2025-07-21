@@ -21,6 +21,7 @@ interface ResourceTreeViewerProps {
   selectedSeverity?: string;
   onCategoryChange?: (category: string) => void;
   onSeverityChange?: (severity: string) => void;
+  onIssueClick?: (issueId: string) => void;
 }
 
 interface TreeNodeProps {
@@ -31,9 +32,11 @@ interface TreeNodeProps {
   validationIssues: ValidationIssue[];
   expandedPaths: Set<string>;
   togglePath: (path: string) => void;
+  onIssueClick?: (issueId: string) => void;
 }
 
 interface ValidationIssue {
+  id: string;
   severity: 'error' | 'warning' | 'information';
   message: string;
   path: string;
@@ -72,7 +75,8 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   depth, 
   validationIssues,
   expandedPaths,
-  togglePath
+  togglePath,
+  onIssueClick
 }) => {
   const isObject = value !== null && typeof value === 'object' && !Array.isArray(value);
   const isArray = Array.isArray(value);
@@ -171,15 +175,30 @@ const TreeNode: React.FC<TreeNodeProps> = ({
           {hasErrors && (
             <TooltipProvider>
               <Tooltip>
-                <TooltipTrigger>
-                  <Badge variant="destructive" className="text-xs">
-                    {getSeverityIcon('error', "h-3 w-3 mr-1")}
-                    {directIssues.filter(i => i.severity === 'error').length}
-                  </Badge>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto p-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const errorIssues = directIssues.filter(i => i.severity === 'error');
+                      if (errorIssues.length > 0 && onIssueClick) {
+                        onIssueClick(errorIssues[0].id);
+                      }
+                    }}
+                  >
+                    <Badge variant="destructive" className="text-xs cursor-pointer">
+                      {getSeverityIcon('error', "h-3 w-3 mr-1")}
+                      {directIssues.filter(i => i.severity === 'error').length}
+                    </Badge>
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <div className="text-sm">
                     {directIssues.filter(i => i.severity === 'error').length} validation error(s)
+                    <br />
+                    <span className="text-xs text-gray-400">Click to view details</span>
                   </div>
                 </TooltipContent>
               </Tooltip>
@@ -189,15 +208,30 @@ const TreeNode: React.FC<TreeNodeProps> = ({
           {hasWarnings && (
             <TooltipProvider>
               <Tooltip>
-                <TooltipTrigger>
-                  <Badge className="bg-orange-100 text-orange-800 text-xs">
-                    {getSeverityIcon('warning', "h-3 w-3 mr-1")}
-                    {directIssues.filter(i => i.severity === 'warning').length}
-                  </Badge>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto p-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const warningIssues = directIssues.filter(i => i.severity === 'warning');
+                      if (warningIssues.length > 0 && onIssueClick) {
+                        onIssueClick(warningIssues[0].id);
+                      }
+                    }}
+                  >
+                    <Badge className="bg-orange-100 text-orange-800 text-xs cursor-pointer">
+                      {getSeverityIcon('warning', "h-3 w-3 mr-1")}
+                      {directIssues.filter(i => i.severity === 'warning').length}
+                    </Badge>
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <div className="text-sm">
                     {directIssues.filter(i => i.severity === 'warning').length} warning(s)
+                    <br />
+                    <span className="text-xs text-gray-400">Click to view details</span>
                   </div>
                 </TooltipContent>
               </Tooltip>
@@ -207,15 +241,30 @@ const TreeNode: React.FC<TreeNodeProps> = ({
           {hasInfo && (
             <TooltipProvider>
               <Tooltip>
-                <TooltipTrigger>
-                  <Badge className="bg-blue-100 text-blue-800 text-xs">
-                    {getSeverityIcon('information', "h-3 w-3 mr-1")}
-                    {directIssues.filter(i => i.severity === 'information').length}
-                  </Badge>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto p-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const infoIssues = directIssues.filter(i => i.severity === 'information');
+                      if (infoIssues.length > 0 && onIssueClick) {
+                        onIssueClick(infoIssues[0].id);
+                      }
+                    }}
+                  >
+                    <Badge className="bg-blue-100 text-blue-800 text-xs cursor-pointer">
+                      {getSeverityIcon('information', "h-3 w-3 mr-1")}
+                      {directIssues.filter(i => i.severity === 'information').length}
+                    </Badge>
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <div className="text-sm">
                     {directIssues.filter(i => i.severity === 'information').length} information message(s)
+                    <br />
+                    <span className="text-xs text-gray-400">Click to view details</span>
                   </div>
                 </TooltipContent>
               </Tooltip>
@@ -224,46 +273,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         </div>
       </div>
 
-      {/* Validation Messages for this node */}
-      {isExpanded && directIssues.filter(i => i.path === path).length > 0 && (
-        <div 
-          className="mt-1 space-y-1"
-          style={{ paddingLeft: `${(depth + 1) * 1.5}rem` }}
-        >
-          {directIssues.filter(i => i.path === path).map((issue, idx) => (
-            <Card key={idx} className={cn(
-              "border-l-4",
-              issue.severity === 'error' && "border-l-red-500 bg-red-50",
-              issue.severity === 'warning' && "border-l-orange-500 bg-orange-50",
-              issue.severity === 'information' && "border-l-blue-500 bg-blue-50"
-            )}>
-              <CardContent className="p-3">
-                <div className="flex items-start gap-2">
-                  <span className={`${getSeverityColor(issue.severity)} mt-0.5`}>
-                    {getSeverityIcon(issue.severity, "h-4 w-4")}
-                  </span>
-                  
-                  <div className="flex-1">
-                    <p className="text-sm">{issue.message}</p>
-                    
-                    {issue.category && (
-                      <Badge variant="outline" className="mt-1 text-xs">
-                        {issue.category}
-                      </Badge>
-                    )}
-                    
-                    {issue.recommendation && (
-                      <p className="text-xs text-gray-600 mt-1">
-                        💡 {issue.recommendation}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+
 
       {/* Render children if expanded */}
       {isExpanded && isExpandable && (
@@ -279,6 +289,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                 validationIssues={validationIssues}
                 expandedPaths={expandedPaths}
                 togglePath={togglePath}
+                onIssueClick={onIssueClick}
               />
             ))
           ) : (
@@ -292,6 +303,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
                 validationIssues={validationIssues}
                 expandedPaths={expandedPaths}
                 togglePath={togglePath}
+                onIssueClick={onIssueClick}
               />
             ))
           )}
@@ -307,7 +319,8 @@ export default function ResourceTreeViewer({
   selectedCategory = 'all',
   selectedSeverity = 'all',
   onCategoryChange,
-  onSeverityChange
+  onSeverityChange,
+  onIssueClick
 }: ResourceTreeViewerProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set(['']));
   const [expandAll, setExpandAll] = useState(false);
@@ -317,8 +330,8 @@ export default function ResourceTreeViewer({
     const issuesMap = new Map<string, ValidationIssue>();
     
     validationResults.forEach(result => {
-      if (result.issues) {
-        result.issues.forEach((issue: any) => {
+      if (result.issues && Array.isArray(result.issues)) {
+        (result.issues as any[]).forEach((issue: any, index: number) => {
           // Extract path from various formats
           let path = '';
           
@@ -355,6 +368,7 @@ export default function ResourceTreeViewer({
           // Only add if not already present (deduplication)
           if (!issuesMap.has(issueKey)) {
             issuesMap.set(issueKey, {
+              id: `${result.id}-${index}`,
               severity: issue.severity || 'information',
               message: issue.message || '',
               path: path,
@@ -431,8 +445,12 @@ export default function ResourceTreeViewer({
   // Get raw counts from validation results to match counts shown elsewhere
   const totalErrorCount = validationResults.reduce((sum, vr) => sum + (vr.errorCount || 0), 0);
   const totalWarningCount = validationResults.reduce((sum, vr) => sum + (vr.warningCount || 0), 0);
-  const totalInfoCount = validationResults.reduce((sum, vr) => 
-    sum + (vr.issues?.filter(i => i.severity === 'information').length || 0), 0);
+  const totalInfoCount = validationResults.reduce((sum, vr) => {
+    if (vr.issues && Array.isArray(vr.issues)) {
+      return sum + (vr.issues as any[]).filter((i: any) => i.severity === 'information').length;
+    }
+    return sum;
+  }, 0);
   
   // Count from filtered issues (for display when filters are active)
   const filteredErrorCount = validationIssues.filter(i => i.severity === 'error').length;
@@ -467,6 +485,7 @@ export default function ResourceTreeViewer({
           validationIssues={validationIssues}
           expandedPaths={expandedPaths}
           togglePath={togglePath}
+          onIssueClick={onIssueClick}
         />
       </div>
     </div>

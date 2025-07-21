@@ -52,12 +52,13 @@ function ValidationSummaryBadge({ result }: { result: any }) {
 }
 
 // Optimized validation results component
-function OptimizedValidationResults({ result, onRevalidate, isValidating, selectedCategory, selectedSeverity }: { 
+function OptimizedValidationResults({ result, onRevalidate, isValidating, selectedCategory, selectedSeverity, highlightedIssueId }: { 
   result: any; 
   onRevalidate: () => void; 
   isValidating: boolean;
   selectedCategory: string;
   selectedSeverity: string;
+  highlightedIssueId?: string | null;
 }) {
 
   // Filter issues based on selected filters
@@ -101,7 +102,11 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
           </div>
           <div className="space-y-2">
             {categoryIssues.map((issue: any, index: number) => (
-              <ValidationIssueDetails key={index} issue={issue} />
+              <ValidationIssueDetails 
+                key={index} 
+                issue={issue} 
+                isHighlighted={highlightedIssueId === issue.id}
+              />
             ))}
           </div>
         </div>
@@ -139,7 +144,7 @@ function ValidationIssueIndicator({ issue }: { issue: any }) {
 }
 
 // Validation issue details component
-function ValidationIssueDetails({ issue }: { issue: any }) {
+function ValidationIssueDetails({ issue, isHighlighted }: { issue: any; isHighlighted?: boolean }) {
   const getSeverityConfig = (severity: string) => {
     switch(severity) {
       case 'error': 
@@ -174,7 +179,9 @@ function ValidationIssueDetails({ issue }: { issue: any }) {
 
 
   return (
-    <div className={`text-xs rounded-lg px-3 py-2 border-l-4 ${config.color}`}>
+    <div className={`text-xs rounded-lg px-3 py-2 border-l-4 ${config.color} ${
+      isHighlighted ? 'ring-2 ring-blue-500 ring-offset-2' : ''
+    }`}>
       <div className="flex items-center justify-between mb-1">
         <div className="font-semibold flex items-center">
           <span className="uppercase tracking-wide">{config.label}</span>
@@ -513,6 +520,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
   const [validationError, setValidationError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
+  const [highlightedIssueId, setHighlightedIssueId] = useState<string | null>(null);
 
   // Use existing validation results from resource
   const existingValidationResults = resource?.validationResults || [];
@@ -762,6 +770,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
               selectedSeverity={selectedSeverity}
               onCategoryChange={setSelectedCategory}
               onSeverityChange={setSelectedSeverity}
+              onIssueClick={setHighlightedIssueId}
             />
           </CardContent>
         </Card>
@@ -779,6 +788,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
                 isValidating={isValidating}
                 selectedCategory={selectedCategory}
                 selectedSeverity={selectedSeverity}
+                highlightedIssueId={highlightedIssueId}
               />
             </CardContent>
           </Card>
