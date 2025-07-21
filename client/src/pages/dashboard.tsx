@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useValidationWebSocket } from '@/hooks/use-validation-websocket';
 import { useState, useEffect } from 'react';
+import { Link } from 'wouter';
 
 interface ValidationProgress {
   totalResources: number;
@@ -439,19 +440,7 @@ export default function Dashboard() {
                 )}
               </div>
 
-              {/* Error Summary */}
-              {(isValidationRunning || isValidationPaused) && (progress || validationProgress || currentProgress)?.errors?.length > 0 && (
-                <div className="p-3 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
-                  <div className="text-sm font-medium text-red-700 dark:text-red-300 mb-2">
-                    Recent Errors ({(isValidationRunning || isValidationPaused) ? ((progress || validationProgress || currentProgress)?.errors?.length || 0) : 0})
-                  </div>
-                  <div className="text-xs text-red-600 dark:text-red-400 space-y-1 max-h-20 overflow-y-auto">
-                    {(isValidationRunning || isValidationPaused) ? (((progress || validationProgress || currentProgress)?.errors || []).slice(-3).map((error, idx) => (
-                      <div key={idx} className="truncate">{error}</div>
-                    ))) : []}
-                  </div>
-                </div>
-              )}
+
 
               {/* Show status when paused or resumable */}
               {isValidationPaused && (
@@ -865,8 +854,15 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {new Date(error.validatedAt).toLocaleTimeString()}
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(error.validatedAt).toLocaleTimeString()}
+                    </div>
+                    <Link href={`/resources/${error.resourceId}`}>
+                      <Button variant="ghost" size="sm" className="text-xs h-6 px-2">
+                        View
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               ))}

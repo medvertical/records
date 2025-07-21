@@ -1223,16 +1223,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   
                   processedResources++;
                   
-                  // Check for validation errors in real data
-                  if (result.validationResults?.some(vr => !vr.isValid)) {
-                    errorResources++;
-                    const errorDetails = result.validationResults
-                      .filter(vr => !vr.isValid)
-                      .flatMap(vr => vr.errors || [])
-                      .join('; ');
-                    errors.push(`${resourceType}/${entry.resource.id}: ${errorDetails}`);
+                  // Check for validation errors using validation score from latest result
+                  const latestValidation = result.validationResults && result.validationResults.length > 0 
+                    ? result.validationResults.reduce((latest, current) => 
+                        current.validatedAt > latest.validatedAt ? current : latest
+                      )
+                    : null;
+                  
+                  if (latestValidation) {
+                    const validationScore = latestValidation.validationScore || 0;
+                    const isResourceValid = validationScore >= 95; // 95+ is considered valid (allows minor info messages)
+                    
+                    if (!isResourceValid) {
+                      errorResources++;
+                      const errorCount = latestValidation.errorCount || 0;
+                      const warningCount = latestValidation.warningCount || 0;
+                      errors.push(`${resourceType}/${entry.resource.id}: Score ${validationScore}% (${errorCount} errors, ${warningCount} warnings)`);
+                    } else {
+                      validResources++;
+                    }
                   } else {
-                    validResources++;
+                    // No validation results available - count as error
+                    errorResources++;
+                    errors.push(`${resourceType}/${entry.resource.id}: No validation results available`);
                   }
                   
                   // Broadcast real progress with AUTHENTIC total resource count

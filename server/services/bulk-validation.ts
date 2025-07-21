@@ -287,9 +287,16 @@ export class BulkValidationService {
           const existingResults = await storage.getValidationResultsByResourceId(existingResource.id);
           if (existingResults.length > 0) {
             shouldValidate = false;
-            // Update progress counters based on existing results
-            const hasErrors = existingResults.some(r => !r.isValid);
-            if (hasErrors) {
+            // Update progress counters based on existing results with current validation settings
+            // For cached results, use the stored validation score to determine validity
+            const latestResult = existingResults.reduce((latest, current) => 
+              current.validatedAt > latest.validatedAt ? current : latest
+            );
+            
+            // A resource is considered valid if it has a score >= 95 (allows for minor info messages)
+            const isValidWithSettings = latestResult.validationScore >= 95;
+            
+            if (!isValidWithSettings) {
               this.currentProgress!.errorResources++;
             } else {
               this.currentProgress!.validResources++;
@@ -329,35 +336,28 @@ export class BulkValidationService {
 
   private async performValidation(resource: any, dbResourceId: number): Promise<void> {
     try {
-      const validationResult = await this.validationEngine.validateResourceDetailed(resource, {
-        strictMode: false,
-        requiredFields: [],
-        customRules: [],
-        autoValidate: true,
-        profiles: [],
-        fetchFromSimplifier: true,  // Re-enable for comprehensive validation
-        fetchFromFhirServer: true,  // Re-enable with terminology server support
-        autoDetectProfiles: true    // Re-enable with improved US Core support
-      });
+      // Use the UnifiedValidationService that respects current validation settings
+      const { UnifiedValidationService } = await import('./unified-validation.js');
+      const unifiedValidation = new UnifiedValidationService(this.validationEngine);
+      const validationResult = await unifiedValidation.validateResource(resource);
 
-      // Store validation result
-      const insertResult: InsertValidationResult = {
-        resourceId: dbResourceId,
-        isValid: validationResult.isValid,
-        issues: JSON.stringify(validationResult.issues),
-        profileUrl: validationResult.profileUrl,
-        errorCount: validationResult.summary.errorCount,
-        warningCount: validationResult.summary.warningCount,
-        validationScore: validationResult.summary.score
-      };
+      // Process validation result and extract meaningful data
+      const validationData = validationResult.resource?.validationResults?.[0];
+      if (!validationData) {
+        console.warn(`[BulkValidation] No validation data returned for ${resource.resourceType}/${resource.id}`);
+        return;
+      }
 
-      await storage.createValidationResult(insertResult);
-
-      // Update progress counters
-      if (validationResult.isValid && validationResult.summary.errorCount === 0) {
+      // Update progress counters based on validation result
+      const isResourceValid = validationData.validationScore >= 95;
+      if (isResourceValid) {
         this.currentProgress!.validResources++;
       } else {
         this.currentProgress!.errorResources++;
+        // Add error details
+        this.currentProgress!.errors.push(
+          `${resource.resourceType}/${resource.id}: Score ${validationData.validationScore}% - ${validationData.issues?.length || 0} validation issues`
+        );
       }
 
     } catch (error) {
