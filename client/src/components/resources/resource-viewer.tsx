@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight, Shield, CheckCircle, AlertTriangle, RefreshCw, Info, AlertCircle } from "lucide-react";
+import { ChevronDown, ChevronRight, Shield, CheckCircle, AlertTriangle, RefreshCw, Info, AlertCircle, Code, FileCheck, BookOpen, Link, FileText } from "lucide-react";
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { ValidationResults } from '@/components/validation/validation-results';
@@ -12,8 +12,7 @@ import {
   getCategoryIcon, 
   getSeverityIcon, 
   getCategoryColor, 
-  getSeverityColor,
-  categoryDescriptions
+  getSeverityColor
 } from "@/lib/validation-icons";
 import { CircularProgress } from "@/components/ui/circular-progress";
 
@@ -765,29 +764,10 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
 
   return (
     <div className="space-y-4">
-      {/* Header with circular score and filters */}
-      <div className="bg-white rounded-lg border">
-        <div className="flex items-center justify-between p-4">
-          {/* Title and badges on the left */}
-          <div>
-            <h2 className="text-xl font-semibold">{title}</h2>
-            <div className="flex items-center gap-2 mt-2">
-              {getValidationBadge()}
-              {/* Show warning badge separately if there are errors AND warnings */}
-              {displayValidationResult?.summary?.errorCount > 0 && displayValidationResult?.summary?.warningCount > 0 && (
-                <Badge className="bg-orange-50 text-orange-600 border-orange-200 text-xs">
-                  {displayValidationResult.summary.warningCount} Warning{displayValidationResult.summary.warningCount !== 1 ? 's' : ''}
-                </Badge>
-              )}
-            </div>
-          </div>
-          
-          
-        </div>
-        
-        {/* Horizontal filters in 2 columns */}
-        {displayValidationResult?.issues?.length > 0 && (
-          <div className="border-t pt-4 px-4 pb-4">
+      {/* Horizontal filters in 2 columns */}
+      {displayValidationResult?.issues?.length > 0 && (
+        <div className="bg-white rounded-lg border">
+          <div className="pt-4 px-4 pb-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Severity Filter Column - First */}
               <div className="flex flex-wrap gap-1">
@@ -807,7 +787,9 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
                           'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
                     }`}
                   >
-                    {sev.value !== 'all' && getSeverityIcon(sev.value, "h-3 w-3")}
+                    {sev.value === 'error' && <AlertCircle className="h-3 w-3" />}
+                    {sev.value === 'warning' && <AlertTriangle className="h-3 w-3" />}
+                    {sev.value === 'information' && <Info className="h-3 w-3" />}
                     {sev.value === 'all' ? 'All Severities' : sev.label} ({sev.count})
                   </button>
                 ))}
@@ -825,15 +807,20 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
                         : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
                     }`}
                   >
-                    {cat.value !== 'all' && getCategoryIcon(cat.value, "h-3 w-3")}
+                    {cat.value === 'structural' && <Code className="h-3 w-3" />}
+                    {cat.value === 'profile' && <FileCheck className="h-3 w-3" />}
+                    {cat.value === 'terminology' && <BookOpen className="h-3 w-3" />}
+                    {cat.value === 'reference' && <Link className="h-3 w-3" />}
+                    {cat.value === 'business-rule' && <Shield className="h-3 w-3" />}
+                    {cat.value === 'metadata' && <FileText className="h-3 w-3" />}
                     {cat.value === 'all' ? 'All Categories' : cat.label} ({cat.count})
                   </button>
                 ))}
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Main content: Resource structure on left, validation messages on right */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
