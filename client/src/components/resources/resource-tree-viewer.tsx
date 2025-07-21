@@ -204,7 +204,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({
     <div className="group">
       <div 
         className={cn(
-          "grid grid-cols-[1fr,auto] gap-4 py-1 hover:bg-gray-50 rounded px-2 -mx-2 cursor-pointer",
+          "grid grid-cols-[1fr,1fr] gap-4 py-1 hover:bg-gray-50 rounded px-2 -mx-2 cursor-pointer",
           hasErrors && "bg-red-50 hover:bg-red-100",
           !hasErrors && hasWarnings && "bg-orange-50 hover:bg-orange-100",
           !hasErrors && !hasWarnings && hasInfo && "bg-blue-50 hover:bg-blue-100"
@@ -252,19 +252,18 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         </div>
 
         {/* Right column: Value display and validation badges */}
-        <div className="flex items-center gap-2 justify-start">
-          {/* Value display for simple types */}
-          {!isExpandable && (
-            <div className="flex items-center gap-1 flex-1">
-              {getValueIcon(value)}
-              <span className="font-mono text-sm text-gray-900 truncate text-left">
-                {formatValue(value)}
-              </span>
-            </div>
-          )}
-          
-          {/* Spacer for expandable items */}
-          {isExpandable && <div className="flex-1" />}
+        <div className="flex items-center justify-between">
+          {/* Value display for simple types - always left aligned */}
+          <div className="flex items-center gap-1">
+            {!isExpandable && (
+              <>
+                {getValueIcon(value)}
+                <span className="font-mono text-sm text-gray-900 text-left">
+                  {formatValue(value)}
+                </span>
+              </>
+            )}
+          </div>
           
           {/* Validation Indicators */}
           <div className="flex items-center gap-1 flex-shrink-0">
