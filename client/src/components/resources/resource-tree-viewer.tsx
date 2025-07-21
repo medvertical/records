@@ -120,47 +120,66 @@ const TreeNode: React.FC<TreeNodeProps> = ({
     return true;
   };
 
+  // Helper to check if an issue is visible somewhere in expanded descendants
+  const isIssueVisibleInExpandedDescendants = (issue: ValidationIssue, currentPath: string): boolean => {
+    const issuePath = issue.path.toLowerCase();
+    
+    // Check all expanded paths to see if any of them would display this issue
+    for (const expandedPath of expandedPaths) {
+      const expandedPathLower = expandedPath.toLowerCase();
+      
+      // Skip if this expanded path is not a descendant of current path
+      if (currentPath && !expandedPathLower.startsWith(currentPath.toLowerCase() + '.') && 
+          !expandedPathLower.startsWith(currentPath.toLowerCase() + '[')) {
+        continue;
+      }
+      
+      // Check if the issue belongs directly to this expanded path
+      if (issuePath === expandedPathLower || 
+          (issuePath.startsWith(expandedPathLower + '.') && 
+           !issuePath.slice(expandedPathLower.length + 1).includes('.') &&
+           !issuePath.slice(expandedPathLower.length + 1).includes('['))) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
   // Get issues to display at this level
   const displayIssues = getAllDescendantIssues(path).filter(issue => {
     const normalizedIssuePath = issue.path.toLowerCase();
     const normalizedCurrentPath = path.toLowerCase();
     
-    // For collapsed nodes, show all descendant issues EXCEPT those visible in expanded children
+    // For collapsed nodes, show all descendant issues
     if (!isExpanded && isExpandable) {
-      // Check if this issue is being displayed by a visible child
-      // First check immediate children
-      const immediateChildren = isArray 
-        ? Array.from({ length: value.length }, (_, i) => `${path}[${i}]`)
-        : Object.keys(value).map(key => path ? `${path}.${key}` : key);
-      
-      // If any immediate child is expanded and has this issue, don't show it here
-      for (const childPath of immediateChildren) {
-        if (expandedPaths.has(childPath)) {
-          // Check if the expanded child would display this issue
-          const childIssues = getAllDescendantIssues(childPath);
-          const hasIssue = childIssues.some(childIssue => 
-            childIssue.code === issue.code && 
-            childIssue.message === issue.message &&
-            childIssue.path === issue.path
-          );
-          if (hasIssue) {
-            return false; // Don't show at parent level
-          }
-        }
-      }
-      
-      return true; // Show at this level
+      return true;
     }
     
-    // For expanded nodes or leaf nodes, only show direct issues
+    // For expanded nodes, show issues that:
+    // 1. Belong directly to this node (not to descendants)
+    // 2. Are not visible in any expanded descendant
+    if (isExpanded && isExpandable) {
+      // Check if issue belongs directly to this node
+      const isDirectIssue = normalizedIssuePath === normalizedCurrentPath;
+      if (isDirectIssue) return true;
+      
+      // Check if issue is for a descendant but not visible in expanded children
+      const isDescendantIssue = normalizedIssuePath.startsWith(normalizedCurrentPath + '.') || 
+                                normalizedIssuePath.startsWith(normalizedCurrentPath + '[');
+      if (isDescendantIssue && !isIssueVisibleInExpandedDescendants(issue, path)) {
+        return true;
+      }
+      
+      return false;
+    }
+    
+    // For leaf nodes, show direct issues
     if (path === '') {
       return !issue.path || issue.path === nodeKey;
     }
-    // Only show direct issues when expanded
-    const segments = normalizedIssuePath.split(/[\.\[\]]+/).filter(Boolean);
-    const currentSegments = normalizedCurrentPath.split(/[\.\[\]]+/).filter(Boolean);
-    return segments.length === currentSegments.length || 
-           normalizedIssuePath === normalizedCurrentPath;
+    
+    return normalizedIssuePath === normalizedCurrentPath;
   });
   
   const hasErrors = displayIssues.some(i => i.severity === 'error');
