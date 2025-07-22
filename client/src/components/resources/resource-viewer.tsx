@@ -114,7 +114,7 @@ function getHumanReadableMessage(issue: any): string {
 }
 
 // Optimized validation results component
-function OptimizedValidationResults({ result, onRevalidate, isValidating, selectedCategory, selectedSeverity, selectedPath, highlightedIssueId, onClearFilters }: { 
+function OptimizedValidationResults({ result, onRevalidate, isValidating, selectedCategory, selectedSeverity, selectedPath, highlightedIssueId, onClearFilters, onNavigateToPath }: { 
   result: any; 
   onRevalidate: () => void; 
   isValidating: boolean;
@@ -123,6 +123,7 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
   selectedPath?: string;
   highlightedIssueId?: string | null;
   onClearFilters?: () => void;
+  onNavigateToPath?: (path: string) => void;
 }) {
   // State for human-readable mode (persisted in localStorage)
   const [humanReadableMode, setHumanReadableMode] = useState(() => {
@@ -268,6 +269,7 @@ function OptimizedValidationResults({ result, onRevalidate, isValidating, select
                 issue={issue} 
                 isHighlighted={highlightedIssueId === issue.id}
                 humanReadableMode={humanReadableMode}
+                onNavigateToPath={onNavigateToPath}
               />
             ))}
           </div>
@@ -323,7 +325,7 @@ function ValidationIssueIndicator({ issue }: { issue: any }) {
 }
 
 // Validation issue details component
-function ValidationIssueDetails({ issue, isHighlighted, humanReadableMode = false }: { issue: any; isHighlighted?: boolean; humanReadableMode?: boolean }) {
+function ValidationIssueDetails({ issue, isHighlighted, humanReadableMode = false, onNavigateToPath }: { issue: any; isHighlighted?: boolean; humanReadableMode?: boolean; onNavigateToPath?: (path: string) => void }) {
   const getSeverityConfig = (severity: string) => {
     switch(severity) {
       case 'error': 
@@ -386,7 +388,18 @@ function ValidationIssueDetails({ issue, isHighlighted, humanReadableMode = fals
       )}
       {issue.path && (
         <div className="mt-1 text-xs opacity-60">
-          Path: <code className="bg-black bg-opacity-10 px-1 rounded">{issue.path}</code>
+          Path: <code 
+            className="bg-black bg-opacity-10 px-1 rounded cursor-pointer hover:bg-black hover:bg-opacity-20 transition-colors"
+            onClick={() => {
+              if (onNavigateToPath) {
+                console.log(`[ValidationIssue] Navigating to path: ${issue.path}`);
+                onNavigateToPath(issue.path);
+              }
+            }}
+            title="Click to navigate to this field in the resource tree"
+          >
+            {issue.path}
+          </code>
         </div>
       )}
     </div>
@@ -723,6 +736,24 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
     setExpandAll(!expandAll);
   };
 
+  // Handler for navigating to a specific path from validation issues
+  const handleNavigateToPath = (path: string) => {
+    console.log(`[ResourceViewer] Navigating to path: ${path}`);
+    
+    // Normalize path by removing resource type prefix if present
+    // e.g., "AuditEvent.agent.type" becomes "agent.type"
+    let normalizedPath = path;
+    const resourceTypePrefixPattern = /^[A-Z][a-zA-Z]+\./;
+    if (resourceTypePrefixPattern.test(path)) {
+      normalizedPath = path.replace(resourceTypePrefixPattern, '');
+    }
+    
+    console.log(`[ResourceViewer] Normalized path: ${normalizedPath}`);
+    setSelectedPath(normalizedPath);
+    setSelectedCategory('all'); // Clear category filter to show all issues for this path
+    setSelectedSeverity('all'); // Clear severity filter to show all issues for this path
+  };
+
   // Use existing validation results from resource
   const existingValidationResults = resource?.validationResults || [];
   const hasExistingValidation = existingValidationResults.length > 0;
@@ -1000,6 +1031,7 @@ export default function ResourceViewer({ resource, resourceId, resourceType, dat
                 selectedPath={selectedPath}
                 highlightedIssueId={highlightedIssueId}
                 onClearFilters={handleClearFilters}
+                onNavigateToPath={handleNavigateToPath}
               />
             </CardContent>
           </Card>

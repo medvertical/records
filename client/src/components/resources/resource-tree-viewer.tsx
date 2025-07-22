@@ -463,6 +463,59 @@ export default function ResourceTreeViewer({
     }
   }, [externalExpandAll]);
 
+  // Effect to auto-expand paths when navigating to a specific path
+  useEffect(() => {
+    if (selectedPath && selectedPath !== '') {
+      setExpandedPaths(prev => {
+        const newExpanded = new Set(prev);
+        
+        // Auto-expand all parent paths leading to the selected path
+        const pathSegments = selectedPath.split(/[\.\[\]]+/).filter(Boolean);
+        
+        // Build progressive paths and expand each one
+        let currentPath = '';
+        for (let i = 0; i < pathSegments.length; i++) {
+          if (i === 0) {
+            currentPath = pathSegments[i];
+          } else {
+            // Handle array indices vs object properties
+            const segment = pathSegments[i];
+            if (segment.match(/^\d+$/)) {
+              currentPath += `[${segment}]`;
+            } else {
+              currentPath += `.${segment}`;
+            }
+          }
+          newExpanded.add(currentPath);
+        }
+        
+        // Also expand intermediate paths for arrays
+        // e.g. for "agent[0].type", expand both "agent" and "agent[0]"
+        const parts = selectedPath.split('.');
+        let buildPath = '';
+        for (const part of parts) {
+          if (buildPath) {
+            buildPath += '.';
+          }
+          buildPath += part;
+          
+          // Handle array notation like "agent[0]"
+          const arrayMatch = buildPath.match(/^(.+)\[(\d+)\]$/);
+          if (arrayMatch) {
+            const [, arrayPath, index] = arrayMatch;
+            newExpanded.add(arrayPath); // Expand "agent"
+            newExpanded.add(buildPath); // Expand "agent[0]"
+          } else {
+            newExpanded.add(buildPath);
+          }
+        }
+        
+        console.log(`[TreeViewer] Auto-expanding paths for "${selectedPath}":`, Array.from(newExpanded));
+        return newExpanded;
+      });
+    }
+  }, [selectedPath]);
+
   // Process validation results into a more usable format and deduplicate
   const allValidationIssues = useMemo(() => {
     const issuesMap = new Map<string, ValidationIssue>();
