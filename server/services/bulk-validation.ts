@@ -97,12 +97,8 @@ export class BulkValidationService {
       for (const resourceType of typesToValidate) {
         const count = await this.fhirClient.getResourceCount(resourceType);
         resourceCounts[resourceType] = count;
-        // Only count resources we'll actually validate (skip those with > 50,000)
-        if (count <= 50000) {
-          totalResources += count;
-        } else {
-          console.log(`Excluding ${resourceType} from total count - ${count} resources (> 50,000 limit)`);
-        }
+        // Include ALL resource types in validation
+        totalResources += count;
       }
 
       this.currentProgress = {
@@ -135,12 +131,7 @@ export class BulkValidationService {
           this.currentProgress.currentResourceType = resourceType;
           console.log(`Starting validation for ${resourceType}: ${resourceCounts[resourceType]} resources`);
           
-          // Skip resource types with too many resources to avoid timeouts
-          if (resourceCounts[resourceType] > 50000) {
-            console.log(`Skipping ${resourceType} - too many resources (${resourceCounts[resourceType]})`);
-            // Don't add skipped resources to processedResources - they're not part of our total
-            continue;
-          }
+          // Process ALL resource types - no skipping based on size
           
           await this.validateResourceType(resourceType, resourceCounts[resourceType], batchSize, skipUnchanged, onProgress);
           
