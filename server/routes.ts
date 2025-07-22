@@ -635,25 +635,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const counts: Record<string, number> = {};
       
-      // Get counts for common resource types with parallel requests
-      const commonTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'Practitioner', 'Organization'];
-      const countPromises = commonTypes.map(async (type) => {
-        try {
-          const count = await fhirClient.getResourceCount(type);
-          return { type, count };
-        } catch (error) {
-          console.warn(`Failed to get count for ${type}:`, error);
-          return { type, count: 0 };
-        }
-      });
+      // Get actual resource types supported by the FHIR server from CapabilityStatement
+      console.log('[ResourceCounts] Fetching supported resource types from server CapabilityStatement...');
+      const supportedResourceTypes = await fhirClient.getAllResourceTypes();
+      console.log(`[ResourceCounts] Server supports ${supportedResourceTypes.length} resource types:`, supportedResourceTypes.slice(0, 10), '...');
       
-      const results = await Promise.all(countPromises);
-      results.forEach(({ type, count }) => {
-        counts[type] = count;
-      });
+      // Process resource types in smaller batches to avoid overwhelming the server
+      const batchSize = 8;
+      let totalProcessed = 0;
+      
+      for (let i = 0; i < supportedResourceTypes.length; i += batchSize) {
+        const batch = supportedResourceTypes.slice(i, i + batchSize);
+        console.log(`[ResourceCounts] Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(supportedResourceTypes.length/batchSize)}: ${batch.join(', ')}`);
+        
+        const countPromises = batch.map(async (type) => {
+          try {
+            const count = await fhirClient.getResourceCount(type);
+            console.log(`[ResourceCounts] ${type}: ${count} resources`);
+            return { type, count };
+          } catch (error) {
+            console.warn(`[ResourceCounts] Failed to get count for ${type}:`, error.message);
+            return { type, count: 0 };
+          }
+        });
+        
+        const results = await Promise.all(countPromises);
+        results.forEach(({ type, count }) => {
+          if (count > 0) { // Only include resource types that actually have resources
+            counts[type] = count;
+            totalProcessed++;
+          }
+        });
+        
+        // Small delay between batches to be respectful to the server
+        if (i + batchSize < supportedResourceTypes.length) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      }
+      
+      const totalResources = Object.values(counts).reduce((sum, count) => sum + count, 0);
+      console.log(`[ResourceCounts] Complete. Found ${totalProcessed} resource types with data, total: ${totalResources} resources`);
       
       res.json(counts);
     } catch (error: any) {
+      console.error('[ResourceCounts] Error:', error.message);
       res.status(500).json({ message: error.message });
     }
   });
@@ -1036,42 +1061,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Don't reset global state here - it's already set in main thread
           
-          // ALWAYS use comprehensive FHIR resource types - ignore any specific types from frontend
-          console.log('Starting comprehensive FHIR validation across ALL resource types...');
-      const resourceTypes = [
-        'Account', 'ActivityDefinition', 'AdverseEvent', 'AllergyIntolerance', 'Appointment', 
-        'AppointmentResponse', 'AuditEvent', 'Basic', 'Binary', 'BiologicallyDerivedProduct',
-        'BodyStructure', 'Bundle', 'CapabilityStatement', 'CarePlan', 'CareTeam', 'CatalogEntry',
-        'ChargeItem', 'ChargeItemDefinition', 'Claim', 'ClaimResponse', 'ClinicalImpression',
-        'CodeSystem', 'Communication', 'CommunicationRequest', 'CompartmentDefinition',
-        'Composition', 'ConceptMap', 'Condition', 'Consent', 'Contract', 'Coverage',
-        'CoverageEligibilityRequest', 'CoverageEligibilityResponse', 'DetectedIssue', 'Device',
-        'DeviceDefinition', 'DeviceMetric', 'DeviceRequest', 'DeviceUseStatement',
-        'DiagnosticReport', 'DocumentManifest', 'DocumentReference', 'DomainResource',
-        'EffectEvidenceSynthesis', 'Encounter', 'Endpoint', 'EnrollmentRequest',
-        'EnrollmentResponse', 'EpisodeOfCare', 'EventDefinition', 'Evidence', 'EvidenceVariable',
-        'ExampleScenario', 'ExplanationOfBenefit', 'FamilyMemberHistory', 'Flag', 'Goal',
-        'GraphDefinition', 'Group', 'GuidanceResponse', 'HealthcareService', 'ImagingStudy',
-        'Immunization', 'ImmunizationEvaluation', 'ImmunizationRecommendation',
-        'ImplementationGuide', 'InsurancePlan', 'Invoice', 'Library', 'Linkage', 'List',
-        'Location', 'Measure', 'MeasureReport', 'Media', 'Medication', 'MedicationAdministration',
-        'MedicationDispense', 'MedicationKnowledge', 'MedicationRequest', 'MedicationStatement',
-        'MedicinalProduct', 'MedicinalProductAuthorization', 'MedicinalProductContraindication',
-        'MedicinalProductIndication', 'MedicinalProductIngredient', 'MedicinalProductInteraction',
-        'MedicinalProductManufactured', 'MedicinalProductPackaged', 'MedicinalProductPharmaceutical',
-        'MedicinalProductUndesirableEffect', 'MessageDefinition', 'MessageHeader', 'MolecularSequence',
-        'NamingSystem', 'NutritionOrder', 'Observation', 'ObservationDefinition', 'OperationDefinition',
-        'OperationOutcome', 'Organization', 'OrganizationAffiliation', 'Parameters', 'Patient',
-        'PaymentNotice', 'PaymentReconciliation', 'Person', 'PlanDefinition', 'Practitioner',
-        'PractitionerRole', 'Procedure', 'Provenance', 'Questionnaire', 'QuestionnaireResponse',
-        'RelatedPerson', 'RequestGroup', 'ResearchDefinition', 'ResearchElementDefinition',
-        'ResearchStudy', 'ResearchSubject', 'Resource', 'RiskAssessment', 'RiskEvidenceSynthesis',
-        'Schedule', 'SearchParameter', 'ServiceRequest', 'Slot', 'Specimen', 'SpecimenDefinition',
-        'StructureDefinition', 'StructureMap', 'Subscription', 'Substance', 'SubstanceNucleicAcid',
-        'SubstancePolymer', 'SubstanceProtein', 'SubstanceReferenceInformation', 'SubstanceSourceMaterial',
-        'SubstanceSpecification', 'SupplyDelivery', 'SupplyRequest', 'Task', 'TerminologyCapabilities',
-        'TestReport', 'TestScript', 'ValueSet', 'VerificationResult', 'VisionPrescription'
-      ];
+          // Get actual resource types supported by the FHIR server from CapabilityStatement
+          console.log('Getting supported resource types from FHIR server CapabilityStatement...');
+      const resourceTypes = await fhirClient.getAllResourceTypes();
       console.log(`Using comprehensive ${resourceTypes.length} FHIR resource types`);
       console.log(`Resource types to validate: ${JSON.stringify(resourceTypes.slice(0, 10))}... (showing first 10 of ${resourceTypes.length})`);
       
