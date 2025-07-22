@@ -336,7 +336,12 @@ export default function Dashboard() {
   // Calculate real-time metrics
   const validationCoverage = validationSummary?.validationCoverage || 0;
   const totalValidated = validationSummary?.totalValidated || dashboardStats?.totalValidated || 0;
-  const totalResources = dashboardStats?.totalResources || validationSummary?.totalResources || resourceCounts?.total || 0;
+  
+  // Calculate total resources from individual counts if needed
+  const calculatedTotal = resourceCounts ? 
+    Object.values(resourceCounts).reduce((sum, count) => sum + (typeof count === 'number' ? count : 0), 0) : 0;
+  
+  const totalResources = dashboardStats?.totalResources || validationSummary?.totalResources || calculatedTotal || 0;
   
   // Real-time progress calculations
   const currentProgressPercent = validationProgress 
@@ -806,13 +811,13 @@ export default function Dashboard() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="text-center p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
                   <div className="text-lg font-bold text-blue-600">
-                    {resourceCounts?.total ? (resourceCounts.total / 1000).toFixed(0) + 'K' : '0'}
+                    {calculatedTotal ? (calculatedTotal / 1000).toFixed(0) + 'K' : '0'}
                   </div>
                   <div className="text-xs text-muted-foreground">Total Resources</div>
                 </div>
                 <div className="text-center p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg">
                   <div className="text-lg font-bold text-purple-600">
-                    {resourceCounts ? Object.keys(resourceCounts).filter(k => k !== 'total').length : 0}
+                    {resourceCounts ? Object.keys(resourceCounts).length : 0}
                   </div>
                   <div className="text-xs text-muted-foreground">Resource Types</div>
                 </div>
