@@ -138,7 +138,7 @@ export class BulkValidationService {
           // Skip resource types with too many resources to avoid timeouts
           if (resourceCounts[resourceType] > 50000) {
             console.log(`Skipping ${resourceType} - too many resources (${resourceCounts[resourceType]})`);
-            this.currentProgress.processedResources += resourceCounts[resourceType];
+            // Don't add skipped resources to processedResources - they're not part of our total
             continue;
           }
           

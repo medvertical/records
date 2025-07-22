@@ -1075,10 +1075,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Using comprehensive ${resourceTypes.length} FHIR resource types`);
       console.log(`Resource types to validate: ${JSON.stringify(resourceTypes.slice(0, 10))}... (showing first 10 of ${resourceTypes.length})`);
       
-      // Calculate REAL total resources from FHIR server
+      // Calculate REAL total resources from FHIR server (excluding types with >50k resources)
       console.log('Calculating real total resources from FHIR server...');
       let realTotalResources = 0;
       const resourceCounts: Record<string, number> = {};
+      const excludedResourceTypes: string[] = [];
       
       for (const resourceType of resourceTypes) {
         // Check if validation should stop during initialization
@@ -1095,16 +1096,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           const count = await fhirClient.getResourceCount(resourceType);
           resourceCounts[resourceType] = count;
-          realTotalResources += count;
-          console.log(`${resourceType}: ${count} resources`);
+          
+          // EXCLUDE resource types with >50,000 resources from validation total
+          if (count > 50000) {
+            excludedResourceTypes.push(`${resourceType} (${count.toLocaleString()} resources)`);
+            console.log(`EXCLUDING ${resourceType}: ${count} resources (>50k threshold)`);
+          } else {
+            realTotalResources += count;
+            console.log(`${resourceType}: ${count} resources`);
+          }
         } catch (error) {
           console.error(`Failed to get count for ${resourceType}:`, error);
           resourceCounts[resourceType] = 0;
         }
       }
       
-      console.log(`REAL TOTAL RESOURCES TO VALIDATE: ${realTotalResources} across ${resourceTypes.length} resource types`);
-      console.log('Top resource types:', Object.entries(resourceCounts)
+      if (excludedResourceTypes.length > 0) {
+        console.log(`\nEXCLUDED RESOURCE TYPES (>${50}k resources):`);
+        excludedResourceTypes.forEach(type => console.log(`  - ${type}`));
+      }
+      
+      console.log(`\nREAL TOTAL RESOURCES TO VALIDATE: ${realTotalResources} across ${resourceTypes.length - excludedResourceTypes.length} resource types`);
+      console.log('Top resource types to validate:', Object.entries(resourceCounts)
+        .filter(([type, count]) => count <= 50000)
         .sort(([,a], [,b]) => b - a)
         .slice(0, 10)
         .map(([type, count]) => `${type}: ${count}`)
@@ -1161,8 +1175,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Process ALL resource types with real FHIR server data - ALL RESOURCES!
-      for (const resourceType of resourceTypes) { // Process ALL 148 resource types
+      // Process resource types with real FHIR server data (EXCLUDING types with >50k resources)
+      for (const resourceType of resourceTypes) {
         // Check if validation should stop (pause/stop request)
         if (globalValidationState.shouldStop) {
           console.log('Validation paused by user request - saving state');
@@ -1181,10 +1195,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         try {
-          console.log(`Validating ALL ${resourceType} resources from FHIR server...`);
-          
           // Get total count for this resource type
           const totalCount = await fhirClient.getResourceCount(resourceType);
+          
+          // SKIP resource types with >50,000 resources
+          if (totalCount > 50000) {
+            console.log(`SKIPPING ${resourceType}: ${totalCount} resources (>50k threshold)`);
+            continue;
+          }
+          
+          console.log(`Validating ALL ${resourceType} resources from FHIR server...`);
           console.log(`Found ${totalCount} total ${resourceType} resources on server`);
           
           // Process ALL resources in batches
