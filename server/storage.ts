@@ -400,6 +400,7 @@ export class DatabaseStorage implements IStorage {
       totalResources,
       validResources,
       errorResources,
+      warningResources: 0, // TODO: implement warning count logic
       activeProfiles: activeProfiles.length,
       resourceBreakdown,
     };
@@ -434,9 +435,10 @@ export class DatabaseStorage implements IStorage {
       enableMetadataValidation: true
     };
     
-    // Count valid/error resources based on filtered issues
+    // Count valid/error/warning resources based on filtered issues
     let validResourcesCount = 0;
     let errorResourcesCount = 0;
+    let warningResourcesCount = 0;
     const resourceBreakdown: Record<string, { total: number; valid: number; validPercent: number }> = {};
     
     // Group resources by type
@@ -457,6 +459,7 @@ export class DatabaseStorage implements IStorage {
       
       // Filter issues based on active validation settings
       let hasRelevantErrors = false;
+      let hasRelevantWarnings = false;
       
       if (result.issues && Array.isArray(result.issues)) {
         const filteredIssues = result.issues.filter((issue: any) => {
@@ -473,15 +476,21 @@ export class DatabaseStorage implements IStorage {
           return true;
         });
         
-        // Check if any filtered issues are errors
+        // Check if any filtered issues are errors or warnings
         hasRelevantErrors = filteredIssues.some((issue: any) => 
           issue.severity === 'error' || issue.severity === 'fatal'
+        );
+        
+        hasRelevantWarnings = filteredIssues.some((issue: any) => 
+          issue.severity === 'warning'
         );
       }
       
       // Update counts
       if (hasRelevantErrors) {
         errorResourcesCount++;
+      } else if (hasRelevantWarnings) {
+        warningResourcesCount++;
       } else {
         validResourcesCount++;
         if (resourceBreakdown[result.resourceType]) {
@@ -511,6 +520,7 @@ export class DatabaseStorage implements IStorage {
       totalResources: resources.length,
       validResources: validResourcesCount,
       errorResources: errorResourcesCount,
+      warningResources: warningResourcesCount,
       activeProfiles: activeProfiles.length,
       resourceBreakdown,
     };

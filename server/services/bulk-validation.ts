@@ -97,7 +97,12 @@ export class BulkValidationService {
       for (const resourceType of typesToValidate) {
         const count = await this.fhirClient.getResourceCount(resourceType);
         resourceCounts[resourceType] = count;
-        totalResources += count;
+        // Only count resources we'll actually validate (skip those with > 50,000)
+        if (count <= 50000) {
+          totalResources += count;
+        } else {
+          console.log(`Excluding ${resourceType} from total count - ${count} resources (> 50,000 limit)`);
+        }
       }
 
       this.currentProgress = {

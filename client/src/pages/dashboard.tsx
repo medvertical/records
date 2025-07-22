@@ -617,6 +617,29 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        <Card className="relative overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Resources with Warnings</CardTitle>
+            <AlertCircle className="h-4 w-4 text-yellow-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">
+              {(validationSummary?.resourcesWithWarnings || 0).toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {totalValidated > 0 ? `${Math.min(100, (((validationSummary?.resourcesWithWarnings || 0) / totalValidated) * 100)).toFixed(1)}% warning rate` : 'No validation data'}
+            </p>
+            <div className="absolute bottom-0 left-0 w-full h-1 bg-muted">
+              <div 
+                className="h-full bg-yellow-500 transition-all duration-1000"
+                style={{ 
+                  width: totalValidated > 0 ? `${Math.min(100, ((validationSummary?.resourcesWithWarnings || 0) / totalValidated) * 100)}%` : '0%' 
+                }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
 
       </div>
 

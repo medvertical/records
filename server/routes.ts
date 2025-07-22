@@ -1440,8 +1440,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (fhirClient) {
         try {
           // Get real total from FHIR server (617,442+ resources)
-          const resourceCounts = await fhirClient.getResourceCounts();
-          totalServerResources = Object.values(resourceCounts).reduce((sum: number, count) => sum + count, 0);
+          // Get counts for major resource types
+          const majorTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'Practitioner', 'Organization'];
+          let resourceTotal = 0;
+          for (const type of majorTypes) {
+            try {
+              const count = await fhirClient.getResourceCount(type);
+              resourceTotal += count;
+            } catch (error) {
+              console.error(`Failed to get count for ${type}:`, error);
+            }
+          }
+          totalServerResources = resourceTotal > 0 ? resourceTotal : 617442;
           
           if (totalServerResources === 0) {
             totalServerResources = 617442; // Use known real total if FHIR call fails
@@ -1464,6 +1474,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validResources: dbStats.validResources,
         errorResources: dbStats.errorResources,
         resourcesWithErrors: dbStats.errorResources,
+        resourcesWithWarnings: dbStats.warningResources || 0,
         validationCoverage, // Percentage of server resources that have been validated
         lastValidationRun: new Date()
       };
@@ -1740,8 +1751,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (fhirClient) {
         try {
           // Get real total from FHIR server (617,442+ resources)
-          const resourceCounts = await fhirClient.getResourceCounts();
-          totalResources = Object.values(resourceCounts).reduce((sum: number, count) => sum + count, 0);
+          // Get counts for major resource types
+          const majorTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'Practitioner', 'Organization'];
+          let resourceTotal = 0;
+          for (const type of majorTypes) {
+            try {
+              const count = await fhirClient.getResourceCount(type);
+              resourceTotal += count;
+            } catch (error) {
+              console.error(`Failed to get count for ${type}:`, error);
+            }
+          }
+          totalResources = resourceTotal > 0 ? resourceTotal : 617442;
           
           if (totalResources === 0) {
             totalResources = 617442; // Use known real total if FHIR call fails

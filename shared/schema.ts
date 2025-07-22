@@ -143,6 +143,7 @@ export interface ResourceStats {
   totalResources: number;
   validResources: number;
   errorResources: number;
+  warningResources: number;
   activeProfiles: number;
   resourceBreakdown: Record<string, {
     total: number;
