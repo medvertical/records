@@ -11,6 +11,11 @@ import {
   ValidationProgress,
   DashboardError 
 } from '@shared/types/dashboard';
+import { 
+  sanitizeValidationStats, 
+  validateValidationStatsConsistency,
+  getFallbackValidationStats 
+} from '@shared/utils/validation';
 
 export class DashboardService {
   private fhirClient: FhirClient;
@@ -102,39 +107,63 @@ export class DashboardService {
       
       // Calculate validation coverage (percentage of validated resources that are valid)
       const validationCoverage = dbStats.totalResources > 0 
-        ? (dbStats.validResources / dbStats.totalResources) * 100 
+        ? Math.min(100, Math.max(0, (dbStats.validResources / dbStats.totalResources) * 100))
         : 0;
       
       // Calculate validation progress (percentage of total server resources that have been validated)
       const validationProgress = fhirTotalResources > 0 
-        ? (dbStats.totalResources / fhirTotalResources) * 100 
+        ? Math.min(100, Math.max(0, (dbStats.totalResources / fhirTotalResources) * 100))
         : 0;
       
-      // Calculate unvalidated resources
-      const unvalidatedResources = fhirTotalResources - dbStats.totalResources;
+      // Calculate unvalidated resources (ensure non-negative)
+      const unvalidatedResources = Math.max(0, fhirTotalResources - dbStats.totalResources);
       
-      // Build resource type breakdown
+      // Build resource type breakdown with improved calculations and validation
       const resourceTypeBreakdown: Record<string, any> = {};
       
       // Process each resource type
       Object.entries(dbStats.resourceBreakdown).forEach(([type, breakdown]) => {
         const serverCount = fhirResourceCounts[type] || 0;
         const validated = breakdown.total;
-        const unvalidated = serverCount - validated;
+        const valid = breakdown.valid;
+        
+        // Validate and sanitize counts
+        const sanitizedValidated = Math.max(0, Math.min(validated, serverCount));
+        const sanitizedValid = Math.max(0, Math.min(valid, sanitizedValidated));
+        const errors = Math.max(0, sanitizedValidated - sanitizedValid);
+        const unvalidated = Math.max(0, serverCount - sanitizedValidated);
+        
+        // Calculate validation rate (percentage of server resources that have been validated)
+        const validationRate = serverCount > 0 ? Math.min(100, Math.max(0, (sanitizedValidated / serverCount) * 100)) : 0;
+        
+        // Calculate success rate (percentage of validated resources that are valid)
+        const successRate = sanitizedValidated > 0 ? Math.min(100, Math.max(0, (sanitizedValid / sanitizedValidated) * 100)) : 0;
+        
+        // Validate rate calculations
+        const validatedRateCheck = this.validateRateCalculation(validationRate, 'validationRate', type);
+        const successRateCheck = this.validateRateCalculation(successRate, 'successRate', type);
+        
+        if (!validatedRateCheck.isValid) {
+          console.warn(`[DashboardService] Invalid validation rate for ${type}:`, validatedRateCheck.errors);
+        }
+        
+        if (!successRateCheck.isValid) {
+          console.warn(`[DashboardService] Invalid success rate for ${type}:`, successRateCheck.errors);
+        }
         
         resourceTypeBreakdown[type] = {
           total: serverCount,
-          validated,
-          valid: breakdown.valid,
-          errors: breakdown.total - breakdown.valid,
+          validated: sanitizedValidated,
+          valid: sanitizedValid,
+          errors,
           warnings: 0, // TODO: Add warning tracking
           unvalidated,
-          validationRate: serverCount > 0 ? (validated / serverCount) * 100 : 0,
-          successRate: validated > 0 ? (breakdown.valid / validated) * 100 : 0
+          validationRate: validatedRateCheck.isValid ? validationRate : 0,
+          successRate: successRateCheck.isValid ? successRate : 0
         };
       });
 
-      const stats: ValidationStats = {
+      const rawStats: ValidationStats = {
         totalValidated: dbStats.totalResources,
         validResources: dbStats.validResources,
         errorResources: dbStats.errorResources,
@@ -146,13 +175,25 @@ export class DashboardService {
         resourceTypeBreakdown
       };
 
-      this.setCachedData(cacheKey, stats);
-      console.log(`[DashboardService] Validation stats: ${dbStats.totalResources} validated, ${validationCoverage.toFixed(1)}% coverage`);
-      return stats;
+      // Sanitize and validate the statistics
+      const sanitizedStats = sanitizeValidationStats(rawStats);
+      const validation = validateValidationStatsConsistency(sanitizedStats);
+      
+      if (!validation.isValid) {
+        console.warn('[DashboardService] Validation stats consistency issues:', validation.errors);
+      }
+
+      this.setCachedData(cacheKey, sanitizedStats);
+      console.log(`[DashboardService] Validation stats: ${sanitizedStats.totalValidated} validated, ${sanitizedStats.validationCoverage.toFixed(1)}% coverage`);
+      return sanitizedStats;
       
     } catch (error: any) {
       console.error('[DashboardService] Error fetching validation stats:', error);
-      throw new Error(`Failed to fetch validation statistics: ${error.message}`);
+      
+      // Return fallback data instead of throwing error to prevent dashboard crashes
+      const fallbackStats = getFallbackValidationStats();
+      console.log('[DashboardService] Returning fallback validation stats due to error');
+      return fallbackStats;
     }
   }
 
@@ -400,6 +441,37 @@ export class DashboardService {
         allResourceTypes: []
       };
     }
+  }
+
+  /**
+   * Validate rate calculations
+   */
+  private validateRateCalculation(rate: number, rateType: string, resourceType: string): { isValid: boolean; errors: string[] } {
+    const errors: string[] = [];
+    
+    // Check if rate is a valid number
+    if (isNaN(rate) || !isFinite(rate)) {
+      errors.push(`${rateType} is not a valid number`);
+    }
+    
+    // Check if rate is within valid range (0-100)
+    if (rate < 0 || rate > 100) {
+      errors.push(`${rateType} (${rate}) is outside valid range [0, 100]`);
+    }
+    
+    // Check for suspicious values
+    if (rate > 100.1) {
+      errors.push(`${rateType} (${rate}) exceeds 100% - possible calculation error`);
+    }
+    
+    if (rate < -0.1) {
+      errors.push(`${rateType} (${rate}) is negative - possible calculation error`);
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
   }
 
   /**

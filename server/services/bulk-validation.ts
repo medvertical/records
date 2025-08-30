@@ -222,13 +222,27 @@ export class BulkValidationService {
           // Update progress for this parallel batch
           this.currentProgress!.processedResources += parallelBatch.length;
           
-          // Calculate estimated time remaining
+          // Ensure processed resources doesn't exceed total resources
+          this.currentProgress!.processedResources = Math.min(
+            this.currentProgress!.processedResources, 
+            this.currentProgress!.totalResources
+          );
+          
+          // Calculate estimated time remaining with improved logic
           if (this.currentProgress!.processedResources > 10) {
             const elapsed = Date.now() - this.currentProgress!.startTime.getTime();
-            const rate = this.currentProgress!.processedResources / elapsed;
+            const rate = this.currentProgress!.processedResources / elapsed; // resources per millisecond
             const remaining = this.currentProgress!.totalResources - this.currentProgress!.processedResources;
-            this.currentProgress!.estimatedTimeRemaining = remaining / rate;
+            
+            if (rate > 0 && remaining > 0) {
+              this.currentProgress!.estimatedTimeRemaining = remaining / rate; // milliseconds
+            } else {
+              this.currentProgress!.estimatedTimeRemaining = 0;
+            }
           }
+          
+          // Validate and sanitize progress data
+          this.validateAndSanitizeProgress();
           
           // Report progress after each parallel batch
           if (onProgress) {
@@ -360,7 +374,13 @@ export class BulkValidationService {
       }
 
       // Update progress counters based on validation result
-      const isResourceValid = validationData.validationScore >= 95;
+      // Use more reasonable threshold: 70% score or no fatal/error issues
+      const hasFatalOrErrors = validationData.issues?.some((issue: any) => 
+        issue.severity === 'fatal' || issue.severity === 'error'
+      ) || false;
+      
+      const isResourceValid = !hasFatalOrErrors && validationData.validationScore >= 70;
+      
       if (isResourceValid) {
         this.currentProgress!.validResources++;
       } else {
@@ -387,6 +407,38 @@ export class BulkValidationService {
       hash = hash & hash; // Convert to 32-bit integer
     }
     return hash.toString(36);
+  }
+
+  private validateAndSanitizeProgress(): void {
+    if (!this.currentProgress) return;
+
+    const progress = this.currentProgress;
+
+    // Ensure all counts are non-negative
+    progress.totalResources = Math.max(0, progress.totalResources);
+    progress.processedResources = Math.max(0, progress.processedResources);
+    progress.validResources = Math.max(0, progress.validResources);
+    progress.errorResources = Math.max(0, progress.errorResources);
+
+    // Ensure processed resources doesn't exceed total resources
+    progress.processedResources = Math.min(progress.processedResources, progress.totalResources);
+
+    // Ensure valid + error resources don't exceed processed resources
+    const totalProcessed = progress.validResources + progress.errorResources;
+    if (totalProcessed > progress.processedResources) {
+      // Adjust error resources to maintain consistency
+      progress.errorResources = Math.max(0, progress.processedResources - progress.validResources);
+    }
+
+    // Ensure estimated time remaining is reasonable (not negative, not too large)
+    if (progress.estimatedTimeRemaining !== undefined) {
+      progress.estimatedTimeRemaining = Math.max(0, Math.min(progress.estimatedTimeRemaining, 24 * 60 * 60 * 1000)); // Max 24 hours
+    }
+
+    // Validate start time
+    if (!progress.startTime || isNaN(progress.startTime.getTime())) {
+      progress.startTime = new Date();
+    }
   }
 
   getCurrentProgress(): BulkValidationProgress | null {

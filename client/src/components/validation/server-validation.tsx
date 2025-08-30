@@ -341,7 +341,12 @@ export default function ServerValidation() {
               <div>
                 <span className="text-gray-600">Started:</span>
                 <span className="ml-2 font-medium">
-                  {new Date(progress.startTime).toLocaleTimeString()}
+                  {progress.startTime ? 
+                    (typeof progress.startTime === 'string' ? 
+                      new Date(progress.startTime).toLocaleTimeString() : 
+                      progress.startTime.toLocaleTimeString()
+                    ) : 'Unknown'
+                  }
                 </span>
               </div>
             </div>

@@ -733,9 +733,18 @@ export class RockSolidValidationEngine extends EventEmitter {
     }
 
     const totalIssues = issues.length;
-    const validationScore = totalIssues === 0 ? 100 : Math.max(0, 100 - (errorCount * 10) - (warningCount * 5) - (informationCount * 1));
+    const fatalCount = issues.filter(i => i.severity === 'fatal').length;
     
-    const passed = settings.strictMode ? errorCount === 0 : errorCount === 0;
+    // Use consistent scoring system with enhanced validation engine
+    let validationScore = 100;
+    validationScore -= fatalCount * 30;  // Fatal issues: -30 points each
+    validationScore -= errorCount * 15;  // Error issues: -15 points each  
+    validationScore -= warningCount * 5; // Warning issues: -5 points each
+    validationScore -= informationCount * 1; // Information issues: -1 point each
+    validationScore = Math.max(0, Math.round(validationScore));
+    
+    // Resource passes if no fatal or error issues (warnings and info are acceptable)
+    const passed = fatalCount === 0 && errorCount === 0;
 
     return {
       totalIssues,

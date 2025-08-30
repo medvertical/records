@@ -30,8 +30,8 @@ export interface ValidationStats {
   errorResources: number;
   warningResources: number;
   unvalidatedResources: number;
-  validationCoverage: number; // Percentage of validated resources that are valid
-  validationProgress: number; // Percentage of total resources that have been validated
+  validationCoverage: number; // Percentage of validated resources that are valid (0-100)
+  validationProgress: number; // Percentage of total resources that have been validated (0-100)
   lastValidationRun?: Date;
   resourceTypeBreakdown: Record<string, {
     total: number;
@@ -40,8 +40,8 @@ export interface ValidationStats {
     errors: number;
     warnings: number;
     unvalidated: number;
-    validationRate: number; // Percentage of this type that has been validated
-    successRate: number; // Percentage of validated resources that are valid
+    validationRate: number; // Percentage of this type that has been validated (0-100)
+    successRate: number; // Percentage of validated resources that are valid (0-100)
   }>;
 }
 

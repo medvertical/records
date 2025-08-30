@@ -973,25 +973,33 @@ export class EnhancedValidationEngine {
 
   private calculateValidationResult(result: EnhancedValidationResult): void {
     const totalIssues = result.issues.length;
-    const errorCount = result.issues.filter(i => i.severity === 'error' || i.severity === 'fatal').length;
+    const fatalCount = result.issues.filter(i => i.severity === 'fatal').length;
+    const errorCount = result.issues.filter(i => i.severity === 'error').length;
     const warningCount = result.issues.filter(i => i.severity === 'warning').length;
     const informationCount = result.issues.filter(i => i.severity === 'information').length;
 
-    // Calculate validation score (0-100)
-    if (errorCount > 0) {
-      result.validationScore = Math.max(0, 60 - (errorCount * 20));
-      result.isValid = false;
-    } else if (warningCount > 0) {
-      result.validationScore = Math.max(70, 100 - (warningCount * 5));
-      result.isValid = false; // Warnings make resource invalid
-    } else {
-      // Only information-level issues - resource is still valid
-      result.validationScore = 100;
-      result.isValid = true;
-    }
+    // Calculate validation score (0-100) with more reasonable scoring
+    let score = 100;
+    
+    // Fatal issues: -30 points each (critical problems)
+    score -= fatalCount * 30;
+    
+    // Error issues: -15 points each (significant problems)
+    score -= errorCount * 15;
+    
+    // Warning issues: -5 points each (minor problems, but still valid)
+    score -= warningCount * 5;
+    
+    // Information issues: -1 point each (cosmetic issues)
+    score -= informationCount * 1;
+    
+    result.validationScore = Math.max(0, Math.round(score));
+    
+    // Resource is valid if no fatal or error issues (warnings and info are acceptable)
+    result.isValid = fatalCount === 0 && errorCount === 0;
 
     // Log validation result for debugging
-    console.log(`[EnhancedValidation] Validation result: score=${result.validationScore}, valid=${result.isValid}, errors=${errorCount}, warnings=${warningCount}, information=${informationCount}`);
+    console.log(`[EnhancedValidation] Validation result: score=${result.validationScore}, valid=${result.isValid}, fatal=${fatalCount}, errors=${errorCount}, warnings=${warningCount}, information=${informationCount}`);
   }
 
   // Placeholder methods for remaining validation aspects (to be implemented in next steps)

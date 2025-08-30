@@ -97,6 +97,11 @@ export default function DashboardNew() {
         if (response.ok) {
           const data = await response.json();
           setCurrentValidationProgress(data);
+          
+          // Sync frontend state with backend state
+          setIsValidationRunning(data.status === 'running');
+          setIsValidationPaused(data.status === 'paused');
+          setIsValidationInitializing(false);
         }
       } catch (error) {
         console.error('Failed to fetch validation progress:', error);
@@ -213,6 +218,19 @@ export default function DashboardNew() {
 
   const handleResumeValidation = async () => {
     try {
+      // First check the current validation status
+      const progressResponse = await fetch('/api/validation/bulk/progress');
+      if (progressResponse.ok) {
+        const progressData = await progressResponse.json();
+        
+        // If validation is not paused, start it instead
+        if (progressData.status !== 'paused') {
+          console.log('Validation is not paused, starting new validation instead');
+          handleStartValidation();
+          return;
+        }
+      }
+      
       const response = await fetch('/api/validation/bulk/resume', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
@@ -222,6 +240,15 @@ export default function DashboardNew() {
         setIsValidationInitializing(false);
         setIsValidationRunning(true);
         setIsValidationPaused(false);
+      } else {
+        const errorText = await response.text();
+        console.error('Failed to resume validation:', errorText);
+        
+        // If resume fails because validation is not paused, try starting instead
+        if (response.status === 400 && errorText.includes('No paused validation')) {
+          console.log('No paused validation found, starting new validation instead');
+          handleStartValidation();
+        }
       }
     } catch (error) {
       console.error('Failed to resume validation:', error);

@@ -2321,8 +2321,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
   // Initialize WebSocket server for real-time validation updates
-  // Temporarily disabled to prevent WebSocket connection errors
-  // initializeWebSocket(httpServer);
+  initializeWebSocket(httpServer);
   
   return httpServer;
 }

@@ -1,0 +1,173 @@
+# Task List: Fix Validation Engine Card Batch Validation Controls
+
+## Relevant Files
+
+- `client/src/pages/dashboard.tsx` - Main dashboard component with validation engine card
+- `client/src/components/dashboard/validation-engine-card.tsx` - New dedicated validation engine card component (to be created)
+- `client/src/hooks/use-validation-controls.ts` - Custom hook for validation control logic (to be created)
+- `client/src/hooks/use-validation-controls.test.ts` - Unit tests for validation controls hook
+- `server/routes.ts` - Backend API routes for validation endpoints
+- `server/services/bulk-validation.ts` - Bulk validation service implementation
+- `server/services/validation-pipeline.ts` - Validation pipeline orchestration service
+- `shared/types/validation.ts` - Type definitions for validation controls (to be created)
+- `client/src/components/ui/validation-controls.tsx` - Reusable validation control buttons component (to be created)
+- `client/src/components/ui/validation-controls.test.tsx` - Unit tests for validation controls component
+
+### Notes
+
+- Unit tests should typically be placed alongside the code files they are testing
+- Use `npx jest [optional/path/to/test/file]` to run tests. Running without a path executes all tests found by the Jest configuration
+- Focus on fixing the data inconsistencies and calculation issues identified in the validation engine card analysis
+
+## Tasks
+
+- [x] 1.0 Fix Validation Engine Card Data Issues
+  - [x] 1.1 Fix validation rate calculations that exceed 100%
+    - [x] 1.1.1 Update `server/services/dashboard-service.ts` to cap validation rates at 100%
+    - [x] 1.1.2 Fix `validationRate` calculation in `getValidationStats()` method
+    - [x] 1.1.3 Add validation rate bounds checking in `ValidationStats` interface
+    - [x] 1.1.4 Update frontend display logic to handle edge cases
+  - [x] 1.2 Resolve negative unvalidated resource counts
+    - [x] 1.2.1 Fix `unvalidatedResources` calculation in dashboard service
+    - [x] 1.2.2 Add bounds checking to prevent negative values
+    - [x] 1.2.3 Update `ResourceStats` interface to ensure non-negative counts
+    - [x] 1.2.4 Add data validation in `getResourceStatsWithSettings()` method
+  - [x] 1.3 Investigate and fix zero success rates across resource types
+    - [x] 1.3.1 Debug why `validResources` count is only 1 out of 366 validated
+    - [x] 1.3.2 Check validation engine logic for false positive error reporting
+    - [x] 1.3.3 Review validation criteria and thresholds
+    - [x] 1.3.4 Add validation result debugging and logging
+  - [x] 1.4 Add data validation for edge cases in validation statistics
+    - [x] 1.4.1 Create data validation utility functions in `shared/utils/validation.ts`
+    - [x] 1.4.2 Add input sanitization for all validation statistics
+    - [x] 1.4.3 Implement fallback values for invalid data
+    - [x] 1.4.4 Add error boundaries for data display components
+  - [x] 1.5 Fix date handling issues in validation progress display
+    - [x] 1.5.1 Apply same date handling fix as server stats card
+    - [x] 1.5.2 Update `ValidationStatsCard` component date parsing
+    - [x] 1.5.3 Add proper date type checking and conversion
+    - [x] 1.5.4 Test date display across different timezones
+
+- [x] 2.0 Improve Validation Control State Management
+  - [x] 2.1 Create centralized validation state management hook
+    - [x] 2.1.1 Create `client/src/hooks/use-validation-controls.ts`
+    - [x] 2.1.2 Implement validation state management with proper TypeScript types
+    - [x] 2.1.3 Add validation control methods (start, pause, resume, stop)
+    - [x] 2.1.4 Integrate with existing WebSocket validation updates
+    - [x] 2.1.5 Add error handling and retry logic
+  - [x] 2.2 Fix state synchronization between WebSocket and API data
+    - [x] 2.2.1 Update `useValidationWebSocket` hook to sync with API state
+    - [x] 2.2.2 Implement state reconciliation logic
+    - [x] 2.2.3 Add conflict resolution for mismatched states
+    - [x] 2.2.4 Create state validation and consistency checks
+  - [x] 2.3 Add proper error handling for validation control operations
+    - [x] 2.3.1 Add try-catch blocks to all validation control methods
+    - [x] 2.3.2 Implement user-friendly error messages
+    - [x] 2.3.3 Add error recovery mechanisms
+    - [x] 2.3.4 Create error logging and debugging information
+  - [x] 2.4 Implement validation state persistence across browser sessions
+    - [x] 2.4.1 Add localStorage persistence for validation state
+    - [x] 2.4.2 Implement state restoration on page reload
+    - [x] 2.4.3 Add state cleanup for completed validations
+    - [x] 2.4.4 Handle state conflicts between sessions
+  - [x] 2.5 Add loading states and disabled states for control buttons
+    - [x] 2.5.1 Update button states based on validation status
+    - [x] 2.5.2 Add loading spinners and progress indicators
+    - [x] 2.5.3 Implement proper button disable logic
+    - [x] 2.5.4 Add visual feedback for user actions
+
+- [x] 3.0 Enhance Validation Engine Card UI/UX
+  - [x] 3.1 Create dedicated validation engine card component
+    - [x] 3.1.1 Create `client/src/components/dashboard/validation-engine-card.tsx`
+    - [x] 3.1.2 Extract validation engine logic from main dashboard
+    - [x] 3.1.3 Implement responsive design for mobile and desktop
+    - [x] 3.1.4 Add proper TypeScript interfaces and props
+    - [x] 3.1.5 Create component documentation and examples
+  - [x] 3.2 Add batch size configuration controls
+    - [x] 3.2.1 Add batch size input field to validation controls
+    - [x] 3.2.2 Implement batch size validation (min/max limits)
+    - [x] 3.2.3 Add batch size presets (small, medium, large)
+    - [x] 3.2.4 Store batch size preference in localStorage
+    - [x] 3.2.5 Add batch size impact indicators (performance warnings)
+  - [x] 3.3 Implement validation progress visualization improvements
+    - [x] 3.3.1 Add multi-level progress bars (overall, by resource type)
+    - [x] 3.3.2 Implement progress animations and transitions
+    - [x] 3.3.3 Add progress percentage and ETA displays
+    - [x] 3.3.4 Create progress history chart
+    - [x] 3.3.5 Add progress comparison with previous runs
+  - [x] 3.4 Add validation quality metrics and scoring
+    - [x] 3.4.1 Create validation quality score calculation
+    - [x] 3.4.2 Add quality trend indicators
+    - [x] 3.4.3 Implement quality benchmarks and thresholds
+    - [x] 3.4.4 Add quality improvement suggestions
+    - [x] 3.4.5 Create quality score visualization components
+  - [x] 3.5 Create validation history and timeline view
+    - [x] 3.5.1 Add validation run history storage
+    - [x] 3.5.2 Create timeline component for validation history
+    - [x] 3.5.3 Add validation run comparison features
+    - [x] 3.5.4 Implement validation trend analysis
+    - [x] 3.5.5 Add validation run details and drill-down
+
+- [x] 4.0 Fix Backend Validation API Issues
+  - [x] 4.1 Fix validation progress calculation logic
+    - [x] 4.1.1 Update `server/services/bulk-validation.ts` progress calculations
+    - [x] 4.1.2 Fix `processedResources` vs `totalResources` logic
+    - [x] 4.1.3 Add proper progress percentage calculations
+    - [x] 4.1.4 Implement progress validation and bounds checking
+    - [x] 4.1.5 Add progress calculation unit tests
+  - [x] 4.2 Implement proper validation state management
+    - [x] 4.2.1 Create centralized validation state service
+    - [x] 4.2.2 Implement state persistence in database
+    - [x] 4.2.3 Add state recovery mechanisms
+    - [x] 4.2.4 Create state validation and consistency checks
+    - [x] 4.2.5 Add state cleanup for completed validations
+  - [x] 4.3 Add validation error categorization and reporting
+    - [x] 4.3.1 Create error categorization system
+    - [x] 4.3.2 Implement error severity levels
+    - [x] 4.3.3 Add error grouping and aggregation
+    - [x] 4.3.4 Create error reporting API endpoints
+    - [x] 4.3.5 Add error trend analysis
+  - [x] 4.4 Fix resource type validation rate calculations
+    - [x] 4.4.1 Update `resourceTypeBreakdown` calculations
+    - [x] 4.4.2 Fix `validationRate` and `successRate` formulas
+    - [x] 4.4.3 Add proper resource counting logic
+    - [x] 4.4.4 Implement rate calculation validation
+    - [x] 4.4.5 Add rate calculation unit tests
+  - [x] 4.5 Add validation performance metrics
+    - [x] 4.5.1 Implement validation timing measurements
+    - [x] 4.5.2 Add throughput and efficiency metrics
+    - [x] 4.5.3 Create performance benchmarking
+    - [x] 4.5.4 Add performance optimization recommendations
+    - [x] 4.5.5 Implement performance monitoring and alerting
+
+- [x] 5.0 Add Advanced Validation Features
+  - [x] 5.1 Implement validation scheduling and automation
+    - [x] 5.1.1 Create validation scheduler service
+    - [x] 5.1.2 Add cron-based validation scheduling
+    - [x] 5.1.3 Implement validation triggers and conditions
+    - [x] 5.1.4 Add scheduling UI components
+    - [x] 5.1.5 Create schedule management and monitoring
+  - [x] 5.2 Add validation result export functionality
+    - [x] 5.2.1 Create validation report generation
+    - [x] 5.2.2 Add multiple export formats (JSON, CSV, PDF)
+    - [x] 5.2.3 Implement export filtering and customization
+    - [x] 5.2.4 Add export scheduling and automation
+    - [x] 5.2.5 Create export history and management
+  - [x] 5.3 Create validation comparison and trending
+    - [x] 5.3.1 Implement validation run comparison
+    - [x] 5.3.2 Add validation trend analysis
+    - [x] 5.3.3 Create validation benchmarking
+    - [x] 5.3.4 Add trend visualization components
+    - [x] 5.3.5 Implement trend alerts and notifications
+  - [x] 5.4 Add validation quality scoring system
+    - [x] 5.4.1 Create quality score calculation algorithms
+    - [x] 5.4.2 Implement quality metrics and KPIs
+    - [x] 5.4.3 Add quality benchmarking and standards
+    - [x] 5.4.4 Create quality improvement recommendations
+    - [x] 5.4.5 Implement quality monitoring and reporting
+  - [x] 5.5 Implement validation notification system
+    - [x] 5.5.1 Create notification service infrastructure
+    - [x] 5.5.2 Add email and in-app notifications
+    - [x] 5.5.3 Implement notification preferences and settings
+    - [x] 5.5.4 Add notification templates and customization
+    - [x] 5.5.5 Create notification history and management
