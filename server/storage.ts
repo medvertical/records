@@ -425,14 +425,14 @@ export class DatabaseStorage implements IStorage {
       .where(targetServerId ? eq(fhirResources.serverId, targetServerId) : undefined);
     
     // Get current validation settings
-    const validationSettings = await this.getValidationSettings();
-    const settings = (validationSettings?.config as any) || {
-      enableStructuralValidation: true,
-      enableProfileValidation: true,
-      enableTerminologyValidation: true,
-      enableReferenceValidation: true,
-      enableBusinessRuleValidation: true,
-      enableMetadataValidation: true
+    const validationSettingsData = await this.getValidationSettings();
+    const settings = validationSettingsData?.settings || {
+      structural: { enabled: true, severity: 'error' as const },
+      profile: { enabled: true, severity: 'warning' as const },
+      terminology: { enabled: true, severity: 'warning' as const },
+      reference: { enabled: true, severity: 'error' as const },
+      businessRule: { enabled: true, severity: 'warning' as const },
+      metadata: { enabled: true, severity: 'information' as const }
     };
     
     // Count valid/error/warning resources based on filtered issues
@@ -466,12 +466,12 @@ export class DatabaseStorage implements IStorage {
           const category = issue.category || 'structural';
           
           // Check if this category is enabled
-          if (category === 'structural' && !settings.enableStructuralValidation) return false;
-          if (category === 'profile' && !settings.enableProfileValidation) return false;
-          if (category === 'terminology' && !settings.enableTerminologyValidation) return false;
-          if (category === 'reference' && !settings.enableReferenceValidation) return false;
-          if (category === 'business-rule' && !settings.enableBusinessRuleValidation) return false;
-          if (category === 'metadata' && !settings.enableMetadataValidation) return false;
+          if (category === 'structural' && !settings.structural?.enabled) return false;
+          if (category === 'profile' && !settings.profile?.enabled) return false;
+          if (category === 'terminology' && !settings.terminology?.enabled) return false;
+          if (category === 'reference' && !settings.reference?.enabled) return false;
+          if (category === 'business-rule' && !settings.businessRule?.enabled) return false;
+          if (category === 'metadata' && !settings.metadata?.enabled) return false;
           
           return true;
         });
@@ -499,14 +499,11 @@ export class DatabaseStorage implements IStorage {
       }
     });
     
-    // Handle resources that haven't been validated yet
+    // Count unvalidated resources separately (don't count them as errors)
     const validatedResourceIds = new Set(allValidationResults.map(r => r.resourceId));
-    resources.forEach(resource => {
-      if (!validatedResourceIds.has(resource.id)) {
-        // Unvalidated resources are counted as errors
-        errorResourcesCount++;
-      }
-    });
+    const unvalidatedResourcesCount = resources.filter(resource => 
+      !validatedResourceIds.has(resource.id)
+    ).length;
     
     // Calculate percentages
     Object.keys(resourceBreakdown).forEach(type => {
@@ -521,13 +518,19 @@ export class DatabaseStorage implements IStorage {
       validResources: validResourcesCount,
       errorResources: errorResourcesCount,
       warningResources: warningResourcesCount,
+      unvalidatedResources: unvalidatedResourcesCount,
       activeProfiles: activeProfiles.length,
       resourceBreakdown,
     };
   }
 
   async getValidationSettings(): Promise<ValidationSettings | undefined> {
-    const [settings] = await db.select().from(validationSettings);
+    const [settings] = await db
+      .select()
+      .from(validationSettings)
+      .where(eq(validationSettings.isActive, true))
+      .orderBy(desc(validationSettings.updatedAt))
+      .limit(1);
     return settings || undefined;
   }
 
@@ -546,10 +549,55 @@ export class DatabaseStorage implements IStorage {
         .returning();
       return updated;
     } else {
-      // Create new settings
+      // Create new settings with default structure
+      const defaultSettings = {
+        version: 1,
+        settings: {
+          structural: { enabled: true, severity: 'error' as const },
+          profile: { enabled: true, severity: 'warning' as const },
+          terminology: { enabled: true, severity: 'warning' as const },
+          reference: { enabled: true, severity: 'error' as const },
+          businessRule: { enabled: true, severity: 'warning' as const },
+          metadata: { enabled: true, severity: 'information' as const },
+          strictMode: false,
+          defaultSeverity: 'warning' as const,
+          includeDebugInfo: false,
+          validateAgainstBaseSpec: true,
+          fhirVersion: 'R4' as const,
+          terminologyServers: [],
+          profileResolutionServers: [],
+          cacheSettings: {
+            enabled: true,
+            ttlMs: 300000,
+            maxSizeMB: 100,
+            cacheValidationResults: true,
+            cacheTerminologyExpansions: true,
+            cacheProfileResolutions: true
+          },
+          timeoutSettings: {
+            defaultTimeoutMs: 30000,
+            structuralValidationTimeoutMs: 30000,
+            profileValidationTimeoutMs: 45000,
+            terminologyValidationTimeoutMs: 60000,
+            referenceValidationTimeoutMs: 30000,
+            businessRuleValidationTimeoutMs: 30000,
+            metadataValidationTimeoutMs: 15000
+          },
+          maxConcurrentValidations: 10,
+          useParallelValidation: true,
+          customRules: [],
+          validateExternalReferences: false,
+          validateNonExistentReferences: true,
+          validateReferenceTypes: true
+        },
+        isActive: true,
+        createdBy: 'system',
+        updatedBy: 'system'
+      };
+      
       const [created] = await db
         .insert(validationSettings)
-        .values(settings)
+        .values(defaultSettings)
         .returning();
       return created;
     }

@@ -10,10 +10,20 @@ import { insertFhirServerSchema, insertFhirResourceSchema, insertValidationProfi
 import { validationWebSocket, initializeWebSocket } from "./services/websocket-server.js";
 import { z } from "zod";
 
+// Rock Solid Validation Settings imports
+import { getValidationSettingsService } from "./services/validation-settings-service.js";
+import { getValidationSettingsRepository } from "./repositories/validation-settings-repository.js";
+import { getRockSolidValidationEngine } from "./services/rock-solid-validation-engine.js";
+import { getValidationPipeline } from "./services/validation-pipeline.js";
+import { DashboardService } from "./services/dashboard-service.js";
+import type { ValidationSettings, ValidationSettingsUpdate } from "@shared/validation-settings.js";
+import { BUILT_IN_PRESETS } from "@shared/validation-settings.js";
+
 let fhirClient: FhirClient;
 let validationEngine: ValidationEngine;
 let unifiedValidationService: UnifiedValidationService;
 let robustValidationService: RobustValidationService;
+let dashboardService: DashboardService;
 
 // Global validation state tracking
 let globalValidationState = {
@@ -219,22 +229,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     validationEngine = new ValidationEngine(fhirClient);
     unifiedValidationService = new UnifiedValidationService(fhirClient, validationEngine);
     robustValidationService = new RobustValidationService(fhirClient, validationEngine);
+    dashboardService = new DashboardService(fhirClient, storage);
     
     // Load and apply saved validation settings
     const savedSettings = await storage.getValidationSettings();
     if (savedSettings && unifiedValidationService) {
       console.log('[Routes] Loading saved validation settings from database');
+      const settings = savedSettings.settings || {};
       const config = {
-        enableStructuralValidation: savedSettings.enableStructuralValidation,
-        enableProfileValidation: savedSettings.enableProfileValidation,
-        enableTerminologyValidation: savedSettings.enableTerminologyValidation,
-        enableReferenceValidation: savedSettings.enableReferenceValidation,
-        enableBusinessRuleValidation: savedSettings.enableBusinessRuleValidation,
-        enableMetadataValidation: savedSettings.enableMetadataValidation,
-        strictMode: savedSettings.strictMode,
-        profiles: savedSettings.validationProfiles as string[],
-        terminologyServers: savedSettings.terminologyServers as any[],
-        profileResolutionServers: savedSettings.profileResolutionServers as any[]
+        enableStructuralValidation: settings.structural?.enabled ?? true,
+        enableProfileValidation: settings.profile?.enabled ?? true,
+        enableTerminologyValidation: settings.terminology?.enabled ?? true,
+        enableReferenceValidation: settings.reference?.enabled ?? true,
+        enableBusinessRuleValidation: settings.businessRule?.enabled ?? true,
+        enableMetadataValidation: settings.metadata?.enabled ?? true,
+        strictMode: settings.strictMode ?? false,
+        profiles: settings.customRules as string[] || [],
+        terminologyServers: settings.terminologyServers as any[] || [],
+        profileResolutionServers: settings.profileResolutionServers as any[] || []
       };
       unifiedValidationService.updateConfig(config);
       console.log('[Routes] Applied saved validation settings to services');
@@ -278,17 +290,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Reapply saved validation settings
         const savedSettings = await storage.getValidationSettings();
         if (savedSettings && unifiedValidationService) {
+          const settings = savedSettings.settings || {};
           const config = {
-            enableStructuralValidation: savedSettings.enableStructuralValidation,
-            enableProfileValidation: savedSettings.enableProfileValidation,
-            enableTerminologyValidation: savedSettings.enableTerminologyValidation,
-            enableReferenceValidation: savedSettings.enableReferenceValidation,
-            enableBusinessRuleValidation: savedSettings.enableBusinessRuleValidation,
-            enableMetadataValidation: savedSettings.enableMetadataValidation,
-            strictMode: savedSettings.strictMode,
-            profiles: savedSettings.validationProfiles as string[],
-            terminologyServers: savedSettings.terminologyServers as any[],
-            profileResolutionServers: savedSettings.profileResolutionServers as any[]
+            enableStructuralValidation: settings.structural?.enabled ?? true,
+            enableProfileValidation: settings.profile?.enabled ?? true,
+            enableTerminologyValidation: settings.terminology?.enabled ?? true,
+            enableReferenceValidation: settings.reference?.enabled ?? true,
+            enableBusinessRuleValidation: settings.businessRule?.enabled ?? true,
+            enableMetadataValidation: settings.metadata?.enabled ?? true,
+            strictMode: settings.strictMode ?? false,
+            profiles: settings.customRules as string[] || [],
+            terminologyServers: settings.terminologyServers as any[] || [],
+            profileResolutionServers: settings.profileResolutionServers as any[] || []
           };
           unifiedValidationService.updateConfig(config);
         }
@@ -1522,28 +1535,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/validation/bulk/summary", async (req, res) => {
     try {
-      // Get comprehensive FHIR server totals using cached resource counts
-      const { totalResources: totalServerResources } = await getCachedResourceCounts();
+      if (!dashboardService) {
+        return res.status(503).json({ message: "Dashboard service not initialized" });
+      }
       
-      // Get validation stats from database with settings filter
-      const dbStats = await storage.getResourceStatsWithSettings();
-      
-      // Calculate validation coverage based on real server totals
-      const validationCoverage = totalServerResources > 0 ? 
-        Math.min(100, (dbStats.totalResources / totalServerResources) * 100) : 0;
+      // Use the new dashboard service for consistent data
+      const validationStats = await dashboardService.getValidationStats();
+      const fhirServerStats = await dashboardService.getFhirServerStats();
       
       const validationSummary = {
-        totalResources: totalServerResources, // Real comprehensive FHIR server total (807K+)
-        totalValidated: dbStats.totalResources, // Resources actually validated in database
-        validResources: dbStats.validResources,
-        errorResources: dbStats.errorResources,
-        resourcesWithErrors: dbStats.errorResources,
-        resourcesWithWarnings: dbStats.warningResources || 0,
-        validationCoverage, // Percentage of server resources that have been validated
-        lastValidationRun: new Date()
+        totalResources: fhirServerStats.totalResources, // Real comprehensive FHIR server total (807K+)
+        totalValidated: validationStats.totalValidated, // Resources actually validated in database
+        validResources: validationStats.validResources,
+        errorResources: validationStats.errorResources,
+        warningResources: validationStats.warningResources,
+        unvalidatedResources: validationStats.unvalidatedResources,
+        resourcesWithErrors: validationStats.errorResources,
+        resourcesWithWarnings: validationStats.warningResources,
+        validationCoverage: validationStats.validationCoverage, // Percentage of validated resources that are valid
+        validationProgress: validationStats.validationProgress, // Percentage of server resources that have been validated
+        lastValidationRun: validationStats.lastValidationRun
       };
       
-      console.log('[ValidationSummary] Real server total:', totalServerResources, 'Validated in DB:', dbStats.totalResources, 'Coverage:', validationCoverage.toFixed(1) + '%');
+      console.log('[ValidationSummary] Server total:', fhirServerStats.totalResources, 'Validated:', validationStats.totalValidated, 'Coverage:', validationStats.validationCoverage.toFixed(1) + '%', 'Progress:', validationStats.validationProgress.toFixed(1) + '%');
       res.json(validationSummary);
     } catch (error: any) {
       console.error('Error getting validation summary:', error);
@@ -1810,28 +1824,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard endpoints
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
-      // Get comprehensive FHIR server totals using cached resource counts
-      const { totalResources, resourceCounts } = await getCachedResourceCounts();
+      if (!dashboardService) {
+        return res.status(503).json({ message: "Dashboard service not initialized" });
+      }
       
-      // Get validation stats from database filtered by current validation settings
-      const dbStats = await storage.getResourceStatsWithSettings();
+      // Use the new dashboard service for consistent data
+      const combinedData = await dashboardService.getCombinedDashboardData();
       
-      // Calculate resource breakdown using actual FHIR server data
-      const resourceBreakdown = Object.entries(resourceCounts)
-        .sort(([,a], [,b]) => b - a) // Sort by count descending
-        .slice(0, 10) // Top 10 resource types
-        .map(([type, count]) => ({ type, count }));
-      
-      // Combine real FHIR server totals with accurate validation counts
+      // Return backward-compatible format for existing frontend
       const stats = {
-        totalResources, // Real comprehensive FHIR server total (807K+)
-        validResources: dbStats.validResources, // Validation count filtered by settings
-        errorResources: dbStats.errorResources, // Validation count filtered by settings
-        activeProfiles: dbStats.activeProfiles,
-        resourceBreakdown // Top resource types from actual server data
+        totalResources: combinedData.fhirServer.totalResources, // Real comprehensive FHIR server total (807K+)
+        validResources: combinedData.validation.validResources, // Validation count filtered by settings
+        errorResources: combinedData.validation.errorResources, // Validation count filtered by settings
+        warningResources: combinedData.validation.warningResources,
+        unvalidatedResources: combinedData.validation.unvalidatedResources,
+        validationCoverage: combinedData.validation.validationCoverage,
+        validationProgress: combinedData.validation.validationProgress,
+        activeProfiles: 0, // TODO: Get from validation settings
+        resourceBreakdown: combinedData.fhirServer.resourceBreakdown.slice(0, 10) // Top 10 resource types from FHIR server
       };
       
-      console.log(`[DashboardStats] Returning stats: ${totalResources} total, ${dbStats.validResources} valid, ${dbStats.errorResources} errors`);
+      console.log(`[DashboardStats] Server: ${combinedData.fhirServer.totalResources} total, Validation: ${combinedData.validation.totalValidated} validated, ${combinedData.validation.validResources} valid, ${combinedData.validation.errorResources} errors`);
       res.json(stats);
     } catch (error: any) {
       console.error('[DashboardStats] Error:', error);
@@ -1844,6 +1857,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const cards = await storage.getDashboardCards();
       res.json(cards);
     } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // New separated dashboard endpoints
+  app.get("/api/dashboard/fhir-server-stats", async (req, res) => {
+    try {
+      if (!dashboardService) {
+        return res.status(503).json({ message: "Dashboard service not initialized" });
+      }
+      
+      const fhirServerStats = await dashboardService.getFhirServerStats();
+      res.json(fhirServerStats);
+    } catch (error: any) {
+      console.error('[FHIRServerStats] Error:', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/dashboard/validation-stats", async (req, res) => {
+    try {
+      if (!dashboardService) {
+        return res.status(503).json({ message: "Dashboard service not initialized" });
+      }
+      
+      const validationStats = await dashboardService.getValidationStats();
+      res.json(validationStats);
+    } catch (error: any) {
+      console.error('[ValidationStats] Error:', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/dashboard/combined", async (req, res) => {
+    try {
+      if (!dashboardService) {
+        return res.status(503).json({ message: "Dashboard service not initialized" });
+      }
+      
+      const combinedData = await dashboardService.getCombinedDashboardData();
+      res.json(combinedData);
+    } catch (error: any) {
+      console.error('[CombinedDashboard] Error:', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Force refresh endpoint for performance optimization
+  app.post("/api/dashboard/force-refresh", async (req, res) => {
+    try {
+      if (!dashboardService) {
+        return res.status(503).json({ message: "Dashboard service not initialized" });
+      }
+      const fhirServerStats = await dashboardService.forceRefreshFhirServerData();
+      res.json({ 
+        message: "FHIR server data refreshed successfully",
+        fhirServerStats,
+        cacheStatus: dashboardService.getCacheStatus()
+      });
+    } catch (error: any) {
+      console.error('[ForceRefresh] Error:', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // FHIR version and resource type information endpoint
+  app.get("/api/dashboard/fhir-version-info", async (req, res) => {
+    try {
+      if (!dashboardService) {
+        return res.status(503).json({ message: "Dashboard service not initialized" });
+      }
+      const versionInfo = await dashboardService.getFhirVersionInfo();
+      res.json(versionInfo);
+    } catch (error: any) {
+      console.error('[FhirVersionInfo] Error:', error);
       res.status(500).json({ message: error.message });
     }
   });
@@ -1944,10 +2032,297 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ========================================================================
+  // Rock Solid Validation Settings API Routes
+  // ========================================================================
+
+  // Initialize rock-solid validation services
+  const settingsService = getValidationSettingsService();
+  const settingsRepository = getValidationSettingsRepository();
+  const rockSolidEngine = getRockSolidValidationEngine();
+  const validationPipeline = getValidationPipeline();
+
+  // Initialize settings service
+  await settingsService.initialize();
+
+  // GET /api/validation/settings - Get current active settings
+  app.get("/api/validation/settings", async (req, res) => {
+    try {
+      const settings = await settingsService.getActiveSettings();
+      res.json(settings);
+    } catch (error: any) {
+      res.status(500).json({ 
+        message: "Failed to load validation settings",
+        error: error.message 
+      });
+    }
+  });
+
+  // PUT /api/validation/settings - Update settings
+  app.put("/api/validation/settings", async (req, res) => {
+    try {
+      const update: ValidationSettingsUpdate = {
+        settings: req.body,
+        validate: true,
+        createNewVersion: false,
+        updatedBy: req.headers['x-user-id'] as string || 'anonymous'
+      };
+
+      const updatedSettings = await settingsService.updateSettings(update);
+      res.json(updatedSettings);
+    } catch (error: any) {
+      res.status(400).json({ 
+        message: "Failed to update validation settings",
+        error: error.message 
+      });
+    }
+  });
+
+  // POST /api/validation/settings/validate - Validate settings
+  app.post("/api/validation/settings/validate", async (req, res) => {
+    try {
+      const validationResult = await settingsService.validateSettings(req.body);
+      res.json(validationResult);
+    } catch (error: any) {
+      res.status(400).json({ 
+        message: "Failed to validate settings",
+        error: error.message 
+      });
+    }
+  });
+
+  // GET /api/validation/settings/history - Get settings history
+  app.get("/api/validation/settings/history", async (req, res) => {
+    try {
+      const { id } = req.query;
+      if (!id) {
+        return res.status(400).json({ message: "Settings ID is required" });
+      }
+
+      const history = await settingsRepository.getHistory(parseInt(id as string));
+      res.json(history);
+    } catch (error: any) {
+      res.status(500).json({ 
+        message: "Failed to load settings history",
+        error: error.message 
+      });
+    }
+  });
+
+  // POST /api/validation/settings/reset - Reset to defaults
+  app.post("/api/validation/settings/reset", async (req, res) => {
+    try {
+      const defaultSettings = await settingsService.createSettings({}, 'system');
+      const activatedSettings = await settingsService.activateSettings(defaultSettings.id!, 'system');
+      res.json(activatedSettings);
+    } catch (error: any) {
+      res.status(500).json({ 
+        message: "Failed to reset settings",
+        error: error.message 
+      });
+    }
+  });
+
+  // GET /api/validation/settings/presets - Get available presets
+  app.get("/api/validation/settings/presets", async (req, res) => {
+    try {
+      const presets = await settingsService.getPresets();
+      res.json(presets);
+    } catch (error: any) {
+      res.status(500).json({ 
+        message: "Failed to load presets",
+        error: error.message 
+      });
+    }
+  });
+
+  // POST /api/validation/settings/presets/apply - Apply preset
+  app.post("/api/validation/settings/presets/apply", async (req, res) => {
+    try {
+      const { presetId } = req.body;
+      if (!presetId) {
+        return res.status(400).json({ message: "Preset ID is required" });
+      }
+
+      const settings = await settingsService.applyPreset(presetId, req.headers['x-user-id'] as string);
+      res.json(settings);
+    } catch (error: any) {
+      res.status(400).json({ 
+        message: "Failed to apply preset",
+        error: error.message 
+      });
+    }
+  });
+
+  // POST /api/validation/settings/test - Test settings with sample resource
+  app.post("/api/validation/settings/test", async (req, res) => {
+    try {
+      const { settings, sampleResource } = req.body;
+      if (!settings || !sampleResource) {
+        return res.status(400).json({ 
+          message: "Settings and sample resource are required" 
+        });
+      }
+
+      const testResult = await settingsService.testSettings(settings, sampleResource);
+      res.json(testResult);
+    } catch (error: any) {
+      res.status(400).json({ 
+        message: "Failed to test settings",
+        error: error.message 
+      });
+    }
+  });
+
+  // GET /api/validation/settings/statistics - Get settings statistics
+  app.get("/api/validation/settings/statistics", async (req, res) => {
+    try {
+      const stats = await settingsRepository.getStatistics();
+      res.json(stats);
+    } catch (error: any) {
+      res.status(500).json({ 
+        message: "Failed to load settings statistics",
+        error: error.message 
+      });
+    }
+  });
+
+  // POST /api/validation/validate - Validate resource using rock-solid engine
+  app.post("/api/validation/validate", async (req, res) => {
+    try {
+      const { resource, resourceType, resourceId, profileUrl, context } = req.body;
+      
+      if (!resource || !resourceType) {
+        return res.status(400).json({ 
+          message: "Resource and resourceType are required" 
+        });
+      }
+
+      const validationRequest = {
+        resource,
+        resourceType,
+        resourceId,
+        profileUrl,
+        context: {
+          ...context,
+          requestedBy: req.headers['x-user-id'] as string || 'anonymous',
+          requestId: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        }
+      };
+
+      const result = await rockSolidEngine.validateResource(validationRequest);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ 
+        message: "Validation failed",
+        error: error.message 
+      });
+    }
+  });
+
+  // POST /api/validation/validate-batch - Validate multiple resources
+  app.post("/api/validation/validate-batch", async (req, res) => {
+    try {
+      const { resources } = req.body;
+      
+      if (!resources || !Array.isArray(resources)) {
+        return res.status(400).json({ 
+          message: "Resources array is required" 
+        });
+      }
+
+      const validationRequests = resources.map((resourceData: any) => ({
+        resource: resourceData.resource,
+        resourceType: resourceData.resourceType,
+        resourceId: resourceData.resourceId,
+        profileUrl: resourceData.profileUrl,
+        context: {
+          ...resourceData.context,
+          requestedBy: req.headers['x-user-id'] as string || 'anonymous',
+          requestId: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        }
+      }));
+
+      const results = await rockSolidEngine.validateResources(validationRequests);
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ 
+        message: "Batch validation failed",
+        error: error.message 
+      });
+    }
+  });
+
+  // POST /api/validation/pipeline - Execute validation pipeline
+  app.post("/api/validation/pipeline", async (req, res) => {
+    try {
+      const { resources, config, context } = req.body;
+      
+      if (!resources || !Array.isArray(resources)) {
+        return res.status(400).json({ 
+          message: "Resources array is required" 
+        });
+      }
+
+      const pipelineRequest = {
+        resources: resources.map((resourceData: any) => ({
+          resource: resourceData.resource,
+          resourceType: resourceData.resourceType,
+          resourceId: resourceData.resourceId,
+          profileUrl: resourceData.profileUrl,
+          context: resourceData.context
+        })),
+        config,
+        context: {
+          ...context,
+          requestedBy: req.headers['x-user-id'] as string || 'anonymous',
+          requestId: `pipeline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        }
+      };
+
+      const result = await validationPipeline.executePipeline(pipelineRequest);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ 
+        message: "Pipeline execution failed",
+        error: error.message 
+      });
+    }
+  });
+
+  // GET /api/validation/pipeline/:requestId/status - Get pipeline status
+  app.get("/api/validation/pipeline/:requestId/status", async (req, res) => {
+    try {
+      const { requestId } = req.params;
+      const status = validationPipeline.getPipelineStatus(requestId);
+      res.json({ requestId, status });
+    } catch (error: any) {
+      res.status(500).json({ 
+        message: "Failed to get pipeline status",
+        error: error.message 
+      });
+    }
+  });
+
+  // POST /api/validation/pipeline/:requestId/cancel - Cancel pipeline
+  app.post("/api/validation/pipeline/:requestId/cancel", async (req, res) => {
+    try {
+      const { requestId } = req.params;
+      await validationPipeline.cancelPipeline(requestId);
+      res.json({ message: "Pipeline cancelled successfully" });
+    } catch (error: any) {
+      res.status(500).json({ 
+        message: "Failed to cancel pipeline",
+        error: error.message 
+      });
+    }
+  });
+
   const httpServer = createServer(app);
   
   // Initialize WebSocket server for real-time validation updates
-  initializeWebSocket(httpServer);
+  // Temporarily disabled to prevent WebSocket connection errors
+  // initializeWebSocket(httpServer);
   
   return httpServer;
 }

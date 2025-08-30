@@ -48,9 +48,14 @@ export default function ResourceBrowser() {
 
   // WebSocket connection for real-time validation updates
   useEffect(() => {
+    // Temporarily disable WebSocket to prevent connection errors
+    console.log('[Resource Browser] WebSocket temporarily disabled');
+    return;
+
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    
+    const host = window.location.host || 'localhost:3000';
+    const wsUrl = `${protocol}//${host}/ws`;
+
     console.log('[Resource Browser] Connecting to WebSocket for validation updates:', wsUrl);
     const socket = new WebSocket(wsUrl);
     

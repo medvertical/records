@@ -220,14 +220,14 @@ export default function SettingsPage() {
         {/* Validation Settings Tab */}
         <TabsContent value="validation" className="space-y-6">
           <RockSolidSettings
-            initialSettings={settings || undefined}
+            initialSettings={settings}
             loading={settingsLoading}
             saving={settingsSaving}
             onSettingsChange={handleSettingsChange}
             onSave={handleSaveSettings}
             onReset={handleResetSettings}
             onTest={handleTestSettings}
-            presets={presets || []}
+            presets={presets}
             showAdvanced={true}
             enableRealTimeValidation={true}
           />
@@ -236,7 +236,7 @@ export default function SettingsPage() {
         {/* FHIR Servers Tab */}
         <TabsContent value="servers" className="space-y-6">
           <FhirServersCard 
-            servers={fhirServers || []}
+            servers={fhirServers}
             onAddServer={() => setShowServerModal(true)}
             onEditServer={handleServerEdit}
             onDeleteServer={handleServerDelete}
@@ -256,13 +256,22 @@ export default function SettingsPage() {
 
       {/* Server Connection Modal */}
       <ServerConnectionModal
-        open={showServerModal}
-        onOpenChange={(open) => {
-          if (!open) {
-            setShowServerModal(false);
-            setEditingServer(null);
-          }
+        isOpen={showServerModal}
+        onClose={() => {
+          setShowServerModal(false);
+          setEditingServer(null);
         }}
+        onSubmit={handleServerSubmit}
+        formData={{
+          name: '',
+          url: '',
+          authType: 'none',
+          username: '',
+          password: '',
+          token: ''
+        }}
+        setFormData={() => {}}
+        editingServer={editingServer}
       />
     </div>
   );

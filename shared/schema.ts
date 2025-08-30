@@ -65,6 +65,18 @@ export const dashboardCards = pgTable("dashboard_cards", {
 
 export const validationSettings = pgTable("validation_settings", {
   id: serial("id").primaryKey(),
+  version: integer("version").notNull().default(1),
+  settings: jsonb("settings").notNull(),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdBy: text("created_by"),
+  updatedBy: text("updated_by"),
+});
+
+// Legacy validation settings table for migration
+export const legacyValidationSettings = pgTable("legacy_validation_settings", {
+  id: serial("id").primaryKey(),
   enableStructuralValidation: boolean("enable_structural_validation").default(true),
   enableProfileValidation: boolean("enable_profile_validation").default(true),
   enableTerminologyValidation: boolean("enable_terminology_validation").default(true),
@@ -98,14 +110,17 @@ export const insertValidationResultSchema = createInsertSchema(validationResults
   id: true,
 });
 
+export const insertValidationSettingsSchema = createInsertSchema(validationSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertDashboardCardSchema = createInsertSchema(dashboardCards).omit({
   id: true,
 });
 
-export const insertValidationSettingsSchema = createInsertSchema(validationSettings).omit({
-  id: true,
-  updatedAt: true,
-});
+
 
 // Types
 export type FhirServer = typeof fhirServers.$inferSelect;
@@ -144,6 +159,7 @@ export interface ResourceStats {
   validResources: number;
   errorResources: number;
   warningResources: number;
+  unvalidatedResources: number;
   activeProfiles: number;
   resourceBreakdown: Record<string, {
     total: number;

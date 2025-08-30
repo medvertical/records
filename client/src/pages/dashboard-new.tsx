@@ -72,7 +72,7 @@ export default function DashboardNew() {
     isStale
   } = useDashboardData({
     enableRealTimeUpdates: true,
-    refetchInterval: 300000, // 5 minutes (reduced for better performance)
+    refetchInterval: 30000, // 30 seconds
     enableCaching: true
   });
 
@@ -85,47 +85,17 @@ export default function DashboardNew() {
   // WebSocket for real-time validation updates
   const { isConnected, progress, validationStatus } = useValidationWebSocket();
 
-  // Get current validation progress from server (using fetch for now)
-  const [currentValidationProgress, setCurrentValidationProgress] = useState(null);
-  const [recentErrors, setRecentErrors] = useState([]);
+  // Get current validation progress from server
+  const { data: currentValidationProgress } = useQuery({
+    queryKey: ['/api/validation/bulk/progress'],
+    refetchInterval: 2000,
+  });
 
-  // Fetch validation progress
-  useEffect(() => {
-    const fetchValidationProgress = async () => {
-      try {
-        const response = await fetch('/api/validation/bulk/progress');
-        if (response.ok) {
-          const data = await response.json();
-          setCurrentValidationProgress(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch validation progress:', error);
-      }
-    };
-
-    const interval = setInterval(fetchValidationProgress, 10000); // Reduced from 2s to 10s
-    fetchValidationProgress(); // Initial fetch
-    return () => clearInterval(interval);
-  }, []);
-
-  // Fetch recent errors
-  useEffect(() => {
-    const fetchRecentErrors = async () => {
-      try {
-        const response = await fetch('/api/validation/errors/recent');
-        if (response.ok) {
-          const data = await response.json();
-          setRecentErrors(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch recent errors:', error);
-      }
-    };
-
-    const interval = setInterval(fetchRecentErrors, 30000); // Reduced from 10s to 30s
-    fetchRecentErrors(); // Initial fetch
-    return () => clearInterval(interval);
-  }, []);
+  // Get recent validation errors
+  const { data: recentErrors } = useQuery({
+    queryKey: ['/api/validation/errors/recent'],
+    refetchInterval: 10000,
+  });
 
   // ========================================================================
   // Effects

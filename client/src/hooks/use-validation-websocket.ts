@@ -29,9 +29,14 @@ export function useValidationWebSocket() {
 
   const connect = () => {
     try {
+      // Temporarily disable WebSocket to prevent connection errors
+      console.log('WebSocket temporarily disabled to prevent connection errors');
+      return;
+
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/validation`;
-      
+      const host = window.location.host || 'localhost:3000';
+      const wsUrl = `${protocol}//${host}/ws/validation`;
+
       wsRef.current = new WebSocket(wsUrl);
 
       wsRef.current.onopen = () => {
