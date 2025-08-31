@@ -22,11 +22,8 @@ export default function ResourceSearch({
   const [resourceType, setResourceType] = useState(defaultResourceType);
 
   useEffect(() => {
-    console.log('[ResourceSearch] Props changed:', { defaultQuery, defaultResourceType });
-    console.log('[ResourceSearch] Current internal state:', { query, resourceType });
     setQuery(defaultQuery);
     setResourceType(defaultResourceType);
-    console.log('[ResourceSearch] Internal state updated to:', { query: defaultQuery, resourceType: defaultResourceType });
   }, [defaultQuery, defaultResourceType]);
 
   const handleSearch = () => {
@@ -56,13 +53,12 @@ export default function ResourceSearch({
           />
         </div>
         
-        <Select 
-          value={resourceType || "all"} 
-          onValueChange={(value) => {
-            console.log('[ResourceSearch] Select value changed to:', value);
-            setResourceType(value);
-          }}
-        >
+                    <Select 
+              value={resourceType || "all"} 
+              onValueChange={(value) => {
+                setResourceType(value);
+              }}
+            >
           <SelectTrigger className="w-48">
             <SelectValue placeholder="All Resource Types" />
           </SelectTrigger>
@@ -75,12 +71,7 @@ export default function ResourceSearch({
             ))}
           </SelectContent>
         </Select>
-        {/* Debug info */}
-        <div className="text-xs text-gray-500 p-2 bg-yellow-100 rounded">
-          <div>Debug Select: value="{resourceType}", defaultResourceType="{defaultResourceType}"</div>
-          <div>Internal state: query="{query}", resourceType="{resourceType}"</div>
-          <div>Props received: defaultQuery="{defaultQuery}", defaultResourceType="{defaultResourceType}"</div>
-        </div>
+        
 
         <Button onClick={handleSearch} className="bg-fhir-blue text-white hover:bg-blue-700">
           <Search className="h-4 w-4 sm:mr-2" />
