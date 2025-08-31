@@ -42,6 +42,7 @@ interface ValidationProgress {
   validResources: number;
   errorResources: number;
   currentResourceType?: string;
+  nextResourceType?: string;
   startTime: Date;
   estimatedTimeRemaining?: number;
   isComplete: boolean;
@@ -82,6 +83,12 @@ export default function DashboardNew() {
   const [isValidationInitializing, setIsValidationInitializing] = useState(false);
   const [validationProgress, setValidationProgress] = useState<WebSocketValidationProgress | null>(null);
   const [lastFetchUpdate, setLastFetchUpdate] = useState<number>(0);
+  const [currentResourceType, setCurrentResourceType] = useState<string>('');
+  const [nextResourceType, setNextResourceType] = useState<string>('');
+  
+  // Track paused time for accurate elapsed time calculation
+  const [pausedAt, setPausedAt] = useState<Date | null>(null);
+  const [totalPausedTime, setTotalPausedTime] = useState<number>(0);
 
   // WebSocket for real-time validation updates
   const { isConnected, progress, validationStatus } = useValidationWebSocket();
@@ -132,6 +139,10 @@ export default function DashboardNew() {
           }
           setCurrentValidationProgress(data);
           
+          // Update processing blocks from fetch data
+          setCurrentResourceType(data.currentResourceType || '');
+          setNextResourceType(data.nextResourceType || '');
+          
           // Sync frontend state with backend state
           setIsValidationRunning(data.status === 'running');
           setIsValidationPaused(data.status === 'paused');
@@ -143,7 +154,7 @@ export default function DashboardNew() {
       }
     };
 
-    const interval = setInterval(fetchValidationProgress, 10000); // Reduced from 2s to 10s
+    const interval = setInterval(fetchValidationProgress, 5000); // 5 seconds for processing blocks
     fetchValidationProgress(); // Initial fetch
     return () => clearInterval(interval);
   }, []);
@@ -178,6 +189,10 @@ export default function DashboardNew() {
       // Use WebSocket progress directly (startTime is already a string)
       setValidationProgress(progress);
       
+      // DISABLED: Don't update processing blocks via WebSocket to prevent flashing
+      // Processing blocks will only be updated via fetch (every 10 seconds)
+      // This prevents the constant re-rendering that causes flashing
+      
       // Only update state if fetch hasn't been more recent (within last 5 seconds)
       const now = Date.now();
       const timeSinceLastFetch = now - lastFetchUpdate;
@@ -197,7 +212,7 @@ export default function DashboardNew() {
         console.log('Skipping WebSocket state update - fetch was more recent');
       }
     }
-  }, [progress, lastFetchUpdate]);
+  }, [progress, lastFetchUpdate, currentResourceType, nextResourceType]);
 
   // WebSocket status updates
   useEffect(() => {
@@ -210,14 +225,34 @@ export default function DashboardNew() {
         setIsValidationInitializing(false);
         setIsValidationRunning(true);
         setIsValidationPaused(false);
+        // Clear paused time tracking when running
+        if (pausedAt) {
+          const pauseDuration = Date.now() - pausedAt.getTime();
+          setTotalPausedTime(prev => prev + pauseDuration);
+          setPausedAt(null);
+        }
+      } else if (validationStatus === 'paused') {
+        setIsValidationInitializing(false);
+        setIsValidationRunning(false);
+        setIsValidationPaused(true);
+        // Track when validation was paused via WebSocket
+        if (!pausedAt) {
+          setPausedAt(new Date());
+        }
       } else if (validationStatus === 'completed') {
         setIsValidationInitializing(false);
         setIsValidationRunning(false);
         setIsValidationPaused(false);
+        // Reset paused time tracking when completed
+        setPausedAt(null);
+        setTotalPausedTime(0);
       } else if (validationStatus === 'error') {
         setIsValidationInitializing(false);
         setIsValidationRunning(false);
         setIsValidationPaused(false);
+        // Reset paused time tracking on error
+        setPausedAt(null);
+        setTotalPausedTime(0);
       }
     } else {
       console.log('Skipping WebSocket status update - fetch was more recent');
@@ -233,6 +268,9 @@ export default function DashboardNew() {
     setIsValidationRunning(false);
     setIsValidationPaused(false);
     setValidationProgress(null);
+    // Reset paused time tracking for new validation
+    setPausedAt(null);
+    setTotalPausedTime(0);
     
     try {
       const response = await fetch('/api/validation/bulk/start', {
@@ -262,6 +300,8 @@ export default function DashboardNew() {
         setIsValidationInitializing(false);
         setIsValidationRunning(false);
         setIsValidationPaused(true);
+        // Track when validation was paused
+        setPausedAt(new Date());
         console.log('Validation paused successfully');
       } else {
         const errorData = await response.json();
@@ -280,6 +320,10 @@ export default function DashboardNew() {
             setIsValidationRunning(progressData.status === 'running');
             setIsValidationPaused(progressData.status === 'paused');
             setIsValidationInitializing(false);
+            // Track when validation was paused
+            if (progressData.status === 'paused') {
+              setPausedAt(new Date());
+            }
           }
         }
       }
@@ -312,6 +356,12 @@ export default function DashboardNew() {
         setIsValidationInitializing(false);
         setIsValidationRunning(true);
         setIsValidationPaused(false);
+        // Accumulate paused time when resuming
+        if (pausedAt) {
+          const pauseDuration = Date.now() - pausedAt.getTime();
+          setTotalPausedTime(prev => prev + pauseDuration);
+          setPausedAt(null);
+        }
       } else {
         const errorText = await response.text();
         console.error('Failed to resume validation:', errorText);
@@ -339,6 +389,9 @@ export default function DashboardNew() {
         setIsValidationRunning(false);
         setIsValidationPaused(false);
         setValidationProgress(null);
+        // Reset paused time tracking when stopping
+        setPausedAt(null);
+        setTotalPausedTime(0);
         // Refresh validation stats after stopping
         refetchValidation();
       }
@@ -352,20 +405,107 @@ export default function DashboardNew() {
   // ========================================================================
 
   const formatElapsedTime = (startTime: Date) => {
-    const elapsed = Date.now() - new Date(startTime).getTime();
+    const now = Date.now();
+    const start = new Date(startTime).getTime();
+    let elapsed = now - start;
+    
+    // Subtract total paused time
+    elapsed -= totalPausedTime;
+    
+    // If currently paused, subtract the current pause duration
+    if (isValidationPaused && pausedAt) {
+      elapsed -= (now - pausedAt.getTime());
+    }
+    
+    // Ensure elapsed time doesn't go negative
+    elapsed = Math.max(0, elapsed);
+    
     const minutes = Math.floor(elapsed / 60000);
     const seconds = Math.floor((elapsed % 60000) / 1000);
     return `${minutes}m ${seconds}s`;
   };
 
-  // Calculate processing rate only when validation is running
-  const processingRate = (currentValidationProgress && isValidationRunning) ? 
-    Math.round((currentValidationProgress.processedResources / ((Date.now() - new Date(currentValidationProgress.startTime).getTime()) / 1000)) * 60) : 
-    0;
+  const formatTimeRemaining = (minutes: number) => {
+    if (minutes < 60) {
+      return `${minutes}m`;
+    }
+    
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    
+    if (hours < 24) {
+      return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+    }
+    
+    const days = Math.floor(hours / 24);
+    const remainingHours = hours % 24;
+    
+    if (remainingHours > 0) {
+      return `${days}d ${remainingHours}h`;
+    }
+    
+    return `${days}d`;
+  };
 
-  const estimatedMinutesRemaining = currentValidationProgress?.estimatedTimeRemaining 
-    ? Math.round(currentValidationProgress.estimatedTimeRemaining / 1000 / 60) 
-    : null;
+  // Calculate processing rate only when validation is running, accounting for paused time
+  const processingRate = (() => {
+    if (!currentValidationProgress || !isValidationRunning) return 0;
+    
+    const now = Date.now();
+    const start = new Date(currentValidationProgress.startTime).getTime();
+    let elapsedSeconds = (now - start) / 1000;
+    
+    // Subtract total paused time
+    elapsedSeconds -= totalPausedTime / 1000;
+    
+    // If currently paused, subtract the current pause duration
+    if (isValidationPaused && pausedAt) {
+      elapsedSeconds -= (now - pausedAt.getTime()) / 1000;
+    }
+    
+    // Ensure elapsed time doesn't go negative
+    elapsedSeconds = Math.max(0, elapsedSeconds);
+    
+    if (elapsedSeconds > 0) {
+      return Math.round((currentValidationProgress.processedResources / elapsedSeconds) * 60);
+    }
+    
+    return 0;
+  })();
+
+  // Calculate estimated time remaining - use server value if available, otherwise calculate client-side
+  const estimatedMinutesRemaining = (() => {
+    if (currentValidationProgress?.estimatedTimeRemaining) {
+      return Math.round(currentValidationProgress.estimatedTimeRemaining / 1000 / 60);
+    }
+    
+    // Fallback: calculate client-side if server doesn't provide it
+    if (currentValidationProgress && isValidationRunning && currentValidationProgress.processedResources > 0) {
+      const now = Date.now();
+      const start = new Date(currentValidationProgress.startTime).getTime();
+      let elapsedSeconds = (now - start) / 1000;
+      
+      // Subtract total paused time
+      elapsedSeconds -= totalPausedTime / 1000;
+      
+      // If currently paused, subtract the current pause duration
+      if (isValidationPaused && pausedAt) {
+        elapsedSeconds -= (now - pausedAt.getTime()) / 1000;
+      }
+      
+      // Ensure elapsed time doesn't go negative
+      elapsedSeconds = Math.max(0, elapsedSeconds);
+      
+      if (elapsedSeconds > 0) {
+        const processingRate = currentValidationProgress.processedResources / elapsedSeconds; // resources per second
+        const remainingResources = currentValidationProgress.totalResources - currentValidationProgress.processedResources;
+        const estimatedMs = (remainingResources / processingRate) * 1000;
+        return Math.round(estimatedMs / 1000 / 60);
+      }
+    }
+    
+    return null;
+  })();
 
   // ========================================================================
   // Render
@@ -526,7 +666,7 @@ export default function DashboardNew() {
                     <Target className="h-5 w-5 text-orange-500" />
                     <div>
                       <div className="text-lg font-bold">
-                        {estimatedMinutesRemaining ? `${estimatedMinutesRemaining}m` : 'Calc...'}
+                        {estimatedMinutesRemaining ? formatTimeRemaining(estimatedMinutesRemaining) : 'Calc...'}
                       </div>
                       <div className="text-xs text-muted-foreground">Remaining</div>
                     </div>
@@ -543,15 +683,52 @@ export default function DashboardNew() {
                     <div className="text-xs text-muted-foreground">Processing Rate</div>
                   </div>
                 </div>
-                {validationProgress?.currentResourceType && (
-                  <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg">
-                    <Zap className="h-5 w-5 text-blue-500 animate-pulse" />
-                    <div>
-                      <div className="text-sm font-medium">{validationProgress.currentResourceType}</div>
-                      <div className="text-xs text-muted-foreground">Currently Processing</div>
+                <div className="space-y-2" style={{ 
+                  contain: 'layout style paint',
+                  transform: 'translateZ(0)',
+                  backfaceVisibility: 'hidden',
+                  perspective: '1000px',
+                  filter: 'none',
+                  minHeight: '60px'
+                }}>
+                  <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg" style={{ 
+                    transition: 'none !important',
+                    willChange: 'auto',
+                    contain: 'layout style paint',
+                    transform: 'translateZ(0)',
+                    backfaceVisibility: 'hidden',
+                    isolation: 'isolate',
+                    position: 'relative',
+                    zIndex: 1,
+                    filter: 'none',
+                    animation: 'none !important',
+                    display: (currentResourceType || nextResourceType) ? 'flex' : 'none'
+                  }}>
+                    <Zap className="h-5 w-5 text-blue-500" style={{ 
+                      transition: 'none !important',
+                      willChange: 'auto',
+                      animation: 'none !important'
+                    }} />
+                    <div className="min-w-0 flex-1" style={{ 
+                      contain: 'layout style',
+                      transform: 'translateZ(0)',
+                      filter: 'none'
+                    }}>
+                      <div className="flex items-center gap-4">
+                        <div className="flex-1">
+                          <div className="text-sm font-medium truncate">{currentResourceType || 'Starting...'}</div>
+                          <div className="text-xs text-muted-foreground">Currently Processing</div>
+                        </div>
+                        {nextResourceType && (
+                          <div className="flex-1 border-l border-blue-200 dark:border-blue-800 pl-4">
+                            <div className="text-sm font-medium truncate">{nextResourceType}</div>
+                            <div className="text-xs text-muted-foreground">Next</div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                )}
+                </div>
               </div>
 
               {/* Show status when paused */}

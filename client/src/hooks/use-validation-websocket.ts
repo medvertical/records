@@ -6,6 +6,7 @@ export interface ValidationProgress {
   validResources: number;
   errorResources: number;
   currentResourceType?: string;
+  nextResourceType?: string;
   startTime: string;
   estimatedTimeRemaining?: number;
   isComplete: boolean;
@@ -23,7 +24,7 @@ export interface WebSocketMessage {
 export function useValidationWebSocket() {
   const [isConnected, setIsConnected] = useState(false);
   const [progress, setProgress] = useState<ValidationProgress | null>(null);
-  const [validationStatus, setValidationStatus] = useState<'idle' | 'running' | 'completed' | 'error'>('idle');
+  const [validationStatus, setValidationStatus] = useState<'idle' | 'running' | 'paused' | 'completed' | 'error'>('idle');
   const [lastError, setLastError] = useState<string | null>(null);
   const [apiState, setApiState] = useState<{
     isRunning: boolean;
@@ -134,7 +135,6 @@ export function useValidationWebSocket() {
               
             case 'validation-progress':
             case 'validation_progress':
-              console.log('Validation progress:', message.data);
               setProgress(message.data);
               setValidationStatus('running');
               hasReceivedMessage.current = true;

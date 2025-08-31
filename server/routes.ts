@@ -32,7 +32,10 @@ let globalValidationState = {
   startTime: null as Date | null,
   canPause: false,
   shouldStop: false,
-  resumeData: null as any | null
+  resumeData: null as any | null,
+  currentResourceType: null as string | null,
+  nextResourceType: null as string | null,
+  lastBroadcastTime: null as number | null
 };
 
 // Resource counts cache for dashboard performance
@@ -1261,7 +1264,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Process resource types with real FHIR server data (EXCLUDING types with >50k resources)
-      for (const resourceType of resourceTypes) {
+      for (let i = 0; i < resourceTypes.length; i++) {
+        const resourceType = resourceTypes[i];
+        const nextResourceType = i + 1 < resourceTypes.length ? resourceTypes[i + 1] : null;
+        
+        // Update current and next resource type in global state
+        globalValidationState.currentResourceType = resourceType;
+        globalValidationState.nextResourceType = nextResourceType;
+        
         // Check if validation should stop (pause/stop request)
         if (globalValidationState.shouldStop) {
           console.log('Validation paused by user request - saving state');
@@ -1401,18 +1411,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               // Broadcast real progress with AUTHENTIC total resource count
               if (validationWebSocket && processedResources % 10 === 0) {
-                const progress = {
-                  totalResources: realTotalResources, // REAL total from FHIR server (617,442+)
-                  processedResources,
-                  validResources,
-                  errorResources,
-                  currentResourceType: resourceType,
-                  startTime: startTime.toISOString(),
-                  isComplete: false,
-                  errors: errors.slice(-10), // Last 10 errors
-                  status: 'running' as const
-                };
-                validationWebSocket.broadcastProgress(progress);
+                // Calculate estimated time remaining
+                let estimatedTimeRemaining = undefined;
+                if (processedResources > 0) {
+                  const elapsedMs = Date.now() - startTime.getTime();
+                  const processingRate = processedResources / (elapsedMs / 1000); // resources per second
+                  const remainingResources = realTotalResources - processedResources;
+                  estimatedTimeRemaining = Math.round((remainingResources / processingRate) * 1000); // in milliseconds
+                }
+                
+                // Throttle WebSocket updates to prevent UI flashing
+                // Only broadcast every 100 processed resources or every 5 seconds
+                const shouldBroadcast = processedResources % 100 === 0 || 
+                  (Date.now() - (globalValidationState.lastBroadcastTime || 0)) > 5000;
+                
+                if (shouldBroadcast) {
+                  const progress = {
+                    totalResources: realTotalResources, // REAL total from FHIR server (617,442+)
+                    processedResources,
+                    validResources,
+                    errorResources,
+                    currentResourceType: resourceType,
+                    startTime: startTime.toISOString(),
+                    estimatedTimeRemaining,
+                    isComplete: false,
+                    errors: errors.slice(-10), // Last 10 errors
+                    status: 'running' as const
+                  };
+                  validationWebSocket.broadcastProgress(progress);
+                  globalValidationState.lastBroadcastTime = Date.now();
+                }
               }
             }
             
@@ -1511,8 +1539,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get the total resources from FHIR server for validation
-      // Use the known total from FHIR server (857,607 resources)
-      const totalResources = 857607;
+      // Use the actual total from FHIR server via dashboard service
+      const fhirServerStats = await dashboardService.getFhirServerStats();
+      const totalResources = fhirServerStats.totalResources;
       // Determine actual status based on validation state
       let status = 'not_running';
       if (globalValidationState.isRunning) {
@@ -1526,14 +1555,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Always use actual database counts for progress tracking
       // This ensures progress is shown correctly whether running, paused, or stopped
+      const processedResources = summary.validResources + summary.errorResources;
+      
+      // Calculate estimated time remaining based on processing rate
+      let estimatedTimeRemaining = undefined;
+      if (status === 'running' && processedResources > 0 && globalValidationState.startTime) {
+        const elapsedMs = Date.now() - globalValidationState.startTime.getTime();
+        const processingRate = processedResources / (elapsedMs / 1000); // resources per second
+        const remainingResources = totalResources - processedResources;
+        estimatedTimeRemaining = Math.round((remainingResources / processingRate) * 1000); // in milliseconds
+      }
+      
+      // Determine current and next resource type
+      let currentResourceType = undefined;
+      let nextResourceType = undefined;
+      
+      if (status === 'running' || status === 'paused') {
+        if (globalValidationState.currentResourceType) {
+          currentResourceType = globalValidationState.currentResourceType;
+        } else if (globalValidationState.resumeData?.resourceType) {
+          currentResourceType = globalValidationState.resumeData.resourceType;
+        } else if (status === 'running') {
+          currentResourceType = 'Processing...';
+        } else if (status === 'paused') {
+          currentResourceType = 'Paused';
+        }
+        
+        if (globalValidationState.nextResourceType) {
+          nextResourceType = globalValidationState.nextResourceType;
+        } else if (status === 'running') {
+          nextResourceType = 'Next resource type...';
+        }
+      }
+      
       const progress = {
         totalResources,
-        processedResources: summary.validResources + summary.errorResources,
+        processedResources,
         validResources: summary.validResources,
         errorResources: summary.errorResources,
+        currentResourceType,
+        nextResourceType,
         isComplete: false,
         errors: [],
         startTime: globalValidationState.startTime ? globalValidationState.startTime.toISOString() : new Date().toISOString(),
+        estimatedTimeRemaining,
         status: status as 'running' | 'paused' | 'not_running'
       };
       
@@ -1624,9 +1689,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Broadcast resume via WebSocket
       if (validationWebSocket) {
+        // Get the actual total resources from FHIR server
+        const fhirServerStats = await dashboardService.getFhirServerStats();
+        const totalResources = fhirServerStats.totalResources;
+        
         validationWebSocket.broadcastValidationStart();
         validationWebSocket.broadcastProgress({
-          totalResources: 617442,
+          totalResources,
           processedResources: resumeData.processedResources,
           validResources: resumeData.validResources,
           errorResources: resumeData.errorResources,
@@ -1729,10 +1798,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                         validResources++;
                       }
                       
-                      // Broadcast progress every 5 resources
-                      if (validationWebSocket && processedResources % 5 === 0) {
+                      // Broadcast progress every 100 resources or every 5 seconds
+                      if (validationWebSocket && (processedResources % 100 === 0 || 
+                          (Date.now() - (globalValidationState.lastBroadcastTime || 0)) > 5000)) {
+                        // Get the actual total resources from FHIR server
+                        const fhirServerStats = await dashboardService.getFhirServerStats();
+                        const totalResources = fhirServerStats.totalResources;
+                        
                         const progress = {
-                          totalResources: 617442,
+                          totalResources,
                           processedResources,
                           validResources,
                           errorResources,
@@ -1743,6 +1817,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                           status: 'running' as const
                         };
                         validationWebSocket.broadcastProgress(progress);
+                        globalValidationState.lastBroadcastTime = Date.now();
                       }
                       
                     } catch (validationError) {
@@ -1855,23 +1930,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(503).json({ message: "Dashboard service not initialized" });
       }
       
-      // Use the new dashboard service for consistent data
-      const combinedData = await dashboardService.getCombinedDashboardData();
+      // Use the same data source as validation progress for consistency
+      const [fhirServerStats, validationStats] = await Promise.all([
+        dashboardService.getFhirServerStats(),
+        dashboardService.getValidationStats()
+      ]);
       
       // Return backward-compatible format for existing frontend
       const stats = {
-        totalResources: combinedData.fhirServer.totalResources, // Real comprehensive FHIR server total (807K+)
-        validResources: combinedData.validation.validResources, // Validation count filtered by settings
-        errorResources: combinedData.validation.errorResources, // Validation count filtered by settings
-        warningResources: combinedData.validation.warningResources,
-        unvalidatedResources: combinedData.validation.unvalidatedResources,
-        validationCoverage: combinedData.validation.validationCoverage,
-        validationProgress: combinedData.validation.validationProgress,
+        totalResources: fhirServerStats.totalResources, // Real comprehensive FHIR server total (consistent with validation progress)
+        validResources: validationStats.validResources, // Validation count filtered by settings
+        errorResources: validationStats.errorResources, // Validation count filtered by settings
+        warningResources: validationStats.warningResources,
+        unvalidatedResources: validationStats.unvalidatedResources,
+        validationCoverage: validationStats.validationCoverage,
+        validationProgress: validationStats.validationProgress,
         activeProfiles: 0, // TODO: Get from validation settings
-        resourceBreakdown: combinedData.fhirServer.resourceBreakdown.slice(0, 10) // Top 10 resource types from FHIR server
+        resourceBreakdown: fhirServerStats.resourceBreakdown.slice(0, 10) // Top 10 resource types from FHIR server
       };
       
-      console.log(`[DashboardStats] Server: ${combinedData.fhirServer.totalResources} total, Validation: ${combinedData.validation.totalValidated} validated, ${combinedData.validation.validResources} valid, ${combinedData.validation.errorResources} errors`);
+      console.log(`[DashboardStats] Server: ${fhirServerStats.totalResources} total, Validation: ${validationStats.totalValidated} validated, ${validationStats.validResources} valid, ${validationStats.errorResources} errors`);
       res.json(stats);
     } catch (error: any) {
       console.error('[DashboardStats] Error:', error);

@@ -22,9 +22,9 @@ export class DashboardService {
   private storage: DatabaseStorage;
   private cache: Map<string, { data: any; timestamp: Date; ttl: number }> = new Map();
   
-  // Cache TTL in milliseconds - Extended for better performance
+  // Cache TTL in milliseconds - Balanced for performance and accuracy
   private readonly CACHE_TTL = {
-    FHIR_SERVER: 30 * 60 * 1000, // 30 minutes (FHIR server data changes rarely)
+    FHIR_SERVER: 5 * 60 * 1000,  // 5 minutes (FHIR server data changes moderately)
     VALIDATION: 2 * 60 * 1000,   // 2 minutes (validation data changes more frequently)
     COMBINED: 2 * 60 * 1000      // 2 minutes
   };
@@ -89,9 +89,11 @@ export class DashboardService {
       console.error('[DashboardService] Error fetching FHIR server stats:', error);
       
       // Return fallback stats if FHIR server is slow or unavailable
+      // Use cached data if available, otherwise use a reasonable default
+      const cached = this.getCachedData('fhir-server-stats', this.CACHE_TTL.FHIR_SERVER);
       const fallbackStats: FhirServerStats = {
-        totalResources: 857607, // Known total from previous successful fetch
-        resourceCounts: {
+        totalResources: cached?.totalResources || 500000, // Use cached total or reasonable default
+        resourceCounts: cached?.resourceCounts || {
           'Patient': 50000,
           'Observation': 100000,
           'Encounter': 25000,
