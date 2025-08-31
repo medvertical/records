@@ -1307,8 +1307,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             console.log(`Processing ${resourceType} batch: ${bundle.entry.length} resources (offset: ${offset})`);
             
-            for (const entry of bundle.entry) {
-              // Check if validation should stop before each resource
+            // Process resources in parallel for much better performance
+            const PARALLEL_BATCH_SIZE = 10; // Process 10 resources in parallel
+            
+            for (let i = 0; i < bundle.entry.length; i += PARALLEL_BATCH_SIZE) {
+              // Check if validation should stop before each parallel batch
               if (globalValidationState.shouldStop) {
                 console.log('Validation paused by user request during resource processing');
                 globalValidationState.isRunning = false;
@@ -1316,7 +1319,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 // Save current progress for resume
                 globalValidationState.resumeData = {
                   resourceType,
-                  offset,
+                  offset: offset + i,
                   processedResources,
                   validResources,
                   errorResources,
@@ -1326,7 +1329,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 break;
               }
               
-              if (entry.resource) {
+              // Get the next batch of resources to process in parallel
+              const parallelBatch = bundle.entry.slice(i, i + PARALLEL_BATCH_SIZE);
+              
+              // Validate resources in parallel
+              const validationPromises = parallelBatch.map(async (entry) => {
+                if (!entry.resource) return null;
+                
                 try {
                   // Validate real FHIR resource using enhanced validation
                   const result = await unifiedValidationService.validateResource(
@@ -1334,8 +1343,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     options.skipUnchanged !== false, 
                     false
                   );
-                  
-                  processedResources++;
                   
                   // Check for validation errors using validation score from latest result
                   const latestValidation = result.validationResults && result.validationResults.length > 0 
@@ -1349,40 +1356,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     const isResourceValid = validationScore >= 95; // 95+ is considered valid (allows minor info messages)
                     
                     if (!isResourceValid) {
-                      errorResources++;
                       const errorCount = latestValidation.errorCount || 0;
                       const warningCount = latestValidation.warningCount || 0;
-                      errors.push(`${resourceType}/${entry.resource.id}: Score ${validationScore}% (${errorCount} errors, ${warningCount} warnings)`);
+                      return {
+                        valid: false,
+                        error: `${resourceType}/${entry.resource.id}: Score ${validationScore}% (${errorCount} errors, ${warningCount} warnings)`
+                      };
                     } else {
-                      validResources++;
+                      return { valid: true, error: null };
                     }
                   } else {
                     // No validation results available - count as error
-                    errorResources++;
-                    errors.push(`${resourceType}/${entry.resource.id}: No validation results available`);
-                  }
-                  
-                  // Broadcast real progress with AUTHENTIC total resource count
-                  if (validationWebSocket && processedResources % 5 === 0) {
-                    const progress = {
-                      totalResources: realTotalResources, // REAL total from FHIR server (617,442+)
-                      processedResources,
-                      validResources,
-                      errorResources,
-                      currentResourceType: resourceType,
-                      startTime: startTime.toISOString(),
-                      isComplete: false,
-                      errors: errors.slice(-10), // Last 10 errors
-                      status: 'running' as const
+                    return {
+                      valid: false,
+                      error: `${resourceType}/${entry.resource.id}: No validation results available`
                     };
-                    validationWebSocket.broadcastProgress(progress);
                   }
                   
                 } catch (validationError) {
-                  processedResources++;
-                  errorResources++;
-                  errors.push(`${resourceType}/${entry.resource.id}: Validation failed - ${validationError}`);
+                  return {
+                    valid: false,
+                    error: `${resourceType}/${entry.resource.id}: Validation failed - ${validationError}`
+                  };
                 }
+              });
+              
+              // Wait for all parallel validations to complete
+              const results = await Promise.all(validationPromises);
+              
+              // Update progress for this parallel batch
+              results.forEach(result => {
+                if (result) {
+                  processedResources++;
+                  if (result.valid) {
+                    validResources++;
+                  } else {
+                    errorResources++;
+                    if (result.error) {
+                      errors.push(result.error);
+                    }
+                  }
+                }
+              });
+              
+              // Broadcast real progress with AUTHENTIC total resource count
+              if (validationWebSocket && processedResources % 10 === 0) {
+                const progress = {
+                  totalResources: realTotalResources, // REAL total from FHIR server (617,442+)
+                  processedResources,
+                  validResources,
+                  errorResources,
+                  currentResourceType: resourceType,
+                  startTime: startTime.toISOString(),
+                  isComplete: false,
+                  errors: errors.slice(-10), // Last 10 errors
+                  status: 'running' as const
+                };
+                validationWebSocket.broadcastProgress(progress);
               }
             }
             

@@ -84,6 +84,10 @@ export class EnhancedValidationEngine {
   private fhirClient: FhirClient;
   private terminologyClient: TerminologyClient;
   private config: EnhancedValidationConfig;
+  
+  // Performance optimization: Cache resolved profiles to avoid repeated network calls
+  private profileCache = new Map<string, { profile: any; timestamp: number }>();
+  private readonly PROFILE_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
   constructor(fhirClient: FhirClient, config?: Partial<EnhancedValidationConfig>) {
     this.fhirClient = fhirClient;
@@ -204,23 +208,29 @@ export class EnhancedValidationEngine {
     };
 
     try {
-      // ALWAYS perform all validation aspects - settings only affect result filtering
-      // 1. Strukturelle Validierung
+      // Perform validation aspects based on configuration for better performance
+      // 1. Strukturelle Validierung (always perform - core FHIR validation)
       await this.performStructuralValidation(resource, result);
 
-      // 2. Profilkonformität
-      await this.performProfileValidation(resource, result);
+      // 2. Profilkonformität (skip if profile resolution is disabled for performance)
+      if (this.config.enableProfileValidation && this.config.profileResolutionServers?.length > 0) {
+        await this.performProfileValidation(resource, result);
+      }
 
-      // 3. Terminologieprüfung
-      await this.performTerminologyValidation(resource, result);
+      // 3. Terminologieprüfung (skip if terminology servers are disabled for performance)
+      if (this.config.enableTerminologyValidation) {
+        await this.performTerminologyValidation(resource, result);
+      }
 
-      // 4. Referenzkonsistenz
+      // 4. Referenzkonsistenz (always perform - core FHIR validation)
       await this.performReferenceValidation(resource, result);
 
-      // 5. Feldübergreifende Logikprüfung
-      await this.performBusinessRuleValidation(resource, result);
+      // 5. Feldübergreifende Logikprüfung (skip if disabled for performance)
+      if (this.config.enableBusinessRuleValidation) {
+        await this.performBusinessRuleValidation(resource, result);
+      }
 
-      // 6. Versions- und Metadatenprüfung
+      // 6. Versions- und Metadatenprüfung (always perform - lightweight)
       await this.performMetadataValidation(resource, result);
 
       // Calculate overall validity and score
@@ -470,9 +480,16 @@ export class EnhancedValidationEngine {
   }
 
   /**
-   * Resolve a FHIR profile using configured profile resolution servers
+   * Resolve a FHIR profile using configured profile resolution servers with caching
    */
   private async resolveProfile(profileUrl: string): Promise<any | null> {
+    // Check cache first for performance optimization
+    const cached = this.profileCache.get(profileUrl);
+    if (cached && (Date.now() - cached.timestamp) < this.PROFILE_CACHE_TTL) {
+      // console.log(`[ProfileResolution] Using cached profile for ${profileUrl}`);
+      return cached.profile;
+    }
+
     if (!this.config.profileResolutionServers) {
       // console.log(`[ProfileResolution] No profile resolution servers configured`);
       return null;
@@ -492,6 +509,8 @@ export class EnhancedValidationEngine {
         const profile = await this.fetchProfileFromServer(profileUrl, server);
         
         if (profile) {
+          // Cache the resolved profile for future use
+          this.profileCache.set(profileUrl, { profile, timestamp: Date.now() });
           // console.log(`[ProfileResolution] Profile successfully resolved from ${server.name}`);
           return profile;
         }
@@ -501,6 +520,8 @@ export class EnhancedValidationEngine {
       }
     }
 
+    // Cache null result to avoid repeated failed attempts
+    this.profileCache.set(profileUrl, { profile: null, timestamp: Date.now() });
     // console.log(`[ProfileResolution] Profile ${profileUrl} could not be resolved from any server`);
     return null;
   }
@@ -540,7 +561,7 @@ export class EnhancedValidationEngine {
           'Accept': 'application/fhir+json',
           'User-Agent': 'Records-FHIR-Validator/1.0'
         },
-        timeout: 10000
+        timeout: 3000 // Reduced timeout for faster fallback
       });
 
       if (response.status === 200 && response.data) {
@@ -572,7 +593,7 @@ export class EnhancedValidationEngine {
           'Accept': 'application/fhir+json',
           'User-Agent': 'Records-FHIR-Validator/1.0'
         },
-        timeout: 10000
+        timeout: 3000 // Reduced timeout for faster fallback
       });
 
       if (response.status === 200 && response.data) {
@@ -607,7 +628,7 @@ export class EnhancedValidationEngine {
           'Accept': 'application/fhir+json',
           'User-Agent': 'Records-FHIR-Validator/1.0'
         },
-        timeout: 10000
+        timeout: 3000 // Reduced timeout for faster fallback
       });
 
       if (response.status === 200 && response.data) {
@@ -640,7 +661,7 @@ export class EnhancedValidationEngine {
           'Accept': 'application/fhir+json',
           'User-Agent': 'Records-FHIR-Validator/1.0'
         },
-        timeout: 10000
+        timeout: 3000 // Reduced timeout for faster fallback
       });
 
       if (response.status === 200 && response.data) {
@@ -695,7 +716,7 @@ export class EnhancedValidationEngine {
                 'Accept': 'application/fhir+json, application/json',
                 'User-Agent': 'Records-FHIR-Validator/1.0'
               },
-              timeout: 10000
+              timeout: 3000 // Reduced timeout for faster fallback
             });
 
             if (response.status === 200 && response.data && response.data.resourceType === 'StructureDefinition') {
@@ -720,7 +741,7 @@ export class EnhancedValidationEngine {
             'Accept': 'application/fhir+json, application/json',
             'User-Agent': 'Records-FHIR-Validator/1.0'
           },
-          timeout: 10000
+          timeout: 3000 // Reduced timeout for faster fallback
         });
 
         if (response.status === 200 && response.data && response.data.resourceType === 'StructureDefinition') {
