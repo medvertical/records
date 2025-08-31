@@ -139,6 +139,36 @@ function SidebarContent({
   onItemClick?: () => void;
   onChangeServer?: () => void;
 }) {
+  // Get the current location to make the component reactive to URL changes
+  const [currentLocation] = useLocation();
+  const [currentUrl, setCurrentUrl] = useState(window.location.href);
+  
+  // Update currentUrl when location changes
+  useEffect(() => {
+    setCurrentUrl(window.location.href);
+  }, [currentLocation]);
+  
+  // Also listen for popstate events and manual URL changes
+  useEffect(() => {
+    const handleUrlChange = () => {
+      setCurrentUrl(window.location.href);
+    };
+    
+    // Listen for browser navigation events
+    window.addEventListener('popstate', handleUrlChange);
+    
+    // Also check for URL changes periodically (fallback)
+    const interval = setInterval(() => {
+      if (window.location.href !== currentUrl) {
+        setCurrentUrl(window.location.href);
+      }
+    }, 100); // Check every 100ms
+    
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      clearInterval(interval);
+    };
+  }, [currentUrl]);
   return (
     <div className="h-full flex flex-col">
       {/* Server Connection Status */}
@@ -214,21 +244,42 @@ function SidebarContent({
             Quick Access
           </h3>
           <ul className="space-y-1">
-            {quickAccessItems.map((item) => (
-              <li key={item.href}>
-                <Link href={item.href}>
-                  <div 
-                    className="flex items-center justify-between p-2 text-sm text-gray-600 hover:bg-gray-100 rounded transition-colors cursor-pointer"
-                    onClick={onItemClick}
-                  >
-                    <span>{item.label}</span>
-                    <span className="text-xs bg-gray-200 px-2 py-1 rounded">
-                      {formatCount(resourceCounts?.[item.resourceType] || 0)}
-                    </span>
-                  </div>
-                </Link>
-              </li>
-            ))}
+            {quickAccessItems.map((item) => {
+              // Check if this resource type is currently selected
+              const url = new URL(currentUrl);
+              const selectedType = url.searchParams.get('type');
+              const isSelected = selectedType === item.resourceType;
+              
+              return (
+                <li key={item.href}>
+                  <Link href={item.href}>
+                    <div 
+                      className={cn(
+                        "flex items-center justify-between p-2 text-sm rounded transition-colors cursor-pointer",
+                        isSelected 
+                          ? "text-fhir-blue bg-blue-50 font-medium" 
+                          : "text-gray-600 hover:bg-gray-100"
+                      )}
+                      onClick={onItemClick}
+                    >
+                      <span>{item.label}</span>
+                      {resourceCounts && resourceCounts[item.resourceType] ? (
+                        <span className={cn(
+                          "text-xs font-medium",
+                          isSelected 
+                            ? "text-blue-600" 
+                            : "text-gray-400"
+                        )}>
+                          {formatCount(resourceCounts[item.resourceType])}
+                        </span>
+                      ) : (
+                        <div className="w-4 h-4 border border-gray-300 border-t-transparent rounded-full animate-spin"></div>
+                      )}
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </div>
       </nav>

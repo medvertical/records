@@ -57,6 +57,9 @@ export default function ResourceSearch({
               value={resourceType || "all"} 
               onValueChange={(value) => {
                 setResourceType(value);
+                // Convert "all" back to empty string for the API
+                const searchResourceType = value === "all" ? "" : value;
+                onSearch(query, searchResourceType);
               }}
             >
           <SelectTrigger className="w-48">
