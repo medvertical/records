@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import ResourceSearch from "@/components/resources/resource-search";
@@ -32,19 +32,59 @@ export default function ResourceBrowser() {
   const [page, setPage] = useState(0);
   const queryClient = useQueryClient();
 
-  // Parse URL parameters on component mount
+  // Debug: Log location changes
+  console.log('[ResourceBrowser] Current location:', location);
+
+  // Define handleSearch function before using it in useEffect
+  const handleSearch = useCallback((query: string, type: string) => {
+    console.log('[ResourceBrowser] handleSearch called with:', { query, type });
+    setSearchQuery(query);
+    setResourceType(type);
+    setPage(0);
+  }, []);
+
+  // Parse URL parameters and update state when location changes
   useEffect(() => {
+    console.log('[ResourceBrowser] useEffect triggered - location changed to:', location);
+    
     const urlParams = new URLSearchParams(window.location.search);
     const typeParam = urlParams.get('type');
     const searchParam = urlParams.get('search');
     
-    if (typeParam) {
-      setResourceType(typeParam);
-    }
-    if (searchParam) {
-      setSearchQuery(searchParam);
-    }
+    console.log('[ResourceBrowser] URL changed, parsing params:', { typeParam, searchParam });
+    console.log('[ResourceBrowser] Current state before update:', { resourceType, searchQuery });
+    console.log('[ResourceBrowser] Full URL:', window.location.href);
+    
+    // Update state directly - this will trigger the query to re-run
+    setResourceType(typeParam || "");
+    setSearchQuery(searchParam || "");
+    setPage(0); // Reset to first page when navigating
+    
+    console.log('[ResourceBrowser] State updated to:', { resourceType: typeParam || "", searchQuery: searchParam || "" });
   }, [location]);
+
+  // Additional effect to monitor URL changes more frequently
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const currentSearch = window.location.search;
+      const urlParams = new URLSearchParams(currentSearch);
+      const typeParam = urlParams.get('type');
+      
+      // Only update if the type parameter is different from current state
+      if (typeParam !== resourceType && (typeParam || resourceType)) {
+        console.log('[ResourceBrowser] Manual URL check detected change:', { typeParam, currentResourceType: resourceType });
+        setResourceType(typeParam || "");
+        setPage(0);
+      }
+    }, 500); // Check every 500ms
+    
+    return () => clearInterval(interval);
+  }, [resourceType]);
+
+  // Debug effect to track state changes
+  useEffect(() => {
+    console.log('[ResourceBrowser] State changed:', { resourceType, searchQuery, page });
+  }, [resourceType, searchQuery, page]);
 
   // WebSocket connection for real-time validation updates
   useEffect(() => {
@@ -114,25 +154,29 @@ export default function ResourceBrowser() {
     queryKey: ["/api/fhir/resource-types"],
   });
 
+  // Debug effect to track when resourceTypes are loaded
+  useEffect(() => {
+    console.log('[ResourceBrowser] ResourceTypes loaded:', resourceTypes ? resourceTypes.length : 'not loaded');
+  }, [resourceTypes]);
+
   const { data: resourcesData, isLoading } = useQuery<ResourcesResponse>({
-    queryKey: ["/api/fhir/resources", { resourceType, search: searchQuery, page }],
+    queryKey: ["/api/fhir/resources", { resourceType, search: searchQuery, page, location }],
     queryFn: ({ queryKey }) => {
-      const [url, params] = queryKey as [string, { resourceType?: string; search?: string; page: number }];
+      const [url, params] = queryKey as [string, { resourceType?: string; search?: string; page: number; location: string }];
+      console.log('[ResourceBrowser] Query triggered with params:', params);
       const searchParams = new URLSearchParams();
       
       if (params?.resourceType) searchParams.set('resourceType', params.resourceType);
       if (params?.search) searchParams.set('search', params.search);
       if (params?.page !== undefined) searchParams.set('page', params.page.toString());
       
-      return fetch(`${url}?${searchParams}`).then(res => res.json());
+      const fullUrl = `${url}?${searchParams}`;
+      console.log('[ResourceBrowser] Fetching from URL:', fullUrl);
+      
+      return fetch(fullUrl).then(res => res.json());
     },
+    enabled: true, // Explicitly enable the query
   });
-
-  const handleSearch = (query: string, type: string) => {
-    setSearchQuery(query);
-    setResourceType(type);
-    setPage(0);
-  };
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
@@ -147,6 +191,10 @@ export default function ResourceBrowser() {
           defaultResourceType={resourceType}
           defaultQuery={searchQuery}
         />
+        {/* Debug info */}
+        <div className="text-xs text-gray-500 p-2 bg-gray-100 rounded">
+          Debug: resourceType="{resourceType}", searchQuery="{searchQuery}", resourceTypes loaded: {resourceTypes ? 'yes' : 'no'}
+        </div>
         
         {isLoading ? (
           <div className="space-y-6">
