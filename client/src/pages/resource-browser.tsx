@@ -84,6 +84,29 @@ export default function ResourceBrowser() {
 
 
 
+  // Listen for validation settings changes to invalidate resource cache
+  useEffect(() => {
+    const handleWebSocketMessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
+          console.log('[ResourceBrowser] Validation settings updated, invalidating resource cache');
+          // Invalidate resource queries to refresh with new validation settings
+          queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+        }
+      } catch (error) {
+        // Ignore non-JSON messages
+      }
+    };
+
+    // Add event listener for WebSocket messages
+    const ws = (window as any).validationWebSocket;
+    if (ws) {
+      ws.addEventListener('message', handleWebSocketMessage);
+      return () => ws.removeEventListener('message', handleWebSocketMessage);
+    }
+  }, [queryClient]);
+
   // WebSocket connection for real-time validation updates
   useEffect(() => {
     // Temporarily disable WebSocket to prevent connection errors

@@ -1,5 +1,6 @@
 import { useParams } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import ValidationErrors from "@/components/validation/validation-errors";
 import ResourceViewer from "@/components/resources/resource-viewer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,30 @@ import { CircularProgress } from "@/components/ui/circular-progress";
 
 export default function ResourceDetail() {
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
+  
+  // Listen for validation settings changes to invalidate resource cache
+  useEffect(() => {
+    const handleWebSocketMessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
+          console.log('[ResourceDetail] Validation settings updated, invalidating resource cache');
+          // Invalidate resource queries to refresh with new validation settings
+          queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources', id] });
+        }
+      } catch (error) {
+        // Ignore non-JSON messages
+      }
+    };
+
+    // Add event listener for WebSocket messages
+    const ws = (window as any).validationWebSocket;
+    if (ws) {
+      ws.addEventListener('message', handleWebSocketMessage);
+      return () => ws.removeEventListener('message', handleWebSocketMessage);
+    }
+  }, [queryClient, id]);
   
   const { data: resource, isLoading, error } = useQuery<FhirResourceWithValidation>({
     queryKey: ["/api/fhir/resources", id],
@@ -71,13 +96,26 @@ export default function ResourceDetail() {
   const hasValidationResults = resource.validationResults && resource.validationResults.length > 0;
   const hasErrors = hasValidationResults && resource.validationResults?.some(r => !r.isValid);
   
-  // Calculate validation summary
+  // Calculate validation summary from filtered validation results
   const validationSummary = hasValidationResults ? (() => {
-    const allIssues = resource.validationResults.flatMap(vr => vr.issues || []);
+    // Use the filtered validation results from the server
+    const latestResult = resource.validationResults[0]; // Server already filters to latest result
+    const filteredIssues = latestResult.issues || [];
     
-    // Calculate score from issues (same logic as list view)
+    // Calculate counts from filtered issues
+    const errorCount = filteredIssues.filter(issue => 
+      issue.severity === 'error' || issue.severity === 'fatal'
+    ).length;
+    const warningCount = filteredIssues.filter(issue => 
+      issue.severity === 'warning'
+    ).length;
+    const informationCount = filteredIssues.filter(issue => 
+      issue.severity === 'information'
+    ).length;
+    
+    // Calculate score from filtered issues
     let calculatedScore = 100;
-    allIssues.forEach(issue => {
+    filteredIssues.forEach(issue => {
       if (issue.severity === 'error' || issue.severity === 'fatal') {
         calculatedScore -= 10;
       } else if (issue.severity === 'warning') {
@@ -89,11 +127,12 @@ export default function ResourceDetail() {
     calculatedScore = Math.max(0, Math.round(calculatedScore));
     
     return {
-      totalIssues: resource.validationResults.reduce((sum, vr) => sum + (vr.issues?.length || 0), 0),
-      errorCount: resource.validationResults.reduce((sum, vr) => sum + (vr.errorCount || 0), 0),
-      warningCount: resource.validationResults.reduce((sum, vr) => sum + (vr.warningCount || 0), 0),
-      informationCount: resource.validationResults.reduce((sum, vr) => sum + (vr.issues?.filter(i => i.severity === 'information').length || 0), 0),
-      score: calculatedScore
+      totalIssues: filteredIssues.length,
+      errorCount,
+      warningCount,
+      informationCount,
+      score: calculatedScore,
+      isValid: errorCount === 0
     };
   })() : null;
 

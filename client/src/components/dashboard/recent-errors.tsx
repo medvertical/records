@@ -1,13 +1,39 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { ValidationResult } from "@shared/schema";
 import { AlertCircle } from "lucide-react";
 import { Link } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 
 export default function RecentErrors() {
+  const queryClient = useQueryClient();
+  
+  // Listen for validation settings changes to invalidate recent errors cache
+  useEffect(() => {
+    const handleWebSocketMessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
+          console.log('[RecentErrors] Validation settings updated, invalidating recent errors cache');
+          // Invalidate recent errors query to refresh with new validation settings
+          queryClient.invalidateQueries({ queryKey: ['/api/validation/errors/recent'] });
+        }
+      } catch (error) {
+        // Ignore non-JSON messages
+      }
+    };
+
+    // Add event listener for WebSocket messages
+    const ws = (window as any).validationWebSocket;
+    if (ws) {
+      ws.addEventListener('message', handleWebSocketMessage);
+      return () => ws.removeEventListener('message', handleWebSocketMessage);
+    }
+  }, [queryClient]);
+  
   const { data: recentErrors, isLoading } = useQuery<ValidationResult[]>({
     queryKey: ["/api/validation/errors/recent"],
   });

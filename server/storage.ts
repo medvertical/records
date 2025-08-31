@@ -299,6 +299,7 @@ export class DatabaseStorage implements IStorage {
     // Get active server if none specified
     const targetServerId = serverId || (await this.getActiveFhirServer())?.id;
     
+    // Get all validation results first
     const query = db.select({
       id: validationResults.id,
       resourceId: validationResults.resourceId,
@@ -320,15 +321,55 @@ export class DatabaseStorage implements IStorage {
       .where(
         targetServerId 
           ? and(
-              eq(validationResults.isValid, false),
               eq(fhirResources.serverId, targetServerId)
             )
-          : eq(validationResults.isValid, false)
+          : undefined
       )
       .orderBy(desc(validationResults.validatedAt))
-      .limit(limit);
+      .limit(limit * 3); // Get more results to filter
 
-    return await query;
+    const allResults = await query;
+    
+    // Get current validation settings for filtering
+    const validationSettingsData = await this.getValidationSettings();
+    const settings = validationSettingsData?.settings || {
+      structural: { enabled: true, severity: 'error' as const },
+      profile: { enabled: true, severity: 'warning' as const },
+      terminology: { enabled: true, severity: 'warning' as const },
+      reference: { enabled: true, severity: 'error' as const },
+      businessRule: { enabled: true, severity: 'warning' as const },
+      metadata: { enabled: true, severity: 'information' as const }
+    };
+    
+    // Filter results based on current settings and re-evaluate
+    const filteredResults: ValidationResult[] = [];
+    
+    for (const result of allResults) {
+      // Re-evaluate validation result based on current settings
+      const reEvaluatedResult = this.reEvaluateValidationResult(result, settings);
+      
+      // Only include results that have errors after filtering
+      if (!reEvaluatedResult.isValid && reEvaluatedResult.errorCount > 0) {
+        // Update the result with filtered data
+        const filteredResult = {
+          ...result,
+          isValid: reEvaluatedResult.isValid,
+          errorCount: reEvaluatedResult.errorCount,
+          warningCount: reEvaluatedResult.warningCount,
+          issues: reEvaluatedResult.filteredIssues,
+          validationScore: reEvaluatedResult.validationScore
+        };
+        
+        filteredResults.push(filteredResult);
+        
+        // Stop when we have enough results
+        if (filteredResults.length >= limit) {
+          break;
+        }
+      }
+    }
+    
+    return filteredResults;
   }
 
   async getDashboardCards(): Promise<DashboardCard[]> {
