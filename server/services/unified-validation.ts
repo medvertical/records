@@ -57,20 +57,33 @@ export class UnifiedValidationService {
         console.log('[UnifiedValidation] Loading validation settings from database');
       }
       
+      // Access the nested settings structure
+      const nestedSettings = settings.settings || settings;
+      
+      // Debug logging to see what settings are being loaded
+      console.log('[UnifiedValidation] Loading settings:', {
+        structural: nestedSettings.structural?.enabled,
+        profile: nestedSettings.profile?.enabled,
+        terminology: nestedSettings.terminology?.enabled,
+        reference: nestedSettings.reference?.enabled,
+        businessRule: nestedSettings.businessRule?.enabled,
+        metadata: nestedSettings.metadata?.enabled
+      });
+      
       this.enhancedValidationEngine.updateConfig({
-        enableStructuralValidation: settings.enableStructuralValidation ?? true,
-        enableProfileValidation: settings.enableProfileValidation ?? true,
-        enableTerminologyValidation: settings.enableTerminologyValidation ?? true,
-        enableReferenceValidation: settings.enableReferenceValidation ?? true,
-        enableBusinessRuleValidation: settings.enableBusinessRuleValidation ?? true,
-        enableMetadataValidation: settings.enableMetadataValidation ?? true,
-        strictMode: settings.strictMode ?? false,
-        profiles: settings.validationProfiles ?? [
+        enableStructuralValidation: nestedSettings.structural?.enabled ?? true,
+        enableProfileValidation: nestedSettings.profile?.enabled ?? true,
+        enableTerminologyValidation: nestedSettings.terminology?.enabled ?? true,
+        enableReferenceValidation: nestedSettings.reference?.enabled ?? true,
+        enableBusinessRuleValidation: nestedSettings.businessRule?.enabled ?? true,
+        enableMetadataValidation: nestedSettings.metadata?.enabled ?? true,
+        strictMode: nestedSettings.strictMode ?? false,
+        profiles: nestedSettings.validationProfiles ?? [
           'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient',
           'http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab'
         ],
-        terminologyServers: settings.terminologyServers ?? [],
-        profileResolutionServers: settings.profileResolutionServers ?? []
+        terminologyServers: nestedSettings.terminologyServers ?? [],
+        profileResolutionServers: nestedSettings.profileResolutionServers ?? []
       });
     }
   }
@@ -81,6 +94,87 @@ export class UnifiedValidationService {
   clearSettingsCache(): void {
     this.cachedSettings = null;
     this.settingsCacheTime = 0;
+  }
+
+  /**
+   * Force reload settings from database (bypasses cache)
+   */
+  async forceReloadSettings(): Promise<void> {
+    this.clearSettingsCache();
+    await this.loadValidationSettings();
+  }
+
+  /**
+   * Filter validation issues based on current settings
+   * This determines what the UI considers "valid" vs "error"
+   */
+  private filterValidationIssues(issues: any[]): { filteredIssues: any[], isValid: boolean } {
+    if (!this.cachedSettings) {
+      // If no settings, consider all issues as errors
+      return { filteredIssues: issues, isValid: issues.length === 0 };
+    }
+
+    // Check if ALL validation aspects are disabled
+    const settings = this.cachedSettings?.settings || this.cachedSettings;
+    const allAspectsDisabled = 
+      settings?.structural?.enabled !== true &&
+      settings?.profile?.enabled !== true &&
+      settings?.terminology?.enabled !== true &&
+      settings?.reference?.enabled !== true &&
+      settings?.businessRule?.enabled !== true &&
+      settings?.metadata?.enabled !== true;
+
+    // Debug logging
+    console.log('[FilterValidation] Settings check:', {
+      structural: settings?.structural?.enabled,
+      profile: settings?.profile?.enabled,
+      terminology: settings?.terminology?.enabled,
+      reference: settings?.reference?.enabled,
+      businessRule: settings?.businessRule?.enabled,
+      metadata: settings?.metadata?.enabled,
+      allAspectsDisabled
+    });
+
+    if (allAspectsDisabled) {
+      // If all aspects are disabled, consider everything valid
+      console.log('[FilterValidation] All aspects disabled - returning valid result');
+      return { filteredIssues: [], isValid: true };
+    }
+
+    const filteredIssues = issues.filter(issue => {
+      const category = issue.category || 'structural';
+      
+      // Check if this category is enabled in settings
+      switch (category) {
+        case 'structural':
+          return settings?.structural?.enabled === true;
+        case 'profile':
+          return settings?.profile?.enabled === true;
+        case 'terminology':
+          return settings?.terminology?.enabled === true;
+        case 'reference':
+          return settings?.reference?.enabled === true;
+        case 'business-rule':
+        case 'businessRule':
+          return settings?.businessRule?.enabled === true;
+        case 'metadata':
+          return settings?.metadata?.enabled === true;
+        case 'general':
+          return true; // Always show general category issues
+        default:
+          return true; // Show unknown categories by default
+      }
+    });
+
+    // A resource is considered "valid" if it has no errors/fatal issues in the filtered results
+    const hasErrors = filteredIssues.some(issue => 
+      issue.severity === 'error' || issue.severity === 'fatal'
+    );
+    
+    return { 
+      filteredIssues, 
+      isValid: !hasErrors 
+    };
   }
 
   /**
@@ -170,25 +264,60 @@ export class UnifiedValidationService {
       wasRevalidated = true;
 
       try {
-        // Load latest validation settings from database (cached for performance)
+        // Load settings first to check if validation should be skipped
         await this.loadValidationSettings();
         
-        // Use enhanced validation engine with current settings
-        const enhancedResult = await this.enhancedValidationEngine.validateResource(resource);
+            // Check if ALL validation aspects are disabled
+    const settings = this.cachedSettings?.settings || this.cachedSettings;
+    const allAspectsDisabled = 
+      settings?.structural?.enabled !== true &&
+      settings?.profile?.enabled !== true &&
+      settings?.terminology?.enabled !== true &&
+      settings?.reference?.enabled !== true &&
+      settings?.businessRule?.enabled !== true &&
+      settings?.metadata?.enabled !== true;
+
+        let enhancedResult;
+        if (allAspectsDisabled) {
+          // Skip validation entirely - return valid result
+          enhancedResult = {
+            isValid: true,
+            resourceType: resource.resourceType,
+            resourceId: resource.id,
+            issues: [],
+            validationAspects: {
+              structural: { passed: true, issues: [] },
+              profile: { passed: true, issues: [], profilesChecked: [] },
+              terminology: { passed: true, issues: [], codesChecked: 0 },
+              reference: { passed: true, issues: [], referencesChecked: 0 },
+              businessRule: { passed: true, issues: [], rulesChecked: 0 },
+              metadata: { passed: true, issues: [] }
+            },
+            validationScore: 100,
+            validatedAt: new Date()
+          };
+        } else {
+          // Always validate with all aspects - settings only affect result filtering
+          // Use enhanced validation engine (now always runs all validation aspects)
+          enhancedResult = await this.enhancedValidationEngine.validateResource(resource);
+        }
+        
+        // Apply filtering based on current settings to determine what's considered "valid"
+        const { filteredIssues, isValid } = this.filterValidationIssues(enhancedResult.issues);
         
         // Convert enhanced validation result to our database format
         const validationResult: InsertValidationResult = {
           resourceId: dbResource.id,
           profileId: null,
-          isValid: enhancedResult.isValid,
-          errors: enhancedResult.issues.filter(issue => issue.severity === 'error' || issue.severity === 'fatal').map(issue => ({
+          isValid: isValid, // Use filtered validity (what UI considers valid)
+          errors: filteredIssues.filter(issue => issue.severity === 'error' || issue.severity === 'fatal').map(issue => ({
             severity: issue.severity as 'error' | 'warning' | 'information',
             message: issue.message,
             path: issue.path,
             expression: issue.expression,
             code: issue.code
           })),
-          warnings: enhancedResult.issues.filter(issue => issue.severity === 'warning').map(issue => ({
+          warnings: filteredIssues.filter(issue => issue.severity === 'warning').map(issue => ({
             severity: issue.severity as 'error' | 'warning' | 'information',
             message: issue.message,
             path: issue.path,
@@ -204,8 +333,8 @@ export class UnifiedValidationService {
             category: issue.category // Include category in stored issues
           })),
           profileUrl: enhancedResult.validationAspects.profile.profilesChecked[0] || null,
-          errorCount: enhancedResult.issues.filter(i => i.severity === 'error' || i.severity === 'fatal').length,
-          warningCount: enhancedResult.issues.filter(i => i.severity === 'warning').length,
+          errorCount: filteredIssues.filter(i => i.severity === 'error' || i.severity === 'fatal').length,
+          warningCount: filteredIssues.filter(i => i.severity === 'warning').length,
           validationScore: enhancedResult.validationScore,
           validatedAt: enhancedResult.validatedAt,
           // Add enhanced validation details
@@ -218,7 +347,10 @@ export class UnifiedValidationService {
               reference: enhancedResult.issues.filter(i => i.category === 'reference').length,
               businessRule: enhancedResult.issues.filter(i => i.category === 'business-rule').length,
               metadata: enhancedResult.issues.filter(i => i.category === 'metadata').length
-            }
+            },
+            // Store both filtered and unfiltered results for debugging
+            filteredIssues: filteredIssues,
+            allIssues: enhancedResult.issues
           }
         };
 

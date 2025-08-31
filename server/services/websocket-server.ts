@@ -77,6 +77,17 @@ export class ValidationWebSocketServer {
     });
   }
 
+  broadcastValidationPaused() {
+    const message = {
+      type: 'validation_paused',
+      data: { timestamp: new Date().toISOString() }
+    };
+
+    this.clients.forEach(client => {
+      this.sendToClient(client, message);
+    });
+  }
+
   broadcastMessage(message: string) {
     this.clients.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {

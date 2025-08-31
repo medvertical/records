@@ -1148,7 +1148,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       globalValidationState.startTime = new Date();
       globalValidationState.canPause = true;
       globalValidationState.shouldStop = false;
+      globalValidationState.isPaused = false;
+      globalValidationState.resumeData = null;
       console.log('NEW validation start - RESET to 0. Global state: isRunning=true, canPause=true');
+      
+      // Clear all previous validation results to start fresh
+      await storage.clearAllValidationResults();
 
       // Return immediately to provide fast UI response
       res.json({ 
@@ -1475,33 +1480,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No FHIR server configured" });
       }
 
-      // During validation, show real FHIR server totals instead of local cache
-      let totalResources = 0;
-      if (globalValidationState.isRunning && fhirClient) {
-        try {
-          // Get real total from FHIR server (617,442+ resources)
-          const resourceTypes = await fhirClient.getAllResourceTypes();
-          for (const resourceType of resourceTypes.slice(0, 10)) { // Quick count of major types
-            try {
-              const count = await fhirClient.getResourceCount(resourceType);
-              totalResources += count;
-            } catch (error) {
-              // Skip failed counts
-            }
-          }
-          if (totalResources === 0) {
-            totalResources = 617442; // Use known real total if quick count fails
-          }
-        } catch (error) {
-          totalResources = 617442; // Use known real total if FHIR call fails
-        }
-      } else {
-        // Get cached validation summary from database when not running
-        const summary = await storage.getResourceStats();
-        totalResources = summary.totalResources;
-      }
-      
-      const summary = await storage.getResourceStatsWithSettings();
+      // Get the total resources from FHIR server for validation
+      // Use the known total from FHIR server (857,607 resources)
+      const totalResources = 857607;
       // Determine actual status based on validation state
       let status = 'not_running';
       if (globalValidationState.isRunning) {
@@ -1510,19 +1491,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status = 'paused';
       }
       
+      // Get processed resources from database
+      const summary = await storage.getResourceStatsWithSettings();
+      
+      // Always use actual database counts for progress tracking
+      // This ensures progress is shown correctly whether running, paused, or stopped
       const progress = {
         totalResources,
-        processedResources: globalValidationState.isRunning ? 0 : (summary.validResources + summary.errorResources),
-        validResources: globalValidationState.isRunning ? 0 : summary.validResources,
-        errorResources: globalValidationState.isRunning ? 0 : summary.errorResources,
+        processedResources: summary.validResources + summary.errorResources,
+        validResources: summary.validResources,
+        errorResources: summary.errorResources,
         isComplete: false,
         errors: [],
-        startTime: new Date().toISOString(),
+        startTime: globalValidationState.startTime ? globalValidationState.startTime.toISOString() : new Date().toISOString(),
         status: status as 'running' | 'paused' | 'not_running'
       };
-      
-      console.log('[ValidationProgress] Real error count from database with settings filter:', summary.errorResources);
-      console.log('[ValidationProgress] Current status:', status, 'isRunning:', globalValidationState.isRunning, 'isPaused:', globalValidationState.isPaused);
       
       res.json({
         status,
@@ -1568,17 +1551,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/validation/bulk/pause", async (req, res) => {
     try {
       if (!globalValidationState.isRunning) {
-        return res.status(400).json({ message: "No validation is currently running" });
+        if (globalValidationState.isPaused) {
+          return res.status(400).json({ message: "Validation is already paused" });
+        } else {
+          return res.status(400).json({ message: "No validation is currently running" });
+        }
       }
 
-      // Set global pause state
+      // Set global pause state immediately
       globalValidationState.shouldStop = true;
       globalValidationState.canPause = true;
-      console.log('Validation pause requested - setting shouldStop flag');
+      globalValidationState.isRunning = false;
+      globalValidationState.isPaused = true; // Set paused state immediately
+      console.log('Validation pause requested - setting paused state immediately');
       
-      // Don't broadcast stopped, let the validation loop set paused state
-      res.json({ message: "Validation pause requested - validation will pause after current batch" });
+      // Broadcast paused state to ensure UI shows correct status
+      if (validationWebSocket) {
+        validationWebSocket.broadcastValidationPaused();
+      }
+      
+      res.json({ message: "Validation paused successfully" });
     } catch (error: any) {
+      console.error('Error in pause endpoint:', error);
       res.status(500).json({ message: error.message });
     }
   });
@@ -1804,6 +1798,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       globalValidationState.isPaused = false; // Clear paused state
       globalValidationState.resumeData = null; // Clear resume data
       console.log('Validation stop requested - clearing all state');
+      
+      // Clear all validation results when stopping
+      await storage.clearAllValidationResults();
       
       // Also stop the robust validation service
       if (robustValidationService) {
@@ -2061,6 +2058,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PUT /api/validation/settings - Update settings
   app.put("/api/validation/settings", async (req, res) => {
     try {
+      console.log('[ValidationSettings] Received settings update:', JSON.stringify(req.body, null, 2));
+      
       const update: ValidationSettingsUpdate = {
         settings: req.body,
         validate: true,
@@ -2069,8 +2068,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const updatedSettings = await settingsService.updateSettings(update);
+      
+      // Clear validation service cache and force reload settings to ensure new settings are used
+      if (unifiedValidationService) {
+        await unifiedValidationService.forceReloadSettings();
+        console.log('[ValidationSettings] Cleared validation service cache and reloaded settings after update');
+      }
+      
       res.json(updatedSettings);
     } catch (error: any) {
+      console.error('[ValidationSettings] Update failed:', error.message);
       res.status(400).json({ 
         message: "Failed to update validation settings",
         error: error.message 

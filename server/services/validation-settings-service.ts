@@ -227,9 +227,14 @@ export class ValidationSettingsService extends EventEmitter {
       await this.initialize();
     }
 
+    // Transform string dates to Date objects before validation
+    const transformedSettings = this.transformStringDatesToObjects(update.settings);
+    
     // Validate the update
-    const validationResult = validatePartialValidationSettings(update.settings);
+    console.log('[ValidationSettingsService] Validating settings update:', JSON.stringify(transformedSettings, null, 2));
+    const validationResult = validatePartialValidationSettings(transformedSettings);
     if (!validationResult.isValid) {
+      console.error('[ValidationSettingsService] Validation failed:', validationResult.errors);
       throw new Error(`Invalid settings update: ${validationResult.errors.map(e => e.message).join(', ')}`);
     }
 
@@ -239,7 +244,7 @@ export class ValidationSettingsService extends EventEmitter {
     // Merge with current settings
     const updatedSettings: ValidationSettings = {
       ...currentSettings,
-      ...update.settings,
+      ...transformedSettings,
       version: update.createNewVersion ? currentSettings.version + 1 : currentSettings.version,
       updatedAt: new Date(),
       updatedBy: update.updatedBy
@@ -640,6 +645,27 @@ export class ValidationSettingsService extends EventEmitter {
       timestamp: new Date(),
       settingsCount: this.cache.size
     });
+  }
+
+  /**
+   * Transforms string dates to Date objects in the settings object
+   */
+  private transformStringDatesToObjects(settings: any): any {
+    if (!settings || typeof settings !== 'object') {
+      return settings;
+    }
+
+    const transformed = { ...settings };
+
+    // Transform known date fields
+    if (transformed.createdAt && typeof transformed.createdAt === 'string') {
+      transformed.createdAt = new Date(transformed.createdAt);
+    }
+    if (transformed.updatedAt && typeof transformed.updatedAt === 'string') {
+      transformed.updatedAt = new Date(transformed.updatedAt);
+    }
+
+    return transformed;
   }
 }
 

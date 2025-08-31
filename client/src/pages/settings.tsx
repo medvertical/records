@@ -59,6 +59,9 @@ export default function SettingsPage() {
     validateOnChange: true
   });
 
+  // Debug hasChanges state
+  console.log('[SettingsPage] hasChanges:', hasChanges);
+
   // FHIR servers data
   const { data: fhirServers, isLoading: serversLoading, refetch: refetchServers } = useFhirServers();
 
@@ -67,6 +70,7 @@ export default function SettingsPage() {
   // ========================================================================
 
   const handleSettingsChange = (newSettings: any) => {
+    console.log('[SettingsPage] Settings change received:', newSettings);
     updateSettings({
       settings: newSettings,
       createNewVersion: false,
@@ -223,6 +227,7 @@ export default function SettingsPage() {
             initialSettings={settings || undefined}
             loading={settingsLoading}
             saving={settingsSaving}
+            hasChanges={hasChanges}
             onSettingsChange={handleSettingsChange}
             onSave={handleSaveSettings}
             onReset={handleResetSettings}

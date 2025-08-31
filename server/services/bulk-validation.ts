@@ -374,12 +374,8 @@ export class BulkValidationService {
       }
 
       // Update progress counters based on validation result
-      // Use more reasonable threshold: 70% score or no fatal/error issues
-      const hasFatalOrErrors = validationData.issues?.some((issue: any) => 
-        issue.severity === 'fatal' || issue.severity === 'error'
-      ) || false;
-      
-      const isResourceValid = !hasFatalOrErrors && validationData.validationScore >= 70;
+      // Use the isValid field which is already filtered based on current settings
+      const isResourceValid = validationData.isValid;
       
       if (isResourceValid) {
         this.currentProgress!.validResources++;
@@ -387,7 +383,7 @@ export class BulkValidationService {
         this.currentProgress!.errorResources++;
         // Add error details
         this.currentProgress!.errors.push(
-          `${resource.resourceType}/${resource.id}: Score ${validationData.validationScore}% - ${validationData.issues?.length || 0} validation issues`
+          `${resource.resourceType}/${resource.id}: Score ${validationData.validationScore}% - ${validationData.errorCount || 0} errors, ${validationData.warningCount || 0} warnings`
         );
       }
 

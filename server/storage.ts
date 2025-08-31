@@ -282,6 +282,11 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(validationResults).where(eq(validationResults.resourceId, resourceId));
   }
 
+  async clearAllValidationResults(): Promise<void> {
+    await db.delete(validationResults);
+    console.log('[Storage] Cleared all validation results');
+  }
+
   async createValidationResult(result: InsertValidationResult): Promise<ValidationResult> {
     const [newResult] = await db
       .insert(validationResults)
@@ -435,6 +440,8 @@ export class DatabaseStorage implements IStorage {
       metadata: { enabled: true, severity: 'information' as const }
     };
     
+
+    
     // Count valid/error/warning resources based on filtered issues
     let validResourcesCount = 0;
     let errorResourcesCount = 0;
@@ -457,44 +464,26 @@ export class DatabaseStorage implements IStorage {
       if (processedResourceIds.has(result.resourceId)) return;
       processedResourceIds.add(result.resourceId);
       
-      // Filter issues based on active validation settings
-      let hasRelevantErrors = false;
-      let hasRelevantWarnings = false;
+      // Re-evaluate validation result based on current settings
+      const reEvaluatedResult = this.reEvaluateValidationResult(result, settings);
       
-      if (result.issues && Array.isArray(result.issues)) {
-        const filteredIssues = result.issues.filter((issue: any) => {
-          const category = issue.category || 'structural';
-          
-          // Check if this category is enabled
-          if (category === 'structural' && !settings.structural?.enabled) return false;
-          if (category === 'profile' && !settings.profile?.enabled) return false;
-          if (category === 'terminology' && !settings.terminology?.enabled) return false;
-          if (category === 'reference' && !settings.reference?.enabled) return false;
-          if (category === 'business-rule' && !settings.businessRule?.enabled) return false;
-          if (category === 'metadata' && !settings.metadata?.enabled) return false;
-          
-          return true;
-        });
-        
-        // Check if any filtered issues are errors or warnings
-        hasRelevantErrors = filteredIssues.some((issue: any) => 
-          issue.severity === 'error' || issue.severity === 'fatal'
-        );
-        
-        hasRelevantWarnings = filteredIssues.some((issue: any) => 
-          issue.severity === 'warning'
-        );
-      }
-      
-      // Update counts
-      if (hasRelevantErrors) {
-        errorResourcesCount++;
-      } else if (hasRelevantWarnings) {
-        warningResourcesCount++;
-      } else {
+      if (reEvaluatedResult.isValid) {
         validResourcesCount++;
         if (resourceBreakdown[result.resourceType]) {
           resourceBreakdown[result.resourceType].valid++;
+        }
+      } else {
+        // Check if it has warnings (but no errors) or errors
+        const hasErrors = reEvaluatedResult.errorCount > 0;
+        const hasWarnings = reEvaluatedResult.warningCount > 0;
+        
+        if (hasErrors) {
+          errorResourcesCount++;
+        } else if (hasWarnings) {
+          warningResourcesCount++;
+        } else {
+          // Fallback: if isValid is false but no errors/warnings, count as error
+          errorResourcesCount++;
         }
       }
     });
@@ -522,6 +511,71 @@ export class DatabaseStorage implements IStorage {
       activeProfiles: activeProfiles.length,
       resourceBreakdown,
     };
+  }
+
+  /**
+   * Re-evaluate a validation result based on current settings
+   * This allows the same validation data to be filtered differently based on current settings
+   */
+  private reEvaluateValidationResult(result: any, settings: any): { isValid: boolean; errorCount: number; warningCount: number } {
+    // Check if ALL validation aspects are disabled
+    const allAspectsDisabled = 
+      settings?.structural?.enabled !== true &&
+      settings?.profile?.enabled !== true &&
+      settings?.terminology?.enabled !== true &&
+      settings?.reference?.enabled !== true &&
+      settings?.businessRule?.enabled !== true &&
+      settings?.metadata?.enabled !== true;
+
+    if (allAspectsDisabled) {
+      // If all aspects are disabled, consider everything valid
+      return { isValid: true, errorCount: 0, warningCount: 0 };
+    }
+
+    // Get the stored issues from the validation result
+    const issues = result.issues || [];
+    
+    // Filter issues based on current settings
+    const filteredIssues = issues.filter((issue: any) => {
+      const category = issue.category || 'structural';
+      
+      // Check if this category is enabled in settings
+      switch (category) {
+        case 'structural':
+          return settings?.structural?.enabled === true;
+        case 'profile':
+          return settings?.profile?.enabled === true;
+        case 'terminology':
+          return settings?.terminology?.enabled === true;
+        case 'reference':
+          return settings?.reference?.enabled === true;
+        case 'business-rule':
+        case 'businessRule':
+          return settings?.businessRule?.enabled === true;
+        case 'metadata':
+          return settings?.metadata?.enabled === true;
+        default:
+          return true; // Include unknown categories
+      }
+    });
+
+    // Count errors and warnings from filtered issues
+    let errorCount = 0;
+    let warningCount = 0;
+    
+    filteredIssues.forEach((issue: any) => {
+      const severity = issue.severity || 'error';
+      if (severity === 'error' || severity === 'fatal') {
+        errorCount++;
+      } else if (severity === 'warning') {
+        warningCount++;
+      }
+    });
+
+    // Resource is valid if no errors remain after filtering
+    const isValid = errorCount === 0;
+
+    return { isValid, errorCount, warningCount };
   }
 
   async getValidationSettings(): Promise<ValidationSettings | undefined> {

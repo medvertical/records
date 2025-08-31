@@ -10,7 +10,7 @@ export interface ValidationProgress {
   estimatedTimeRemaining?: number;
   isComplete: boolean;
   errors: string[];
-  status: 'not_running' | 'running' | 'completed';
+  status: 'not_running' | 'running' | 'paused' | 'completed' | 'error';
 }
 
 export interface WebSocketMessage {
@@ -56,15 +56,24 @@ export function useValidationWebSocket() {
         // Update local state if API state differs
         if (data.status === 'running' && validationStatus !== 'running') {
           setValidationStatus('running');
-        } else if (data.status === 'paused' && validationStatus !== 'idle') {
-          setValidationStatus('idle');
+        } else if (data.status === 'paused' && validationStatus !== 'running') {
+          // Keep status as 'running' when paused - paused is just a temporary state
+          setValidationStatus('running');
         } else if (data.status === 'completed' && validationStatus !== 'completed') {
           setValidationStatus('completed');
         }
         
-        // Update progress if available
-        if (data.progress) {
-          setProgress(data.progress);
+        // Update progress with the full data object (not just data.progress)
+        if (data.totalResources !== undefined) {
+          setProgress({
+            totalResources: data.totalResources,
+            processedResources: data.processedResources,
+            validResources: data.validResources,
+            errorResources: data.errorResources,
+            startTime: data.startTime,
+            isComplete: data.isComplete,
+            errors: data.errors || []
+          });
         }
       }
     } catch (error) {

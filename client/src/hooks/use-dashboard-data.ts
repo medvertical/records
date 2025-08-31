@@ -2,7 +2,7 @@
 // Dashboard Data Hook - Centralized Data Management
 // ============================================================================
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect, useCallback } from 'react';
 import { 
   FhirServerStats, 
@@ -54,12 +54,42 @@ interface UseDashboardDataReturn {
 export function useDashboardData(options: UseDashboardDataOptions = {}): UseDashboardDataReturn {
   const {
     enableRealTimeUpdates = true,
-    refetchInterval = 300000, // 5 minutes (reduced from 30 seconds for better performance)
+    refetchInterval = 600000, // 10 minutes (reduced frequency for better performance)
     enableCaching = true
   } = options;
 
+  const queryClient = useQueryClient();
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isStale, setIsStale] = useState(false);
+
+  // Listen for settings changes to invalidate dashboard cache
+  useEffect(() => {
+    const handleWebSocketMessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
+          console.log('[useDashboardData] Validation settings updated, invalidating cache');
+          // Invalidate all dashboard-related queries
+          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/fhir-server-stats'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/validation-stats'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/combined'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/validation/bulk/progress'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/validation/errors/recent'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+        }
+      } catch (error) {
+        // Ignore non-JSON messages
+      }
+    };
+
+    // Add event listener for WebSocket messages
+    const ws = (window as any).validationWebSocket;
+    if (ws) {
+      ws.addEventListener('message', handleWebSocketMessage);
+      return () => ws.removeEventListener('message', handleWebSocketMessage);
+    }
+  }, [queryClient]);
 
   // FHIR Server Stats Query
   const {
@@ -70,7 +100,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
   } = useQuery({
     queryKey: ['/api/dashboard/fhir-server-stats'],
     refetchInterval: enableRealTimeUpdates ? refetchInterval : false,
-    staleTime: enableCaching ? 15 * 60 * 1000 : 0, // 15 minutes (extended for better performance)
+    staleTime: enableCaching ? 30 * 60 * 1000 : 0, // 30 minutes (extended for better performance)
     onSuccess: () => {
       setLastUpdated(new Date());
       setIsStale(false);

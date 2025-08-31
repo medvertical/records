@@ -73,6 +73,9 @@ interface RockSolidSettingsProps {
   /** Whether settings are saving */
   saving?: boolean;
   
+  /** Whether settings have changes */
+  hasChanges?: boolean;
+  
   /** Callback when settings change */
   onSettingsChange?: (settings: ValidationSettings) => void;
   
@@ -111,6 +114,7 @@ export function RockSolidSettings({
   initialSettings,
   loading = false,
   saving = false,
+  hasChanges = false,
   onSettingsChange,
   onSave,
   onReset,
@@ -124,13 +128,16 @@ export function RockSolidSettings({
   const [state, setState] = useState<SettingsState>({
     settings: initialSettings || getDefaultSettings(),
     validationResult: undefined,
-    hasChanges: false,
+    hasChanges: false, // This is now managed by the parent component
     isTesting: false,
     testResult: undefined
   });
 
   const [activeTab, setActiveTab] = useState('aspects');
   const [showValidationDetails, setShowValidationDetails] = useState(false);
+
+  // Debug state.settings
+  console.log('[RockSolidSettings] state.settings:', state.settings);
 
   // ========================================================================
   // Effects
@@ -140,8 +147,8 @@ export function RockSolidSettings({
     if (initialSettings) {
       setState(prev => ({
         ...prev,
-        settings: initialSettings,
-        hasChanges: false
+        settings: initialSettings
+        // hasChanges is now managed by the parent component
       }));
     }
   }, [initialSettings]);
@@ -157,14 +164,16 @@ export function RockSolidSettings({
   // ========================================================================
 
   const handleSettingChange = useCallback((path: string, value: any) => {
+    console.log('[RockSolidSettings] Setting change:', path, value);
     setState(prev => {
       const newSettings = updateNestedProperty(prev.settings, path, value);
+      console.log('[RockSolidSettings] New settings:', newSettings);
       // Call onSettingsChange with the new settings
       onSettingsChange?.(newSettings);
       return {
         ...prev,
-        settings: newSettings,
-        hasChanges: true
+        settings: newSettings
+        // hasChanges is now managed by the parent component
       };
     });
   }, [onSettingsChange]);
@@ -422,7 +431,7 @@ export function RockSolidSettings({
             <div className="flex items-center space-x-2">
               <Button
                 onClick={handleSave}
-                disabled={!state.hasChanges || loading || saving}
+                disabled={!hasChanges || loading || saving}
               >
                 {saving ? (
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
@@ -621,6 +630,9 @@ function ValidationAspectsCard({
     }
   ];
 
+  console.log('[ValidationAspectsCard] Rendering with settings:', settings);
+  console.log('[ValidationAspectsCard] Aspects:', aspects);
+
   return (
     <Card>
       <CardHeader>
@@ -630,7 +642,9 @@ function ValidationAspectsCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {aspects.map((aspect) => (
+        {aspects.map((aspect) => {
+          console.log('[ValidationAspectsCard] Rendering aspect:', aspect.key, 'enabled:', settings[aspect.key]?.enabled);
+          return (
           <div key={aspect.key} className="space-y-4">
             <div className="flex items-center space-x-3">
               {aspect.icon}
@@ -640,9 +654,11 @@ function ValidationAspectsCard({
               </div>
               <Switch
                 checked={settings[aspect.key]?.enabled ?? false}
-                onCheckedChange={(enabled) => 
-                  onSettingChange(`${aspect.key}.enabled`, enabled)
-                }
+                onCheckedChange={(enabled) => {
+                  console.log('[ValidationAspectsCard] Switch toggled:', aspect.key, enabled);
+                  console.log('[ValidationAspectsCard] Current settings:', settings);
+                  onSettingChange(`${aspect.key}.enabled`, enabled);
+                }}
               />
             </div>
             
@@ -695,7 +711,8 @@ function ValidationAspectsCard({
             
             {aspect.key !== 'metadata' && <Separator />}
           </div>
-        ))}
+          );
+        })}
       </CardContent>
     </Card>
   );

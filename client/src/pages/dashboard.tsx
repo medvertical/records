@@ -24,7 +24,7 @@ import {
   WifiOff,
   RefreshCw
 } from 'lucide-react';
-import { useValidationWebSocket } from '@/hooks/use-validation-websocket';
+import { useValidationWebSocket, ValidationProgress as WebSocketValidationProgress } from '@/hooks/use-validation-websocket';
 import { useDashboardData } from '@/hooks/use-dashboard-data';
 import { ServerStatsCard } from '@/components/dashboard/server-stats-card';
 import { ValidationStatsCard } from '@/components/dashboard/validation-stats-card';
@@ -80,13 +80,43 @@ export default function DashboardNew() {
   const [isValidationRunning, setIsValidationRunning] = useState(false);
   const [isValidationPaused, setIsValidationPaused] = useState(false);
   const [isValidationInitializing, setIsValidationInitializing] = useState(false);
-  const [validationProgress, setValidationProgress] = useState<ValidationProgress | null>(null);
+  const [validationProgress, setValidationProgress] = useState<WebSocketValidationProgress | null>(null);
+  const [lastFetchUpdate, setLastFetchUpdate] = useState<number>(0);
 
   // WebSocket for real-time validation updates
   const { isConnected, progress, validationStatus } = useValidationWebSocket();
 
+  // Listen for settings changes to invalidate dashboard cache
+  useEffect(() => {
+    const handleWebSocketMessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
+          console.log('[Dashboard] Validation settings updated, invalidating cache');
+          // Invalidate dashboard-related queries
+          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/fhir-server-stats'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/validation-stats'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/combined'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/validation/bulk/progress'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/validation/errors/recent'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+        }
+      } catch (error) {
+        // Ignore non-JSON messages
+      }
+    };
+
+    // Add event listener for WebSocket messages
+    const ws = (window as any).validationWebSocket;
+    if (ws) {
+      ws.addEventListener('message', handleWebSocketMessage);
+      return () => ws.removeEventListener('message', handleWebSocketMessage);
+    }
+  }, []);
+
   // Get current validation progress from server (using fetch for now)
-  const [currentValidationProgress, setCurrentValidationProgress] = useState(null);
+  const [currentValidationProgress, setCurrentValidationProgress] = useState<ValidationProgress | null>(null);
   const [recentErrors, setRecentErrors] = useState([]);
 
   // Fetch validation progress
@@ -96,12 +126,17 @@ export default function DashboardNew() {
         const response = await fetch('/api/validation/bulk/progress');
         if (response.ok) {
           const data = await response.json();
+          // Convert startTime string to Date
+          if (data.startTime) {
+            data.startTime = new Date(data.startTime);
+          }
           setCurrentValidationProgress(data);
           
           // Sync frontend state with backend state
           setIsValidationRunning(data.status === 'running');
           setIsValidationPaused(data.status === 'paused');
           setIsValidationInitializing(false);
+          setLastFetchUpdate(Date.now()); // Record when we last updated from fetch
         }
       } catch (error) {
         console.error('Failed to fetch validation progress:', error);
@@ -140,37 +175,54 @@ export default function DashboardNew() {
   useEffect(() => {
     if (progress) {
       console.log('WebSocket progress received:', progress);
+      // Use WebSocket progress directly (startTime is already a string)
       setValidationProgress(progress);
       
-      if (progress.status === 'running') {
-        setIsValidationRunning(true);
-        setIsValidationPaused(false);
-      } else if (progress.status === 'paused') {
-        setIsValidationRunning(false);
-        setIsValidationPaused(true);
-      } else if (progress.isComplete || progress.status === 'completed') {
-        setIsValidationRunning(false);
-        setIsValidationPaused(false);
+      // Only update state if fetch hasn't been more recent (within last 5 seconds)
+      const now = Date.now();
+      const timeSinceLastFetch = now - lastFetchUpdate;
+      
+      if (timeSinceLastFetch > 5000) { // 5 seconds threshold
+        if (progress.status === 'running') {
+          setIsValidationRunning(true);
+          setIsValidationPaused(false);
+        } else if (progress.status === 'paused') {
+          setIsValidationRunning(false);
+          setIsValidationPaused(true);
+        } else if (progress.isComplete || progress.status === 'completed') {
+          setIsValidationRunning(false);
+          setIsValidationPaused(false);
+        }
+      } else {
+        console.log('Skipping WebSocket state update - fetch was more recent');
       }
     }
-  }, [progress]);
+  }, [progress, lastFetchUpdate]);
 
   // WebSocket status updates
   useEffect(() => {
-    if (validationStatus === 'running') {
-      setIsValidationInitializing(false);
-      setIsValidationRunning(true);
-      setIsValidationPaused(false);
-    } else if (validationStatus === 'completed') {
-      setIsValidationInitializing(false);
-      setIsValidationRunning(false);
-      setIsValidationPaused(false);
-    } else if (validationStatus === 'stopped') {
-      setIsValidationInitializing(false);
-      setIsValidationRunning(false);
-      setIsValidationPaused(false);
+    // Only update state if fetch hasn't been more recent (within last 5 seconds)
+    const now = Date.now();
+    const timeSinceLastFetch = now - lastFetchUpdate;
+    
+    if (timeSinceLastFetch > 5000) { // 5 seconds threshold
+      if (validationStatus === 'running') {
+        setIsValidationInitializing(false);
+        setIsValidationRunning(true);
+        setIsValidationPaused(false);
+      } else if (validationStatus === 'completed') {
+        setIsValidationInitializing(false);
+        setIsValidationRunning(false);
+        setIsValidationPaused(false);
+      } else if (validationStatus === 'error') {
+        setIsValidationInitializing(false);
+        setIsValidationRunning(false);
+        setIsValidationPaused(false);
+      }
+    } else {
+      console.log('Skipping WebSocket status update - fetch was more recent');
     }
-  }, [validationStatus]);
+  }, [validationStatus, lastFetchUpdate]);
 
   // ========================================================================
   // Validation Control Handlers
@@ -210,9 +262,29 @@ export default function DashboardNew() {
         setIsValidationInitializing(false);
         setIsValidationRunning(false);
         setIsValidationPaused(true);
+        console.log('Validation paused successfully');
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to pause validation:', response.status, errorData);
+        
+        // If validation is already paused or not running, sync the state
+        if (response.status === 400 && (
+          errorData.message?.includes('No validation is currently running') ||
+          errorData.message?.includes('Validation is already paused')
+        )) {
+          console.log('Validation is already paused or not running, syncing state...');
+          // Fetch current status to sync state
+          const progressResponse = await fetch('/api/validation/bulk/progress');
+          if (progressResponse.ok) {
+            const progressData = await progressResponse.json();
+            setIsValidationRunning(progressData.status === 'running');
+            setIsValidationPaused(progressData.status === 'paused');
+            setIsValidationInitializing(false);
+          }
+        }
       }
     } catch (error) {
-      console.error('Failed to pause validation:', error);
+      console.error('Error pausing validation:', error);
     }
   };
 
@@ -286,12 +358,13 @@ export default function DashboardNew() {
     return `${minutes}m ${seconds}s`;
   };
 
-  const processingRate = validationProgress ? 
-    Math.round((validationProgress.processedResources / ((Date.now() - new Date(validationProgress.startTime).getTime()) / 1000)) * 60) : 
+  // Calculate processing rate only when validation is running
+  const processingRate = (currentValidationProgress && isValidationRunning) ? 
+    Math.round((currentValidationProgress.processedResources / ((Date.now() - new Date(currentValidationProgress.startTime).getTime()) / 1000)) * 60) : 
     0;
 
-  const estimatedMinutesRemaining = validationProgress?.estimatedTimeRemaining 
-    ? Math.round(validationProgress.estimatedTimeRemaining / 1000 / 60) 
+  const estimatedMinutesRemaining = currentValidationProgress?.estimatedTimeRemaining 
+    ? Math.round(currentValidationProgress.estimatedTimeRemaining / 1000 / 60) 
     : null;
 
   // ========================================================================
@@ -337,6 +410,8 @@ export default function DashboardNew() {
       <Card className={`border-2 transition-colors duration-300 ${
         isValidationRunning 
           ? 'border-green-500 bg-green-50/50 dark:border-green-400 dark:bg-green-950/20' 
+          : isValidationPaused
+          ? 'border-orange-500 bg-orange-50/50 dark:border-orange-400 dark:bg-orange-950/20'
           : isValidationInitializing
           ? 'border-yellow-500 bg-yellow-50/50 dark:border-yellow-400 dark:bg-yellow-950/20'
           : 'border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20'
@@ -347,6 +422,7 @@ export default function DashboardNew() {
               <CardTitle className="flex items-center gap-2">
                 <Activity className={`h-5 w-5 transition-colors duration-300 ${
                   isValidationRunning ? 'text-green-500 animate-pulse' : 
+                  isValidationPaused ? 'text-orange-500' :
                   isValidationInitializing ? 'text-yellow-500' : 'text-blue-500'
                 }`} />
                 Validation Engine
@@ -357,6 +433,10 @@ export default function DashboardNew() {
                 ) : isValidationRunning ? (
                   <Badge variant="secondary" className="bg-green-100 text-green-800 animate-pulse">
                     RUNNING
+                  </Badge>
+                ) : isValidationPaused ? (
+                  <Badge variant="secondary" className="bg-orange-100 text-orange-800">
+                    PAUSED
                   </Badge>
                 ) : null}
               </CardTitle>
@@ -399,37 +479,37 @@ export default function DashboardNew() {
           {(isValidationRunning || isValidationPaused || isValidationInitializing) ? (
             <div className="space-y-4">
               {/* Primary Progress Bar */}
-              {validationProgress && (
+              {currentValidationProgress && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">
-                      Processing: {validationProgress.processedResources?.toLocaleString() || 0} / {validationProgress.totalResources?.toLocaleString() || 0}
+                      Processing: {currentValidationProgress.processedResources?.toLocaleString() || 0} / {currentValidationProgress.totalResources?.toLocaleString() || 0}
                     </span>
                     <span className="text-sm font-bold text-blue-600">
-                      {Math.min(100, (validationProgress.processedResources / validationProgress.totalResources) * 100).toFixed(1)}%
+                      {Math.min(100, (currentValidationProgress.processedResources / currentValidationProgress.totalResources) * 100).toFixed(1)}%
                     </span>
                   </div>
                   <Progress 
-                    value={Math.min(100, (validationProgress.processedResources / validationProgress.totalResources) * 100)} 
+                    value={Math.min(100, (currentValidationProgress.processedResources / currentValidationProgress.totalResources) * 100)} 
                     className="w-full h-3" 
                   />
                 </div>
               )}
 
               {/* Live Statistics Grid */}
-              {validationProgress && (
+              {currentValidationProgress && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
                     <CheckCircle className="h-5 w-5 text-green-500" />
                     <div>
-                      <div className="text-lg font-bold">{validationProgress.validResources?.toLocaleString() || 0}</div>
+                      <div className="text-lg font-bold">{currentValidationProgress.validResources?.toLocaleString() || 0}</div>
                       <div className="text-xs text-muted-foreground">Valid</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
                     <AlertCircle className="h-5 w-5 text-red-500" />
                     <div>
-                      <div className="text-lg font-bold">{validationProgress.errorResources?.toLocaleString() || 0}</div>
+                      <div className="text-lg font-bold">{currentValidationProgress.errorResources?.toLocaleString() || 0}</div>
                       <div className="text-xs text-muted-foreground">Errors</div>
                     </div>
                   </div>
@@ -437,7 +517,7 @@ export default function DashboardNew() {
                     <Timer className="h-5 w-5 text-blue-500" />
                     <div>
                       <div className="text-lg font-bold">
-                        {validationProgress.startTime ? formatElapsedTime(validationProgress.startTime) : 'N/A'}
+                        {currentValidationProgress.startTime ? formatElapsedTime(currentValidationProgress.startTime) : 'N/A'}
                       </div>
                       <div className="text-xs text-muted-foreground">Elapsed</div>
                     </div>
@@ -504,7 +584,7 @@ export default function DashboardNew() {
           data={fhirServerStats!}
           isLoading={isFhirServerLoading}
           error={fhirServerError}
-          lastUpdated={lastUpdated}
+          lastUpdated={lastUpdated || undefined}
         />
 
         {/* Validation Statistics */}
@@ -512,7 +592,7 @@ export default function DashboardNew() {
           data={validationStats!}
           isLoading={isValidationLoading}
           error={validationError}
-          lastUpdated={lastUpdated}
+          lastUpdated={lastUpdated || undefined}
         />
       </div>
 

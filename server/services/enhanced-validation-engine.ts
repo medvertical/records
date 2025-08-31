@@ -204,35 +204,24 @@ export class EnhancedValidationEngine {
     };
 
     try {
+      // ALWAYS perform all validation aspects - settings only affect result filtering
       // 1. Strukturelle Validierung
-      if (this.config.enableStructuralValidation) {
-        await this.performStructuralValidation(resource, result);
-      }
+      await this.performStructuralValidation(resource, result);
 
       // 2. Profilkonformität
-      if (this.config.enableProfileValidation) {
-        await this.performProfileValidation(resource, result);
-      }
+      await this.performProfileValidation(resource, result);
 
       // 3. Terminologieprüfung
-      if (this.config.enableTerminologyValidation) {
-        await this.performTerminologyValidation(resource, result);
-      }
+      await this.performTerminologyValidation(resource, result);
 
       // 4. Referenzkonsistenz
-      if (this.config.enableReferenceValidation) {
-        await this.performReferenceValidation(resource, result);
-      }
+      await this.performReferenceValidation(resource, result);
 
       // 5. Feldübergreifende Logikprüfung
-      if (this.config.enableBusinessRuleValidation) {
-        await this.performBusinessRuleValidation(resource, result);
-      }
+      await this.performBusinessRuleValidation(resource, result);
 
       // 6. Versions- und Metadatenprüfung
-      if (this.config.enableMetadataValidation) {
-        await this.performMetadataValidation(resource, result);
-      }
+      await this.performMetadataValidation(resource, result);
 
       // Calculate overall validity and score
       this.calculateValidationResult(result);

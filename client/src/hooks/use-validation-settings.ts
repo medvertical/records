@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from './use-toast';
 import type {
   ValidationSettings,
@@ -96,6 +97,8 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
     autoSaveDelayMs = 2000,
     validateOnChange = true
   } = options;
+
+  const queryClient = useQueryClient();
 
   const { toast } = useToast();
   
@@ -225,7 +228,11 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
   }, [enableCaching, toast]);
 
   const updateSettings = useCallback(async (update: ValidationSettingsUpdate) => {
-    if (!settings) return;
+    console.log('[useValidationSettings] updateSettings called with:', update);
+    if (!settings) {
+      console.log('[useValidationSettings] No settings available, returning');
+      return;
+    }
 
     try {
       const updatedSettings = {
@@ -236,8 +243,10 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
         updatedBy: update.updatedBy
       };
 
+      console.log('[useValidationSettings] Updated settings:', updatedSettings);
       setSettings(updatedSettings);
       setHasChanges(true);
+      console.log('[useValidationSettings] hasChanges set to true');
       
       // Cache the updated settings
       if (enableCaching) {
@@ -263,6 +272,7 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
     setError(null);
 
     try {
+      console.log('[useValidationSettings] Sending settings to save:', settings);
       const response = await fetch('/api/validation/settings', {
         method: 'PUT',
         headers: {
@@ -272,13 +282,24 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to save settings: ${response.statusText}`);
+        const errorData = await response.json();
+        console.error('[useValidationSettings] Save failed with response:', errorData);
+        throw new Error(`Failed to save settings: ${errorData.message || response.statusText}`);
       }
 
       setHasChanges(false);
       setLastSaved(new Date());
       setLastSync(new Date());
       setPerformance(prev => ({ ...prev, saveTime: Date.now() - startTime }));
+      
+      // Invalidate dashboard cache to reflect new validation settings
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/fhir-server-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/validation-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/combined'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/validation/bulk/progress'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/validation/errors/recent'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
       
       toast({
         title: "Settings Saved",
@@ -297,7 +318,7 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
     } finally {
       setSaving(false);
     }
-  }, [settings, hasChanges, toast]);
+  }, [settings, hasChanges, toast, queryClient]);
 
   const resetSettings = useCallback(async () => {
     setLoading(true);
