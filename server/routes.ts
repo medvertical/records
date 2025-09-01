@@ -543,7 +543,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       isValid: filteredErrorCount === 0,
                       validationScore: filteredScore,
                       lastValidated: latestValidation ? new Date(latestValidation.validatedAt) : null,
-                      needsValidation: validationResults.length === 0 // Flag resources that need validation
+                      needsValidation: false // Always use cached validation results for performance
                     }
                   };
                 } catch (error) {
@@ -560,7 +560,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       isValid: false,
                       validationScore: 0,
                       lastValidated: null,
-                      needsValidation: true
+                      needsValidation: false
                     }
                   };
                 }
@@ -672,23 +672,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Resource not found" });
       }
       
-      // Check if validation is outdated and revalidate if needed
-      if (unifiedValidationService && resource.data) {
-        console.log(`[Resource Detail] Checking validation freshness for ${resource.resourceType}/${resource.resourceId}`);
-        try {
-          const validationResult = await unifiedValidationService.checkAndRevalidateResource(resource);
-          resource = validationResult.resource;
-          
-          if (validationResult.wasRevalidated) {
-            console.log(`[Resource Detail] Resource ${resource.resourceType}/${resource.resourceId} was revalidated`);
-          } else {
-            console.log(`[Resource Detail] Resource ${resource.resourceType}/${resource.resourceId} validation is up-to-date`);
-          }
-        } catch (validationError) {
-          console.warn(`[Resource Detail] Validation check failed for ${resource.resourceType}/${resource.resourceId}:`, validationError);
-          // Continue with existing validation results
-        }
-      }
+      // Skip revalidation check for better performance - use cached validation results
+      // Resources are validated during batch processing and should be up-to-date
+      // Individual revalidation can be triggered manually if needed
+      console.log(`[Resource Detail] Using cached validation results for ${resource.resourceType}/${resource.resourceId}`);
       
       // Get validation settings for filtering
       const validationSettings = await storage.getValidationSettings();
