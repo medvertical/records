@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { WebSocketServer } from "ws";
 import { serveStatic, log } from "./server/static";
 
 const app = express();
@@ -686,43 +685,6 @@ function broadcastValidationUpdate(data: any) {
   });
 }
 
-// WebSocket setup (keep for local development)
-const wss = new WebSocketServer({ server, path: "/ws/validation" });
-
-wss.on("connection", (ws) => {
-  log("WebSocket client connected");
-  
-  // Send a welcome message
-  ws.send(JSON.stringify({
-    type: "connected",
-    message: "Connected to validation WebSocket",
-    timestamp: new Date().toISOString()
-  }));
-
-  ws.on("message", (message) => {
-    try {
-      const data = JSON.parse(message.toString());
-      log(`WebSocket message received: ${JSON.stringify(data)}`);
-      
-      // Echo back the message
-      ws.send(JSON.stringify({
-        type: "echo",
-        original: data,
-        timestamp: new Date().toISOString()
-      }));
-    } catch (error) {
-      log(`WebSocket message error: ${error}`);
-    }
-  });
-
-  ws.on("close", () => {
-    log("WebSocket client disconnected");
-  });
-
-  ws.on("error", (error) => {
-    log(`WebSocket error: ${error}`);
-  });
-});
 
 // Mock validation updates for demonstration (remove in production)
 let mockValidationProgress: {
