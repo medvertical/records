@@ -67,8 +67,8 @@ export function ValidationStatsCard({
     );
   }
 
-  const formatNumber = (num: number) => num.toLocaleString();
-  const formatPercentage = (num: number) => num.toFixed(1);
+  const formatNumber = (num: number | undefined) => (num || 0).toLocaleString();
+  const formatPercentage = (num: number | undefined) => (num || 0).toFixed(1);
 
   // Calculate success rate
   const successRate = data.totalValidated > 0 
@@ -188,14 +188,14 @@ export function ValidationStatsCard({
                         <div className="w-16 bg-muted rounded-full h-1.5">
                           <div 
                             className={`h-1.5 rounded-full transition-all duration-500 ${
-                              breakdown.successRate > 80 ? 'bg-green-500' : 
-                              breakdown.successRate > 60 ? 'bg-yellow-500' : 'bg-red-500'
+                              (breakdown.successRate || 0) > 80 ? 'bg-green-500' : 
+                              (breakdown.successRate || 0) > 60 ? 'bg-yellow-500' : 'bg-red-500'
                             }`}
-                            style={{ width: `${breakdown.successRate}%` }}
+                            style={{ width: `${breakdown.successRate || 0}%` }}
                           />
                         </div>
                         <div className="text-sm text-muted-foreground w-12 text-right">
-                          {formatPercentage(breakdown.successRate)}%
+                          {formatPercentage(breakdown.successRate || 0)}%
                         </div>
                         <div className="text-xs text-muted-foreground w-16 text-right">
                           {formatNumber(breakdown.validated)}/{formatNumber(breakdown.total)}
