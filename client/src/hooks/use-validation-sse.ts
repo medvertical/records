@@ -14,14 +14,14 @@ export interface ValidationProgress {
   status: 'not_running' | 'running' | 'paused' | 'completed' | 'error';
 }
 
-export interface WebSocketMessage {
-  type: 'status' | 'validation_progress' | 'validation-progress' | 'validation_started' | 'validation-started' 
+export interface SSEMessage {
+  type: 'connected' | 'status' | 'validation_progress' | 'validation-progress' | 'validation_started' | 'validation-started' 
     | 'validation_complete' | 'validation-completed' | 'validation_error' | 'validation-error' 
     | 'validation_stopped' | 'validation-stopped' | 'validation-paused' | 'validation-resumed';
   data: any;
 }
 
-export function useValidationWebSocket() {
+export function useValidationSSE() {
   const [isConnected, setIsConnected] = useState(false);
   const [progress, setProgress] = useState<ValidationProgress | null>(null);
   const [validationStatus, setValidationStatus] = useState<'idle' | 'running' | 'paused' | 'completed' | 'error'>('idle');
@@ -35,7 +35,7 @@ export function useValidationWebSocket() {
     isPaused: false,
     lastSync: null
   });
-  const wsRef = useRef<WebSocket | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasReceivedMessage = useRef(false);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -73,7 +73,8 @@ export function useValidationWebSocket() {
             errorResources: data.errorResources,
             startTime: data.startTime,
             isComplete: data.isComplete,
-            errors: data.errors || []
+            errors: data.errors || [],
+            status: data.status || 'running'
           });
         }
       }
@@ -97,128 +98,126 @@ export function useValidationWebSocket() {
     }
   }, []);
 
-  const connect = () => {
+  // SSE connection function
+  const connectSSE = () => {
     try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host || 'localhost:3000';
-      const wsUrl = `${protocol}//${host}/ws/validation`;
-
-      console.log('[ValidationWebSocket] Attempting to connect to:', wsUrl);
-      wsRef.current = new WebSocket(wsUrl);
-
-      wsRef.current.onopen = () => {
-        console.log('WebSocket connected for validation updates');
+      const sseUrl = '/api/validation/stream';
+      console.log('[ValidationSSE] Attempting to connect to:', sseUrl);
+      
+      eventSourceRef.current = new EventSource(sseUrl);
+      
+      eventSourceRef.current.onopen = () => {
+        console.log('[ValidationSSE] Connected to validation stream');
         setIsConnected(true);
         setLastError(null);
-        setRetryCount(0); // Reset retry count on successful connection
-        // Start API synchronization
-        startApiSync();
-        // Don't reset status on connection - let server messages determine state
+        setRetryCount(0);
       };
-
-      wsRef.current.onmessage = (event) => {
+      
+      eventSourceRef.current.onmessage = (event) => {
         try {
-          const message: WebSocketMessage = JSON.parse(event.data);
-          
-          switch (message.type) {
-            case 'status':
-              console.log('WebSocket status:', message.data);
-              break;
-              
-            case 'validation-started':
-            case 'validation_started':
-              console.log('Validation started:', message.data);
-              setValidationStatus('running');
-              setLastError(null);
-              hasReceivedMessage.current = true;
-              break;
-              
-            case 'validation-progress':
-            case 'validation_progress':
-              setProgress(message.data);
-              setValidationStatus('running');
-              hasReceivedMessage.current = true;
-              break;
-              
-            case 'validation-completed':
-            case 'validation_complete':
-              console.log('Validation completed:', message.data);
-              setProgress(message.data.progress || message.data);
-              setValidationStatus('completed');
-              hasReceivedMessage.current = true;
-              break;
-              
-            case 'validation-error':
-            case 'validation_error':
-              console.log('Validation error:', message.data);
-              setLastError(message.data.error);
-              setValidationStatus('error');
-              hasReceivedMessage.current = true;
-              break;
-              
-            case 'validation-paused':
-              console.log('Validation paused:', message.data);
-              setValidationStatus('idle');
-              hasReceivedMessage.current = true;
-              break;
-              
-            case 'validation-resumed':
-              console.log('Validation resumed:', message.data);
-              setValidationStatus('running');
-              hasReceivedMessage.current = true;
-              break;
-              
-            case 'validation-stopped':
-            case 'validation_stopped':
-              console.log('Validation stopped and reset');
-              setProgress(null);
-              setValidationStatus('idle');
-              setLastError(null);
-              hasReceivedMessage.current = true;
-              break;
-              
-            default:
-              console.log('Unknown WebSocket message type:', message.type);
-          }
+          const message: SSEMessage = JSON.parse(event.data);
+          handleSSEMessage(message);
         } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
+          console.error('[ValidationSSE] Error parsing message:', error);
         }
       };
-
-      wsRef.current.onclose = (event) => {
-        console.log('WebSocket disconnected:', event.code, event.reason);
+      
+      eventSourceRef.current.onerror = (error) => {
+        console.error('[ValidationSSE] Connection error:', error);
         setIsConnected(false);
-        
-        // Attempt to reconnect after 3 seconds
-        if (!event.wasClean) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            console.log('Attempting to reconnect WebSocket...');
-            connect();
-          }, 3000);
-        }
-      };
-
-      wsRef.current.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setIsConnected(false);
-        setLastError('WebSocket connection error');
+        setLastError('SSE connection error');
         
         // Retry connection if we haven't exceeded max retries
         if (retryCount < maxRetries) {
-          console.log(`[ValidationWebSocket] Retrying connection (${retryCount + 1}/${maxRetries})...`);
+          console.log(`[ValidationSSE] Retrying connection (${retryCount + 1}/${maxRetries})...`);
           setRetryCount(prev => prev + 1);
           setTimeout(() => {
-            connect();
+            connectSSE();
           }, 2000 * (retryCount + 1)); // Exponential backoff
         } else {
-          console.error('[ValidationWebSocket] Max retries exceeded, giving up');
+          console.error('[ValidationSSE] Max retries exceeded, falling back to API polling');
+          startApiSync();
         }
       };
-
+      
     } catch (error) {
-      console.error('Failed to create WebSocket connection:', error);
+      console.error('[ValidationSSE] Failed to create SSE connection:', error);
       setIsConnected(false);
+      startApiSync(); // Fallback to API polling
     }
+  };
+
+  // Handle SSE messages (same logic as WebSocket)
+  const handleSSEMessage = (message: SSEMessage) => {
+    switch (message.type) {
+      case 'connected':
+        console.log('[ValidationSSE] Connected:', message.data);
+        break;
+        
+      case 'validation-started':
+      case 'validation_started':
+        console.log('[ValidationSSE] Validation started:', message.data);
+        setValidationStatus('running');
+        setLastError(null);
+        hasReceivedMessage.current = true;
+        break;
+        
+      case 'validation-progress':
+      case 'validation_progress':
+        setProgress(message.data);
+        setValidationStatus('running');
+        hasReceivedMessage.current = true;
+        break;
+        
+      case 'validation-completed':
+      case 'validation_complete':
+        console.log('[ValidationSSE] Validation completed:', message.data);
+        setProgress(message.data.progress || message.data);
+        setValidationStatus('completed');
+        hasReceivedMessage.current = true;
+        break;
+        
+      case 'validation-error':
+      case 'validation_error':
+        console.log('[ValidationSSE] Validation error:', message.data);
+        setLastError(message.data.error);
+        setValidationStatus('error');
+        hasReceivedMessage.current = true;
+        break;
+        
+      case 'validation-paused':
+        console.log('[ValidationSSE] Validation paused:', message.data);
+        setValidationStatus('idle');
+        hasReceivedMessage.current = true;
+        break;
+        
+      case 'validation-resumed':
+        console.log('[ValidationSSE] Validation resumed:', message.data);
+        setValidationStatus('running');
+        hasReceivedMessage.current = true;
+        break;
+        
+      case 'validation-stopped':
+      case 'validation_stopped':
+        console.log('[ValidationSSE] Validation stopped and reset');
+        setProgress(null);
+        setValidationStatus('idle');
+        setLastError(null);
+        hasReceivedMessage.current = true;
+        break;
+        
+      default:
+        console.log('[ValidationSSE] Unknown message type:', message.type);
+    }
+  };
+
+  const connect = () => {
+    // Use SSE everywhere - it's more reliable than WebSocket
+    console.log('[ValidationSSE] Using SSE for real-time updates');
+    connectSSE();
+    return;
+
+    // WebSocket code removed - using SSE everywhere now
   };
 
   const disconnect = () => {
@@ -227,9 +226,9 @@ export function useValidationWebSocket() {
       reconnectTimeoutRef.current = null;
     }
     
-    if (wsRef.current) {
-      wsRef.current.close(1000, 'Component unmounting');
-      wsRef.current = null;
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
     
     // Stop API synchronization
@@ -256,6 +255,13 @@ export function useValidationWebSocket() {
     setLastError(null);
   };
 
+  const reconnect = () => {
+    disconnect();
+    setTimeout(() => {
+      connect();
+    }, 1000);
+  };
+
   return {
     isConnected,
     progress,
@@ -263,7 +269,7 @@ export function useValidationWebSocket() {
     lastError,
     apiState,
     resetProgress,
-    reconnect: connect,
+    reconnect,
     syncWithApi
   };
 }

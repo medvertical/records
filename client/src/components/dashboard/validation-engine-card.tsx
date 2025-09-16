@@ -266,7 +266,7 @@ export function ValidationEngineCard({ className }: ValidationEngineCardProps) {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Validation Progress</span>
                 <span className="text-sm font-bold text-blue-600">
-                  {progressPercentage.toFixed(1)}%
+                  {(progressPercentage || 0).toFixed(1)}%
                 </span>
               </div>
               <Progress value={progressPercentage} className="w-full h-2" />
@@ -328,7 +328,7 @@ export function ValidationEngineCard({ className }: ValidationEngineCardProps) {
                   {formatNumber(state.progress.processedResources)} / {formatNumber(state.progress.totalResources)}
                 </span>
                 <Badge variant="outline">
-                  {successRate.toFixed(1)}% Success
+                  {(successRate || 0).toFixed(1)}% Success
                 </Badge>
               </div>
             </div>

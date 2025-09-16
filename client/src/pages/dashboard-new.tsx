@@ -24,7 +24,7 @@ import {
   WifiOff,
   RefreshCw
 } from 'lucide-react';
-import { useValidationWebSocket } from '@/hooks/use-validation-websocket';
+import { useValidationSSE } from '@/hooks/use-validation-sse';
 import { useDashboardData } from '@/hooks/use-dashboard-data';
 import { ServerStatsCard } from '@/components/dashboard/server-stats-card';
 import { ValidationStatsCard } from '@/components/dashboard/validation-stats-card';
@@ -82,8 +82,8 @@ export default function DashboardNew() {
   const [isValidationInitializing, setIsValidationInitializing] = useState(false);
   const [validationProgress, setValidationProgress] = useState<ValidationProgress | null>(null);
 
-  // WebSocket for real-time validation updates
-  const { isConnected, progress, validationStatus } = useValidationWebSocket();
+  // SSE for real-time validation updates
+  const { isConnected, progress, validationStatus } = useValidationSSE();
 
   // Get current validation progress from server
   const { data: currentValidationProgress } = useQuery({

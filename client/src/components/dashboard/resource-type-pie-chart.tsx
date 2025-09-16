@@ -53,7 +53,7 @@ export function ResourceTypePieChart({ resourceCounts }: ResourceTypePieChartPro
         <div className="bg-white p-3 border rounded-lg shadow-lg">
           <p className="font-semibold text-gray-900">{data.name}</p>
           <p className="text-sm text-gray-600">
-            {data.value.toLocaleString()} resources ({data.percentage.toFixed(1)}%)
+            {data.value.toLocaleString()} resources ({(data.percentage || 0).toFixed(1)}%)
           </p>
         </div>
       );
@@ -79,7 +79,7 @@ export function ResourceTypePieChart({ resourceCounts }: ResourceTypePieChartPro
         dominantBaseline="central"
         className="text-xs font-medium"
       >
-        {`${(percent * 100).toFixed(0)}%`}
+        {`${((percent || 0) * 100).toFixed(0)}%`}
       </text>
     );
   };
@@ -107,7 +107,7 @@ export function ResourceTypePieChart({ resourceCounts }: ResourceTypePieChartPro
       </CardHeader>
       
       <CardContent>
-        {chartData.length === 0 ? (
+        {!chartData || chartData.length === 0 ? (
           <div className="flex items-center justify-center h-64 text-gray-500">
             <div className="text-center">
               <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -158,7 +158,7 @@ export function ResourceTypePieChart({ resourceCounts }: ResourceTypePieChartPro
                         {item.value.toLocaleString()}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {item.percentage.toFixed(1)}%
+                        {(item.percentage || 0).toFixed(1)}%
                       </div>
                     </div>
                   </div>

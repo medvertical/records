@@ -18,7 +18,7 @@ import {
   WifiOff
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useValidationWebSocket } from "@/hooks/use-validation-websocket";
+import { useValidationSSE } from "@/hooks/use-validation-sse";
 
 interface BulkValidationProgress {
   totalResources: number;
@@ -60,7 +60,7 @@ export default function ServerValidation() {
     validationStatus, 
     lastError: wsError,
     resetProgress 
-  } = useValidationWebSocket();
+  } = useValidationSSE();
 
   // Fallback to polling if WebSocket is not connected
   const { data: fallbackProgress, isLoading: progressLoading } = useQuery<BulkValidationProgress>({

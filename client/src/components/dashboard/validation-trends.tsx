@@ -54,8 +54,8 @@ export function ValidationTrends({ currentProgress }: ValidationTrendsProps) {
   }, [currentProgress, lastUpdateTime]);
 
   // Calculate trend indicators
-  const latestData = trendData[trendData.length - 1];
-  const previousData = trendData[trendData.length - 2];
+  const latestData = trendData && trendData.length > 0 ? trendData[trendData.length - 1] : null;
+  const previousData = trendData && trendData.length > 1 ? trendData[trendData.length - 2] : null;
   
   const validationRateTrend = latestData && previousData 
     ? latestData.validationRate - previousData.validationRate
@@ -88,7 +88,7 @@ export function ValidationTrends({ currentProgress }: ValidationTrendsProps) {
                   <TrendingDown className="h-4 w-4 text-red-500" />
                 )}
                 <span className="font-medium">
-                  {latestData.validationRate.toFixed(1)}% Valid
+                  {(latestData.validationRate || 0).toFixed(1)}% Valid
                 </span>
               </div>
               
@@ -104,7 +104,7 @@ export function ValidationTrends({ currentProgress }: ValidationTrendsProps) {
       </CardHeader>
       
       <CardContent>
-        {trendData.length === 0 ? (
+        {!trendData || trendData.length === 0 ? (
           <div className="flex items-center justify-center h-64 text-gray-500">
             <div className="text-center">
               <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />

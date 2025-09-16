@@ -93,7 +93,7 @@ export function ServerStatsCard({
   }
 
   const formatNumber = (num: number) => num.toLocaleString();
-  const formatPercentage = (num: number) => num.toFixed(1);
+  const formatPercentage = (num: number | undefined) => (num || 0).toFixed(1);
 
   return (
     <Card className="transition-all duration-300">
@@ -150,7 +150,7 @@ export function ServerStatsCard({
               </div>
               <div className="text-xs text-blue-700 dark:text-blue-300">
                 Scanning {fhirVersionInfo.totalResourceTypes} resource types 
-                ({fhirVersionInfo.priorityResourceTypes.length} priority types first)
+                ({(fhirVersionInfo.priorityResourceTypes || []).length} priority types first)
               </div>
             </div>
           )}

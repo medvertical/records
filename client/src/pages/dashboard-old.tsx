@@ -20,7 +20,7 @@ import {
   Wifi,
   WifiOff
 } from 'lucide-react';
-import { useValidationWebSocket } from '@/hooks/use-validation-websocket';
+import { useValidationSSE } from '@/hooks/use-validation-sse';
 import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
 import { queryClient } from '@/lib/queryClient';
@@ -143,8 +143,8 @@ export default function Dashboard() {
     refetchInterval: 2000, // Very frequent for real-time feel
   });
 
-  // WebSocket for real-time validation updates
-  const { isConnected, progress, validationStatus } = useValidationWebSocket();
+  // SSE for real-time validation updates
+  const { isConnected, progress, validationStatus } = useValidationSSE();
 
   // Listen for settings changes to invalidate dashboard cache
   useEffect(() => {

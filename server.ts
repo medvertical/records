@@ -27,7 +27,8 @@ const mockFhirServers = [
   { id: 2, name: "FHIR Test Server", url: "https://r4.smarthealthit.org", isActive: false }
 ];
 
-const mockValidationProgress = {
+// Mock validation progress data (will be replaced by SSE implementation)
+const defaultValidationProgress = {
   totalResources: 100,
   processedResources: 75,
   validResources: 60,
@@ -110,7 +111,7 @@ app.get("/api/validation/bulk/progress", async (req, res) => {
     });
   } catch (error) {
     console.log('Database not available, using mock validation progress');
-    res.json(mockValidationProgress);
+    res.json(defaultValidationProgress);
   }
 });
 
@@ -631,13 +632,61 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   res.status(status).json({ message });
 });
 
-// Serve static files
-serveStatic(app);
-
 const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 const server = createServer(app);
 
-// WebSocket setup
+// Server-Sent Events setup for validation updates
+const sseClients = new Set<Response>();
+
+// SSE endpoint for validation updates (must be before static file serving)
+app.get("/api/validation/stream", (req, res) => {
+  log("SSE client connected");
+  
+  // Set SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+
+  // Send initial connection message
+  res.write(`data: ${JSON.stringify({
+    type: "connected",
+    message: "Connected to validation stream",
+    timestamp: new Date().toISOString()
+  })}\n\n`);
+
+  // Add client to the set
+  sseClients.add(res);
+
+  // Handle client disconnect
+  req.on('close', () => {
+    log("SSE client disconnected");
+    sseClients.delete(res);
+  });
+
+  req.on('error', (error) => {
+    log(`SSE client error: ${error}`);
+    sseClients.delete(res);
+  });
+});
+
+// Function to broadcast validation updates to all SSE clients
+function broadcastValidationUpdate(data: any) {
+  const message = `data: ${JSON.stringify(data)}\n\n`;
+  sseClients.forEach(client => {
+    try {
+      client.write(message);
+    } catch (error) {
+      log(`Error sending SSE message: ${error}`);
+      sseClients.delete(client);
+    }
+  });
+}
+
+// WebSocket setup (keep for local development)
 const wss = new WebSocketServer({ server, path: "/ws/validation" });
 
 wss.on("connection", (ws) => {
@@ -674,6 +723,87 @@ wss.on("connection", (ws) => {
     log(`WebSocket error: ${error}`);
   });
 });
+
+// Mock validation updates for demonstration (remove in production)
+let mockValidationProgress: {
+  totalResources: number;
+  processedResources: number;
+  validResources: number;
+  errorResources: number;
+  currentResourceType: string;
+  startTime: string;
+  isComplete: boolean;
+  errors: string[];
+  status: 'not_running' | 'running' | 'completed' | 'error';
+} = {
+  totalResources: 100,
+  processedResources: 0,
+  validResources: 0,
+  errorResources: 0,
+  currentResourceType: "Patient",
+  startTime: new Date().toISOString(),
+  isComplete: false,
+  errors: [],
+  status: 'not_running'
+};
+
+// Simulate validation progress updates every 2 seconds
+setInterval(() => {
+  if (mockValidationProgress.status === 'running' && !mockValidationProgress.isComplete) {
+    mockValidationProgress.processedResources += 5;
+    mockValidationProgress.validResources += 4;
+    mockValidationProgress.errorResources += 1;
+    
+    if (mockValidationProgress.processedResources >= mockValidationProgress.totalResources) {
+      mockValidationProgress.isComplete = true;
+      mockValidationProgress.status = 'completed';
+    }
+    
+    // Broadcast update to all SSE clients
+    broadcastValidationUpdate({
+      type: "validation-progress",
+      data: mockValidationProgress
+    });
+  }
+}, 2000);
+
+// API endpoint to start mock validation
+app.post("/api/validation/start", (req, res) => {
+  mockValidationProgress = {
+    totalResources: 100,
+    processedResources: 0,
+    validResources: 0,
+    errorResources: 0,
+    currentResourceType: "Patient",
+    startTime: new Date().toISOString(),
+    isComplete: false,
+    errors: [],
+    status: 'running'
+  };
+  
+  broadcastValidationUpdate({
+    type: "validation-started",
+    data: mockValidationProgress
+  });
+  
+  res.json({ success: true, message: "Validation started" });
+});
+
+// API endpoint to stop mock validation
+app.post("/api/validation/stop", (req, res) => {
+  mockValidationProgress.status = 'not_running';
+  mockValidationProgress.isComplete = false;
+  
+  broadcastValidationUpdate({
+    type: "validation-stopped",
+    data: mockValidationProgress
+  });
+  
+  res.json({ success: true, message: "Validation stopped" });
+});
+
+// Serve static files (must be after all API routes)
+serveStatic(app);
 
 server.listen({
   port,

@@ -21,7 +21,7 @@ import {
   ValidationErrorMessage,
   ValidationError
 } from '@shared/types/validation';
-import { useValidationWebSocket } from './use-validation-websocket';
+import { useValidationSSE } from './use-validation-sse';
 
 // Types are now imported from @shared/types/validation
 
@@ -76,7 +76,7 @@ export function useValidationControls(config: ValidationControlsConfig = {}): Va
     resetProgress: wsResetProgress,
     reconnect: wsReconnect,
     syncWithApi: wsSyncWithApi
-  } = useValidationWebSocket();
+  } = useValidationSSE();
   
   // State management
   const [state, setState] = useState<ValidationControlsState>(() => {

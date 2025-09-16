@@ -35,7 +35,7 @@ export default function ResourceBreakdown({ stats }: ResourceBreakdownProps) {
         </div>
       </CardHeader>
       <CardContent>
-        {resourceTypes.length > 0 ? (
+        {resourceTypes && resourceTypes.length > 0 ? (
           <div className="space-y-4">
             {resourceTypes.map((resourceType) => {
               const data = resourceBreakdown[resourceType];
@@ -55,7 +55,7 @@ export default function ResourceBreakdown({ stats }: ResourceBreakdownProps) {
                         data.validPercent >= 90 ? "text-fhir-success" : 
                         data.validPercent >= 70 ? "text-fhir-warning" : "text-fhir-error"
                       )}>
-                        {data.validPercent.toFixed(1)}%
+                        {(data.validPercent || 0).toFixed(1)}%
                       </p>
                     </div>
                     <div className="w-20">
