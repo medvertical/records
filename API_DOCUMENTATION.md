@@ -368,6 +368,287 @@ console.log('Validation Stats:', dashboardData.validationStats);
 console.log('Resource Counts:', dashboardData.resourceCounts);
 ```
 
+## SSE Troubleshooting Guide
+
+### Common SSE Issues and Solutions
+
+#### 1. Connection Fails to Establish
+
+**Symptoms:**
+- EventSource fails to connect
+- No initial "connected" message received
+- Browser shows network errors
+
+**Solutions:**
+```javascript
+// Check if the endpoint is accessible
+fetch('/api/validation/stream')
+  .then(response => {
+    if (response.ok) {
+      console.log('SSE endpoint is accessible');
+    } else {
+      console.error('SSE endpoint returned:', response.status);
+    }
+  });
+
+// Verify EventSource is supported
+if (typeof EventSource === 'undefined') {
+  console.error('EventSource not supported in this browser');
+}
+```
+
+#### 2. Messages Not Received
+
+**Symptoms:**
+- Connection established but no messages received
+- Progress updates not appearing in UI
+
+**Solutions:**
+```javascript
+const eventSource = new EventSource('/api/validation/stream');
+
+// Add comprehensive logging
+eventSource.onopen = () => {
+  console.log('SSE connection opened');
+};
+
+eventSource.onmessage = (event) => {
+  console.log('SSE message received:', event.data);
+  try {
+    const message = JSON.parse(event.data);
+    console.log('Parsed message:', message);
+  } catch (error) {
+    console.error('Failed to parse SSE message:', error);
+  }
+};
+
+eventSource.onerror = (error) => {
+  console.error('SSE error:', error);
+  console.log('Ready state:', eventSource.readyState);
+};
+```
+
+#### 3. Frequent Reconnections
+
+**Symptoms:**
+- Connection keeps dropping and reconnecting
+- High network traffic from reconnection attempts
+
+**Solutions:**
+```javascript
+// Implement custom reconnection logic with backoff
+class SSEConnection {
+  constructor(url) {
+    this.url = url;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
+    this.reconnectDelay = 1000;
+  }
+
+  connect() {
+    this.eventSource = new EventSource(this.url);
+    
+    this.eventSource.onopen = () => {
+      console.log('SSE connected');
+      this.reconnectAttempts = 0;
+    };
+
+    this.eventSource.onerror = () => {
+      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        setTimeout(() => {
+          this.reconnectAttempts++;
+          this.connect();
+        }, this.reconnectDelay * Math.pow(2, this.reconnectAttempts));
+      } else {
+        console.error('Max reconnection attempts reached');
+        this.fallbackToPolling();
+      }
+    };
+  }
+
+  fallbackToPolling() {
+    console.log('Falling back to API polling');
+    setInterval(() => {
+      fetch('/api/validation/bulk/progress')
+        .then(response => response.json())
+        .then(data => {
+          // Handle progress update
+          console.log('Polling update:', data);
+        });
+    }, 2000);
+  }
+}
+```
+
+#### 4. Browser Compatibility Issues
+
+**Symptoms:**
+- SSE not working in certain browsers
+- Different behavior across browsers
+
+**Solutions:**
+```javascript
+// Check browser support
+function checkSSESupport() {
+  if (typeof EventSource === 'undefined') {
+    console.warn('EventSource not supported, falling back to polling');
+    return false;
+  }
+  return true;
+}
+
+// Polyfill for older browsers (if needed)
+if (!window.EventSource) {
+  // Implement polling fallback
+  console.log('Using polling fallback for older browsers');
+}
+```
+
+#### 5. Server-Side Issues
+
+**Symptoms:**
+- SSE endpoint returns HTML instead of event stream
+- 404 or 500 errors from SSE endpoint
+
+**Solutions:**
+```bash
+# Test SSE endpoint directly
+curl -N -H "Accept: text/event-stream" http://localhost:3000/api/validation/stream
+
+# Check server logs for errors
+# Look for SSE-related error messages in server console
+```
+
+#### 6. Network and Proxy Issues
+
+**Symptoms:**
+- SSE works locally but fails in production
+- Connection timeouts or proxy errors
+
+**Solutions:**
+```javascript
+// Add timeout handling
+const eventSource = new EventSource('/api/validation/stream');
+
+// Set a timeout for connection
+const connectionTimeout = setTimeout(() => {
+  if (eventSource.readyState !== EventSource.OPEN) {
+    console.error('SSE connection timeout');
+    eventSource.close();
+    // Implement fallback
+  }
+}, 10000);
+
+eventSource.onopen = () => {
+  clearTimeout(connectionTimeout);
+};
+```
+
+### Debugging Tools
+
+#### Browser Developer Tools
+
+1. **Network Tab**: Monitor SSE connections and messages
+2. **Console**: Check for JavaScript errors and logs
+3. **Application Tab**: View stored data and connections
+
+#### Server-Side Debugging
+
+```javascript
+// Add detailed logging to SSE endpoint
+app.get("/api/validation/stream", (req, res) => {
+  console.log('SSE client connected from:', req.ip);
+  console.log('User agent:', req.get('User-Agent'));
+  
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+
+  // Log when client disconnects
+  req.on('close', () => {
+    console.log('SSE client disconnected');
+  });
+});
+```
+
+### Performance Optimization
+
+#### Reduce Message Frequency
+
+```javascript
+// Throttle progress updates
+let lastUpdateTime = 0;
+const updateInterval = 1000; // 1 second
+
+function shouldUpdate() {
+  const now = Date.now();
+  if (now - lastUpdateTime > updateInterval) {
+    lastUpdateTime = now;
+    return true;
+  }
+  return false;
+}
+```
+
+#### Memory Management
+
+```javascript
+// Clean up old connections
+const sseClients = new Set();
+
+function cleanupClients() {
+  sseClients.forEach(client => {
+    if (client.destroyed || client.closed) {
+      sseClients.delete(client);
+    }
+  });
+}
+
+// Run cleanup periodically
+setInterval(cleanupClients, 30000); // Every 30 seconds
+```
+
+### Testing SSE Implementation
+
+#### Unit Tests
+
+```javascript
+// Mock EventSource for testing
+class MockEventSource {
+  constructor(url) {
+    this.url = url;
+    this.readyState = 1;
+  }
+  
+  simulateMessage(data) {
+    if (this.onmessage) {
+      this.onmessage({ data: JSON.stringify(data) });
+    }
+  }
+  
+  close() {
+    this.readyState = 3;
+  }
+}
+
+global.EventSource = MockEventSource;
+```
+
+#### Integration Tests
+
+```javascript
+// Test SSE endpoint
+describe('SSE Endpoint', () => {
+  it('should establish SSE connection', async () => {
+    const response = await fetch('/api/validation/stream');
+    expect(response.headers.get('content-type')).toBe('text/event-stream');
+  });
+});
+```
+
 ## Support
 
 For API support and questions, please refer to the main project documentation or create an issue in the project repository.

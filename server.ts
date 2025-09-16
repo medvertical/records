@@ -764,6 +764,36 @@ app.post("/api/validation/stop", (req, res) => {
   res.json({ success: true, message: "Validation stopped" });
 });
 
+// SSE health check endpoint
+app.get("/api/validation/health", (req, res) => {
+  const healthData = {
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+    sse: {
+      activeConnections: sseClients.size,
+      endpoint: "/api/validation/stream",
+      supported: true
+    },
+    validation: {
+      status: mockValidationProgress.status,
+      isRunning: mockValidationProgress.status === 'running',
+      progress: {
+        totalResources: mockValidationProgress.totalResources,
+        processedResources: mockValidationProgress.processedResources,
+        validResources: mockValidationProgress.validResources,
+        errorResources: mockValidationProgress.errorResources
+      }
+    },
+    server: {
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      version: process.version
+    }
+  };
+
+  res.json(healthData);
+});
+
 // Serve static files (must be after all API routes)
 serveStatic(app);
 
