@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { serveStatic, log } from "./static";
+import { setupVite } from "./vite";
 
 const app = express();
 app.use(express.json());
@@ -30,7 +30,7 @@ app.use((req, res, next) => {
         logLine = logLine.slice(0, 79) + "…";
       }
 
-      log(logLine);
+      console.log(logLine);
     }
   });
 
@@ -48,17 +48,16 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // In production, serve static files
-  serveStatic(app);
+  // Setup Vite for development
+  await setupVite(app, server);
 
   // Serve the app on port 3000 for local development
-  // this serves both the API and the client.
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
   server.listen({
     port,
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
-    log(`serving on port ${port}`);
+    console.log(`Development server serving on port ${port}`);
   });
 })();
