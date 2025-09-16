@@ -79,7 +79,7 @@ export function useValidationSSE() {
         }
       }
     } catch (error) {
-      console.warn('[ValidationWebSocket] Failed to sync with API:', error);
+      console.warn('[ValidationSSE] Failed to sync with API:', error);
     }
   }, [validationStatus]);
 
