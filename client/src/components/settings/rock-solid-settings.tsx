@@ -5,7 +5,7 @@
  * validation settings using the new rock-solid schema.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -64,8 +64,8 @@ import type {
 // ============================================================================
 
 interface RockSolidSettingsProps {
-  /** Initial settings */
-  initialSettings?: ValidationSettings;
+  /** Current settings - controlled by parent */
+  settings: ValidationSettings;
   
   /** Whether settings are loading */
   loading?: boolean;
@@ -76,8 +76,14 @@ interface RockSolidSettingsProps {
   /** Whether settings have changes */
   hasChanges?: boolean;
   
+  /** Whether settings are being validated */
+  isValidating?: boolean;
+  
+  /** Current validation result */
+  validationResult?: ValidationSettingsValidationResult | null;
+  
   /** Callback when settings change */
-  onSettingsChange?: (settings: ValidationSettings) => void;
+  onSettingsChange: (settings: ValidationSettings) => void;
   
   /** Callback when settings are saved */
   onSave?: (settings: ValidationSettings) => Promise<void>;
@@ -99,9 +105,6 @@ interface RockSolidSettingsProps {
 }
 
 interface SettingsState {
-  settings: ValidationSettings;
-  validationResult?: ValidationSettingsValidationResult;
-  hasChanges: boolean;
   isTesting: boolean;
   testResult?: any;
 }
@@ -111,10 +114,12 @@ interface SettingsState {
 // ============================================================================
 
 export function RockSolidSettings({
-  initialSettings,
+  settings,
   loading = false,
   saving = false,
   hasChanges = false,
+  isValidating = false,
+  validationResult = null,
   onSettingsChange,
   onSave,
   onReset,
@@ -126,9 +131,6 @@ export function RockSolidSettings({
   const { toast } = useToast();
   
   const [state, setState] = useState<SettingsState>({
-    settings: initialSettings || getDefaultSettings(),
-    validationResult: undefined,
-    hasChanges: false, // This is now managed by the parent component
     isTesting: false,
     testResult: undefined
   });
@@ -136,28 +138,12 @@ export function RockSolidSettings({
   const [activeTab, setActiveTab] = useState('aspects');
   const [showValidationDetails, setShowValidationDetails] = useState(false);
 
-  // Debug state.settings
-  console.log('[RockSolidSettings] state.settings:', state.settings);
+  // Debug settings
+  console.log('[RockSolidSettings] settings:', settings);
 
   // ========================================================================
   // Effects
   // ========================================================================
-
-  useEffect(() => {
-    if (initialSettings) {
-      setState(prev => ({
-        ...prev,
-        settings: initialSettings
-        // hasChanges is now managed by the parent component
-      }));
-    }
-  }, [initialSettings]);
-
-  useEffect(() => {
-    if (enableRealTimeValidation && state.settings) {
-      validateSettings(state.settings);
-    }
-  }, [state.settings, enableRealTimeValidation]);
 
   // ========================================================================
   // Event Handlers
@@ -165,28 +151,17 @@ export function RockSolidSettings({
 
   const handleSettingChange = useCallback((path: string, value: any) => {
     console.log('[RockSolidSettings] Setting change:', path, value);
-    setState(prev => {
-      const newSettings = updateNestedProperty(prev.settings, path, value);
-      console.log('[RockSolidSettings] New settings:', newSettings);
-      // Call onSettingsChange with the new settings
-      onSettingsChange?.(newSettings);
-      return {
-        ...prev,
-        settings: newSettings
-        // hasChanges is now managed by the parent component
-      };
-    });
-  }, [onSettingsChange]);
+    const newSettings = updateNestedProperty(settings, path, value);
+    console.log('[RockSolidSettings] New settings:', newSettings);
+    // Call onSettingsChange with the new settings
+    onSettingsChange(newSettings);
+  }, [settings, onSettingsChange]);
 
   const handleSave = useCallback(async () => {
     if (!onSave) return;
     
     try {
-      await onSave(state.settings);
-      setState(prev => ({
-        ...prev,
-        hasChanges: false
-      }));
+      await onSave(settings);
       toast({
         title: "Settings Saved",
         description: "Your validation settings have been saved successfully.",
@@ -199,7 +174,7 @@ export function RockSolidSettings({
         variant: "destructive"
       });
     }
-  }, [onSave, state.settings, toast]);
+  }, [onSave, settings, toast]);
 
   const handleReset = useCallback(async () => {
     if (!onReset) return;
@@ -208,7 +183,6 @@ export function RockSolidSettings({
       await onReset();
       setState(prev => ({
         ...prev,
-        hasChanges: false,
         validationResult: undefined
       }));
       toast({
@@ -231,7 +205,7 @@ export function RockSolidSettings({
     setState(prev => ({ ...prev, isTesting: true }));
     
     try {
-      const result = await onTest(state.settings);
+      const result = await onTest(settings);
       setState(prev => ({
         ...prev,
         testResult: result,
@@ -250,41 +224,96 @@ export function RockSolidSettings({
         variant: "destructive"
       });
     }
-  }, [onTest, state.settings, toast]);
+  }, [onTest, settings, toast]);
 
   const handlePresetApply = useCallback((preset: ValidationSettingsPreset) => {
-    setState(prev => ({
-      ...prev,
-      settings: {
-        ...prev.settings,
-        ...preset.settings
-      },
-      hasChanges: true
-    }));
+    const newSettings = {
+      ...settings,
+      ...preset.settings
+    };
+    // Notify parent of the change
+    onSettingsChange(newSettings);
     toast({
       title: "Preset Applied",
       description: `Applied preset: ${preset.name}`,
       variant: "default"
     });
-  }, [toast]);
+  }, [toast, settings, onSettingsChange]);
 
   // ========================================================================
   // Validation
   // ========================================================================
 
   const validateSettings = useCallback(async (settings: ValidationSettings) => {
-    // This would call the validation service
-    // For now, we'll do basic validation
+    // Comprehensive validation logic
     const errors: string[] = [];
     const warnings: string[] = [];
+    const suggestions: string[] = [];
     
-    if (settings.terminology?.enabled && settings.terminologyServers?.length === 0) {
+    // Cross-field validation
+    if (settings.terminology?.enabled && (!settings.terminologyServers || settings.terminologyServers.length === 0)) {
       warnings.push('Terminology validation is enabled but no servers are configured');
+      suggestions.push('Add at least one terminology server to enable terminology validation');
     }
     
-    if (settings.profile?.enabled && settings.profileResolutionServers?.length === 0) {
+    if (settings.profile?.enabled && (!settings.profileResolutionServers || settings.profileResolutionServers.length === 0)) {
       warnings.push('Profile validation is enabled but no servers are configured');
+      suggestions.push('Add at least one profile resolution server to enable profile validation');
     }
+    
+    // Validate server configurations
+    if (settings.terminologyServers) {
+      settings.terminologyServers.forEach((server, index) => {
+        if (!server.url || !isValidUrl(server.url)) {
+          errors.push(`Terminology server ${index + 1} has an invalid URL`);
+        }
+        if (server.timeoutMs && (server.timeoutMs < 1000 || server.timeoutMs > 300000)) {
+          warnings.push(`Terminology server ${index + 1} timeout is outside recommended range (1-300 seconds)`);
+        }
+      });
+    }
+    
+    if (settings.profileResolutionServers) {
+      settings.profileResolutionServers.forEach((server, index) => {
+        if (!server.url || !isValidUrl(server.url)) {
+          errors.push(`Profile resolution server ${index + 1} has an invalid URL`);
+        }
+        if (server.timeoutMs && (server.timeoutMs < 1000 || server.timeoutMs > 300000)) {
+          warnings.push(`Profile resolution server ${index + 1} timeout is outside recommended range (1-300 seconds)`);
+        }
+      });
+    }
+    
+    // Performance validation
+    if (settings.maxConcurrentValidations < 1 || settings.maxConcurrentValidations > 50) {
+      errors.push('Max concurrent validations must be between 1 and 50');
+    }
+    
+    if (settings.timeoutSettings?.defaultTimeoutMs && 
+        (settings.timeoutSettings.defaultTimeoutMs < 1000 || settings.timeoutSettings.defaultTimeoutMs > 300000)) {
+      warnings.push('Default timeout is outside recommended range (1-300 seconds)');
+    }
+    
+    // Cache validation
+    if (settings.cacheSettings?.enabled) {
+      if (settings.cacheSettings.ttlMs && (settings.cacheSettings.ttlMs < 60000 || settings.cacheSettings.ttlMs > 86400000)) {
+        warnings.push('Cache TTL is outside recommended range (1 minute to 24 hours)');
+      }
+      if (settings.cacheSettings.maxSizeMB && (settings.cacheSettings.maxSizeMB < 1 || settings.cacheSettings.maxSizeMB > 10000)) {
+        warnings.push('Cache size is outside recommended range (1MB to 10GB)');
+      }
+    }
+    
+    // Aspect-specific validation
+    const aspects: ValidationAspect[] = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'];
+    aspects.forEach(aspect => {
+      const aspectSettings = settings[aspect];
+      if (aspectSettings?.enabled) {
+        if (aspectSettings.timeoutMs && (aspectSettings.timeoutMs < 1000 || aspectSettings.timeoutMs > 300000)) {
+          warnings.push(`${aspect} validation timeout is outside recommended range (1-300 seconds)`);
+        }
+      }
+    });
     
     const validationResult: ValidationSettingsValidationResult = {
       isValid: errors.length === 0,
@@ -298,9 +327,14 @@ export function RockSolidSettings({
         code: 'VALIDATION_WARNING',
         message: warning,
         path: '',
-        suggestion: 'Consider configuring the required servers'
+        suggestion: 'Consider adjusting the setting to the recommended range'
       })),
-      suggestions: []
+      suggestions: suggestions.map(suggestion => ({
+        code: 'VALIDATION_SUGGESTION',
+        message: suggestion,
+        path: '',
+        suggestion: ''
+      }))
     };
     
     setState(prev => ({
@@ -308,6 +342,17 @@ export function RockSolidSettings({
       validationResult
     }));
   }, []);
+
+  // Debounced validation effect
+  useEffect(() => {
+    if (!enableRealTimeValidation || !settings) return;
+    
+    const timeoutId = setTimeout(() => {
+      validateSettings(settings);
+    }, 500); // 500ms debounce
+    
+    return () => clearTimeout(timeoutId);
+  }, [settings, enableRealTimeValidation, validateSettings]);
 
   // ========================================================================
   // Render Methods
@@ -324,30 +369,45 @@ export function RockSolidSettings({
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          {state.hasChanges && (
+          {hasChanges && (
             <Badge variant="outline" className="text-orange-600 border-orange-200">
               Unsaved Changes
             </Badge>
           )}
-          {state.validationResult && (
+          {validationResult && (
             <Badge 
-              variant={state.validationResult.isValid ? "default" : "destructive"}
+              variant={validationResult.isValid ? "default" : "destructive"}
               className="cursor-pointer"
               onClick={() => setShowValidationDetails(!showValidationDetails)}
             >
-              {state.validationResult.isValid ? (
+              {validationResult.isValid ? (
                 <><CheckCircle className="h-3 w-3 mr-1" /> Valid</>
               ) : (
                 <><AlertTriangle className="h-3 w-3 mr-1" /> Issues</>
               )}
             </Badge>
           )}
+          {isValidating && (
+            <Badge variant="outline" className="text-blue-600 border-blue-200">
+              <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+              Validating...
+            </Badge>
+          )}
         </div>
       </div>
 
+      {/* Validation Summary */}
+      {validationResult && (
+        <ValidationSummaryCard 
+          validationResult={validationResult} 
+          showDetails={showValidationDetails}
+          onToggleDetails={() => setShowValidationDetails(!showValidationDetails)}
+        />
+      )}
+
       {/* Validation Details */}
-      {showValidationDetails && state.validationResult && (
-        <ValidationDetailsCard validationResult={state.validationResult} />
+      {showValidationDetails && validationResult && (
+        <ValidationDetailsCard validationResult={validationResult} />
       )}
 
       {/* Presets */}
@@ -367,28 +427,28 @@ export function RockSolidSettings({
 
         <TabsContent value="aspects" className="space-y-4">
           <ValidationAspectsCard 
-            settings={state.settings}
+            settings={settings}
             onSettingChange={handleSettingChange}
           />
         </TabsContent>
 
         <TabsContent value="servers" className="space-y-4">
           <ServersConfigurationCard 
-            settings={state.settings}
+            settings={settings}
             onSettingChange={handleSettingChange}
           />
         </TabsContent>
 
         <TabsContent value="performance" className="space-y-4">
           <PerformanceSettingsCard 
-            settings={state.settings}
+            settings={settings}
             onSettingChange={handleSettingChange}
           />
         </TabsContent>
 
         <TabsContent value="advanced" className="space-y-4">
           <AdvancedSettingsCard 
-            settings={state.settings}
+            settings={settings}
             onSettingChange={handleSettingChange}
             showAdvanced={showAdvanced}
           />
@@ -410,19 +470,19 @@ export function RockSolidSettings({
               <Button
                 variant="outline"
                 onClick={handleTest}
-                disabled={state.isTesting || loading}
+                disabled={state.isTesting || loading || saving}
               >
                 {state.isTesting ? (
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <TestTube className="h-4 w-4 mr-2" />
                 )}
-                Test Settings
+                {state.isTesting ? 'Testing...' : 'Test Settings'}
               </Button>
               <Button
                 variant="outline"
                 onClick={handleReset}
-                disabled={loading || saving}
+                disabled={loading || saving || state.isTesting}
               >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Reset to Defaults
@@ -431,14 +491,14 @@ export function RockSolidSettings({
             <div className="flex items-center space-x-2">
               <Button
                 onClick={handleSave}
-                disabled={!hasChanges || loading || saving}
+                disabled={!hasChanges || loading || saving || state.isTesting}
               >
                 {saving ? (
                   <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
                   <Save className="h-4 w-4 mr-2" />
                 )}
-                Save Settings
+                {saving ? 'Saving...' : 'Save Settings'}
               </Button>
             </div>
           </div>
@@ -451,6 +511,73 @@ export function RockSolidSettings({
 // ============================================================================
 // Sub-Components
 // ============================================================================
+
+function ValidationSummaryCard({ 
+  validationResult, 
+  showDetails, 
+  onToggleDetails 
+}: { 
+  validationResult: ValidationSettingsValidationResult;
+  showDetails: boolean;
+  onToggleDetails: () => void;
+}) {
+  const hasErrors = validationResult.errors.length > 0;
+  const hasWarnings = validationResult.warnings.length > 0;
+  const hasSuggestions = validationResult.suggestions.length > 0;
+
+  return (
+    <Card className={`border-l-4 ${
+      hasErrors 
+        ? 'border-l-red-500 bg-red-50' 
+        : hasWarnings 
+        ? 'border-l-yellow-500 bg-yellow-50' 
+        : 'border-l-green-500 bg-green-50'
+    }`}>
+      <CardContent className="pt-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            {hasErrors ? (
+              <AlertTriangle className="h-5 w-5 text-red-600" />
+            ) : hasWarnings ? (
+              <AlertTriangle className="h-5 w-5 text-yellow-600" />
+            ) : (
+              <CheckCircle className="h-5 w-5 text-green-600" />
+            )}
+            <div>
+              <h4 className="font-medium">
+                {hasErrors 
+                  ? `${validationResult.errors.length} Error${validationResult.errors.length !== 1 ? 's' : ''} Found`
+                  : hasWarnings 
+                  ? `${validationResult.warnings.length} Warning${validationResult.warnings.length !== 1 ? 's' : ''} Found`
+                  : 'Settings Valid'
+                }
+              </h4>
+              <p className="text-sm text-muted-foreground">
+                {hasErrors 
+                  ? 'Please fix the errors before saving'
+                  : hasWarnings 
+                  ? 'Consider reviewing the warnings'
+                  : 'All settings are properly configured'
+                }
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            {(hasErrors || hasWarnings || hasSuggestions) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onToggleDetails}
+              >
+                {showDetails ? 'Hide Details' : 'Show Details'}
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function ValidationDetailsCard({ validationResult }: { validationResult: ValidationSettingsValidationResult }) {
   return (
@@ -586,6 +713,29 @@ function ValidationAspectsCard({
   settings: ValidationSettings;
   onSettingChange: (path: string, value: any) => void;
 }) {
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateTimeout = (value: number, aspectKey: string) => {
+    if (isNaN(value)) {
+      setErrors(prev => ({ ...prev, [`${aspectKey}-timeout`]: 'Please enter a valid number' }));
+      return false;
+    }
+    if (value < 1000) {
+      setErrors(prev => ({ ...prev, [`${aspectKey}-timeout`]: 'Timeout must be at least 1000ms' }));
+      return false;
+    }
+    if (value > 300000) {
+      setErrors(prev => ({ ...prev, [`${aspectKey}-timeout`]: 'Timeout must be at most 300000ms (5 minutes)' }));
+      return false;
+    }
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[`${aspectKey}-timeout`];
+      return newErrors;
+    });
+    return true;
+  };
+
   const aspects: Array<{
     key: ValidationAspect;
     name: string;
@@ -685,15 +835,29 @@ function ValidationAspectsCard({
                 
                 <div className="flex items-center space-x-4">
                   <Label htmlFor={`${aspect.key}-timeout`}>Timeout (ms)</Label>
-                  <Input
-                    id={`${aspect.key}-timeout`}
-                    type="number"
-                    value={settings[aspect.key]?.timeoutMs || 30000}
-                    onChange={(e) =>
-                      onSettingChange(`${aspect.key}.timeoutMs`, parseInt(e.target.value))
-                    }
-                    className="w-32"
-                  />
+                  <div className="space-y-1">
+                    <Input
+                      id={`${aspect.key}-timeout`}
+                      type="number"
+                      value={settings[aspect.key]?.timeoutMs || 30000}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value);
+                        if (validateTimeout(value, aspect.key)) {
+                          onSettingChange(`${aspect.key}.timeoutMs`, value);
+                        }
+                      }}
+                      className={`w-32 ${
+                        errors[`${aspect.key}-timeout`] 
+                          ? 'border-red-500 focus:border-red-500' 
+                          : 'border-green-500 focus:border-green-500'
+                      }`}
+                      min="1000"
+                      max="300000"
+                    />
+                    {errors[`${aspect.key}-timeout`] && (
+                      <p className="text-xs text-red-500">{errors[`${aspect.key}-timeout`]}</p>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="flex items-center space-x-2">
@@ -886,6 +1050,75 @@ function PerformanceSettingsCard({
   settings: ValidationSettings;
   onSettingChange: (path: string, value: any) => void;
 }) {
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateConcurrentValidations = (value: number) => {
+    if (value < 1) {
+      setErrors(prev => ({ ...prev, 'maxConcurrent': 'Must be at least 1' }));
+      return false;
+    }
+    if (value > 50) {
+      setErrors(prev => ({ ...prev, 'maxConcurrent': 'Must be at most 50' }));
+      return false;
+    }
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors['maxConcurrent'];
+      return newErrors;
+    });
+    return true;
+  };
+
+  const validateTimeout = (value: number) => {
+    if (value < 1000) {
+      setErrors(prev => ({ ...prev, 'defaultTimeout': 'Timeout must be at least 1000ms' }));
+      return false;
+    }
+    if (value > 300000) {
+      setErrors(prev => ({ ...prev, 'defaultTimeout': 'Timeout must be at most 300000ms (5 minutes)' }));
+      return false;
+    }
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors['defaultTimeout'];
+      return newErrors;
+    });
+    return true;
+  };
+
+  const validateCacheTtl = (value: number) => {
+    if (value < 60000) {
+      setErrors(prev => ({ ...prev, 'cacheTtl': 'Cache TTL must be at least 60000ms (1 minute)' }));
+      return false;
+    }
+    if (value > 86400000) {
+      setErrors(prev => ({ ...prev, 'cacheTtl': 'Cache TTL must be at most 86400000ms (24 hours)' }));
+      return false;
+    }
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors['cacheTtl'];
+      return newErrors;
+    });
+    return true;
+  };
+
+  const validateCacheSize = (value: number) => {
+    if (value < 1) {
+      setErrors(prev => ({ ...prev, 'cacheSize': 'Cache size must be at least 1MB' }));
+      return false;
+    }
+    if (value > 10000) {
+      setErrors(prev => ({ ...prev, 'cacheSize': 'Cache size must be at most 10000MB (10GB)' }));
+      return false;
+    }
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors['cacheSize'];
+      return newErrors;
+    });
+    return true;
+  };
   return (
     <div className="space-y-6">
       <Card>
@@ -902,21 +1135,47 @@ function PerformanceSettingsCard({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="maxConcurrent">Max Concurrent Validations</Label>
-              <Input
-                id="maxConcurrent"
-                type="number"
-                value={settings.maxConcurrentValidations}
-                onChange={(e) => onSettingChange('maxConcurrentValidations', parseInt(e.target.value))}
-              />
+              <div className="space-y-1">
+                <Input
+                  id="maxConcurrent"
+                  type="number"
+                  value={settings.maxConcurrentValidations}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value);
+                    if (validateConcurrentValidations(value)) {
+                      onSettingChange('maxConcurrentValidations', value);
+                    }
+                  }}
+                  className={errors['maxConcurrent'] ? 'border-red-500' : ''}
+                  min="1"
+                  max="50"
+                />
+                {errors['maxConcurrent'] && (
+                  <p className="text-xs text-red-500">{errors['maxConcurrent']}</p>
+                )}
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="defaultTimeout">Default Timeout (ms)</Label>
-              <Input
-                id="defaultTimeout"
-                type="number"
-                value={settings.timeoutSettings?.defaultTimeoutMs || 30000}
-                onChange={(e) => onSettingChange('timeoutSettings.defaultTimeoutMs', parseInt(e.target.value))}
-              />
+              <div className="space-y-1">
+                <Input
+                  id="defaultTimeout"
+                  type="number"
+                  value={settings.timeoutSettings?.defaultTimeoutMs || 30000}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value);
+                    if (validateTimeout(value)) {
+                      onSettingChange('timeoutSettings.defaultTimeoutMs', value);
+                    }
+                  }}
+                  className={errors['defaultTimeout'] ? 'border-red-500' : ''}
+                  min="1000"
+                  max="300000"
+                />
+                {errors['defaultTimeout'] && (
+                  <p className="text-xs text-red-500">{errors['defaultTimeout']}</p>
+                )}
+              </div>
             </div>
           </div>
           
@@ -955,21 +1214,47 @@ function PerformanceSettingsCard({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="cacheTtl">Cache TTL (ms)</Label>
-                <Input
-                  id="cacheTtl"
-                  type="number"
-                  value={settings.cacheSettings?.ttlMs || 300000}
-                  onChange={(e) => onSettingChange('cacheSettings.ttlMs', parseInt(e.target.value))}
-                />
+                <div className="space-y-1">
+                  <Input
+                    id="cacheTtl"
+                    type="number"
+                    value={settings.cacheSettings?.ttlMs || 300000}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value);
+                      if (validateCacheTtl(value)) {
+                        onSettingChange('cacheSettings.ttlMs', value);
+                      }
+                    }}
+                    className={errors['cacheTtl'] ? 'border-red-500' : ''}
+                    min="60000"
+                    max="86400000"
+                  />
+                  {errors['cacheTtl'] && (
+                    <p className="text-xs text-red-500">{errors['cacheTtl']}</p>
+                  )}
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="cacheSize">Max Cache Size (MB)</Label>
-                <Input
-                  id="cacheSize"
-                  type="number"
-                  value={settings.cacheSettings?.maxSizeMB || 100}
-                  onChange={(e) => onSettingChange('cacheSettings.maxSizeMB', parseInt(e.target.value))}
-                />
+                <div className="space-y-1">
+                  <Input
+                    id="cacheSize"
+                    type="number"
+                    value={settings.cacheSettings?.maxSizeMB || 100}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value);
+                      if (validateCacheSize(value)) {
+                        onSettingChange('cacheSettings.maxSizeMB', value);
+                      }
+                    }}
+                    className={errors['cacheSize'] ? 'border-red-500' : ''}
+                    min="1"
+                    max="10000"
+                  />
+                  {errors['cacheSize'] && (
+                    <p className="text-xs text-red-500">{errors['cacheSize']}</p>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -1155,10 +1440,32 @@ function AddTerminologyServerModal({
     useForValidation: true,
     useForExpansion: true
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+    
+    if (!formData.name.trim()) {
+      newErrors.name = 'Server name is required';
+    }
+    
+    if (!formData.url.trim()) {
+      newErrors.url = 'Server URL is required';
+    } else if (!isValidUrl(formData.url)) {
+      newErrors.url = 'Please enter a valid URL (http:// or https://)';
+    }
+    
+    if (formData.timeoutMs < 1000 || formData.timeoutMs > 300000) {
+      newErrors.timeout = 'Timeout must be between 1000ms and 300000ms';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.name && formData.url) {
+    if (validateForm()) {
       onAdd(formData);
       setFormData({
         name: '',
@@ -1167,6 +1474,7 @@ function AddTerminologyServerModal({
         useForValidation: true,
         useForExpansion: true
       });
+      setErrors({});
     }
   };
 
@@ -1188,34 +1496,52 @@ function AddTerminologyServerModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Server Name</Label>
-            <Input
-              id="name"
-              value={formData.name}
-              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              placeholder="e.g., HL7 FHIR Terminology Server"
-              required
-            />
+            <div className="space-y-1">
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="e.g., HL7 FHIR Terminology Server"
+                className={errors.name ? 'border-red-500' : ''}
+                required
+              />
+              {errors.name && (
+                <p className="text-xs text-red-500">{errors.name}</p>
+              )}
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="url">Server URL</Label>
-            <Input
-              id="url"
-              value={formData.url}
-              onChange={(e) => setFormData(prev => ({ ...prev, url: e.target.value }))}
-              placeholder="https://tx.fhir.org/r4"
-              required
-            />
+            <div className="space-y-1">
+              <Input
+                id="url"
+                value={formData.url}
+                onChange={(e) => setFormData(prev => ({ ...prev, url: e.target.value }))}
+                placeholder="https://tx.fhir.org/r4"
+                className={errors.url ? 'border-red-500' : ''}
+                required
+              />
+              {errors.url && (
+                <p className="text-xs text-red-500">{errors.url}</p>
+              )}
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="timeout">Timeout (ms)</Label>
-            <Input
-              id="timeout"
-              type="number"
-              value={formData.timeoutMs}
-              onChange={(e) => setFormData(prev => ({ ...prev, timeoutMs: parseInt(e.target.value) }))}
-              min="1000"
-              max="300000"
-            />
+            <div className="space-y-1">
+              <Input
+                id="timeout"
+                type="number"
+                value={formData.timeoutMs}
+                onChange={(e) => setFormData(prev => ({ ...prev, timeoutMs: parseInt(e.target.value) }))}
+                className={errors.timeout ? 'border-red-500' : ''}
+                min="1000"
+                max="300000"
+              />
+              {errors.timeout && (
+                <p className="text-xs text-red-500">{errors.timeout}</p>
+              )}
+            </div>
           </div>
           <div className="space-y-3">
             <div className="flex items-center space-x-2">
@@ -1263,10 +1589,32 @@ function AddProfileServerModal({
     useForProfileResolution: true,
     useForStructureDefinitionResolution: true
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+    
+    if (!formData.name.trim()) {
+      newErrors.name = 'Server name is required';
+    }
+    
+    if (!formData.url.trim()) {
+      newErrors.url = 'Server URL is required';
+    } else if (!isValidUrl(formData.url)) {
+      newErrors.url = 'Please enter a valid URL (http:// or https://)';
+    }
+    
+    if (formData.timeoutMs < 1000 || formData.timeoutMs > 300000) {
+      newErrors.timeout = 'Timeout must be between 1000ms and 300000ms';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.name && formData.url) {
+    if (validateForm()) {
       onAdd(formData);
       setFormData({
         name: '',
@@ -1275,6 +1623,7 @@ function AddProfileServerModal({
         useForProfileResolution: true,
         useForStructureDefinitionResolution: true
       });
+      setErrors({});
     }
   };
 
@@ -1296,34 +1645,52 @@ function AddProfileServerModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Server Name</Label>
-            <Input
-              id="name"
-              value={formData.name}
-              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              placeholder="e.g., Simplifier.net"
-              required
-            />
+            <div className="space-y-1">
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="e.g., Simplifier.net"
+                className={errors.name ? 'border-red-500' : ''}
+                required
+              />
+              {errors.name && (
+                <p className="text-xs text-red-500">{errors.name}</p>
+              )}
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="url">Server URL</Label>
-            <Input
-              id="url"
-              value={formData.url}
-              onChange={(e) => setFormData(prev => ({ ...prev, url: e.target.value }))}
-              placeholder="https://packages.simplifier.net"
-              required
-            />
+            <div className="space-y-1">
+              <Input
+                id="url"
+                value={formData.url}
+                onChange={(e) => setFormData(prev => ({ ...prev, url: e.target.value }))}
+                placeholder="https://packages.simplifier.net"
+                className={errors.url ? 'border-red-500' : ''}
+                required
+              />
+              {errors.url && (
+                <p className="text-xs text-red-500">{errors.url}</p>
+              )}
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="timeout">Timeout (ms)</Label>
-            <Input
-              id="timeout"
-              type="number"
-              value={formData.timeoutMs}
-              onChange={(e) => setFormData(prev => ({ ...prev, timeoutMs: parseInt(e.target.value) }))}
-              min="1000"
-              max="300000"
-            />
+            <div className="space-y-1">
+              <Input
+                id="timeout"
+                type="number"
+                value={formData.timeoutMs}
+                onChange={(e) => setFormData(prev => ({ ...prev, timeoutMs: parseInt(e.target.value) }))}
+                className={errors.timeout ? 'border-red-500' : ''}
+                min="1000"
+                max="300000"
+              />
+              {errors.timeout && (
+                <p className="text-xs text-red-500">{errors.timeout}</p>
+              )}
+            </div>
           </div>
           <div className="space-y-3">
             <div className="flex items-center space-x-2">
@@ -1447,4 +1814,13 @@ function updateNestedProperty(obj: any, path: string, value: any): any {
   
   current[keys[keys.length - 1]] = value;
   return result;
+}
+
+function isValidUrl(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }

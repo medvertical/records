@@ -3,6 +3,7 @@ import { storage } from '../../storage.js';
 import { ValidationEngine } from './validation-engine.js';
 import { EnhancedValidationEngine } from './enhanced-validation-engine.js';
 import { FhirClient } from '../fhir/fhir-client.js';
+import { getValidationSettingsService } from './validation-settings-service.js';
 import type { FhirResource, InsertFhirResource, InsertValidationResult, ValidationResult } from '@shared/schema.js';
 
 /**
@@ -46,11 +47,13 @@ export class UnifiedValidationService {
       return; // Use cached settings
     }
     
-    const settings = await storage.getValidationSettings();
-    if (settings) {
-      // Cache the settings
-      this.cachedSettings = settings;
-      this.settingsCacheTime = now;
+    try {
+      const settingsService = getValidationSettingsService();
+      const settings = await settingsService.getActiveSettings();
+      if (settings) {
+        // Cache the settings
+        this.cachedSettings = settings;
+        this.settingsCacheTime = now;
       
       // Only log in development mode to reduce overhead
       if (process.env.NODE_ENV === 'development') {
@@ -85,6 +88,9 @@ export class UnifiedValidationService {
         terminologyServers: nestedSettings.terminologyServers ?? [],
         profileResolutionServers: nestedSettings.profileResolutionServers ?? []
       });
+      }
+    } catch (error) {
+      console.warn('[UnifiedValidation] Failed to load validation settings:', error);
     }
   }
   

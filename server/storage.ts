@@ -63,9 +63,8 @@ export interface IStorage {
   // Statistics
   getResourceStats(serverId?: number): Promise<ResourceStats>;
 
-  // Validation Settings
-  getValidationSettings(): Promise<ValidationSettings | undefined>;
-  createOrUpdateValidationSettings(settings: InsertValidationSettings): Promise<ValidationSettings>;
+  // Note: Validation Settings methods have been moved to ValidationSettingsRepository
+  // Use the rock-solid validation settings service instead
 }
 
 export class DatabaseStorage implements IStorage {
@@ -499,78 +498,7 @@ export class DatabaseStorage implements IStorage {
     return { isValid, errorCount, warningCount };
   }
 
-  async getValidationSettings(): Promise<ValidationSettings | undefined> {
-    return await queryOptimizer.getValidationSettings();
-  }
-
-  async createOrUpdateValidationSettings(settings: InsertValidationSettings): Promise<ValidationSettings> {
-    const existing = await this.getValidationSettings();
-    
-    if (existing) {
-      // Update existing settings
-      const [updated] = await db
-        .update(validationSettings)
-        .set({
-          ...settings,
-          updatedAt: new Date(),
-        })
-        .where(eq(validationSettings.id, existing.id))
-        .returning();
-      return updated;
-    } else {
-      // Create new settings with default structure
-      const defaultSettings = {
-        version: 1,
-        settings: {
-          structural: { enabled: true, severity: 'error' as const },
-          profile: { enabled: true, severity: 'warning' as const },
-          terminology: { enabled: true, severity: 'warning' as const },
-          reference: { enabled: true, severity: 'error' as const },
-          businessRule: { enabled: true, severity: 'warning' as const },
-          metadata: { enabled: true, severity: 'information' as const },
-          strictMode: false,
-          defaultSeverity: 'warning' as const,
-          includeDebugInfo: false,
-          validateAgainstBaseSpec: true,
-          fhirVersion: 'R4' as const,
-          terminologyServers: [],
-          profileResolutionServers: [],
-          cacheSettings: {
-            enabled: true,
-            ttlMs: 300000,
-            maxSizeMB: 100,
-            cacheValidationResults: true,
-            cacheTerminologyExpansions: true,
-            cacheProfileResolutions: true
-          },
-          timeoutSettings: {
-            defaultTimeoutMs: 30000,
-            structuralValidationTimeoutMs: 30000,
-            profileValidationTimeoutMs: 45000,
-            terminologyValidationTimeoutMs: 60000,
-            referenceValidationTimeoutMs: 30000,
-            businessRuleValidationTimeoutMs: 30000,
-            metadataValidationTimeoutMs: 15000
-          },
-          maxConcurrentValidations: 10,
-          useParallelValidation: true,
-          customRules: [],
-          validateExternalReferences: false,
-          validateNonExistentReferences: true,
-          validateReferenceTypes: true
-        },
-        isActive: true,
-        createdBy: 'system',
-        updatedBy: 'system'
-      };
-      
-      const [created] = await db
-        .insert(validationSettings)
-        .values(defaultSettings)
-        .returning();
-      return created;
-    }
-  }
+  // Legacy validation settings methods removed - use ValidationSettingsRepository instead
 }
 
 export const storage = new DatabaseStorage();

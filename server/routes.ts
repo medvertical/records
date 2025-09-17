@@ -234,25 +234,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     robustValidationService = new RobustValidationService(fhirClient, validationEngine);
     dashboardService = new DashboardService(fhirClient, storage);
     
-    // Load and apply saved validation settings
-    const savedSettings = await storage.getValidationSettings();
-    if (savedSettings && unifiedValidationService) {
-      console.log('[Routes] Loading saved validation settings from database');
-      const settings = savedSettings.settings || {};
-      const config = {
-        enableStructuralValidation: settings.structural?.enabled ?? true,
-        enableProfileValidation: settings.profile?.enabled ?? true,
-        enableTerminologyValidation: settings.terminology?.enabled ?? true,
-        enableReferenceValidation: settings.reference?.enabled ?? true,
-        enableBusinessRuleValidation: settings.businessRule?.enabled ?? true,
-        enableMetadataValidation: settings.metadata?.enabled ?? true,
-        strictMode: settings.strictMode ?? false,
-        profiles: settings.customRules as string[] || [],
-        terminologyServers: settings.terminologyServers as any[] || [],
-        profileResolutionServers: settings.profileResolutionServers as any[] || []
-      };
-      unifiedValidationService.updateConfig(config);
-      console.log('[Routes] Applied saved validation settings to services');
+    // Load and apply saved validation settings using rock-solid service
+    try {
+      const settingsService = getValidationSettingsService();
+      const savedSettings = await settingsService.getActiveSettings();
+      if (savedSettings && unifiedValidationService) {
+        console.log('[Routes] Loading saved validation settings from rock-solid service');
+        const config = {
+          enableStructuralValidation: savedSettings.structural?.enabled ?? true,
+          enableProfileValidation: savedSettings.profile?.enabled ?? true,
+          enableTerminologyValidation: savedSettings.terminology?.enabled ?? true,
+          enableReferenceValidation: savedSettings.reference?.enabled ?? true,
+          enableBusinessRuleValidation: savedSettings.businessRule?.enabled ?? true,
+          enableMetadataValidation: savedSettings.metadata?.enabled ?? true,
+          strictMode: savedSettings.strictMode ?? false,
+          profiles: savedSettings.customRules as string[] || [],
+          terminologyServers: savedSettings.terminologyServers as any[] || [],
+          profileResolutionServers: savedSettings.profileResolutionServers as any[] || []
+        };
+        unifiedValidationService.updateConfig(config);
+        console.log('[Routes] Applied saved validation settings to services');
+      }
+    } catch (error) {
+      console.warn('[Routes] Failed to load validation settings from service:', error);
     }
   }
 
@@ -290,23 +294,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         unifiedValidationService = new UnifiedValidationService(fhirClient, validationEngine);
         robustValidationService = new RobustValidationService(fhirClient, validationEngine);
         
-        // Reapply saved validation settings
-        const savedSettings = await storage.getValidationSettings();
-        if (savedSettings && unifiedValidationService) {
-          const settings = savedSettings.settings || {};
-          const config = {
-            enableStructuralValidation: settings.structural?.enabled ?? true,
-            enableProfileValidation: settings.profile?.enabled ?? true,
-            enableTerminologyValidation: settings.terminology?.enabled ?? true,
-            enableReferenceValidation: settings.reference?.enabled ?? true,
-            enableBusinessRuleValidation: settings.businessRule?.enabled ?? true,
-            enableMetadataValidation: settings.metadata?.enabled ?? true,
-            strictMode: settings.strictMode ?? false,
-            profiles: settings.customRules as string[] || [],
-            terminologyServers: settings.terminologyServers as any[] || [],
-            profileResolutionServers: settings.profileResolutionServers as any[] || []
-          };
-          unifiedValidationService.updateConfig(config);
+        // Reapply saved validation settings using rock-solid service
+        try {
+          const settingsService = getValidationSettingsService();
+          const savedSettings = await settingsService.getActiveSettings();
+          if (savedSettings && unifiedValidationService) {
+            const config = {
+              enableStructuralValidation: savedSettings.structural?.enabled ?? true,
+              enableProfileValidation: savedSettings.profile?.enabled ?? true,
+              enableTerminologyValidation: savedSettings.terminology?.enabled ?? true,
+              enableReferenceValidation: savedSettings.reference?.enabled ?? true,
+              enableBusinessRuleValidation: savedSettings.businessRule?.enabled ?? true,
+              enableMetadataValidation: savedSettings.metadata?.enabled ?? true,
+              strictMode: savedSettings.strictMode ?? false,
+              profiles: savedSettings.customRules as string[] || [],
+              terminologyServers: savedSettings.terminologyServers as any[] || [],
+              profileResolutionServers: savedSettings.profileResolutionServers as any[] || []
+            };
+            unifiedValidationService.updateConfig(config);
+          }
+        } catch (error) {
+          console.warn('[Routes] Failed to reapply validation settings after server activation:', error);
         }
       }
       
@@ -480,8 +488,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (cachedResources.length > 0) {
             console.log(`[Resources] Serving ${cachedResources.length} cached resources immediately (${allCachedForType.length} total in cache)`);
             
-            // Get current validation settings for filtering
-            const validationSettings = await storage.getValidationSettings();
+            // Get current validation settings for filtering using rock-solid service
+            let validationSettings = null;
+            try {
+              const settingsService = getValidationSettingsService();
+              validationSettings = await settingsService.getActiveSettings();
+            } catch (error) {
+              console.warn('[Routes] Failed to load validation settings for filtering:', error);
+            }
             
             // Return resources immediately with cached validation data only
             const resourcesWithCachedValidation = await Promise.all(
@@ -677,8 +691,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Individual revalidation can be triggered manually if needed
       console.log(`[Resource Detail] Using cached validation results for ${resource.resourceType}/${resource.resourceId}`);
       
-      // Get validation settings for filtering
-      const validationSettings = await storage.getValidationSettings();
+      // Get validation settings for filtering using rock-solid service
+      let validationSettings = null;
+      try {
+        const settingsService = getValidationSettingsService();
+        validationSettings = await settingsService.getActiveSettings();
+      } catch (error) {
+        console.warn('[Routes] Failed to load validation settings for resource detail filtering:', error);
+      }
       
       // Get only the latest validation result (like in list view)
       if (resource.validationResults && resource.validationResults.length > 0) {
@@ -863,228 +883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/validation/settings", async (req, res) => {
-    try {
-      // Load settings from database first
-      const savedSettings = await storage.getValidationSettings();
-      
-      if (savedSettings) {
-        // Return saved settings from database
-        console.log('[ValidationSettings] Returning saved settings from database');
-        
-        // Merge the config object with the main settings to create a flat structure
-        const flatSettings = {
-          ...savedSettings,
-          ...(savedSettings.config as any || {}),
-          // Remove the nested config to avoid confusion
-          config: undefined
-        };
-        
-        res.json(flatSettings);
-      } else {
-        // Return default settings if no saved settings exist
-        console.log('[ValidationSettings] No saved settings, returning defaults');
-        const defaultSettings = {
-          // Enhanced Validation Engine - 6 Aspects
-          enableStructuralValidation: true,
-          enableProfileValidation: true,
-          enableTerminologyValidation: true,
-          enableReferenceValidation: true,
-          enableBusinessRuleValidation: true,
-          enableMetadataValidation: true,
-          
-          // Legacy settings for backwards compatibility
-          fetchFromSimplifier: true,
-          fetchFromFhirServer: true,
-          autoDetectProfiles: true,
-          strictMode: false,
-          maxProfiles: 3,
-          cacheDuration: 3600, // 1 hour in seconds
-          
-          // Advanced settings
-          validationProfiles: [
-            'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient',
-            'http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab'
-          ],
-          terminologyServers: [
-            {
-              priority: 1,
-              enabled: true,
-              url: 'https://r4.ontoserver.csiro.au/fhir',
-              type: 'ontoserver',
-              name: 'CSIRO OntoServer',
-              description: 'Primary terminology server with SNOMED CT, LOINC, extensions',
-              capabilities: ['SNOMED CT', 'LOINC', 'ICD-10', 'Extensions', 'ValueSets']
-            },
-            {
-              priority: 2,
-              enabled: true,
-              url: 'https://tx.fhir.org/r4',
-              type: 'fhir-terminology',
-            name: 'HL7 FHIR Terminology Server',
-            description: 'Official HL7 terminology server for FHIR standards',
-            capabilities: ['US Core', 'FHIR Base', 'HL7 Standards', 'ValueSets']
-          },
-          {
-            priority: 3,
-            enabled: false,
-            url: 'https://snowstorm.ihtsdotools.org/fhir',
-            type: 'snowstorm',
-            name: 'SNOMED International',
-            description: 'Official SNOMED CT terminology server',
-            capabilities: ['SNOMED CT', 'ECL', 'Concept Maps']
-          }
-        ],
-        // Legacy single server for backwards compatibility
-        terminologyServer: {
-          enabled: true,
-          url: 'https://r4.ontoserver.csiro.au/fhir',
-          type: 'ontoserver',
-          description: 'CSIRO OntoServer (Public)'
-        },
-        
-        // Profile Resolution Servers
-        profileResolutionServers: [
-          {
-            priority: 1,
-            enabled: true,
-            url: 'https://packages.simplifier.net',
-            type: 'simplifier',
-            name: 'Simplifier.net',
-            description: 'Firely Simplifier - Community profile registry with thousands of FHIR profiles',
-            capabilities: ['FHIR Profiles', 'Implementation Guides', 'Extensions', 'US Core', 'IPS', 'Custom Profiles']
-          },
-          {
-            priority: 2,
-            enabled: true,
-            url: 'https://build.fhir.org',
-            type: 'fhir-ci',
-            name: 'FHIR CI Build',
-            description: 'Official FHIR continuous integration server with latest profiles',
-            capabilities: ['Official FHIR Profiles', 'Core Profiles', 'Development Versions']
-          },
-          {
-            priority: 3,
-            enabled: true,
-            url: 'https://registry.fhir.org',
-            type: 'fhir-registry',
-            name: 'FHIR Package Registry',
-            description: 'Official FHIR package registry for stable profile versions',
-            capabilities: ['Stable Profiles', 'Published IGs', 'Official Packages']
-          }
-        ],
-        
-        // Performance settings
-        batchSize: 20,
-        maxRetries: 3,
-        timeout: 30000,
-        
-        // Quality thresholds
-        minValidationScore: 70,
-        errorSeverityThreshold: 'warning' // 'information', 'warning', 'error', 'fatal'
-        };
-        res.json(defaultSettings);
-      }
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
 
-  app.post("/api/validation/settings", async (req, res) => {
-    try {
-      const settings = req.body;
-      console.log('[ValidationSettings] Updating Enhanced Validation Engine configuration:', settings);
-      
-      // Persist settings to database
-      const savedSettings = await storage.createOrUpdateValidationSettings({
-        enableStructuralValidation: settings.enableStructuralValidation ?? true,
-        enableProfileValidation: settings.enableProfileValidation ?? true,
-        enableTerminologyValidation: settings.enableTerminologyValidation ?? true,
-        enableReferenceValidation: settings.enableReferenceValidation ?? true,
-        enableBusinessRuleValidation: settings.enableBusinessRuleValidation ?? true,
-        enableMetadataValidation: settings.enableMetadataValidation ?? true,
-        strictMode: settings.strictMode ?? false,
-        validationProfiles: settings.validationProfiles ?? [],
-        terminologyServers: settings.terminologyServers ?? [],
-        profileResolutionServers: settings.profileResolutionServers ?? [],
-        config: {
-          // Only store additional settings not in the main columns
-          fetchFromSimplifier: settings.fetchFromSimplifier,
-          fetchFromFhirServer: settings.fetchFromFhirServer,
-          autoDetectProfiles: settings.autoDetectProfiles,
-          maxProfiles: settings.maxProfiles,
-          cacheDuration: settings.cacheDuration,
-          terminologyServer: settings.terminologyServer,
-          batchSize: settings.batchSize,
-          maxRetries: settings.maxRetries,
-          timeout: settings.timeout,
-          minValidationScore: settings.minValidationScore,
-          errorSeverityThreshold: settings.errorSeverityThreshold,
-          autoRefreshDashboard: settings.autoRefreshDashboard,
-          rememberLastPage: settings.rememberLastPage
-        }
-      });
-      
-      console.log('[ValidationSettings] Settings persisted to database');
-      
-      // Update Enhanced Validation Engine configuration
-      if (unifiedValidationService) {
-        const enhancedConfig = {
-          enableStructuralValidation: savedSettings.enableStructuralValidation,
-          enableProfileValidation: savedSettings.enableProfileValidation,
-          enableTerminologyValidation: savedSettings.enableTerminologyValidation,
-          enableReferenceValidation: savedSettings.enableReferenceValidation,
-          enableBusinessRuleValidation: savedSettings.enableBusinessRuleValidation,
-          enableMetadataValidation: savedSettings.enableMetadataValidation,
-          strictMode: savedSettings.strictMode,
-          profiles: savedSettings.validationProfiles as string[],
-          terminologyServers: savedSettings.terminologyServers as any[],
-          profileResolutionServers: savedSettings.profileResolutionServers as any[],
-          // Legacy single server for backwards compatibility
-          terminologyServer: settings.terminologyServer
-        };
-        
-        console.log('[ValidationSettings] Applying config to Enhanced Validation Engine with multiple terminology servers:', enhancedConfig);
-        // Update validation engine configuration
-        if (typeof unifiedValidationService.updateConfig === 'function') {
-          unifiedValidationService.updateConfig(enhancedConfig);
-        }
-      }
-      
-      // Update terminology server configuration if provided
-      if (settings.terminologyServer && validationEngine) {
-        validationEngine.updateTerminologyConfig(settings);
-      }
-      
-      // Broadcast settings change to trigger dashboard cache invalidation
-      if (validationWebSocket) {
-        validationWebSocket.broadcastMessage('settings_changed', {
-          type: 'validation_settings_updated',
-          timestamp: new Date().toISOString(),
-          message: 'Validation settings have been updated. Dashboard data will refresh.'
-        });
-      }
-      
-      res.json({
-        message: "Enhanced Validation Engine settings updated successfully",
-        settings: settings,
-        appliedConfig: {
-          enhancedValidationEnabled: true,
-          aspectsConfigured: [
-            'Structural Validation',
-            'Profile Validation', 
-            'Terminology Validation',
-            'Reference Validation',
-            'Business Rule Validation',
-            'Metadata Validation'
-          ]
-        }
-      });
-    } catch (error: any) {
-      console.error('[ValidationSettings] Failed to update settings:', error);
-      res.status(500).json({ message: error.message });
-    }
-  });
 
   app.get("/api/fhir/packages", async (req, res) => {
     try {
@@ -2140,12 +1939,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/validation/settings - Get current active settings
   app.get("/api/validation/settings", async (req, res) => {
     try {
+      // Validate request parameters
+      const { includeHistory, includeStatistics } = req.query;
+      
+      // Get settings with proper error handling
       const settings = await settingsService.getActiveSettings();
-      res.json(settings);
+      
+      if (!settings) {
+        return res.status(404).json({
+          success: false,
+          message: "No active validation settings found",
+          error: "SETTINGS_NOT_FOUND",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Validate response structure
+      if (!settings.id || !settings.settings) {
+        console.error('[ValidationSettings] Invalid settings structure:', settings);
+        return res.status(500).json({
+          success: false,
+          message: "Invalid settings structure returned from service",
+          error: "INVALID_SETTINGS_STRUCTURE",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Include additional data if requested
+      const response: any = {
+        success: true,
+        data: settings,
+        timestamp: new Date().toISOString()
+      };
+      
+      if (includeHistory === 'true') {
+        try {
+          const history = await settingsRepository.getHistory(settings.id);
+          response.history = history;
+        } catch (historyError) {
+          console.warn('[ValidationSettings] Failed to load history:', historyError);
+          response.historyError = "Failed to load settings history";
+        }
+      }
+      
+      if (includeStatistics === 'true') {
+        try {
+          const stats = await settingsRepository.getStatistics();
+          response.statistics = stats;
+        } catch (statsError) {
+          console.warn('[ValidationSettings] Failed to load statistics:', statsError);
+          response.statisticsError = "Failed to load settings statistics";
+        }
+      }
+      
+      res.json(response);
     } catch (error: any) {
-      res.status(500).json({ 
-        message: "Failed to load validation settings",
-        error: error.message 
+      console.error('[ValidationSettings] GET settings failed:', error);
+      
+      // Determine error type and appropriate response
+      let statusCode = 500;
+      let errorCode = "INTERNAL_SERVER_ERROR";
+      let message = "Failed to load validation settings";
+      
+      if (error.name === 'ValidationError') {
+        statusCode = 400;
+        errorCode = "VALIDATION_ERROR";
+        message = "Invalid request parameters";
+      } else if (error.name === 'DatabaseError') {
+        statusCode = 503;
+        errorCode = "DATABASE_ERROR";
+        message = "Database connection failed";
+      } else if (error.message?.includes('timeout')) {
+        statusCode = 504;
+        errorCode = "TIMEOUT_ERROR";
+        message = "Request timeout";
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message,
+        error: errorCode,
+        details: error.message,
+        timestamp: new Date().toISOString()
       });
     }
   });
@@ -2154,6 +2029,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/validation/settings", async (req, res) => {
     try {
       console.log('[ValidationSettings] Received settings update:', JSON.stringify(req.body, null, 2));
+      
+      // Validate request body
+      if (!req.body || typeof req.body !== 'object') {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid request body - must be a valid settings object",
+          error: "INVALID_REQUEST_BODY",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Validate required fields
+      const requiredFields = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'];
+      const missingFields = requiredFields.filter(field => !req.body[field]);
+      
+      if (missingFields.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Missing required fields: ${missingFields.join(', ')}`,
+          error: "MISSING_REQUIRED_FIELDS",
+          missingFields,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Validate field structures
+      const validationErrors: string[] = [];
+      requiredFields.forEach(field => {
+        if (req.body[field] && typeof req.body[field] === 'object') {
+          if (typeof req.body[field].enabled !== 'boolean') {
+            validationErrors.push(`${field}.enabled must be a boolean`);
+          }
+          if (req.body[field].severity && !['error', 'warning', 'information'].includes(req.body[field].severity)) {
+            validationErrors.push(`${field}.severity must be one of: error, warning, information`);
+          }
+        }
+      });
+      
+      if (validationErrors.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Validation errors in settings structure",
+          error: "VALIDATION_ERRORS",
+          validationErrors,
+          timestamp: new Date().toISOString()
+        });
+      }
       
       const update: ValidationSettingsUpdate = {
         settings: req.body,
@@ -2164,18 +2086,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const updatedSettings = await settingsService.updateSettings(update);
       
-      // Clear validation service cache and force reload settings to ensure new settings are used
-      if (unifiedValidationService) {
-        await unifiedValidationService.forceReloadSettings();
-        console.log('[ValidationSettings] Cleared validation service cache and reloaded settings after update');
+      if (!updatedSettings) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to update settings - no settings returned from service",
+          error: "UPDATE_FAILED",
+          timestamp: new Date().toISOString()
+        });
       }
       
-      res.json(updatedSettings);
+      // Clear validation service cache and force reload settings to ensure new settings are used
+      try {
+        if (unifiedValidationService) {
+          await unifiedValidationService.forceReloadSettings();
+          console.log('[ValidationSettings] Cleared validation service cache and reloaded settings after update');
+        }
+      } catch (cacheError) {
+        console.warn('[ValidationSettings] Failed to clear validation service cache:', cacheError);
+        // Don't fail the request if cache clearing fails
+      }
+      
+      res.json({
+        success: true,
+        data: updatedSettings,
+        message: "Settings updated successfully",
+        timestamp: new Date().toISOString()
+      });
     } catch (error: any) {
-      console.error('[ValidationSettings] Update failed:', error.message);
-      res.status(400).json({ 
-        message: "Failed to update validation settings",
-        error: error.message 
+      console.error('[ValidationSettings] Update failed:', error);
+      
+      // Determine error type and appropriate response
+      let statusCode = 400;
+      let errorCode = "UPDATE_FAILED";
+      let message = "Failed to update validation settings";
+      
+      if (error.name === 'ValidationError') {
+        errorCode = "VALIDATION_ERROR";
+        message = "Settings validation failed";
+      } else if (error.name === 'DatabaseError') {
+        statusCode = 503;
+        errorCode = "DATABASE_ERROR";
+        message = "Database connection failed";
+      } else if (error.message?.includes('timeout')) {
+        statusCode = 504;
+        errorCode = "TIMEOUT_ERROR";
+        message = "Request timeout";
+      } else if (error.message?.includes('permission')) {
+        statusCode = 403;
+        errorCode = "PERMISSION_DENIED";
+        message = "Insufficient permissions to update settings";
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message,
+        error: errorCode,
+        details: error.message,
+        timestamp: new Date().toISOString()
       });
     }
   });
@@ -2183,12 +2150,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST /api/validation/settings/validate - Validate settings
   app.post("/api/validation/settings/validate", async (req, res) => {
     try {
+      // Validate request body
+      if (!req.body || typeof req.body !== 'object') {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid request body - must be a valid settings object",
+          error: "INVALID_REQUEST_BODY",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Perform validation
       const validationResult = await settingsService.validateSettings(req.body);
-      res.json(validationResult);
+      
+      if (!validationResult) {
+        return res.status(500).json({
+          success: false,
+          message: "Validation service returned no result",
+          error: "VALIDATION_SERVICE_ERROR",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Ensure validation result has proper structure
+      const response = {
+        success: true,
+        data: {
+          isValid: validationResult.isValid || false,
+          errors: validationResult.errors || [],
+          warnings: validationResult.warnings || [],
+          suggestions: validationResult.suggestions || [],
+          validatedAt: new Date().toISOString()
+        },
+        message: validationResult.isValid ? "Settings validation passed" : "Settings validation failed",
+        timestamp: new Date().toISOString()
+      };
+      
+      res.json(response);
     } catch (error: any) {
-      res.status(400).json({ 
-        message: "Failed to validate settings",
-        error: error.message 
+      console.error('[ValidationSettings] Validation failed:', error);
+      
+      // Determine error type and appropriate response
+      let statusCode = 400;
+      let errorCode = "VALIDATION_FAILED";
+      let message = "Failed to validate settings";
+      
+      if (error.name === 'ValidationError') {
+        errorCode = "VALIDATION_ERROR";
+        message = "Settings validation error";
+      } else if (error.name === 'DatabaseError') {
+        statusCode = 503;
+        errorCode = "DATABASE_ERROR";
+        message = "Database connection failed";
+      } else if (error.message?.includes('timeout')) {
+        statusCode = 504;
+        errorCode = "TIMEOUT_ERROR";
+        message = "Request timeout";
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message,
+        error: errorCode,
+        details: error.message,
+        timestamp: new Date().toISOString()
       });
     }
   });
@@ -2196,17 +2221,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/validation/settings/history - Get settings history
   app.get("/api/validation/settings/history", async (req, res) => {
     try {
-      const { id } = req.query;
+      const { id, limit = '50', offset = '0' } = req.query;
+      
+      // Validate required parameters
       if (!id) {
-        return res.status(400).json({ message: "Settings ID is required" });
+        return res.status(400).json({
+          success: false,
+          message: "Settings ID is required",
+          error: "MISSING_SETTINGS_ID",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Validate ID format
+      const settingsId = parseInt(id as string);
+      if (isNaN(settingsId) || settingsId <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid settings ID - must be a positive integer",
+          error: "INVALID_SETTINGS_ID",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Validate pagination parameters
+      const limitNum = parseInt(limit as string);
+      const offsetNum = parseInt(offset as string);
+      
+      if (isNaN(limitNum) || limitNum <= 0 || limitNum > 1000) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid limit - must be between 1 and 1000",
+          error: "INVALID_LIMIT",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      if (isNaN(offsetNum) || offsetNum < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid offset - must be a non-negative integer",
+          error: "INVALID_OFFSET",
+          timestamp: new Date().toISOString()
+        });
       }
 
-      const history = await settingsRepository.getHistory(parseInt(id as string));
-      res.json(history);
+      const history = await settingsRepository.getHistory(settingsId, limitNum, offsetNum);
+      
+      if (!history) {
+        return res.status(404).json({
+          success: false,
+          message: "Settings history not found",
+          error: "HISTORY_NOT_FOUND",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      res.json({
+        success: true,
+        data: history,
+        pagination: {
+          limit: limitNum,
+          offset: offsetNum,
+          total: Array.isArray(history) ? history.length : 1
+        },
+        timestamp: new Date().toISOString()
+      });
     } catch (error: any) {
-      res.status(500).json({ 
-        message: "Failed to load settings history",
-        error: error.message 
+      console.error('[ValidationSettings] History failed:', error);
+      
+      // Determine error type and appropriate response
+      let statusCode = 500;
+      let errorCode = "HISTORY_LOAD_FAILED";
+      let message = "Failed to load settings history";
+      
+      if (error.name === 'ValidationError') {
+        statusCode = 400;
+        errorCode = "VALIDATION_ERROR";
+        message = "Invalid request parameters";
+      } else if (error.name === 'DatabaseError') {
+        statusCode = 503;
+        errorCode = "DATABASE_ERROR";
+        message = "Database connection failed";
+      } else if (error.message?.includes('timeout')) {
+        statusCode = 504;
+        errorCode = "TIMEOUT_ERROR";
+        message = "Request timeout";
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message,
+        error: errorCode,
+        details: error.message,
+        timestamp: new Date().toISOString()
       });
     }
   });
@@ -2214,13 +2322,127 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST /api/validation/settings/reset - Reset to defaults
   app.post("/api/validation/settings/reset", async (req, res) => {
     try {
-      const defaultSettings = await settingsService.createSettings({}, 'system');
-      const activatedSettings = await settingsService.activateSettings(defaultSettings.id!, 'system');
-      res.json(activatedSettings);
+      // Validate request body (optional confirmation)
+      const { confirmReset = false, resetType = 'defaults' } = req.body;
+      
+      if (confirmReset !== true) {
+        return res.status(400).json({
+          success: false,
+          message: "Reset confirmation required - set confirmReset to true",
+          error: "RESET_CONFIRMATION_REQUIRED",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Validate reset type
+      const validResetTypes = ['defaults', 'minimal', 'strict'];
+      if (!validResetTypes.includes(resetType)) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid reset type - must be one of: ${validResetTypes.join(', ')}`,
+          error: "INVALID_RESET_TYPE",
+          validTypes: validResetTypes,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Create default settings based on reset type
+      let defaultSettingsData = {};
+      if (resetType === 'minimal') {
+        defaultSettingsData = {
+          structural: { enabled: true, severity: 'error' },
+          profile: { enabled: false, severity: 'warning' },
+          terminology: { enabled: false, severity: 'warning' },
+          reference: { enabled: true, severity: 'error' },
+          businessRule: { enabled: false, severity: 'warning' },
+          metadata: { enabled: true, severity: 'error' },
+          strictMode: false
+        };
+      } else if (resetType === 'strict') {
+        defaultSettingsData = {
+          structural: { enabled: true, severity: 'error' },
+          profile: { enabled: true, severity: 'error' },
+          terminology: { enabled: true, severity: 'error' },
+          reference: { enabled: true, severity: 'error' },
+          businessRule: { enabled: true, severity: 'error' },
+          metadata: { enabled: true, severity: 'error' },
+          strictMode: true
+        };
+      }
+      // 'defaults' uses empty object which will use service defaults
+      
+      const defaultSettings = await settingsService.createSettings(defaultSettingsData, 'system');
+      
+      if (!defaultSettings || !defaultSettings.id) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to create default settings",
+          error: "DEFAULT_SETTINGS_CREATION_FAILED",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      const activatedSettings = await settingsService.activateSettings(defaultSettings.id, 'system');
+      
+      if (!activatedSettings) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to activate default settings",
+          error: "SETTINGS_ACTIVATION_FAILED",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Clear validation service cache
+      try {
+        if (unifiedValidationService) {
+          await unifiedValidationService.forceReloadSettings();
+          console.log('[ValidationSettings] Cleared validation service cache after reset');
+        }
+      } catch (cacheError) {
+        console.warn('[ValidationSettings] Failed to clear validation service cache after reset:', cacheError);
+        // Don't fail the request if cache clearing fails
+      }
+      
+      res.json({
+        success: true,
+        data: activatedSettings,
+        message: `Settings reset to ${resetType} successfully`,
+        resetType,
+        timestamp: new Date().toISOString()
+      });
     } catch (error: any) {
-      res.status(500).json({ 
-        message: "Failed to reset settings",
-        error: error.message 
+      console.error('[ValidationSettings] Reset failed:', error);
+      
+      // Determine error type and appropriate response
+      let statusCode = 500;
+      let errorCode = "RESET_FAILED";
+      let message = "Failed to reset settings";
+      
+      if (error.name === 'ValidationError') {
+        statusCode = 400;
+        errorCode = "VALIDATION_ERROR";
+        message = "Invalid reset request";
+      } else if (error.name === 'DatabaseError') {
+        statusCode = 503;
+        errorCode = "DATABASE_ERROR";
+        message = "Database connection failed";
+      } else if (error.message?.includes('timeout')) {
+        statusCode = 504;
+        errorCode = "TIMEOUT_ERROR";
+        message = "Request timeout";
+      } else if (error.message?.includes('permission')) {
+        statusCode = 403;
+        errorCode = "PERMISSION_DENIED";
+        message = "Insufficient permissions to reset settings";
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message,
+        error: errorCode,
+        details: error.message,
+        timestamp: new Date().toISOString()
       });
     }
   });
@@ -2228,12 +2450,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/validation/settings/presets - Get available presets
   app.get("/api/validation/settings/presets", async (req, res) => {
     try {
+      const { category, includeBuiltIn = 'true' } = req.query;
+      
       const presets = await settingsService.getPresets();
-      res.json(presets);
+      
+      if (!presets || !Array.isArray(presets)) {
+        return res.status(500).json({
+          success: false,
+          message: "Invalid presets data returned from service",
+          error: "INVALID_PRESETS_DATA",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Filter presets by category if specified
+      let filteredPresets = presets;
+      if (category) {
+        filteredPresets = presets.filter(preset => 
+          preset.category === category || preset.tags?.includes(category)
+        );
+      }
+      
+      // Filter built-in presets if requested
+      if (includeBuiltIn === 'false') {
+        filteredPresets = filteredPresets.filter(preset => !preset.isBuiltIn);
+      }
+      
+      res.json({
+        success: true,
+        data: filteredPresets,
+        total: filteredPresets.length,
+        categories: [...new Set(presets.map(p => p.category).filter(Boolean))],
+        timestamp: new Date().toISOString()
+      });
     } catch (error: any) {
-      res.status(500).json({ 
-        message: "Failed to load presets",
-        error: error.message 
+      console.error('[ValidationSettings] Presets failed:', error);
+      
+      // Determine error type and appropriate response
+      let statusCode = 500;
+      let errorCode = "PRESETS_LOAD_FAILED";
+      let message = "Failed to load presets";
+      
+      if (error.name === 'ValidationError') {
+        statusCode = 400;
+        errorCode = "VALIDATION_ERROR";
+        message = "Invalid request parameters";
+      } else if (error.name === 'DatabaseError') {
+        statusCode = 503;
+        errorCode = "DATABASE_ERROR";
+        message = "Database connection failed";
+      } else if (error.message?.includes('timeout')) {
+        statusCode = 504;
+        errorCode = "TIMEOUT_ERROR";
+        message = "Request timeout";
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message,
+        error: errorCode,
+        details: error.message,
+        timestamp: new Date().toISOString()
       });
     }
   });
@@ -2241,17 +2518,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST /api/validation/settings/presets/apply - Apply preset
   app.post("/api/validation/settings/presets/apply", async (req, res) => {
     try {
-      const { presetId } = req.body;
+      const { presetId, confirmApply = false } = req.body;
+      
+      // Validate required parameters
       if (!presetId) {
-        return res.status(400).json({ message: "Preset ID is required" });
+        return res.status(400).json({
+          success: false,
+          message: "Preset ID is required",
+          error: "MISSING_PRESET_ID",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      if (confirmApply !== true) {
+        return res.status(400).json({
+          success: false,
+          message: "Preset application confirmation required - set confirmApply to true",
+          error: "APPLY_CONFIRMATION_REQUIRED",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Validate preset ID format
+      if (typeof presetId !== 'string' || presetId.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid preset ID - must be a non-empty string",
+          error: "INVALID_PRESET_ID",
+          timestamp: new Date().toISOString()
+        });
       }
 
-      const settings = await settingsService.applyPreset(presetId, req.headers['x-user-id'] as string);
-      res.json(settings);
+      const settings = await settingsService.applyPreset(presetId.trim(), req.headers['x-user-id'] as string);
+      
+      if (!settings) {
+        return res.status(404).json({
+          success: false,
+          message: "Preset not found or failed to apply",
+          error: "PRESET_NOT_FOUND",
+          presetId: presetId.trim(),
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Clear validation service cache
+      try {
+        if (unifiedValidationService) {
+          await unifiedValidationService.forceReloadSettings();
+          console.log('[ValidationSettings] Cleared validation service cache after preset application');
+        }
+      } catch (cacheError) {
+        console.warn('[ValidationSettings] Failed to clear validation service cache after preset application:', cacheError);
+        // Don't fail the request if cache clearing fails
+      }
+      
+      res.json({
+        success: true,
+        data: settings,
+        message: "Preset applied successfully",
+        presetId: presetId.trim(),
+        timestamp: new Date().toISOString()
+      });
     } catch (error: any) {
-      res.status(400).json({ 
-        message: "Failed to apply preset",
-        error: error.message 
+      console.error('[ValidationSettings] Preset apply failed:', error);
+      
+      // Determine error type and appropriate response
+      let statusCode = 400;
+      let errorCode = "PRESET_APPLY_FAILED";
+      let message = "Failed to apply preset";
+      
+      if (error.name === 'ValidationError') {
+        errorCode = "VALIDATION_ERROR";
+        message = "Invalid preset application request";
+      } else if (error.name === 'DatabaseError') {
+        statusCode = 503;
+        errorCode = "DATABASE_ERROR";
+        message = "Database connection failed";
+      } else if (error.message?.includes('timeout')) {
+        statusCode = 504;
+        errorCode = "TIMEOUT_ERROR";
+        message = "Request timeout";
+      } else if (error.message?.includes('not found')) {
+        statusCode = 404;
+        errorCode = "PRESET_NOT_FOUND";
+        message = "Preset not found";
+      } else if (error.message?.includes('permission')) {
+        statusCode = 403;
+        errorCode = "PERMISSION_DENIED";
+        message = "Insufficient permissions to apply preset";
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message,
+        error: errorCode,
+        details: error.message,
+        timestamp: new Date().toISOString()
       });
     }
   });
@@ -2259,19 +2621,124 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST /api/validation/settings/test - Test settings with sample resource
   app.post("/api/validation/settings/test", async (req, res) => {
     try {
-      const { settings, sampleResource } = req.body;
+      const { settings, sampleResource, testType = 'validation' } = req.body;
+      
+      // Validate required parameters
       if (!settings || !sampleResource) {
-        return res.status(400).json({ 
-          message: "Settings and sample resource are required" 
+        return res.status(400).json({
+          success: false,
+          message: "Settings and sample resource are required",
+          error: "MISSING_REQUIRED_PARAMETERS",
+          required: ['settings', 'sampleResource'],
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Validate settings structure
+      if (typeof settings !== 'object' || Array.isArray(settings)) {
+        return res.status(400).json({
+          success: false,
+          message: "Settings must be a valid object",
+          error: "INVALID_SETTINGS_FORMAT",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Validate sample resource structure
+      if (typeof sampleResource !== 'object' || Array.isArray(sampleResource)) {
+        return res.status(400).json({
+          success: false,
+          message: "Sample resource must be a valid object",
+          error: "INVALID_SAMPLE_RESOURCE_FORMAT",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Validate test type
+      const validTestTypes = ['validation', 'performance', 'compatibility'];
+      if (!validTestTypes.includes(testType)) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid test type - must be one of: ${validTestTypes.join(', ')}`,
+          error: "INVALID_TEST_TYPE",
+          validTypes: validTestTypes,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Validate sample resource has required FHIR fields
+      if (!sampleResource.resourceType || !sampleResource.id) {
+        return res.status(400).json({
+          success: false,
+          message: "Sample resource must have resourceType and id fields",
+          error: "INVALID_SAMPLE_RESOURCE_STRUCTURE",
+          required: ['resourceType', 'id'],
+          timestamp: new Date().toISOString()
         });
       }
 
-      const testResult = await settingsService.testSettings(settings, sampleResource);
-      res.json(testResult);
+      const testResult = await settingsService.testSettings(settings, sampleResource, testType);
+      
+      if (!testResult) {
+        return res.status(500).json({
+          success: false,
+          message: "Test service returned no result",
+          error: "TEST_SERVICE_ERROR",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Ensure test result has proper structure
+      const response = {
+        success: true,
+        data: {
+          testType,
+          isValid: testResult.isValid || false,
+          validationResults: testResult.validationResults || [],
+          performanceMetrics: testResult.performanceMetrics || {},
+          compatibilityIssues: testResult.compatibilityIssues || [],
+          recommendations: testResult.recommendations || [],
+          testedAt: new Date().toISOString(),
+          sampleResource: {
+            resourceType: sampleResource.resourceType,
+            id: sampleResource.id
+          }
+        },
+        message: testResult.isValid ? "Settings test passed" : "Settings test failed",
+        timestamp: new Date().toISOString()
+      };
+      
+      res.json(response);
     } catch (error: any) {
-      res.status(400).json({ 
-        message: "Failed to test settings",
-        error: error.message 
+      console.error('[ValidationSettings] Test failed:', error);
+      
+      // Determine error type and appropriate response
+      let statusCode = 400;
+      let errorCode = "TEST_FAILED";
+      let message = "Failed to test settings";
+      
+      if (error.name === 'ValidationError') {
+        errorCode = "VALIDATION_ERROR";
+        message = "Settings test validation error";
+      } else if (error.name === 'DatabaseError') {
+        statusCode = 503;
+        errorCode = "DATABASE_ERROR";
+        message = "Database connection failed";
+      } else if (error.message?.includes('timeout')) {
+        statusCode = 504;
+        errorCode = "TIMEOUT_ERROR";
+        message = "Request timeout";
+      } else if (error.message?.includes('resource')) {
+        errorCode = "INVALID_RESOURCE";
+        message = "Invalid sample resource provided";
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message,
+        error: errorCode,
+        details: error.message,
+        timestamp: new Date().toISOString()
       });
     }
   });
@@ -2279,12 +2746,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/validation/settings/statistics - Get settings statistics
   app.get("/api/validation/settings/statistics", async (req, res) => {
     try {
-      const stats = await settingsRepository.getStatistics();
-      res.json(stats);
+      const { timeRange = '30d', includeDetails = 'false' } = req.query;
+      
+      // Validate time range
+      const validTimeRanges = ['1d', '7d', '30d', '90d', '1y', 'all'];
+      if (!validTimeRanges.includes(timeRange as string)) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid time range - must be one of: ${validTimeRanges.join(', ')}`,
+          error: "INVALID_TIME_RANGE",
+          validRanges: validTimeRanges,
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      const stats = await settingsRepository.getStatistics(timeRange as string, includeDetails === 'true');
+      
+      if (!stats) {
+        return res.status(500).json({
+          success: false,
+          message: "Statistics service returned no data",
+          error: "STATISTICS_SERVICE_ERROR",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Ensure statistics have proper structure
+      const response = {
+        success: true,
+        data: {
+          timeRange: timeRange as string,
+          totalSettings: stats.totalSettings || 0,
+          activeSettings: stats.activeSettings || 0,
+          settingsHistory: stats.settingsHistory || [],
+          usageStats: stats.usageStats || {},
+          performanceMetrics: stats.performanceMetrics || {},
+          errorRates: stats.errorRates || {},
+          lastUpdated: new Date().toISOString()
+        },
+        message: "Settings statistics loaded successfully",
+        timestamp: new Date().toISOString()
+      };
+      
+      res.json(response);
     } catch (error: any) {
-      res.status(500).json({ 
-        message: "Failed to load settings statistics",
-        error: error.message 
+      console.error('[ValidationSettings] Statistics failed:', error);
+      
+      // Determine error type and appropriate response
+      let statusCode = 500;
+      let errorCode = "STATISTICS_LOAD_FAILED";
+      let message = "Failed to load settings statistics";
+      
+      if (error.name === 'ValidationError') {
+        statusCode = 400;
+        errorCode = "VALIDATION_ERROR";
+        message = "Invalid request parameters";
+      } else if (error.name === 'DatabaseError') {
+        statusCode = 503;
+        errorCode = "DATABASE_ERROR";
+        message = "Database connection failed";
+      } else if (error.message?.includes('timeout')) {
+        statusCode = 504;
+        errorCode = "TIMEOUT_ERROR";
+        message = "Request timeout";
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message,
+        error: errorCode,
+        details: error.message,
+        timestamp: new Date().toISOString()
       });
     }
   });

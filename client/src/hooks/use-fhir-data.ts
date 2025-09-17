@@ -314,50 +314,5 @@ export function useFhirErrorHandler() {
   return { handleError };
 }
 
-export function useValidationSettings() {
-  return useQuery({
-    queryKey: ['/api/validation/settings'],
-    staleTime: 5 * 60 * 1000, // 5 minutes - data stays fresh longer
-    refetchOnWindowFocus: false, // Disable automatic refetch on window focus
-    refetchOnReconnect: false, // Disable automatic refetch on reconnect
-    refetchInterval: false, // Disable automatic periodic refetch
-  });
-}
-
-export function useUpdateValidationSettings() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  
-  return useMutation({
-    mutationFn: async (settings: any) => {
-      const response = await fetch('/api/validation/settings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(settings),
-      });
-      return response.json();
-    },
-    onSuccess: (data) => {
-      // Invalidate the settings query to ensure fresh data on next visit
-      queryClient.invalidateQueries({ queryKey: ['/api/validation/settings'] });
-      // Invalidate resource list to show updated error counts with new filters
-      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
-      // Also invalidate dashboard stats
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-      console.log('[UseUpdateValidationSettings] Update successful, cache invalidated');
-      toast({
-        title: 'Settings Updated',
-        description: 'Validation settings have been updated successfully.',
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Update Failed',
-        description: error?.response?.data?.message || 'Failed to update validation settings.',
-        variant: 'destructive'
-      });
-    }
-  });
-}
+// Note: Validation settings functions have been moved to use-validation-settings.ts
+// to avoid conflicts and provide a unified settings management interface.

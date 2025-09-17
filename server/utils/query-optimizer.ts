@@ -354,42 +354,7 @@ export class QueryOptimizer {
     }
   }
 
-  /**
-   * Get validation settings with optimized query
-   */
-  async getValidationSettings(options: OptimizedQueryOptions = {}): Promise<ValidationSettings | undefined> {
-    const cacheKey = 'validation-settings';
-    
-    if (options.useCache !== false) {
-      const cached = cacheManager.get<ValidationSettings>(cacheKey);
-      if (cached) return cached;
-    }
-
-    try {
-      const [settings] = await db
-        .select()
-        .from(validationSettings)
-        .where(eq(validationSettings.isActive, true))
-        .orderBy(desc(validationSettings.updatedAt))
-        .limit(1);
-
-      if (options.useCache !== false) {
-        cacheManager.set(cacheKey, settings, {
-          ttl: options.cacheTTL || 5 * 60 * 1000, // 5 minutes
-          tags: options.cacheTags || [CACHE_TAGS.VALIDATION_SETTINGS]
-        });
-      }
-
-      logger.database(2, 'Fetched validation settings', 'getValidationSettings', { 
-        found: !!settings 
-      });
-      
-      return settings || undefined;
-    } catch (error: any) {
-      logger.database(0, 'Failed to fetch validation settings', 'getValidationSettings', { error: error.message });
-      throw error;
-    }
-  }
+  // Legacy validation settings method removed - use ValidationSettingsRepository instead
 
   /**
    * Get dashboard cards with optimized query

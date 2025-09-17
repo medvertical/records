@@ -13,7 +13,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { useValidationSettings, useUpdateValidationSettings, useFhirServerPackages } from '@/hooks/use-fhir-data';
+import { useFhirServerPackages } from '@/hooks/use-fhir-data';
+import { useValidationSettings } from '@/hooks/use-validation-settings';
 
 interface SimplifierPackage {
   id: string;

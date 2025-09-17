@@ -130,10 +130,29 @@ export default function SettingsPage() {
 
   if (settingsLoading || serversLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading settings...</p>
+      <div className="container mx-auto py-8 space-y-8">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <div className="h-8 w-48 bg-muted animate-pulse rounded" />
+            <div className="h-4 w-96 bg-muted animate-pulse rounded" />
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="h-6 w-32 bg-muted animate-pulse rounded" />
+            <div className="h-9 w-20 bg-muted animate-pulse rounded" />
+          </div>
+        </div>
+
+        {/* Tabs Skeleton */}
+        <div className="space-y-6">
+          <div className="h-10 w-full bg-muted animate-pulse rounded" />
+          
+          {/* Content Skeleton */}
+          <div className="space-y-6">
+            <div className="h-64 w-full bg-muted animate-pulse rounded" />
+            <div className="h-32 w-full bg-muted animate-pulse rounded" />
+            <div className="h-48 w-full bg-muted animate-pulse rounded" />
+          </div>
         </div>
       </div>
     );
@@ -148,14 +167,41 @@ export default function SettingsPage() {
       <div className="container mx-auto py-8">
         <Card>
           <CardContent className="pt-6">
-            <div className="text-center">
+            <div className="text-center space-y-4">
               <Shield className="h-12 w-12 mx-auto mb-4 text-red-500" />
               <h3 className="text-lg font-semibold mb-2">Settings Error</h3>
-              <p className="text-muted-foreground mb-4">{settingsError}</p>
-              <Button onClick={() => window.location.reload()}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Retry
-              </Button>
+              <p className="text-muted-foreground mb-4 max-w-md mx-auto">{settingsError}</p>
+              
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Button 
+                  onClick={() => window.location.reload()}
+                  variant="default"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Reload Page
+                </Button>
+                <Button 
+                  onClick={() => {
+                    // Try to reload settings without full page reload
+                    window.location.hash = '#retry';
+                    window.location.reload();
+                  }}
+                  variant="outline"
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  Retry Settings
+                </Button>
+              </div>
+              
+              <div className="mt-6 p-4 bg-muted rounded-lg text-left max-w-md mx-auto">
+                <h4 className="font-medium mb-2">Troubleshooting:</h4>
+                <ul className="text-sm text-muted-foreground space-y-1">
+                  <li>• Check your internet connection</li>
+                  <li>• Verify the server is running</li>
+                  <li>• Try refreshing the page</li>
+                  <li>• Contact support if the issue persists</li>
+                </ul>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -223,19 +269,23 @@ export default function SettingsPage() {
 
         {/* Validation Settings Tab */}
         <TabsContent value="validation" className="space-y-6">
-          <RockSolidSettings
-            initialSettings={settings || undefined}
-            loading={settingsLoading}
-            saving={settingsSaving}
-            hasChanges={hasChanges}
-            onSettingsChange={handleSettingsChange}
-            onSave={handleSaveSettings}
-            onReset={handleResetSettings}
-            onTest={handleTestSettings}
-            presets={presets || []}
-            showAdvanced={true}
-            enableRealTimeValidation={true}
-          />
+          {settings && (
+            <RockSolidSettings
+              settings={settings}
+              loading={settingsLoading}
+              saving={settingsSaving}
+              hasChanges={hasChanges}
+              isValidating={isValidating}
+              validationResult={validationResult}
+              onSettingsChange={handleSettingsChange}
+              onSave={handleSaveSettings}
+              onReset={handleResetSettings}
+              onTest={handleTestSettings}
+              presets={presets || []}
+              showAdvanced={true}
+              enableRealTimeValidation={true}
+            />
+          )}
         </TabsContent>
 
         {/* FHIR Servers Tab */}

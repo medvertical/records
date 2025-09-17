@@ -127,18 +127,21 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
   const cacheRef = useRef<Map<string, { data: any; timestamp: Date }>>(new Map());
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const loadingControllerRef = useRef<AbortController | null>(null);
+  const initializationRef = useRef<Promise<void> | null>(null);
 
   // ========================================================================
   // Effects
   // ========================================================================
 
   useEffect(() => {
-    loadSettings();
-    loadPresets();
-    
-    if (enableRealTimeSync) {
-      setupWebSocket();
+    // Prevent multiple initializations
+    if (initializationRef.current) {
+      return;
     }
+
+    // Create initialization promise
+    initializationRef.current = initializeSettings();
     
     // Online/offline detection
     const handleOnline = () => setIsOnline(true);
@@ -156,14 +159,17 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
       }
+      if (loadingControllerRef.current) {
+        loadingControllerRef.current.abort();
+      }
     };
-  }, [enableRealTimeSync]);
+  }, []);
 
   useEffect(() => {
     if (validateOnChange && settings) {
       validateSettings(settings);
     }
-  }, [settings, validateOnChange]);
+  }, [settings, validateOnChange, validateSettings]);
 
   useEffect(() => {
     if (autoSave && hasChanges) {
@@ -175,57 +181,112 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
         saveSettings();
       }, autoSaveDelayMs);
     }
-  }, [hasChanges, autoSave, autoSaveDelayMs]);
+  }, [hasChanges, autoSave, autoSaveDelayMs, saveSettings]);
 
   // ========================================================================
   // Settings Management
   // ========================================================================
 
-  const loadSettings = useCallback(async () => {
+  const initializeSettings = useCallback(async () => {
     const startTime = Date.now();
     setLoading(true);
     setError(null);
 
     try {
+      // Cancel any existing loading operation
+      if (loadingControllerRef.current) {
+        loadingControllerRef.current.abort();
+      }
+
+      // Create new abort controller for this operation
+      const controller = new AbortController();
+      loadingControllerRef.current = controller;
+
       // Check cache first
       if (enableCaching) {
         const cached = getCachedData('settings');
         if (cached) {
           setSettings(cached);
           setLoading(false);
+          // Still load presets and setup WebSocket
+          await Promise.all([
+            loadPresets(),
+            enableRealTimeSync ? setupWebSocket() : Promise.resolve()
+          ]);
           return;
         }
       }
 
-      // Load from API
-      const response = await fetch('/api/validation/settings');
-      if (!response.ok) {
-        throw new Error(`Failed to load settings: ${response.statusText}`);
+      // Load settings and presets in parallel, but coordinated
+      const [settingsResult, presetsResult] = await Promise.allSettled([
+        loadSettingsFromAPI(controller.signal),
+        loadPresets()
+      ]);
+
+      // Handle settings result
+      if (settingsResult.status === 'fulfilled') {
+        setSettings(settingsResult.value);
+        setLastSync(new Date());
+        setPerformance(prev => ({ ...prev, loadTime: Date.now() - startTime }));
+      } else {
+        throw settingsResult.reason;
       }
 
-      const data = await response.json();
-      setSettings(data.settings);
-      
-      // Cache the data
-      if (enableCaching) {
-        setCachedData('settings', data.settings);
+      // Handle presets result (non-critical)
+      if (presetsResult.status === 'rejected') {
+        console.warn('Failed to load presets:', presetsResult.reason);
+      }
+
+      // Setup WebSocket if enabled
+      if (enableRealTimeSync) {
+        setupWebSocket();
       }
       
-      setLastSync(new Date());
-      setPerformance(prev => ({ ...prev, loadTime: Date.now() - startTime }));
-      
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load settings';
+      if (err instanceof Error && err.name === 'AbortError') {
+        // Request was cancelled, don't show error
+        return;
+      }
+      
+      const errorMessage = err instanceof Error ? err.message : 'Failed to initialize settings';
       setError(errorMessage);
       toast({
-        title: "Load Failed",
+        title: "Initialization Failed",
         description: errorMessage,
         variant: "destructive"
       });
     } finally {
       setLoading(false);
+      loadingControllerRef.current = null;
     }
-  }, [enableCaching, toast]);
+  }, [enableCaching, enableRealTimeSync, toast, getCachedData, setCachedData, loadPresets, setupWebSocket]);
+
+  const loadSettingsFromAPI = useCallback(async (signal?: AbortSignal): Promise<ValidationSettings> => {
+    const response = await fetch('/api/validation/settings', { signal });
+    if (!response.ok) {
+      throw new Error(`Failed to load settings: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    // Cache the data
+    if (enableCaching) {
+      setCachedData('settings', data.settings);
+    }
+    
+    return data.settings;
+  }, [enableCaching]);
+
+  const loadSettings = useCallback(async () => {
+    // If already initializing, wait for it to complete
+    if (initializationRef.current) {
+      await initializationRef.current;
+      return;
+    }
+
+    // Otherwise, start a new initialization
+    await initializeSettings();
+  }, [initializeSettings]);
 
   const updateSettings = useCallback(async (update: ValidationSettingsUpdate) => {
     console.log('[useValidationSettings] updateSettings called with:', update);
@@ -408,9 +469,9 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
   // Presets
   // ========================================================================
 
-  const loadPresets = useCallback(async () => {
+  const loadPresets = useCallback(async (signal?: AbortSignal): Promise<void> => {
     try {
-      const response = await fetch('/api/validation/settings/presets');
+      const response = await fetch('/api/validation/settings/presets', { signal });
       if (!response.ok) {
         throw new Error(`Failed to load presets: ${response.statusText}`);
       }
@@ -419,7 +480,12 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
       setPresets(data);
       
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        // Request was cancelled, don't log error
+        return;
+      }
       console.error('Failed to load presets:', err);
+      // Don't throw error for presets as it's non-critical
     }
   }, []);
 
@@ -495,63 +561,77 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
   // WebSocket Setup
   // ========================================================================
 
-  const setupWebSocket = useCallback(() => {
-    if (!enableRealTimeSync) return;
+  const setupWebSocket = useCallback((): Promise<void> => {
+    return new Promise((resolve) => {
+      if (!enableRealTimeSync) {
+        resolve();
+        return;
+      }
 
-    // Temporarily disable WebSocket until server endpoint is implemented
-    console.log('WebSocket disabled - endpoint not implemented yet');
-    return;
+      // Close existing WebSocket if any
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
 
-    try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host;
-      const ws = new WebSocket(`${protocol}//${host}/ws/validation-settings`);
-      wsRef.current = ws;
+      // Temporarily disable WebSocket until server endpoint is implemented
+      console.log('WebSocket disabled - endpoint not implemented yet');
+      resolve();
+      return;
 
-      ws.onopen = () => {
-        setSyncStatus('idle');
-        toast({
-          title: "Connected",
-          description: "Real-time settings synchronization is active.",
-          variant: "default"
-        });
-      };
+      try {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const host = window.location.host;
+        const ws = new WebSocket(`${protocol}//${host}/ws/validation-settings`);
+        wsRef.current = ws;
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          
-          if (data.type === 'settingsChanged') {
-            setSettings(data.settings);
-            setLastSync(new Date());
+        ws.onopen = () => {
+          setSyncStatus('idle');
+          toast({
+            title: "Connected",
+            description: "Real-time settings synchronization is active.",
+            variant: "default"
+          });
+          resolve();
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
             
-            // Clear cache to force reload
-            if (enableCaching) {
-              cacheRef.current.delete('settings');
+            if (data.type === 'settingsChanged') {
+              setSettings(data.settings);
+              setLastSync(new Date());
+              
+              // Clear cache to force reload
+              if (enableCaching) {
+                cacheRef.current.delete('settings');
+              }
             }
+          } catch (err) {
+            console.error('Failed to parse WebSocket message:', err);
           }
-        } catch (err) {
-          console.error('Failed to parse WebSocket message:', err);
-        }
-      };
+        };
 
-      ws.onclose = () => {
+        ws.onclose = () => {
+          setSyncStatus('error');
+          toast({
+            title: "Connection Lost",
+            description: "Real-time synchronization is unavailable.",
+            variant: "destructive"
+          });
+        };
+
+        ws.onerror = () => {
+          setSyncStatus('error');
+        };
+
+      } catch (err) {
+        console.error('Failed to setup WebSocket:', err);
         setSyncStatus('error');
-        toast({
-          title: "Connection Lost",
-          description: "Real-time synchronization is unavailable.",
-          variant: "destructive"
-        });
-      };
-
-      ws.onerror = () => {
-        setSyncStatus('error');
-      };
-
-    } catch (err) {
-      console.error('Failed to setup WebSocket:', err);
-      setSyncStatus('error');
-    }
+        resolve(); // Resolve even on error to not block initialization
+      }
+    });
   }, [enableRealTimeSync, enableCaching, toast]);
 
   // ========================================================================
