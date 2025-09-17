@@ -66,22 +66,7 @@ export default function ResourceBrowser() {
     setPage(0); // Reset to first page when navigating
   }, [location]);
 
-  // Additional effect to monitor URL changes more frequently
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const currentSearch = window.location.search;
-      const urlParams = new URLSearchParams(currentSearch);
-      const typeParam = urlParams.get('type');
-      
-      // Only update if the type parameter is different from current state
-      if (typeParam !== resourceType && (typeParam || resourceType)) {
-        setResourceType(typeParam || "");
-        setPage(0);
-      }
-    }, 500); // Check every 500ms
-    
-    return () => clearInterval(interval);
-  }, [resourceType]);
+  // Removed excessive URL monitoring that was causing flickering
 
 
 

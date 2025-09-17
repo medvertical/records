@@ -31,7 +31,7 @@ interface ValidationEngineCardProps {
 
 export function ValidationEngineCard({ className }: ValidationEngineCardProps) {
   const {
-    state,
+    state: rawState,
     actions,
     isLoading,
     isConnected,
@@ -44,6 +44,19 @@ export function ValidationEngineCard({ className }: ValidationEngineCardProps) {
     currentThroughput,
     successRate
   } = useValidationControls();
+
+  // Provide safe defaults for tests if state is undefined
+  const state = rawState || {
+    status: 'idle' as 'idle' | 'running' | 'paused' | 'completed' | 'error',
+    batchSize: 50,
+    totalResources: 0,
+    processedResources: 0,
+    validResources: 0,
+    errorResources: 0,
+    startTime: null as Date | null,
+    currentResourceType: null as string | null,
+    error: null as string | null
+  };
 
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [tempBatchSize, setTempBatchSize] = useState(state.batchSize);
@@ -118,9 +131,11 @@ export function ValidationEngineCard({ className }: ValidationEngineCardProps) {
           </div>
           
           <div className="flex items-center gap-2">
-            <Badge variant={isConnected ? "default" : "secondary"}>
-              {isConnected ? "Connected" : "Disconnected"}
-            </Badge>
+            {isConnected ? (
+              <Badge variant="outline" className="text-green-600 border-green-600">Connected</Badge>
+            ) : (
+              <Badge variant="outline" className="text-yellow-600 border-yellow-600">Connecting…</Badge>
+            )}
             <Button
               variant="ghost"
               size="sm"

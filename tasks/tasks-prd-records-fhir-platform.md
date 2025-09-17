@@ -24,6 +24,7 @@
 - `server/services/dashboard/dashboard-service.ts` - Aggregations for dashboard; normalize to pipeline result model
 - `server/tests/validation-progress-tests.ts` - Validation progress tests; update to pipeline
 - `server/services/validation/validation-engine.test.ts` - Engine tests; replace/port to Rock Solid/Pipeline tests
+- `docs/validation-pipeline-operations.md` - Operational documentation for ValidationPipeline batch execution
 
 ### Notes
 
@@ -32,45 +33,71 @@
 - Maintain SSE for progress updates; do not reintroduce WebSockets
 - Preserve current API response shapes where necessary using a temporary adapter layer to avoid breaking the UI; introduce v2 endpoints only if needed
 
+### Parity Notes (default engine vs. legacy/enhanced)
+
+- Profile handling
+  - Legacy: auto-detects profiles (resource.meta.profile + heuristics), validates via Simplifier/FHIR server.
+  - Default: profile validation via `profileResolutionServers` from settings. Action: add optional pre-processing for auto-detect; consider optional Simplifier integration behind settings.
+- Terminology validation
+  - Legacy/Enhanced: TerminologyClient with multiple servers/priorities.
+  - Default: driven by `terminologyServers` with priority; verify priority ordering and expansion caching.
+- Business rules / custom rules
+  - Legacy: `ValidationRule[]` custom rules applied per resource.
+  - Default: BusinessRule aspect. Action: provide mapper to translate `ValidationRule` into business-rule checks or run a post-processor in adapter.
+- Server-side $validate fallback
+  - Legacy: may call FHIR server validation.
+  - Default: engine-first. Action: optional fallback via adapter (feature-flagged) if parity required.
+- Caching & performance
+  - Enhanced: profile cache, timeout per aspect, max concurrency.
+  - Default: supports `cacheSettings`, `timeoutSettings`, `maxConcurrentValidations`. Action: ensure settings are honored and logged.
+- Issue model & filtering
+  - Unified filters per active settings.
+  - Action: centralize filtering in Pipeline/adapter; standardize issue codes/severities/aspect tagging.
+- Batch control & progress
+  - Robust supports pause/resume/state.
+  - Pipeline: batch orchestration, SSE progress; pause/resume TBD. Action: either implement pause/resume or de-scope with clear API behavior.
+- Output shape compatibility
+  - Action: adapter maps default engine result → legacy response shape for routes still expecting it; keep UI stable during migration.
+
 ## Tasks
 
 - [ ] 1.0 Consolidate on default 6-layer validation engine
-  - [ ] 1.1 Audit all engine usages across routes and services
-  - [ ] 1.2 Catalogue parity requirements vs Enhanced/legacy engines
-  - [ ] 1.3 Add any missing 6-layer features to Rock Solid
-  - [ ] 1.4 Align issue shapes, severities, and aspect tagging
-  - [ ] 1.5 Add engine health/status metrics and debug logging
-  - [ ] 1.6 Document engine configuration from settings service
+  - [x] 1.1 Audit all engine usages across routes and services
+  - [x] 1.2 Catalogue parity requirements vs Enhanced/legacy engines
+  - [x] 1.3 Add any missing 6-layer features to default engine
+  - [x] 1.4 Align issue shapes, severities, and aspect tagging
+  - [x] 1.5 Add engine health/status metrics and debug logging
+  - [x] 1.6 Document engine configuration from settings service
 
 - [ ] 2.0 Establish `ValidationPipeline` as the single orchestrator (single and batch)
-  - [ ] 2.1 Implement single-resource validation entry with timeouts
-  - [ ] 2.2 Implement batch validation with concurrency controls
-  - [ ] 2.3 Emit progress events compatible with existing SSE topics
-  - [ ] 2.4 Reconfigure pipeline on settingsChanged events
-  - [ ] 2.5 Add optional result caching with TTL controls
-  - [ ] 2.6 Expose pipeline facade for DI and testing
+  - [x] 2.1 Implement single-resource validation entry with timeouts
+  - [x] 2.2 Implement batch validation with concurrency controls
+  - [x] 2.3 Emit progress events compatible with existing SSE topics
+  - [x] 2.4 Reconfigure pipeline on settingsChanged events
+  - [x] 2.5 Add optional result caching with TTL controls
+  - [x] 2.6 Expose pipeline facade for DI and testing
 
 - [ ] 3.0 Implement `UnifiedValidationService` adapter that delegates to `ValidationPipeline`
-  - [ ] 3.1 Map legacy validate APIs to pipeline equivalents
-  - [ ] 3.2 Preserve legacy response shape via mapping helpers
-  - [ ] 3.3 Centralize settings-based filtering in adapter
-  - [ ] 3.4 Wire settings service listeners for cache invalidation
-  - [ ] 3.5 Add deprecation warnings and telemetry
+  - [x] 3.1 Map legacy validate APIs to pipeline equivalents
+  - [x] 3.2 Preserve legacy response shape via mapping helpers
+  - [x] 3.3 Centralize settings-based filtering in adapter
+  - [x] 3.4 Wire settings service listeners for cache invalidation
+  - [x] 3.5 Add deprecation warnings and telemetry
   - [ ] 3.6 Cover adapter with unit tests
 
 - [ ] 4.0 Migrate API routes to Pipeline/adapter; remove direct use of legacy engines
-  - [ ] 4.1 Switch single validation endpoints to adapter/pipeline
-  - [ ] 4.2 Switch bulk validation endpoints to pipeline batch
-  - [ ] 4.3 Remove direct instantiations of legacy engines
-  - [ ] 4.4 Keep response schemas stable; add v2 if needed
-  - [ ] 4.5 Update error handling to canonical error model
+  - [x] 4.1 Switch single validation endpoints to adapter/pipeline
+  - [x] 4.2 Switch bulk validation endpoints to pipeline batch
+  - [x] 4.3 Remove direct instantiations of legacy engines
+  - [x] 4.4 Keep response schemas stable; add v2 if needed
+  - [x] 4.5 Update error handling to canonical error model
 
-- [ ] 5.0 Replace Robust/Bulk validation with Pipeline batch mode and progress via SSE
-  - [ ] 5.1 Replace RobustValidationService usage with pipeline batch
-  - [ ] 5.2 Map robust progress fields to pipeline progress
-  - [ ] 5.3 Ensure SSE messages originate from pipeline
-  - [ ] 5.4 Remove legacy robust/bulk services after cutover
-  - [ ] 5.5 Update operational docs for batch execution
+- [x] 5.0 Replace Robust/Bulk validation with Pipeline batch mode and progress via SSE
+  - [x] 5.1 Replace RobustValidationService usage with pipeline batch
+  - [x] 5.2 Map robust progress fields to pipeline progress
+  - [x] 5.3 Ensure SSE messages originate from pipeline
+  - [x] 5.4 Remove legacy robust/bulk services after cutover
+  - [x] 5.5 Update operational docs for batch execution
 
 - [ ] 6.0 Normalize validation result model and settings-based filtering in one canonical place
   - [ ] 6.1 Define canonical ValidationResult and ValidationIssue types

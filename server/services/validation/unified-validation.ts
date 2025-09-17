@@ -1,22 +1,29 @@
 import { createHash } from 'crypto';
 import { storage } from '../../storage';
 import { ValidationEngine } from './validation-engine.js';
-import { EnhancedValidationEngine } from './enhanced-validation-engine.js';
 import { FhirClient } from '../fhir/fhir-client.js';
 import { getValidationSettingsService } from './validation-settings-service.js';
+import { getValidationPipeline } from './validation-pipeline.js';
 import type { FhirResource, InsertFhirResource, InsertValidationResult, ValidationResult } from '@shared/schema.js';
 import type { ValidationSettings } from '@shared/validation-settings.js';
 
 /**
  * Unified validation service that handles both batch and individual resource validation
  * with timestamp-based invalidation
+ *
+ * DEPRECATION: This service is adapter-backed by the default ValidationPipeline.
+ * New code should depend on the pipeline or its facade directly.
  */
 export class UnifiedValidationService {
-  private enhancedValidationEngine: EnhancedValidationEngine;
+  private pipeline = getValidationPipeline();
   private cachedSettings: ValidationSettings | null = null;
   private settingsCacheTime: number = 0;
   private SETTINGS_CACHE_TTL = 60000; // Cache settings for 1 minute
   private settingsService: ReturnType<typeof getValidationSettingsService>;
+
+  // Telemetry for deprecation tracking
+  private static didWarnOnce = false;
+  private deprecationUsageCount = 0;
 
   constructor(
     private fhirClient: FhirClient,
@@ -24,25 +31,27 @@ export class UnifiedValidationService {
   ) {
     // Get the validation settings service instance
     this.settingsService = getValidationSettingsService();
-    
-    // Initialize enhanced validation engine with default settings
-    // Actual settings will be loaded from database when needed
-    this.enhancedValidationEngine = new EnhancedValidationEngine(fhirClient, {
-      enableStructuralValidation: true,
-      enableProfileValidation: true,
-      enableTerminologyValidation: true,
-      enableReferenceValidation: true,
-      enableBusinessRuleValidation: true,
-      enableMetadataValidation: true,
-      strictMode: false,
-      profiles: [
-        'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient',
-        'http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab'
-      ]
-    });
+
+    // Deprecation warning (warn once per process)
+    if (!UnifiedValidationService.didWarnOnce) {
+      UnifiedValidationService.didWarnOnce = true;
+      // Keep logs concise outside tests
+      if (process.env.NODE_ENV !== 'test') {
+        console.warn('[DEPRECATION] UnifiedValidationService is deprecated. Use ValidationPipeline or its facade.');
+      }
+    }
 
     // Set up event listeners for settings changes
     this.setupSettingsEventListeners();
+  }
+
+  /**
+   * Telemetry accessor for monitoring remaining legacy usage paths
+   */
+  getTelemetry() {
+    return {
+      deprecationUsageCount: this.deprecationUsageCount
+    };
   }
 
   /**
@@ -109,22 +118,8 @@ export class UnifiedValidationService {
           fhirVersion: settings.fhirVersion
         });
         
-        // Update the enhanced validation engine with the new settings
-        this.enhancedValidationEngine.updateConfig({
-          enableStructuralValidation: settings.structural?.enabled ?? true,
-          enableProfileValidation: settings.profile?.enabled ?? true,
-          enableTerminologyValidation: settings.terminology?.enabled ?? true,
-          enableReferenceValidation: settings.reference?.enabled ?? true,
-          enableBusinessRuleValidation: settings.businessRule?.enabled ?? true,
-          enableMetadataValidation: settings.metadata?.enabled ?? true,
-          strictMode: settings.strictMode ?? false,
-          profiles: this.extractProfilesFromSettings(settings),
-          terminologyServers: settings.terminologyServers ?? [],
-          profileResolutionServers: settings.profileResolutionServers ?? [],
-          timeoutSettings: settings.timeoutSettings,
-          cacheSettings: settings.cacheSettings,
-          maxConcurrentValidations: settings.maxConcurrentValidations ?? 10
-        });
+        // Notify the pipeline to refresh its configuration
+        await this.pipeline.forceReloadSettings();
 
         console.log('[UnifiedValidation] Validation engine configuration updated successfully');
       }
@@ -133,7 +128,7 @@ export class UnifiedValidationService {
       // Don't throw the error, just log it and continue with default settings
     }
   }
-  
+
   /**
    * Extract profiles from validation settings
    */
@@ -314,6 +309,12 @@ export class UnifiedValidationService {
     validationResults: ValidationResult[];
     wasRevalidated: boolean;
   }> {
+    // Telemetry for deprecation
+    this.deprecationUsageCount += 1;
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('[DEPRECATION] UnifiedValidationService.validateResource invoked. Migrate to ValidationPipeline.');
+    }
+
     const resourceHash = this.createResourceHash(resource);
     
     // Check if resource already exists in database
@@ -360,17 +361,17 @@ export class UnifiedValidationService {
         // Load settings first to check if validation should be skipped
         await this.loadValidationSettings();
         
-            // Check if ALL validation aspects are disabled
-    const settings = this.cachedSettings?.settings || this.cachedSettings;
-    const allAspectsDisabled = 
-      settings?.structural?.enabled !== true &&
-      settings?.profile?.enabled !== true &&
-      settings?.terminology?.enabled !== true &&
-      settings?.reference?.enabled !== true &&
-      settings?.businessRule?.enabled !== true &&
-      settings?.metadata?.enabled !== true;
+        // Check if ALL validation aspects are disabled
+        const settings = this.cachedSettings?.settings || this.cachedSettings;
+        const allAspectsDisabled = 
+          settings?.structural?.enabled !== true &&
+          settings?.profile?.enabled !== true &&
+          settings?.terminology?.enabled !== true &&
+          settings?.reference?.enabled !== true &&
+          settings?.businessRule?.enabled !== true &&
+          settings?.metadata?.enabled !== true;
 
-        let enhancedResult;
+        let enhancedResult: any;
         if (allAspectsDisabled) {
           // Skip validation entirely - return valid result
           enhancedResult = {
@@ -391,8 +392,50 @@ export class UnifiedValidationService {
           };
         } else {
           // Always validate with all aspects - settings only affect result filtering
-          // Use enhanced validation engine (now always runs all validation aspects)
-          enhancedResult = await this.enhancedValidationEngine.validateResource(resource);
+          // Delegate to the default validation pipeline (single-resource execution)
+          const pipelineResult = await this.pipeline.executePipeline({
+            resources: [{
+              resource,
+              resourceType: resource.resourceType,
+              resourceId: resource.id,
+              profileUrl: undefined,
+              context: { requestedBy: 'unified-adapter' }
+            }]
+          });
+
+          const vr = pipelineResult.results[0];
+          const issues = (vr?.issues || []).map((issue: any) => ({
+            severity: issue.severity, // expected to align with 'error' | 'warning' | 'information' | 'fatal'
+            code: issue.code,
+            message: issue.message,
+            path: Array.isArray(issue.location) ? issue.location.join('.') : (issue.location || ''),
+            expression: issue.expression,
+            // Map aspect to legacy category naming
+            category: issue.aspect === 'businessRule' ? 'business-rule' : (issue.aspect || 'structural')
+          }));
+
+          const aspects: Array<'structural'|'profile'|'terminology'|'reference'|'business-rule'|'metadata'> = [
+            'structural','profile','terminology','reference','business-rule','metadata'
+          ];
+          const aspectGroups: Record<string, any[]> = Object.fromEntries(aspects.map(a => [a, []]));
+          issues.forEach((i: any) => { (aspectGroups[i.category] ||= []).push(i); });
+
+          enhancedResult = {
+            isValid: vr?.isValid ?? true,
+            resourceType: vr?.resourceType || resource.resourceType,
+            resourceId: vr?.resourceId || resource.id,
+            issues,
+            validationAspects: {
+              structural: { passed: (aspectGroups['structural']?.length ?? 0) === 0, issues: aspectGroups['structural'] || [] },
+              profile: { passed: (aspectGroups['profile']?.length ?? 0) === 0, issues: aspectGroups['profile'] || [], profilesChecked: vr?.profileUrl ? [vr.profileUrl] : [] },
+              terminology: { passed: (aspectGroups['terminology']?.length ?? 0) === 0, issues: aspectGroups['terminology'] || [], codesChecked: 0 },
+              reference: { passed: (aspectGroups['reference']?.length ?? 0) === 0, issues: aspectGroups['reference'] || [], referencesChecked: 0 },
+              businessRule: { passed: (aspectGroups['business-rule']?.length ?? 0) === 0, issues: aspectGroups['business-rule'] || [], rulesChecked: 0 },
+              metadata: { passed: (aspectGroups['metadata']?.length ?? 0) === 0, issues: aspectGroups['metadata'] || [] }
+            },
+            validationScore: vr?.summary?.validationScore ?? (vr?.summary?.score ?? 0),
+            validatedAt: vr?.validatedAt ? new Date(vr.validatedAt) : new Date()
+          };
         }
         
         // Apply filtering based on current settings to determine what's considered "valid"
@@ -547,8 +590,7 @@ export class UnifiedValidationService {
    * Update configuration settings for the validation engine
    */
   updateConfig(config: any) {
-    console.log('[UnifiedValidation] Updating configuration:', config);
-    this.enhancedValidationEngine.updateConfig(config);
+    console.log('[UnifiedValidation] Updating configuration (adapter no-op, pipeline is settings-driven):', config);
   }
 
   /**

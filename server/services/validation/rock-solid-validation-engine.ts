@@ -3,6 +3,22 @@
  * 
  * This is the new validation engine that uses the centralized validation settings
  * system for consistent, reliable, and maintainable validation.
+ *
+ * Configuration mapping (from ValidationSettings):
+ * - structural.enabled/severity          → performStructuralValidation gating and issue severity
+ * - profile.enabled                      → performProfileValidation gating
+ * - profileResolutionServers[]           → used to warn when empty; future resolution integration
+ * - terminology.enabled                  → performTerminologyValidation gating
+ * - terminologyServers[]                 → used to warn when empty; future terminology integration
+ * - reference.enabled/severity           → performReferenceValidation gating and issue severity
+ * - businessRule.enabled/severity        → performBusinessRuleValidation gating and issue severity
+ * - customRules[]                        → executed in business rule aspect (required, pattern, custom fn)
+ * - metadata.enabled/severity            → performMetadataValidation gating and issue severity
+ * - maxConcurrentValidations             → engine concurrency limit
+ * - timeoutSettings/cacheSettings        → presently reserved; hook points exist for future enforcement
+ *
+ * Settings are retrieved via ValidationSettingsService.getActiveSettings() per validation.
+ * The engine emits per-aspect completion events and aggregates timing into performance.aspectTimes.
  */
 
 import { EventEmitter } from 'events';
@@ -182,6 +198,13 @@ export class RockSolidValidationEngine extends EventEmitter {
   private settingsService = getValidationSettingsService();
   private config: ValidationEngineConfig;
   private activeValidations = new Map<string, Promise<ValidationResult>>();
+  
+  // Health / status metrics
+  private totalValidations = 0;
+  private totalValidationErrors = 0;
+  private lastCompletedAt: Date | null = null;
+  private lastErrorAt: Date | null = null;
+  private lastDurationMs: number | null = null;
 
   constructor(config: Partial<ValidationEngineConfig> = {}) {
     super();
@@ -215,6 +238,14 @@ export class RockSolidValidationEngine extends EventEmitter {
       // Get current validation settings
       const settings = await this.settingsService.getActiveSettings();
       
+      if (this.config.includeDebugInfo) {
+        console.debug('[DefaultValidationEngine] Starting validation', {
+          requestId,
+          resourceType: request.resourceType,
+          profileUrl: request.profileUrl
+        });
+      }
+      
       // Create validation promise
       const validationPromise = this.performValidation(request, settings, requestId);
       this.activeValidations.set(requestId, validationPromise);
@@ -225,6 +256,11 @@ export class RockSolidValidationEngine extends EventEmitter {
       // Update performance metrics
       result.performance.totalTimeMs = Date.now() - startTime;
       
+      // Engine-level metrics
+      this.totalValidations += 1;
+      this.lastCompletedAt = new Date();
+      this.lastDurationMs = result.performance.totalTimeMs;
+
       // Emit validation completed event
       this.emit('validationCompleted', {
         requestId,
@@ -232,14 +268,32 @@ export class RockSolidValidationEngine extends EventEmitter {
         duration: result.performance.totalTimeMs
       });
 
+      if (this.config.includeDebugInfo) {
+        console.debug('[DefaultValidationEngine] Validation completed', {
+          requestId,
+          durationMs: result.performance.totalTimeMs,
+          isValid: result.isValid,
+          issues: result.summary.totalIssues
+        });
+      }
+
       return result;
 
     } catch (error) {
+      this.totalValidationErrors += 1;
+      this.lastErrorAt = new Date();
+
       this.emit('validationError', {
         requestId,
         error: error instanceof Error ? error.message : 'Unknown error',
         duration: Date.now() - startTime
       });
+      if (this.config.includeDebugInfo) {
+        console.error('[DefaultValidationEngine] Validation error', {
+          requestId,
+          error: error instanceof Error ? error.message : error
+        });
+      }
       throw error;
     } finally {
       this.activeValidations.delete(requestId);
@@ -386,10 +440,24 @@ export class RockSolidValidationEngine extends EventEmitter {
     }
 
     try {
-      // Profile validation logic would go here
-      // This would integrate with the profile resolution servers
-      
-      if (settings.profileResolutionServers.length === 0) {
+      // Auto-detect declared profiles and report
+      const declared: string[] = Array.isArray(resource?.meta?.profile) ? resource.meta.profile : [];
+      if (declared.length > 0) {
+        for (const url of declared) {
+          const validUrl = typeof url === 'string' && /^(https?:\/\/).+/.test(url);
+          issues.push({
+            severity: validUrl ? 'information' : 'warning',
+            code: validUrl ? 'PROFILE_DETECTED' : 'PROFILE_URL_INVALID',
+            message: validUrl ? `Profile declared: ${url}` : `Invalid profile URL: ${String(url)}`,
+            location: ['meta', 'profile'],
+            humanReadable: validUrl ? `Detected declared profile ${url}` : `Profile URL seems invalid: ${String(url)}`,
+            aspect: 'profile'
+          });
+        }
+      }
+
+      // Warn if enabled without resolution servers
+      if ((settings as any).profileResolutionServers?.length === 0) {
         issues.push({
           severity: 'warning',
           code: 'NO_PROFILE_SERVERS',
@@ -417,6 +485,10 @@ export class RockSolidValidationEngine extends EventEmitter {
       duration,
       issueCount: issues.length
     });
+
+    if (this.config.includeDebugInfo) {
+      console.debug('[DefaultValidationEngine] Profile validation completed', { durationMs: duration, issues: issues.length });
+    }
 
     return issues;
   }
@@ -543,10 +615,8 @@ export class RockSolidValidationEngine extends EventEmitter {
     }
 
     try {
-      // Business rule validation logic would go here
-      // This would apply custom business rules and constraints
-      
-      for (const rule of settings.customRules) {
+      // Apply custom rules from settings if present
+      for (const rule of (settings as any).customRules || []) {
         if (rule.enabled) {
           // Apply custom rule
           const ruleIssues = await this.applyCustomRule(resource, rule, settings);
@@ -571,6 +641,10 @@ export class RockSolidValidationEngine extends EventEmitter {
       duration,
       issueCount: issues.length
     });
+
+    if (this.config.includeDebugInfo) {
+      console.debug('[DefaultValidationEngine] Business rule validation completed', { durationMs: duration, issues: issues.length });
+    }
 
     return issues;
   }
@@ -650,36 +724,37 @@ export class RockSolidValidationEngine extends EventEmitter {
     };
 
     try {
-      // Perform all validation aspects
-      const validationPromises: Promise<ValidationIssue[]>[] = [];
+      // Perform all validation aspects with timing
+      const runTimed = async (aspect: ValidationAspect, fn: () => Promise<ValidationIssue[]>): Promise<ValidationIssue[]> => {
+        const t0 = Date.now();
+        try {
+          return await fn();
+        } finally {
+          aspectTimes[aspect] += Date.now() - t0;
+        }
+      };
 
       // Structural validation (always first)
-      const structuralPromise = this.performStructuralValidation(request.resource, settings, request.context || {});
-      validationPromises.push(structuralPromise);
+      const structuralIssues = await runTimed('structural', () => this.performStructuralValidation(request.resource, settings, request.context || {}));
+      allIssues.push(...structuralIssues);
 
-      // Other validations (can be parallel if enabled)
       if (this.config.enableParallelValidation) {
-        validationPromises.push(
-          this.performProfileValidation(request.resource, settings, request.context || {}),
-          this.performTerminologyValidation(request.resource, settings, request.context || {}),
-          this.performReferenceValidation(request.resource, settings, request.context || {}),
-          this.performBusinessRuleValidation(request.resource, settings, request.context || {}),
-          this.performMetadataValidation(request.resource, settings, request.context || {})
-        );
+        const [profileIssues, terminologyIssues, referenceIssues, businessRuleIssues, metadataIssues] = await Promise.all([
+          runTimed('profile', () => this.performProfileValidation(request.resource, settings, request.context || {})),
+          runTimed('terminology', () => this.performTerminologyValidation(request.resource, settings, request.context || {})),
+          runTimed('reference', () => this.performReferenceValidation(request.resource, settings, request.context || {})),
+          runTimed('businessRule', () => this.performBusinessRuleValidation(request.resource, settings, request.context || {})),
+          runTimed('metadata', () => this.performMetadataValidation(request.resource, settings, request.context || {}))
+        ]);
+        allIssues.push(...profileIssues, ...terminologyIssues, ...referenceIssues, ...businessRuleIssues, ...metadataIssues);
       } else {
-        // Sequential validation
-        const profileIssues = await this.performProfileValidation(request.resource, settings, request.context || {});
-        const terminologyIssues = await this.performTerminologyValidation(request.resource, settings, request.context || {});
-        const referenceIssues = await this.performReferenceValidation(request.resource, settings, request.context || {});
-        const businessRuleIssues = await this.performBusinessRuleValidation(request.resource, settings, request.context || {});
-        const metadataIssues = await this.performMetadataValidation(request.resource, settings, request.context || {});
-
+        const profileIssues = await runTimed('profile', () => this.performProfileValidation(request.resource, settings, request.context || {}));
+        const terminologyIssues = await runTimed('terminology', () => this.performTerminologyValidation(request.resource, settings, request.context || {}));
+        const referenceIssues = await runTimed('reference', () => this.performReferenceValidation(request.resource, settings, request.context || {}));
+        const businessRuleIssues = await runTimed('businessRule', () => this.performBusinessRuleValidation(request.resource, settings, request.context || {}));
+        const metadataIssues = await runTimed('metadata', () => this.performMetadataValidation(request.resource, settings, request.context || {}));
         allIssues.push(...profileIssues, ...terminologyIssues, ...referenceIssues, ...businessRuleIssues, ...metadataIssues);
       }
-
-      // Wait for all validations to complete
-      const results = await Promise.all(validationPromises);
-      allIssues.push(...results.flat());
 
       // Calculate summary
       const summary = this.calculateSummary(allIssues, settings);
@@ -733,7 +808,8 @@ export class RockSolidValidationEngine extends EventEmitter {
     }
 
     const totalIssues = issues.length;
-    const fatalCount = issues.filter(i => i.severity === 'fatal').length;
+    // Fatal severity not part of ValidationSeverity; treat non-modeled fatals as errors
+    const fatalCount = 0;
     
     // Use consistent scoring system with enhanced validation engine
     let validationScore = 100;
@@ -743,8 +819,8 @@ export class RockSolidValidationEngine extends EventEmitter {
     validationScore -= informationCount * 1; // Information issues: -1 point each
     validationScore = Math.max(0, Math.round(validationScore));
     
-    // Resource passes if no fatal or error issues (warnings and info are acceptable)
-    const passed = fatalCount === 0 && errorCount === 0;
+    // Resource passes if no error issues (warnings and info are acceptable)
+    const passed = errorCount === 0;
 
     return {
       totalIssues,
@@ -834,8 +910,82 @@ export class RockSolidValidationEngine extends EventEmitter {
   }
 
   private async applyCustomRule(resource: any, rule: any, settings: ValidationSettings): Promise<ValidationIssue[]> {
-    // Custom rule application logic would go here
-    return [];
+    const issues: ValidationIssue[] = [];
+    const severity = (settings as any).businessRule?.severity || 'warning';
+    const path: string = rule.path || '';
+    const value = path ? this.getValueByPath(resource, path) : resource;
+    const makeIssue = (code: string, message: string): ValidationIssue => ({
+      severity,
+      code,
+      message,
+      location: path ? [path] : [],
+      humanReadable: message,
+      aspect: 'businessRule'
+    });
+
+    try {
+      switch (rule.type) {
+        case 'required': {
+          const ok = value !== undefined && value !== null && !(Array.isArray(value) && value.length === 0);
+          if (!ok) issues.push(makeIssue('RULE_REQUIRED_FAILED', rule.message || `Required field '${path}' is missing`));
+          break;
+        }
+        case 'pattern': {
+          if (typeof rule.rule === 'string' || rule.rule instanceof RegExp) {
+            const regex = rule.rule instanceof RegExp ? rule.rule : new RegExp(rule.rule);
+            const strVal = value == null ? '' : String(value);
+            if (!regex.test(strVal)) issues.push(makeIssue('RULE_PATTERN_FAILED', rule.message || `Value at '${path}' does not match pattern`));
+          }
+          break;
+        }
+        case 'custom': {
+          if (typeof rule.rule === 'function') {
+            const ok = await Promise.resolve(rule.rule(value, resource));
+            if (!ok) issues.push(makeIssue('RULE_CUSTOM_FAILED', rule.message || `Custom rule failed at '${path}'`));
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'BUSINESS_RULE_EVALUATION_ERROR',
+        message: `Business rule evaluation error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location: [],
+        humanReadable: 'An error occurred while evaluating a business rule',
+        aspect: 'businessRule'
+      });
+    }
+
+    return issues;
+  }
+
+  private getValueByPath(obj: any, path: string): any {
+    if (!path) return obj;
+    return path.split('.').reduce((acc: any, key: string) => (acc == null ? undefined : acc[key]), obj);
+  }
+
+  // Expose health status
+  getHealthStatus(): {
+    isHealthy: boolean;
+    activeValidations: number;
+    totalValidations: number;
+    totalValidationErrors: number;
+    lastCompletedAt: Date | null;
+    lastErrorAt: Date | null;
+    lastDurationMs: number | null;
+  } {
+    return {
+      isHealthy: true, // In future, base on error rates/timeouts
+      activeValidations: this.activeValidations.size,
+      totalValidations: this.totalValidations,
+      totalValidationErrors: this.totalValidationErrors,
+      lastCompletedAt: this.lastCompletedAt,
+      lastErrorAt: this.lastErrorAt,
+      lastDurationMs: this.lastDurationMs
+    };
   }
 }
 

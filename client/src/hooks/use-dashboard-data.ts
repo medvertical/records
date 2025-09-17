@@ -97,8 +97,30 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
   }, [queryClient]);
 
   // FHIR Server Stats Query
+  const defaultFhirServerStats: FhirServerStats = {
+    totalResources: 0,
+    resourceCounts: {},
+    serverInfo: {
+      version: 'Unknown',
+      connected: false,
+      lastChecked: new Date(0)
+    },
+    resourceBreakdown: []
+  };
+
+  const defaultValidationStats: ValidationStats = {
+    totalValidated: 0,
+    validResources: 0,
+    errorResources: 0,
+    warningResources: 0,
+    unvalidatedResources: 0,
+    validationCoverage: 0,
+    validationProgress: 0,
+    resourceTypeBreakdown: {}
+  };
+
   const {
-    data: fhirServerStats,
+    data: fhirServerStatsRaw,
     isLoading: isFhirServerLoading,
     error: fhirServerError,
     refetch: refetchFhirServer
@@ -117,9 +139,11 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     }
   });
 
+  const fhirServerStats = fhirServerStatsRaw ?? defaultFhirServerStats;
+
   // Validation Stats Query
   const {
-    data: validationStats,
+    data: validationStatsRaw,
     isLoading: isValidationLoading,
     error: validationError,
     refetch: refetchValidation
@@ -137,6 +161,8 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
       console.error('[useDashboardData] Validation stats error:', error);
     }
   });
+
+  const validationStats = validationStatsRaw ?? defaultValidationStats;
 
   // Combined Data Query (for backward compatibility)
   const {

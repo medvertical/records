@@ -51,43 +51,18 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
   const { servers, serverStatus, activeServer, isLoading, refreshServerData } = useServerData();
   const isServerConnected = Boolean(activeServer && serverStatus?.connected);
   
-  // Debug logging for server status changes
-  console.log('[Sidebar] Server data:', { 
-    serversCount: servers?.length, 
-    activeServer: activeServer?.name, 
-    serverStatus: serverStatus?.connected,
-    isServerConnected,
-    isLoading 
-  });
-  
-  // Log when active server changes
+  // Reduced logging to prevent console spam - only log significant changes
   useEffect(() => {
     if (activeServer) {
-      console.log('[Sidebar] Active server changed:', {
-        name: activeServer.name,
-        url: activeServer.url,
-        isActive: activeServer.isActive,
-        id: activeServer.id
-      });
-    } else {
-      console.log('[Sidebar] No active server');
+      console.log('[Sidebar] Active server:', activeServer.name);
     }
-  }, [activeServer]);
-  
-  // Log when servers list changes
-  useEffect(() => {
-    console.log('[Sidebar] Servers list changed:', servers?.map(s => ({
-      id: s.id,
-      name: s.name,
-      isActive: s.isActive
-    })));
-  }, [servers]);
+  }, [activeServer?.id]); // Only log when server ID changes, not on every render
 
   const { data: resourceCounts } = useQuery<Record<string, number>>({
     queryKey: ["/api/fhir/resource-counts"],
-    // Don't keep previous data to ensure UI updates immediately when server status changes
-    keepPreviousData: false,
-    staleTime: 0,
+    // Keep previous data to prevent flickering during refetches
+    keepPreviousData: true,
+    staleTime: 30000, // Consider data fresh for 30 seconds
     // Only fetch resource counts when there's an active server
     enabled: isServerConnected,
   });
@@ -202,34 +177,9 @@ function SidebarContent({
 
   // Get the current location to make the component reactive to URL changes
   const [currentLocation] = useLocation();
-  const [currentUrl, setCurrentUrl] = useState(window.location.href);
   
-  // Update currentUrl when location changes
-  useEffect(() => {
-    setCurrentUrl(window.location.href);
-  }, [currentLocation]);
-  
-  // Also listen for popstate events and manual URL changes
-  useEffect(() => {
-    const handleUrlChange = () => {
-      setCurrentUrl(window.location.href);
-    };
-    
-    // Listen for browser navigation events
-    window.addEventListener('popstate', handleUrlChange);
-    
-    // Also check for URL changes periodically (fallback)
-    const interval = setInterval(() => {
-      if (window.location.href !== currentUrl) {
-        setCurrentUrl(window.location.href);
-      }
-    }, 100); // Check every 100ms
-    
-    return () => {
-      window.removeEventListener('popstate', handleUrlChange);
-      clearInterval(interval);
-    };
-  }, [currentUrl]);
+  // Simplified URL monitoring - only update when location actually changes
+  const currentUrl = window.location.href;
   return (
     <div className="h-full flex flex-col">
       {/* Server Connection Status */}

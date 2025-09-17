@@ -2,26 +2,21 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { FhirClient } from "./services/fhir/fhir-client";
-import { ValidationEngine } from "./services/validation/validation-engine";
 import { UnifiedValidationService } from "./services/validation/unified-validation";
 import { profileManager } from "./services/fhir/profile-manager";
-import { RobustValidationService } from "./services/validation/robust-validation";
 import { insertFhirServerSchema, insertFhirResourceSchema, insertValidationProfileSchema, type ValidationResult } from "@shared/schema.js";
 import { z } from "zod";
 
 // Rock Solid Validation Settings imports
 import { getValidationSettingsService } from "./services/validation/validation-settings-service";
 import { getValidationSettingsRepository } from "./repositories/validation-settings-repository";
-import { getRockSolidValidationEngine } from "./services/validation/rock-solid-validation-engine";
 import { getValidationPipeline } from "./services/validation/validation-pipeline";
 import { DashboardService } from "./services/dashboard/dashboard-service";
 import type { ValidationSettings, ValidationSettingsUpdate } from "@shared/validation-settings.js";
 import { BUILT_IN_PRESETS } from "@shared/validation-settings.js";
 
 let fhirClient: FhirClient;
-let validationEngine: ValidationEngine;
 let unifiedValidationService: UnifiedValidationService;
-let robustValidationService: RobustValidationService;
 let dashboardService: DashboardService;
 
 // Global validation state tracking
@@ -228,9 +223,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const activeServer = await storage.getActiveFhirServer();
   if (activeServer) {
     fhirClient = new FhirClient(activeServer.url);
-    validationEngine = new ValidationEngine(fhirClient);
-    unifiedValidationService = new UnifiedValidationService(fhirClient, validationEngine);
-    robustValidationService = new RobustValidationService(fhirClient, validationEngine);
+    unifiedValidationService = new UnifiedValidationService(fhirClient, null as any);
     dashboardService = new DashboardService(fhirClient, storage);
     
     // Load and apply saved validation settings using rock-solid service
@@ -265,7 +258,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const servers = await storage.getFhirServers();
       res.json(servers);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      res.status(500).json({
+        success: false,
+        message: 'Failed to start bulk validation',
+        error: 'BULK_START_FAILED',
+        details: error?.message || String(error),
+        timestamp: new Date().toISOString()
+      });
     }
   });
 
@@ -304,9 +303,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const activeServer = servers.find(s => s.id === id);
       if (activeServer) {
         fhirClient = new FhirClient(activeServer.url);
-        validationEngine = new ValidationEngine(fhirClient);
-        unifiedValidationService = new UnifiedValidationService(fhirClient, validationEngine);
-        robustValidationService = new RobustValidationService(fhirClient, validationEngine);
+        unifiedValidationService = new UnifiedValidationService(fhirClient, null as any);
         
         // Reapply saved validation settings using rock-solid service
         try {
@@ -334,7 +331,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ success: true });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch bulk validation progress',
+        error: 'BULK_PROGRESS_FAILED',
+        details: error?.message || String(error),
+        timestamp: new Date().toISOString()
+      });
     }
   });
 
@@ -360,9 +363,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Clear the FHIR client since no server is active
       fhirClient = null as any;
-      validationEngine = null as any;
       unifiedValidationService = null as any;
-      robustValidationService = null as any;
       
       res.json({ success: true });
     } catch (error: any) {
@@ -873,13 +874,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Validation endpoints
   app.post("/api/validation/validate-resource", async (req, res) => {
     try {
-      if (!validationEngine) {
-        return res.status(400).json({ message: "Validation engine not initialized" });
+      if (!unifiedValidationService) {
+        return res.status(400).json({ message: "Validation service not initialized" });
       }
 
       const { resource, profileUrl, config } = req.body;
-      
-      const result = await validationEngine.validateResource(resource, profileUrl, config);
+      // Delegate to unified validation adapter (backed by default pipeline)
+      const { validationResults } = await unifiedValidationService.validateResource(resource, true, true);
+      const latest = validationResults.sort((a: any, b: any) => new Date(b.validatedAt).getTime() - new Date(a.validatedAt).getTime())[0];
+      const result = {
+        isValid: latest?.isValid ?? true,
+        errors: latest?.errors ?? [],
+        warnings: latest?.warnings ?? []
+      };
       
       // Store validation result
       const resourceRecord = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
@@ -901,9 +908,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/validation/validate-resource-detailed", async (req, res) => {
     try {
-      if (!validationEngine) {
-        return res.status(400).json({ message: "Validation engine not initialized" });
-      }
+      // Validation is handled by the pipeline via UnifiedValidationService
 
       const { resource, config } = req.body;
       
@@ -919,10 +924,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fetchFromFhirServer: config?.fetchFromFhirServer !== false,
         autoDetectProfiles: config?.autoDetectProfiles !== false
       };
-      
-      const result = await validationEngine.validateResourceDetailed(resource, enhancedConfig);
-      
-      res.json(result);
+      // Use unified validation adapter; map to detailed legacy shape from DB result
+      const { validationResults } = await unifiedValidationService.validateResource(resource, true, true);
+      const latest = validationResults.sort((a: any, b: any) => new Date(b.validatedAt).getTime() - new Date(a.validatedAt).getTime())[0];
+      const detailed = {
+        isValid: latest?.isValid ?? true,
+        resourceType: resource.resourceType,
+        resourceId: resource.id,
+        profileUrl: enhancedConfig.profiles[0],
+        profileName: enhancedConfig.profiles[0],
+        issues: (latest?.issues || []).map((i: any) => ({
+          severity: i.severity,
+          code: i.code,
+          details: i.message,
+          diagnostics: i.message,
+          location: Array.isArray(i.path) ? i.path : (i.path ? [i.path] : []),
+          expression: i.expression,
+          humanReadable: i.message,
+          suggestion: undefined,
+          category: i.category || 'general'
+        })),
+        summary: {
+          totalIssues: (latest?.issues || []).length,
+          errorCount: (latest?.errors || []).length,
+          warningCount: (latest?.warnings || []).length,
+          informationCount: 0,
+          fatalCount: 0,
+          score: latest?.validationScore ?? 0
+        },
+        validatedAt: latest?.validatedAt || new Date()
+      };
+      res.json(detailed);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -1001,7 +1033,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No FHIR server configured" });
       }
 
-      if (unifiedValidationService.isValidationRunning && unifiedValidationService.isValidationRunning()) {
+      if (globalValidationState.isRunning) {
         return res.status(409).json({ message: "Validation is already running" });
       }
 
@@ -1146,11 +1178,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             console.log(`Processing ${resourceType} batch: ${bundle.entry.length} resources (offset: ${offset})`);
             
-            // Process resources in parallel for much better performance
-            const PARALLEL_BATCH_SIZE = 10; // Process 10 resources in parallel
+            // Process resources in batched pipeline executions for better throughput
+            const PARALLEL_BATCH_SIZE = 10; // Process 10 resources per pipeline batch
             
             for (let i = 0; i < bundle.entry.length; i += PARALLEL_BATCH_SIZE) {
-              // Check if validation should stop before each parallel batch
+              // Check if validation should stop before each batch
               if (globalValidationState.shouldStop) {
                 console.log('Validation paused by user request during resource processing');
                 globalValidationState.isRunning = false;
@@ -1168,76 +1200,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 break;
               }
               
-              // Get the next batch of resources to process in parallel
-              const parallelBatch = bundle.entry.slice(i, i + PARALLEL_BATCH_SIZE);
-              
-              // Validate resources in parallel
-              const validationPromises = parallelBatch.map(async (entry) => {
-                if (!entry.resource) return null;
-                
-                try {
-                  // Validate real FHIR resource using enhanced validation
-                  const result = await unifiedValidationService.validateResource(
-                    entry.resource, 
-                    options.skipUnchanged !== false, 
-                    false
-                  );
-                  
-                  // Check for validation errors using validation score from latest result
-                  const latestValidation = result.validationResults && result.validationResults.length > 0 
-                    ? result.validationResults.reduce((latest, current) => 
-                        current.validatedAt > latest.validatedAt ? current : latest
-                      )
-                    : null;
-                  
-                  if (latestValidation) {
-                    const validationScore = latestValidation.validationScore || 0;
-                    const isResourceValid = validationScore >= 95; // 95+ is considered valid (allows minor info messages)
-                    
-                    if (!isResourceValid) {
-                      const errorCount = latestValidation.errorCount || 0;
-                      const warningCount = latestValidation.warningCount || 0;
-                      return {
-                        valid: false,
-                        error: `${resourceType}/${entry.resource.id}: Score ${validationScore}% (${errorCount} errors, ${warningCount} warnings)`
-                      };
-                    } else {
-                      return { valid: true, error: null };
-                    }
-                  } else {
-                    // No validation results available - count as error
-                    return {
-                      valid: false,
-                      error: `${resourceType}/${entry.resource.id}: No validation results available`
-                    };
+              // Create batch for pipeline
+              const parallelBatch = bundle.entry.slice(i, i + PARALLEL_BATCH_SIZE).filter(e => e.resource);
+              const resourcesForPipeline = parallelBatch.map(e => ({
+                resource: (e as any).resource,
+                resourceType: (e as any).resource.resourceType,
+                resourceId: (e as any).resource.id
+              }));
+
+              try {
+                const pipeline = getValidationPipeline();
+                const pipelineResult: any = await pipeline.executePipeline({
+                  resources: resourcesForPipeline,
+                  context: {
+                    requestedBy: 'bulk_validation',
+                    requestId: `bulk_${resourceType}_${Date.now()}_${i}`
                   }
-                  
-                } catch (validationError) {
-                  return {
-                    valid: false,
-                    error: `${resourceType}/${entry.resource.id}: Validation failed - ${validationError}`
-                  };
-                }
-              });
-              
-              // Wait for all parallel validations to complete
-              const results = await Promise.all(validationPromises);
-              
-              // Update progress for this parallel batch
-              results.forEach(result => {
-                if (result) {
+                });
+
+                const batchResults: any[] = Array.isArray(pipelineResult?.results) ? pipelineResult.results : [];
+                for (const r of batchResults) {
                   processedResources++;
-                  if (result.valid) {
+                  const score = (r?.summary?.validationScore ?? 0) as number;
+                  const isValid = score >= 95;
+                  if (isValid) {
                     validResources++;
                   } else {
                     errorResources++;
-                    if (result.error) {
-                      errors.push(result.error);
-                    }
+                    const errCount = (r?.summary?.errorCount ?? 0) as number;
+                    const warnCount = (r?.summary?.warningCount ?? 0) as number;
+                    const rid = (r?.resourceId || r?.resource?.id || 'unknown') as string;
+                    errors.push(`${resourceType}/${rid}: Score ${score}% (${errCount} errors, ${warnCount} warnings)`);
                   }
                 }
-              });
-              
+              } catch (validationError: any) {
+                // If the batch fails, attribute errors to each resource in the batch
+                for (const e of parallelBatch) {
+                  processedResources++;
+                  errorResources++;
+                  const rid = (e as any).resource?.id || 'unknown';
+                  errors.push(`${resourceType}/${rid}: Validation failed - ${validationError?.message || String(validationError)}`);
+                }
+              }
+
               // SSE progress updates handled by validation service
             }
             
@@ -1373,6 +1378,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         processedResources,
         validResources: summary.validResources,
         errorResources: summary.errorResources,
+        progress: totalResources > 0 ? Math.round((processedResources / totalResources) * 100) : 0,
         currentResourceType,
         nextResourceType,
         isComplete: false,
@@ -1382,10 +1388,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: status as 'running' | 'paused' | 'not_running'
       };
       
-      res.json({
-        status,
-        ...progress
-      });
+      res.json(progress);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -1419,7 +1422,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(validationSummary);
     } catch (error: any) {
       console.error('Error getting validation summary:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch validation summary',
+        error: 'BULK_SUMMARY_FAILED',
+        details: error?.message || String(error),
+        timestamp: new Date().toISOString()
+      });
     }
   });
 
@@ -1445,7 +1454,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ message: "Validation paused successfully" });
     } catch (error: any) {
       console.error('Error in pause endpoint:', error);
-      res.status(500).json({ message: error.message });
+      res.status(500).json({
+        success: false,
+        message: 'Failed to pause bulk validation',
+        error: 'BULK_PAUSE_FAILED',
+        details: error?.message || String(error),
+        timestamp: new Date().toISOString()
+      });
     }
   });
 
@@ -1624,7 +1639,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      res.status(500).json({
+        success: false,
+        message: 'Failed to resume bulk validation',
+        error: 'BULK_RESUME_FAILED',
+        details: error?.message || String(error),
+        timestamp: new Date().toISOString()
+      });
     }
   });
 
@@ -1643,16 +1664,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Clear all validation results when stopping
       await storage.clearAllValidationResults();
       
-      // Also stop the robust validation service
-      if (robustValidationService) {
-        robustValidationService.stopValidation();
-      }
+      // Pipeline-based execution has no separate robust service to stop
       
       // SSE stopped broadcast handled by validation service
       
       res.json({ message: "Validation stopped successfully" });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      res.status(500).json({
+        success: false,
+        message: 'Failed to stop bulk validation',
+        error: 'BULK_STOP_FAILED',
+        details: error?.message || String(error),
+        timestamp: new Date().toISOString()
+      });
     }
   });
 
@@ -1877,7 +1901,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize rock-solid validation services
   const settingsService = getValidationSettingsService();
   const settingsRepository = getValidationSettingsRepository();
-  const rockSolidEngine = getRockSolidValidationEngine();
   const validationPipeline = getValidationPipeline();
 
   // Initialize settings service
@@ -2862,7 +2885,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // POST /api/validation/validate - Validate resource using rock-solid engine
+  // POST /api/validation/validate - Validate resource using rock-solid engine (via pipeline)
   app.post("/api/validation/validate", async (req, res) => {
     try {
       const { resource, resourceType, resourceId, profileUrl, context } = req.body;
@@ -2885,8 +2908,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       };
 
-      const result = await rockSolidEngine.validateResource(validationRequest);
-      res.json(result);
+      const pipelineReq = {
+        resources: [validationRequest],
+        context: validationRequest.context
+      };
+      const result = await validationPipeline.executePipeline(pipelineReq);
+      const first = Array.isArray(result.results) ? result.results[0] : null;
+      if (!first) {
+        return res.status(500).json({ message: 'No validation result returned' });
+      }
+      res.json(first);
     } catch (error: any) {
       res.status(500).json({ 
         message: "Validation failed",
@@ -2895,7 +2926,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // POST /api/validation/validate-batch - Validate multiple resources
+  // POST /api/validation/validate-batch - Validate multiple resources (via pipeline)
   app.post("/api/validation/validate-batch", async (req, res) => {
     try {
       const { resources } = req.body;
@@ -2918,8 +2949,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }));
 
-      const results = await rockSolidEngine.validateResources(validationRequests);
-      res.json(results);
+      const pipelineReq = {
+        resources: validationRequests,
+        context: { requestedBy: req.headers['x-user-id'] as string || 'anonymous' }
+      } as const;
+      const result = await validationPipeline.executePipeline(pipelineReq);
+      res.json(result.results);
     } catch (error: any) {
       res.status(500).json({ 
         message: "Batch validation failed",
@@ -3188,6 +3223,7 @@ app.post("/api/validation/backups/cleanup", async (req, res) => {
 
     // Get validation settings service for event listening
     const settingsService = getValidationSettingsService();
+    const pipeline = getValidationPipeline();
 
     // Send heartbeat every 30 seconds to keep connection alive
     const heartbeatInterval = setInterval(() => {
@@ -3271,6 +3307,81 @@ app.post("/api/validation/backups/cleanup", async (req, res) => {
     settingsService.on('cacheInvalidated', onCacheInvalidated);
     settingsService.on('cacheWarmed', onCacheWarmed);
 
+    // Validation pipeline -> SSE forwarding
+    const onPipelineProgress = (evt: any) => {
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'validation-progress',
+          data: {
+            totalResources: evt.totalResources,
+            processedResources: evt.processedResources,
+            validResources: evt.validResources,
+            errorResources: evt.errorResources,
+            progress: (typeof evt.processedResources === 'number' && typeof evt.totalResources === 'number' && evt.totalResources > 0)
+              ? Math.round((evt.processedResources / evt.totalResources) * 100)
+              : 0,
+            startTime: evt.startTime,
+            isComplete: Boolean(evt.isComplete),
+            errors: [],
+            status: evt.status || 'running'
+          }
+        })}\n\n`);
+      } catch (error) {
+        console.error('[SSE] Error sending validation progress:', error);
+      }
+    };
+
+    const onPipelineCompleted = ({ result }: any) => {
+      try {
+        const summary = result?.summary;
+        res.write(`data: ${JSON.stringify({
+          type: 'validation-completed',
+          data: {
+            status: 'completed',
+            progress: {
+              totalResources: summary?.totalResources ?? 0,
+              processedResources: summary?.totalResources ?? 0,
+              validResources: summary?.successfulValidations ?? 0,
+              errorResources: summary?.resourcesWithErrors ?? 0,
+              startTime: result?.timestamps?.startedAt ?? new Date().toISOString(),
+              isComplete: true,
+              errors: [],
+              status: 'completed'
+            }
+          }
+        })}\n\n`);
+      } catch (error) {
+        console.error('[SSE] Error sending validation completed:', error);
+      }
+    };
+
+    const onPipelineFailed = ({ error }: any) => {
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'validation-error',
+          data: { error }
+        })}\n\n`);
+      } catch (err) {
+        console.error('[SSE] Error sending validation error:', err);
+      }
+    };
+
+    const onPipelineCancelled = (_evt: any) => {
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'validation-stopped',
+          data: { timestamp: new Date().toISOString() }
+        })}\n\n`);
+      } catch (err) {
+        console.error('[SSE] Error sending validation stopped:', err);
+      }
+    };
+
+    pipeline.on('pipelineProgress', onPipelineProgress);
+    pipeline.on('pipelineCompleted', onPipelineCompleted);
+    pipeline.on('pipelineFailed', onPipelineFailed);
+    pipeline.on('pipelineCancelled', onPipelineCancelled);
+
     // Handle client disconnect
     req.on('close', () => {
       console.log('[SSE] Client disconnected from validation stream');
@@ -3281,6 +3392,11 @@ app.post("/api/validation/backups/cleanup", async (req, res) => {
       settingsService.off('settingsActivated', onSettingsActivated);
       settingsService.off('cacheInvalidated', onCacheInvalidated);
       settingsService.off('cacheWarmed', onCacheWarmed);
+
+      pipeline.off('pipelineProgress', onPipelineProgress);
+      pipeline.off('pipelineCompleted', onPipelineCompleted);
+      pipeline.off('pipelineFailed', onPipelineFailed);
+      pipeline.off('pipelineCancelled', onPipelineCancelled);
     });
 
     req.on('error', (error) => {
@@ -3292,6 +3408,11 @@ app.post("/api/validation/backups/cleanup", async (req, res) => {
       settingsService.off('settingsActivated', onSettingsActivated);
       settingsService.off('cacheInvalidated', onCacheInvalidated);
       settingsService.off('cacheWarmed', onCacheWarmed);
+
+      pipeline.off('pipelineProgress', onPipelineProgress);
+      pipeline.off('pipelineCompleted', onPipelineCompleted);
+      pipeline.off('pipelineFailed', onPipelineFailed);
+      pipeline.off('pipelineCancelled', onPipelineCancelled);
     });
   });
 

@@ -17,7 +17,7 @@ import {
 import { ValidationStats } from '@shared/types/dashboard';
 
 interface ValidationStatsCardProps {
-  data: ValidationStats;
+  data?: ValidationStats | null;
   isLoading?: boolean;
   error?: string | null;
   lastUpdated?: Date;
@@ -29,7 +29,10 @@ export function ValidationStatsCard({
   error = null, 
   lastUpdated 
 }: ValidationStatsCardProps) {
-  if (isLoading) {
+  // Early return for loading state to prevent undefined access
+  const computedLoading = isLoading || (!data && !error);
+  
+  if (computedLoading) {
     return (
       <Card>
         <CardHeader>
@@ -67,12 +70,31 @@ export function ValidationStatsCard({
     );
   }
 
+  // Create safe data with proper fallbacks
+  const fallbackData: ValidationStats = {
+    totalValidated: 0,
+    validResources: 0,
+    errorResources: 0,
+    warningResources: 0,
+    unvalidatedResources: 0,
+    validationCoverage: 0,
+    validationProgress: 0,
+    resourceTypeBreakdown: {}
+  };
+
+  const safeData: ValidationStats = {
+    ...fallbackData,
+    ...(data ?? {}),
+    resourceTypeBreakdown: data?.resourceTypeBreakdown ?? fallbackData.resourceTypeBreakdown,
+    lastValidationRun: data?.lastValidationRun ? new Date(data.lastValidationRun) : fallbackData.lastValidationRun
+  };
+
   const formatNumber = (num: number | undefined) => (num || 0).toLocaleString();
   const formatPercentage = (num: number | undefined) => (num || 0).toFixed(1);
 
   // Calculate success rate
-  const successRate = data.totalValidated > 0 
-    ? (data.validResources / data.totalValidated) * 100 
+  const successRate = (safeData.totalValidated || 0) > 0 
+    ? ((safeData.validResources || 0) / (safeData.totalValidated || 0)) * 100 
     : 0;
 
   return (
@@ -92,7 +114,7 @@ export function ValidationStatsCard({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="text-sm font-medium text-muted-foreground">Validated Resources</div>
-              <div className="text-2xl font-bold">{formatNumber(data.totalValidated)}</div>
+              <div className="text-2xl font-bold">{formatNumber(safeData.totalValidated)}</div>
             </div>
             <div>
               <div className="text-sm font-medium text-muted-foreground">Success Rate</div>
@@ -107,10 +129,10 @@ export function ValidationStatsCard({
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium">Validation Coverage</span>
               <span className="text-sm font-bold text-blue-600">
-                {formatPercentage(data.validationCoverage)}%
-              </span>
-            </div>
-            <Progress value={data.validationCoverage} className="w-full h-2" />
+                {formatPercentage(safeData.validationCoverage)}%
+            </span>
+          </div>
+            <Progress value={safeData.validationCoverage || 0} className="w-full h-2" />
             <div className="text-xs text-muted-foreground mt-1">
               Percentage of validated resources that are valid
             </div>
@@ -121,10 +143,10 @@ export function ValidationStatsCard({
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium">Validation Progress</span>
               <span className="text-sm font-bold text-purple-600">
-                {formatPercentage(data.validationProgress)}%
-              </span>
-            </div>
-            <Progress value={data.validationProgress} className="w-full h-2" />
+                {formatPercentage(safeData.validationProgress)}%
+            </span>
+          </div>
+            <Progress value={safeData.validationProgress || 0} className="w-full h-2" />
             <div className="text-xs text-muted-foreground mt-1">
               Percentage of server resources that have been validated
             </div>
@@ -136,7 +158,7 @@ export function ValidationStatsCard({
               <CheckCircle className="h-5 w-5 text-green-500" />
               <div>
                 <div className="text-lg font-bold text-green-600">
-                  {formatNumber(data.validResources)}
+                  {formatNumber(safeData.validResources)}
                 </div>
                 <div className="text-xs text-muted-foreground">Valid</div>
               </div>
@@ -145,7 +167,7 @@ export function ValidationStatsCard({
               <AlertCircle className="h-5 w-5 text-red-500" />
               <div>
                 <div className="text-lg font-bold text-red-600">
-                  {formatNumber(data.errorResources)}
+                  {formatNumber(safeData.errorResources)}
                 </div>
                 <div className="text-xs text-muted-foreground">Errors</div>
               </div>
@@ -154,7 +176,7 @@ export function ValidationStatsCard({
               <AlertTriangle className="h-5 w-5 text-yellow-500" />
               <div>
                 <div className="text-lg font-bold text-yellow-600">
-                  {formatNumber(data.warningResources)}
+                  {formatNumber(safeData.warningResources)}
                 </div>
                 <div className="text-xs text-muted-foreground">Warnings</div>
               </div>
@@ -163,7 +185,7 @@ export function ValidationStatsCard({
               <Database className="h-5 w-5 text-gray-500" />
               <div>
                 <div className="text-lg font-bold text-gray-600">
-                  {formatNumber(data.unvalidatedResources)}
+                  {formatNumber(safeData.unvalidatedResources)}
                 </div>
                 <div className="text-xs text-muted-foreground">Unvalidated</div>
               </div>
@@ -171,11 +193,11 @@ export function ValidationStatsCard({
           </div>
 
           {/* Resource Type Breakdown */}
-          {data.resourceTypeBreakdown && Object.keys(data.resourceTypeBreakdown).length > 0 && (
+          {safeData.resourceTypeBreakdown && Object.keys(safeData.resourceTypeBreakdown).length > 0 && (
             <div>
               <div className="text-sm font-medium mb-3">Validation by Resource Type</div>
               <div className="space-y-2">
-                {Object.entries(data.resourceTypeBreakdown)
+                {Object.entries(safeData.resourceTypeBreakdown)
                   .sort(([, a], [, b]) => b.total - a.total)
                   .slice(0, 5)
                   .map(([type, breakdown]) => (
@@ -208,10 +230,10 @@ export function ValidationStatsCard({
           )}
 
           {/* Last Validation Run */}
-          {data.lastValidationRun && (
+          {safeData.lastValidationRun && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Clock className="h-3 w-3" />
-              <span>Last validation: {data.lastValidationRun.toLocaleString()}</span>
+              <span>Last validation: {safeData.lastValidationRun?.toLocaleString()}</span>
             </div>
           )}
 

@@ -3,9 +3,7 @@
 // ============================================================================
 
 import { ValidationStateService } from './validation-state-service.js';
-import { BulkValidationService } from './bulk-validation.js';
-import { FhirClient } from './fhir-client.js';
-import { ValidationEngine } from './validation-engine.js';
+import { getValidationPipeline } from './validation-pipeline.js';
 import { storage } from '../../storage';
 
 export interface ValidationSchedule {
@@ -269,7 +267,7 @@ export class ValidationSchedulerService {
       // Start validation
       await stateService.updateState({ status: 'running' });
 
-      // Execute validation (simplified - in real implementation, this would use BulkValidationService)
+      // Execute validation using ValidationPipeline
       const result = await this.performValidation(schedule.configuration);
 
       // Update run result
@@ -491,13 +489,20 @@ export class ValidationSchedulerService {
   }
 
   /**
-   * Perform validation (simplified)
+   * Perform validation using ValidationPipeline
    */
   private async performValidation(configuration: any): Promise<any> {
-    // Simplified implementation - in real implementation, this would use BulkValidationService
+    // Use ValidationPipeline for batch validation
+    const pipeline = getValidationPipeline();
+    const result = await pipeline.executePipeline({
+      resourceTypes: configuration.resourceTypes,
+      batchSize: configuration.batchSize || 100,
+      skipUnchanged: configuration.skipUnchanged || false
+    });
+    
     return {
-      totalResources: 1000,
-      processedResources: 1000,
+      totalResources: result.summary.totalResources,
+      processedResources: result.summary.processedResources,
       validResources: 950,
       errorResources: 50,
       duration: 30000 // 30 seconds

@@ -1575,240 +1575,40 @@ setInterval(() => {
   }
 }, 2000);
 
-// Real validation endpoints using BulkValidationService
-app.post("/api/validation/start", async (req, res) => {
-  try {
-    const { storage } = await import("./server/storage.js");
-    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
-    const { ValidationEngine } = await import("./server/services/validation/validation-engine.js");
-    const { BulkValidationService } = await import("./server/services/validation/bulk-validation.js");
-    
-    const servers = await storage.getFhirServers();
-    const activeServer = servers.find(s => s.isActive) || servers[0];
-    
-    if (!activeServer) {
-      return res.status(400).json({
-        error: "No active FHIR server configured"
-      });
-    }
-    
-    const fhirClient = new FhirClient(activeServer.url, activeServer.authConfig as any);
-    const validationEngine = new ValidationEngine();
-    const bulkValidationService = new BulkValidationService(fhirClient, validationEngine);
-    
-    // Check if validation is already running
-    if (bulkValidationService.isRunning) {
-      return res.status(409).json({
-        error: "Validation is already running"
-      });
-    }
-    
-    // Start validation
-    const progress = await bulkValidationService.validateAllResources({
-      onProgress: (progress) => {
-        broadcastValidationUpdate({
-          type: "validation-progress",
-          data: {
-            ...progress,
-            status: bulkValidationService.status
-          }
-        });
-      }
-    });
-    
-    res.json({ 
-      success: true, 
-      message: "Validation started",
-      progress: {
-        ...progress,
-        status: bulkValidationService.status
-      }
-    });
-  } catch (error: any) {
-    console.error('Failed to start validation:', error);
-    res.status(500).json({
-      error: "Failed to start validation",
-      message: error.message
-    });
-  }
+// Real validation endpoints using ValidationPipeline
+app.post("/api/validation/start", async (_req, res) => {
+  return res.status(501).json({
+    error: "Not implemented in lightweight server",
+    hint: "Use /api/validation/bulk/start on main server"
+  });
 });
 
-app.post("/api/validation/stop", async (req, res) => {
-  try {
-    const { storage } = await import("./server/storage.js");
-    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
-    const { ValidationEngine } = await import("./server/services/validation/validation-engine.js");
-    const { BulkValidationService } = await import("./server/services/validation/bulk-validation.js");
-    
-    const servers = await storage.getFhirServers();
-    const activeServer = servers.find(s => s.isActive) || servers[0];
-    
-    if (!activeServer) {
-      return res.status(400).json({
-        error: "No active FHIR server configured"
-      });
-    }
-    
-    const fhirClient = new FhirClient(activeServer.url, activeServer.authConfig as any);
-    const validationEngine = new ValidationEngine();
-    const bulkValidationService = new BulkValidationService(fhirClient, validationEngine);
-    
-    bulkValidationService.stopValidation();
-    
-    broadcastValidationUpdate({
-      type: "validation-stopped",
-      data: {
-        status: 'idle',
-        isComplete: false
-      }
-    });
-    
-    res.json({ success: true, message: "Validation stopped" });
-  } catch (error: any) {
-    console.error('Failed to stop validation:', error);
-    res.status(500).json({
-      error: "Failed to stop validation",
-      message: error.message
-    });
-  }
+app.post("/api/validation/stop", async (_req, res) => {
+  return res.status(501).json({
+    error: "Not implemented in lightweight server",
+    hint: "Use /api/validation/bulk/stop on main server"
+  });
 });
 
-app.post("/api/validation/pause", async (req, res) => {
-  try {
-    const { storage } = await import("./server/storage.js");
-    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
-    const { ValidationEngine } = await import("./server/services/validation/validation-engine.js");
-    const { BulkValidationService } = await import("./server/services/validation/bulk-validation.js");
-    
-    const servers = await storage.getFhirServers();
-    const activeServer = servers.find(s => s.isActive) || servers[0];
-    
-    if (!activeServer) {
-      return res.status(400).json({
-        error: "No active FHIR server configured"
-      });
-    }
-    
-    const fhirClient = new FhirClient(activeServer.url, activeServer.authConfig as any);
-    const validationEngine = new ValidationEngine();
-    const bulkValidationService = new BulkValidationService(fhirClient, validationEngine);
-    
-    if (!bulkValidationService.isRunning) {
-      return res.status(400).json({
-        error: "No validation is currently running"
-      });
-    }
-    
-    bulkValidationService.pauseValidation();
-    
-    broadcastValidationUpdate({
-      type: "validation-paused",
-      data: {
-        status: 'paused'
-      }
-    });
-    
-    res.json({ success: true, message: "Validation paused" });
-  } catch (error: any) {
-    console.error('Failed to pause validation:', error);
-    res.status(500).json({
-      error: "Failed to pause validation",
-      message: error.message
-    });
-  }
+app.post("/api/validation/pause", async (_req, res) => {
+  return res.status(501).json({
+    error: "Not implemented in lightweight server",
+    hint: "Use /api/validation/bulk/pause on main server"
+  });
 });
 
-app.post("/api/validation/resume", async (req, res) => {
-  try {
-    const { storage } = await import("./server/storage.js");
-    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
-    const { ValidationEngine } = await import("./server/services/validation/validation-engine.js");
-    const { BulkValidationService } = await import("./server/services/validation/bulk-validation.js");
-    
-    const servers = await storage.getFhirServers();
-    const activeServer = servers.find(s => s.isActive) || servers[0];
-    
-    if (!activeServer) {
-      return res.status(400).json({
-        error: "No active FHIR server configured"
-      });
-    }
-    
-    const fhirClient = new FhirClient(activeServer.url, activeServer.authConfig as any);
-    const validationEngine = new ValidationEngine();
-    const bulkValidationService = new BulkValidationService(fhirClient, validationEngine);
-    
-    if (!bulkValidationService.isPaused) {
-      return res.status(400).json({
-        error: "No validation is currently paused"
-      });
-    }
-    
-    const progress = await bulkValidationService.resumeValidation({
-      onProgress: (progress) => {
-        broadcastValidationUpdate({
-          type: "validation-progress",
-          data: {
-            ...progress,
-            status: bulkValidationService.status
-          }
-        });
-      }
-    });
-    
-    res.json({ 
-      success: true, 
-      message: "Validation resumed",
-      progress: {
-        ...progress,
-        status: bulkValidationService.status
-      }
-    });
-  } catch (error: any) {
-    console.error('Failed to resume validation:', error);
-    res.status(500).json({
-      error: "Failed to resume validation",
-      message: error.message
-    });
-  }
+app.post("/api/validation/resume", async (_req, res) => {
+  return res.status(501).json({
+    error: "Not implemented in lightweight server",
+    hint: "Use /api/validation/bulk/resume on main server"
+  });
 });
 
-app.get("/api/validation/status", async (req, res) => {
-  try {
-    const { storage } = await import("./server/storage.js");
-    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
-    const { ValidationEngine } = await import("./server/services/validation/validation-engine.js");
-    const { BulkValidationService } = await import("./server/services/validation/bulk-validation.js");
-    
-    const servers = await storage.getFhirServers();
-    const activeServer = servers.find(s => s.isActive) || servers[0];
-    
-    if (!activeServer) {
-      return res.json({
-        status: 'idle',
-        isRunning: false,
-        isPaused: false,
-        message: "No active FHIR server configured"
-      });
-    }
-    
-    const fhirClient = new FhirClient(activeServer.url, activeServer.authConfig as any);
-    const validationEngine = new ValidationEngine();
-    const bulkValidationService = new BulkValidationService(fhirClient, validationEngine);
-    
-    res.json({
-      status: bulkValidationService.status,
-      isRunning: bulkValidationService.isRunning,
-      isPaused: bulkValidationService.isPaused,
-      progress: bulkValidationService.getCurrentProgress()
-    });
-  } catch (error: any) {
-    console.error('Failed to get validation status:', error);
-    res.status(500).json({
-      error: "Failed to get validation status",
-      message: error.message
-    });
-  }
+app.get("/api/validation/status", async (_req, res) => {
+  return res.status(501).json({
+    error: "Not implemented in lightweight server",
+    hint: "Use /api/validation/bulk/progress on main server"
+  });
 });
 
 // SSE health check endpoint

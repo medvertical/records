@@ -504,6 +504,46 @@ export default function DashboardNew() {
   // Render
   // ========================================================================
 
+  if (!isServerConnected) {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            <p className="text-muted-foreground">
+              FHIR server statistics and validation progress
+            </p>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => window.location.href = '/settings'}
+            className="gap-2"
+          >
+            <Server className="h-4 w-4" />
+            Configure Server
+          </Button>
+        </div>
+
+        <Card className="border-dashed border-2 border-gray-300">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center space-y-4">
+            <Server className="h-16 w-16 text-gray-300" />
+            <div>
+              <h2 className="text-xl font-semibold text-gray-700">No Active FHIR Server</h2>
+              <p className="text-sm text-gray-500 max-w-md">
+                Connect to a FHIR server to browse resources, manage packages, and monitor validation progress. Once a connection is established, dashboard metrics will populate automatically.
+              </p>
+            </div>
+            <Button onClick={() => window.location.href = '/settings'} className="gap-2">
+              <Settings className="h-4 w-4" />
+              Open Settings
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       {/* Header with Data Freshness Indicator */}
@@ -570,7 +610,7 @@ export default function DashboardNew() {
       )}
 
       {/* Real-time Validation Control Panel */}
-      {currentServer && (
+      {isServerConnected && (
         <Card className={`border-2 transition-colors duration-300 ${
           isValidationRunning 
             ? 'border-green-500 bg-green-50/50 dark:border-green-400 dark:bg-green-950/20' 
@@ -779,43 +819,12 @@ export default function DashboardNew() {
       </Card>
       )}
 
-      {/* No Server Connected State */}
-      {!currentServer && (
-        <Card className="border-dashed border-2 border-gray-300">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Server className="h-16 w-16 text-gray-300 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-600 mb-2">No FHIR Server Connected</h3>
-            <p className="text-sm text-gray-500 text-center mb-6 max-w-md">
-              Connect to a FHIR server to view dashboard statistics, browse resources, and run validation.
-            </p>
-            <div className="flex gap-3">
-              <Button 
-                variant="default" 
-                onClick={() => window.location.href = '/settings'}
-                className="gap-2"
-              >
-                <Server className="h-4 w-4" />
-                Connect Server
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => window.location.href = '/settings'}
-                className="gap-2"
-              >
-                <Settings className="h-4 w-4" />
-                Settings
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Separated Statistics Cards */}
-      {currentServer && (
+      {isServerConnected && (
         <div className="grid gap-6 lg:grid-cols-2">
           {/* FHIR Server Statistics */}
           <ServerStatsCard 
-            data={fhirServerStats!}
+            data={fhirServerStats}
             isLoading={isFhirServerLoading}
             error={fhirServerError}
             lastUpdated={lastUpdated || undefined}
@@ -823,7 +832,7 @@ export default function DashboardNew() {
 
           {/* Validation Statistics */}
           <ValidationStatsCard 
-            data={validationStats!}
+            data={validationStats}
             isLoading={isValidationLoading}
             error={validationError}
             lastUpdated={lastUpdated || undefined}
@@ -832,7 +841,7 @@ export default function DashboardNew() {
       )}
 
       {/* Recent Activity */}
-      {currentServer && recentErrors && recentErrors.length > 0 && (
+      {isServerConnected && recentErrors && recentErrors.length > 0 && (
         <Card className="transition-all duration-300">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

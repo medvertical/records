@@ -3,14 +3,12 @@
 // ============================================================================
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { BulkValidationService } from '../services/bulk-validation.js';
+import { getValidationPipeline } from '../services/validation-pipeline.js';
 import { FhirClient } from '../services/fhir-client.js';
-import { ValidationEngine } from '../services/validation-engine.js';
 
 describe('Validation Progress Calculations', () => {
-  let bulkValidationService: BulkValidationService;
+  let validationPipeline: any;
   let mockFhirClient: jest.Mocked<FhirClient>;
-  let mockValidationEngine: jest.Mocked<ValidationEngine>;
 
   beforeEach(() => {
     // Mock dependencies
@@ -21,11 +19,7 @@ describe('Validation Progress Calculations', () => {
       getAllResourceTypes: jest.fn()
     } as any;
 
-    mockValidationEngine = {
-      validateResource: jest.fn()
-    } as any;
-
-    bulkValidationService = new BulkValidationService(mockFhirClient, mockValidationEngine);
+    validationPipeline = getValidationPipeline();
   });
 
   afterEach(() => {

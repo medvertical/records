@@ -34,10 +34,10 @@ export function useServerData() {
       return response.json();
     },
     refetchInterval: 60000, // Refresh every minute
-    // Don't keep previous data to ensure UI updates immediately when server status changes
-    keepPreviousData: false,
-    // Ensure data is always considered fresh to prevent stale data issues
-    staleTime: 0,
+    // Keep previous data to prevent undefined states during refetches
+    keepPreviousData: true,
+    // Consider data fresh for 30 seconds to reduce unnecessary refetches
+    staleTime: 30000,
     onSuccess: (data) => {
       console.log('Server data fetched:', data);
     },
@@ -49,7 +49,7 @@ export function useServerData() {
   const activeServer = servers?.find(server => server.isActive);
   
   const { data: serverStatus } = useQuery<ServerStatus>({
-    queryKey: ["/api/fhir/connection/test", refreshTrigger],
+    queryKey: ["/api/fhir/connection/test", refreshTrigger, activeServer?.id],
     queryFn: async () => {
       try {
         const response = await fetch('/api/fhir/connection/test');
@@ -74,9 +74,9 @@ export function useServerData() {
       }
     },
     refetchInterval: 30000,
-    // Don't keep previous data to ensure UI updates immediately when server status changes
-    keepPreviousData: false,
-    staleTime: 0,
+    // Keep previous data to prevent undefined states during refetches
+    keepPreviousData: true,
+    staleTime: 5000, // Consider data fresh for 5 seconds (reduced for faster updates)
     // Only fetch server status when there's an active server
     enabled: !!activeServer,
     retry: false
@@ -87,16 +87,16 @@ export function useServerData() {
     globalRefreshTrigger++;
     setRefreshTrigger(globalRefreshTrigger);
     
-    // Only refetch server-related queries, not server-dependent queries
+    // Refetch both server list and connection test queries
     queryClient.refetchQueries({ 
       predicate: (query) => 
-        query.queryKey[0] === "/api/fhir/servers"
+        query.queryKey[0] === "/api/fhir/servers" ||
+        query.queryKey[0] === "/api/fhir/connection/test"
     });
     
     // Invalidate server-dependent queries so they can be re-enabled/disabled based on new server state
     queryClient.invalidateQueries({
       predicate: (query) => 
-        query.queryKey[0] === "/api/fhir/connection/test" ||
         query.queryKey[0] === "/api/fhir/resource-counts" ||
         query.queryKey[0] === "/api/fhir/resources" ||
         query.queryKey[0] === "/api/fhir/resource-types" ||
@@ -117,9 +117,26 @@ export function useServerData() {
             query.queryKey[0] === "/api/dashboard/stats" ||
             query.queryKey[0] === "/api/validation/bulk/summary"
         });
+      } else {
+        // When there is an active server, ensure connection test is fresh
+        queryClient.invalidateQueries({
+          predicate: (query) => 
+            query.queryKey[0] === "/api/fhir/connection/test"
+        });
       }
     }
   }, [servers, queryClient]);
+
+  // Additional effect to ensure server status is refreshed when activeServer changes
+  useEffect(() => {
+    if (activeServer) {
+      // Force refresh of connection test when active server changes
+      queryClient.refetchQueries({
+        predicate: (query) => 
+          query.queryKey[0] === "/api/fhir/connection/test"
+      });
+    }
+  }, [activeServer?.id, queryClient]);
 
   return {
     servers,

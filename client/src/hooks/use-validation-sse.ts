@@ -24,7 +24,9 @@ export interface SSEMessage {
 
 export function useValidationSSE(hasActiveServer: boolean = true) {
   const [isConnected, setIsConnected] = useState(false);
-  const [progress, setProgress] = useState<ValidationProgress | null>(null);
+  // Numeric progress for UI/tests, and full progress object for rich views
+  const [progress, setProgress] = useState<number>(0);
+  const [progressData, setProgressData] = useState<ValidationProgress | null>(null);
   const [validationStatus, setValidationStatus] = useState<'idle' | 'running' | 'paused' | 'completed' | 'error'>('idle');
   const [lastError, setLastError] = useState<string | null>(null);
   const [currentServer, setCurrentServer] = useState<{
@@ -89,7 +91,7 @@ export function useValidationSSE(hasActiveServer: boolean = true) {
         
         // Update progress with the full data object (not just data.progress)
         if (data.totalResources !== undefined) {
-          setProgress({
+          setProgressData({
             totalResources: data.totalResources,
             processedResources: data.processedResources,
             validResources: data.validResources,
@@ -99,6 +101,11 @@ export function useValidationSSE(hasActiveServer: boolean = true) {
             errors: data.errors || [],
             status: data.status || 'running'
           });
+          if (typeof data.progress === 'number') {
+            setProgress(data.progress);
+          } else if (typeof data.processedResources === 'number' && typeof data.totalResources === 'number' && data.totalResources > 0) {
+            setProgress(Math.round((data.processedResources / data.totalResources) * 100));
+          }
         }
       }
     } catch (error) {
@@ -128,40 +135,52 @@ export function useValidationSSE(hasActiveServer: boolean = true) {
       console.log('[ValidationSSE] Attempting to connect to:', sseUrl);
       
       eventSourceRef.current = new EventSource(sseUrl);
-      
-      eventSourceRef.current.onopen = () => {
+
+      const es = eventSourceRef.current as any;
+
+      const handleOpen = () => {
         console.log('[ValidationSSE] Connected to validation stream');
         setIsConnected(true);
         setLastError(null);
         setRetryCount(0);
       };
-      
-      eventSourceRef.current.onmessage = (event) => {
+
+      const handleMessage = (event: MessageEvent) => {
         try {
-          const message: SSEMessage = JSON.parse(event.data);
+          const message: SSEMessage = JSON.parse((event as any).data);
           handleSSEMessage(message);
         } catch (error) {
           console.error('[ValidationSSE] Error parsing message:', error);
         }
       };
-      
-      eventSourceRef.current.onerror = (error) => {
+
+      const handleError = (error: any) => {
         console.error('[ValidationSSE] Connection error:', error);
         setIsConnected(false);
         setLastError('SSE connection error');
         
-        // Retry connection if we haven't exceeded max retries
         if (retryCount < maxRetries) {
           console.log(`[ValidationSSE] Retrying connection (${retryCount + 1}/${maxRetries})...`);
           setRetryCount(prev => prev + 1);
           setTimeout(() => {
             connectSSE();
-          }, 2000 * (retryCount + 1)); // Exponential backoff
+          }, 2000 * (retryCount + 1));
         } else {
           console.error('[ValidationSSE] Max retries exceeded, falling back to API polling');
           startApiSync();
         }
       };
+
+      // Prefer addEventListener if available for test compatibility
+      if (typeof es.addEventListener === 'function') {
+        es.addEventListener('open', handleOpen);
+        es.addEventListener('message', handleMessage);
+        es.addEventListener('error', handleError);
+      }
+      // Also set property handlers for robustness
+      eventSourceRef.current.onopen = handleOpen as any;
+      eventSourceRef.current.onmessage = handleMessage as any;
+      eventSourceRef.current.onerror = handleError as any;
       
     } catch (error) {
       console.error('[ValidationSSE] Failed to create SSE connection:', error);
@@ -187,7 +206,12 @@ export function useValidationSSE(hasActiveServer: boolean = true) {
         
       case 'validation-progress':
       case 'validation_progress':
-        setProgress(message.data);
+        setProgressData(message.data);
+        if (typeof message.data?.progress === 'number') {
+          setProgress(message.data.progress);
+        } else if (typeof message.data?.processedResources === 'number' && typeof message.data?.totalResources === 'number' && message.data.totalResources > 0) {
+          setProgress(Math.round((message.data.processedResources / message.data.totalResources) * 100));
+        }
         setValidationStatus('running');
         hasReceivedMessage.current = true;
         break;
@@ -195,7 +219,13 @@ export function useValidationSSE(hasActiveServer: boolean = true) {
       case 'validation-completed':
       case 'validation_complete':
         console.log('[ValidationSSE] Validation completed:', message.data);
-        setProgress(message.data.progress || message.data);
+        const completedPayload = message.data.progress || message.data;
+        setProgressData(completedPayload);
+        if (typeof completedPayload?.progress === 'number') {
+          setProgress(completedPayload.progress);
+        } else if (typeof completedPayload?.processedResources === 'number' && typeof completedPayload?.totalResources === 'number' && completedPayload.totalResources > 0) {
+          setProgress(Math.round((completedPayload.processedResources / completedPayload.totalResources) * 100));
+        }
         setValidationStatus('completed');
         hasReceivedMessage.current = true;
         break;
@@ -210,7 +240,8 @@ export function useValidationSSE(hasActiveServer: boolean = true) {
         
       case 'validation-paused':
         console.log('[ValidationSSE] Validation paused:', message.data);
-        setValidationStatus('idle');
+        setValidationStatus('paused');
+        if (typeof message.data?.progress === 'number') setProgress(message.data.progress);
         hasReceivedMessage.current = true;
         break;
         
@@ -223,7 +254,9 @@ export function useValidationSSE(hasActiveServer: boolean = true) {
       case 'validation-stopped':
       case 'validation_stopped':
         console.log('[ValidationSSE] Validation stopped and reset');
-        setProgress(null);
+        setProgressData(null);
+        if (typeof message.data?.progress === 'number') setProgress(message.data.progress);
+        else setProgress(0);
         setValidationStatus('idle');
         setLastError(null);
         hasReceivedMessage.current = true;
@@ -347,7 +380,8 @@ export function useValidationSSE(hasActiveServer: boolean = true) {
   }, []);
 
   const resetProgress = () => {
-    setProgress(null);
+    setProgressData(null);
+    setProgress(0);
     setValidationStatus('idle');
     setLastError(null);
   };
@@ -359,16 +393,31 @@ export function useValidationSSE(hasActiveServer: boolean = true) {
     }, 1000);
   };
 
+  // Backward compatibility helpers for tests
+  const setStatus = (status: 'idle' | 'running' | 'paused' | 'completed' | 'error') => {
+    setValidationStatus(status);
+  };
+
   return {
     isConnected,
     progress,
+    progressData,
     validationStatus,
+    // Back-compat aliases expected by some tests/components
+    status: validationStatus,
+    isValidating: validationStatus === 'running',
+    error: lastError,
     lastError,
     currentServer,
     apiState,
     settingsState,
     resetProgress,
     reconnect,
-    syncWithApi
+    syncWithApi,
+    // Compatibility methods expected by tests
+    connect,
+    disconnect,
+    setProgress,
+    setStatus
   };
 }

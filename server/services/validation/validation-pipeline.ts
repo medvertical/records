@@ -194,6 +194,9 @@ export class ValidationPipeline extends EventEmitter {
       cacheTtlMs: 300000, // 5 minutes
       ...config
     };
+
+    // Reconfigure on settings changes
+    this.setupSettingsListeners();
   }
 
   // ========================================================================
@@ -278,8 +281,18 @@ export class ValidationPipeline extends EventEmitter {
       // Get validation settings
       const settings = await this.settingsService.getActiveSettings();
       
+      // Initialize progress stats
+      const totalResourcesPlanned = request.resources.length;
+      const progressStats = {
+        totalResources: totalResourcesPlanned,
+        processedResources: 0,
+        validResources: 0,
+        errorResources: 0,
+        startTime: new Date(timestamps.startedAt).toISOString()
+      };
+      
       // Process resources
-      const results = await this.processResources(request.resources, settings, requestId);
+      const results = await this.processResources(request.resources, settings, requestId, progressStats);
       
       // Calculate summary
       const summary = this.calculatePipelineSummary(results);
@@ -323,9 +336,35 @@ export class ValidationPipeline extends EventEmitter {
   private async processResources(
     resources: ValidationRequest[],
     settings: ValidationSettings,
-    requestId: string
+    requestId: string,
+    progressStats?: {
+      totalResources: number;
+      processedResources: number;
+      validResources: number;
+      errorResources: number;
+      startTime: string;
+    }
   ): Promise<ValidationResult[]> {
     const results: ValidationResult[] = [];
+    
+    const emitProgress = (result?: ValidationResult) => {
+      if (!this.config.enableProgressTracking || !progressStats) return;
+      if (result) {
+        progressStats.processedResources += 1;
+        if (result.isValid) progressStats.validResources += 1;
+        if (!result.isValid || result.summary.errorCount > 0) progressStats.errorResources += 1;
+      }
+      this.emit('pipelineProgress', {
+        requestId,
+        totalResources: progressStats.totalResources,
+        processedResources: progressStats.processedResources,
+        validResources: progressStats.validResources,
+        errorResources: progressStats.errorResources,
+        startTime: progressStats.startTime,
+        isComplete: progressStats.processedResources >= progressStats.totalResources,
+        status: progressStats.processedResources >= progressStats.totalResources ? 'completed' : 'running'
+      });
+    };
     
     if (this.config.enableParallelProcessing) {
       // Parallel processing
@@ -334,13 +373,17 @@ export class ValidationPipeline extends EventEmitter {
       for (const chunk of chunks) {
         const chunkPromises = chunk.map(resource => this.processResource(resource, settings, requestId));
         const chunkResults = await Promise.all(chunkPromises);
-        results.push(...chunkResults);
+        for (const r of chunkResults) {
+          results.push(r);
+          emitProgress(r);
+        }
       }
     } else {
       // Sequential processing
       for (const resource of resources) {
         const result = await this.processResource(resource, settings, requestId);
         results.push(result);
+        emitProgress(result);
       }
     }
     
@@ -361,8 +404,74 @@ export class ValidationPipeline extends EventEmitter {
       }
     }
 
-    // Validate resource
-    const result = await this.engine.validateResource(resource);
+    const timeoutMs = this.resolveTimeoutMs(settings);
+
+    // Validate resource with timeout
+    const validationPromise = this.engine.validateResource(resource);
+    const timed = new Promise<ValidationResult>((resolve, reject) => {
+      const to = setTimeout(() => {
+        reject(new Error('PIPELINE_TIMEOUT'));
+      }, timeoutMs);
+      validationPromise.then(res => { clearTimeout(to); resolve(res); }).catch(err => { clearTimeout(to); reject(err); });
+    });
+
+    let result: ValidationResult;
+    try {
+      result = await timed;
+    } catch (error) {
+      // Build a timeout/error result
+      const now = new Date();
+      result = {
+        isValid: false,
+        resourceType: resource.resourceType,
+        resourceId: resource.resourceId,
+        profileUrl: resource.profileUrl,
+        issues: [{
+          severity: 'error',
+          code: error instanceof Error && error.message === 'PIPELINE_TIMEOUT' ? 'PIPELINE_TIMEOUT' : 'PIPELINE_ERROR',
+          message: error instanceof Error ? error.message : 'Unknown pipeline error',
+          location: [],
+          humanReadable: 'Validation failed in pipeline',
+          aspect: 'structural'
+        }],
+        summary: {
+          totalIssues: 1,
+          errorCount: 1,
+          warningCount: 0,
+          informationCount: 0,
+          validationScore: 0,
+          passed: false,
+          issuesByAspect: {
+            structural: 1,
+            profile: 0,
+            terminology: 0,
+            reference: 0,
+            businessRule: 0,
+            metadata: 0
+          }
+        },
+        performance: {
+          totalTimeMs: this.config.defaultTimeoutMs,
+          aspectTimes: {
+            structural: this.config.defaultTimeoutMs,
+            profile: 0,
+            terminology: 0,
+            reference: 0,
+            businessRule: 0,
+            metadata: 0
+          },
+          structuralTimeMs: this.config.defaultTimeoutMs,
+          profileTimeMs: 0,
+          terminologyTimeMs: 0,
+          referenceTimeMs: 0,
+          businessRuleTimeMs: 0,
+          metadataTimeMs: 0
+        },
+        validatedAt: now,
+        settingsUsed: settings,
+        context: resource.context
+      };
+    }
     
     // Cache result
     if (this.config.enableResultCaching) {
@@ -554,6 +663,47 @@ export class ValidationPipeline extends EventEmitter {
     }, 0).toString(36);
   }
 
+  private resolveTimeoutMs(settings: ValidationSettings): number {
+    const settingsTimeout = (settings as any)?.timeoutSettings?.defaultTimeoutMs;
+    return typeof settingsTimeout === 'number' && settingsTimeout > 0 ? settingsTimeout : this.config.defaultTimeoutMs;
+  }
+
+  private setupSettingsListeners(): void {
+    const apply = async () => {
+      try {
+        const settings = await this.settingsService.getActiveSettings();
+        this.applySettingsToConfig(settings);
+        this.clearCache();
+        this.emit('settingsApplied');
+      } catch (error) {
+        // Non-fatal
+      }
+    };
+
+    this.settingsService.on('settingsChanged', apply);
+    this.settingsService.on('settingsActivated', apply);
+  }
+
+  private applySettingsToConfig(settings: ValidationSettings): void {
+    // Concurrency
+    if (typeof settings.maxConcurrentValidations === 'number' && settings.maxConcurrentValidations > 0) {
+      this.config.maxConcurrentValidations = settings.maxConcurrentValidations;
+    }
+    // Cache controls
+    const cache = (settings as any)?.cacheSettings;
+    if (cache) {
+      this.config.enableResultCaching = Boolean(cache.enabled);
+      if (typeof cache.ttlMs === 'number' && cache.ttlMs > 0) {
+        this.config.cacheTtlMs = cache.ttlMs;
+      }
+    }
+    // Timeouts
+    const timeouts = (settings as any)?.timeoutSettings;
+    if (timeouts && typeof timeouts.defaultTimeoutMs === 'number' && timeouts.defaultTimeoutMs > 0) {
+      this.config.defaultTimeoutMs = timeouts.defaultTimeoutMs;
+    }
+  }
+
   // ========================================================================
   // Utility Methods
   // ========================================================================
@@ -611,4 +761,42 @@ export function getValidationPipeline(): ValidationPipeline {
     pipelineInstance = new ValidationPipeline();
   }
   return pipelineInstance;
+}
+
+// ============================================================================
+// Facade for DI/Testing
+// ============================================================================
+
+export type ValidationPipelineFacade = {
+  execute: (resources: ValidationRequest[], context?: ValidationPipelineRequest['context']) => Promise<ValidationPipelineResult>;
+  onProgress: (listener: (evt: {
+    requestId: string;
+    totalResources: number;
+    processedResources: number;
+    validResources: number;
+    errorResources: number;
+    startTime: string;
+    isComplete: boolean;
+    status: string;
+  }) => void) => () => void;
+  cancel: (requestId: string) => Promise<void>;
+  status: (requestId: string) => ReturnType<ValidationPipeline['getPipelineStatus']>;
+  clearCache: () => void;
+  getCacheStats: () => ReturnType<ValidationPipeline['getCacheStats']>;
+};
+
+export function getValidationPipelineFacade(): ValidationPipelineFacade {
+  const pipeline = getValidationPipeline();
+  return {
+    execute: (resources, context) => pipeline.executePipeline({ resources, context }),
+    onProgress: (listener) => {
+      const handler = (evt: any) => listener(evt);
+      pipeline.on('pipelineProgress', handler);
+      return () => pipeline.off('pipelineProgress', handler as any);
+    },
+    cancel: (requestId) => pipeline.cancelPipeline(requestId),
+    status: (requestId) => pipeline.getPipelineStatus(requestId),
+    clearCache: () => pipeline.clearCache(),
+    getCacheStats: () => pipeline.getCacheStats()
+  };
 }
