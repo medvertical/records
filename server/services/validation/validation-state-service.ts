@@ -2,8 +2,8 @@
 // Validation State Service
 // ============================================================================
 
-import { storage } from '../storage.js';
-import { validationWebSocket } from './websocket-server.js';
+import { storage } from '../../storage';
+// WebSocket removed - using SSE instead
 
 export interface ValidationState {
   id: string;

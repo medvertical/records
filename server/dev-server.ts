@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite } from "./vite";
 
 const app = express();
 app.use(express.json());
@@ -48,8 +47,8 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // Setup Vite for development
-  await setupVite(app, server);
+  // Serve static files from dist/public in development
+  app.use(express.static('dist/public'));
 
   // Serve the app on port 3000 for local development
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;

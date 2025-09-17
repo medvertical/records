@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useServerData } from "@/hooks/use-server-data";
 import { cn } from "@/lib/utils";
 import Dashboard from "@/pages/dashboard";
 import ResourceBrowser from "@/pages/resource-browser";
@@ -28,9 +29,13 @@ function Router() {
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  const { activeServer } = useServerData();
+  
   const { data: connectionStatus } = useQuery<ConnectionStatus>({
     queryKey: ["/api/fhir/connection/test"],
     refetchInterval: 30000,
+    // Only fetch connection status when there's an active server
+    enabled: !!activeServer,
   });
 
   const toggleSidebar = () => {

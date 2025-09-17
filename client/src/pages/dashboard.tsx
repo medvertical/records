@@ -22,15 +22,16 @@ import {
   Server,
   Wifi,
   WifiOff,
-  RefreshCw
+  RefreshCw,
+  Settings
 } from 'lucide-react';
 import { useValidationSSE, ValidationProgress as SSEValidationProgress } from '@/hooks/use-validation-sse';
 import { useDashboardData } from '@/hooks/use-dashboard-data';
+import { useServerData } from '@/hooks/use-server-data';
 import { ServerStatsCard } from '@/components/dashboard/server-stats-card';
 import { ValidationStatsCard } from '@/components/dashboard/validation-stats-card';
 import { useState, useEffect } from 'react';
 import { Link } from 'wouter';
-import { queryClient } from '@/lib/queryClient';
 
 // ============================================================================
 // Types
@@ -56,6 +57,9 @@ interface ValidationProgress {
 
 export default function DashboardNew() {
   // Use our new centralized dashboard data hook
+  const { activeServer, serverStatus } = useServerData();
+  const isServerConnected = Boolean(activeServer && serverStatus?.connected);
+
   const {
     fhirServerStats,
     validationStats,
@@ -74,7 +78,8 @@ export default function DashboardNew() {
   } = useDashboardData({
     enableRealTimeUpdates: true,
     refetchInterval: 300000, // 5 minutes (reduced for better performance)
-    enableCaching: true
+    enableCaching: true,
+    enabled: isServerConnected
   });
 
   // Validation state management
@@ -91,7 +96,7 @@ export default function DashboardNew() {
   const [totalPausedTime, setTotalPausedTime] = useState<number>(0);
 
   // SSE for real-time validation updates
-  const { isConnected, progress, validationStatus, currentServer } = useValidationSSE();
+  const { isConnected, progress, validationStatus, currentServer } = useValidationSSE(isServerConnected);
 
   // Note: Settings change notifications are now handled via SSE through the useValidationSSE hook
   // No need for separate event listeners - SSE handles everything
@@ -100,8 +105,24 @@ export default function DashboardNew() {
   const [currentValidationProgress, setCurrentValidationProgress] = useState<ValidationProgress | null>(null);
   const [recentErrors, setRecentErrors] = useState([]);
 
+  useEffect(() => {
+    if (!isServerConnected) {
+      setValidationProgress(null);
+      setIsValidationRunning(false);
+      setIsValidationPaused(false);
+      setIsValidationInitializing(false);
+    }
+  }, [isServerConnected]);
+
   // Fetch validation progress (fallback when SSE is not connected)
   useEffect(() => {
+    if (!isServerConnected) {
+      setCurrentValidationProgress(null);
+      setCurrentResourceType('');
+      setNextResourceType('');
+      return;
+    }
+
     const fetchValidationProgress = async () => {
       try {
         const response = await fetch('/api/validation/bulk/progress');
@@ -134,10 +155,15 @@ export default function DashboardNew() {
     const interval = setInterval(fetchValidationProgress, 5000); // 5 seconds for processing blocks
     fetchValidationProgress(); // Initial fetch
     return () => clearInterval(interval);
-  }, [isConnected]);
+  }, [isConnected, isServerConnected]);
 
   // Fetch recent errors
   useEffect(() => {
+    if (!isServerConnected) {
+      setRecentErrors([]);
+      return;
+    }
+
     const fetchRecentErrors = async () => {
       try {
         const response = await fetch('/api/validation/errors/recent');
@@ -153,7 +179,7 @@ export default function DashboardNew() {
     const interval = setInterval(fetchRecentErrors, 30000); // Reduced from 10s to 30s
     fetchRecentErrors(); // Initial fetch
     return () => clearInterval(interval);
-  }, []);
+  }, [isServerConnected]);
 
   // ========================================================================
   // Effects
@@ -544,15 +570,16 @@ export default function DashboardNew() {
       )}
 
       {/* Real-time Validation Control Panel */}
-      <Card className={`border-2 transition-colors duration-300 ${
-        isValidationRunning 
-          ? 'border-green-500 bg-green-50/50 dark:border-green-400 dark:bg-green-950/20' 
-          : isValidationPaused
-          ? 'border-orange-500 bg-orange-50/50 dark:border-orange-400 dark:bg-orange-950/20'
-          : isValidationInitializing
-          ? 'border-yellow-500 bg-yellow-50/50 dark:border-yellow-400 dark:bg-yellow-950/20'
-          : 'border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20'
-      }`}>
+      {currentServer && (
+        <Card className={`border-2 transition-colors duration-300 ${
+          isValidationRunning 
+            ? 'border-green-500 bg-green-50/50 dark:border-green-400 dark:bg-green-950/20' 
+            : isValidationPaused
+            ? 'border-orange-500 bg-orange-50/50 dark:border-orange-400 dark:bg-orange-950/20'
+            : isValidationInitializing
+            ? 'border-yellow-500 bg-yellow-50/50 dark:border-yellow-400 dark:bg-yellow-950/20'
+            : 'border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20'
+        }`}>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -750,28 +777,62 @@ export default function DashboardNew() {
           )}
         </CardContent>
       </Card>
+      )}
+
+      {/* No Server Connected State */}
+      {!currentServer && (
+        <Card className="border-dashed border-2 border-gray-300">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Server className="h-16 w-16 text-gray-300 mb-4" />
+            <h3 className="text-lg font-semibold text-gray-600 mb-2">No FHIR Server Connected</h3>
+            <p className="text-sm text-gray-500 text-center mb-6 max-w-md">
+              Connect to a FHIR server to view dashboard statistics, browse resources, and run validation.
+            </p>
+            <div className="flex gap-3">
+              <Button 
+                variant="default" 
+                onClick={() => window.location.href = '/settings'}
+                className="gap-2"
+              >
+                <Server className="h-4 w-4" />
+                Connect Server
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => window.location.href = '/settings'}
+                className="gap-2"
+              >
+                <Settings className="h-4 w-4" />
+                Settings
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Separated Statistics Cards */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* FHIR Server Statistics */}
-        <ServerStatsCard 
-          data={fhirServerStats!}
-          isLoading={isFhirServerLoading}
-          error={fhirServerError}
-          lastUpdated={lastUpdated || undefined}
-        />
+      {currentServer && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* FHIR Server Statistics */}
+          <ServerStatsCard 
+            data={fhirServerStats!}
+            isLoading={isFhirServerLoading}
+            error={fhirServerError}
+            lastUpdated={lastUpdated || undefined}
+          />
 
-        {/* Validation Statistics */}
-        <ValidationStatsCard 
-          data={validationStats!}
-          isLoading={isValidationLoading}
-          error={validationError}
-          lastUpdated={lastUpdated || undefined}
-        />
-      </div>
+          {/* Validation Statistics */}
+          <ValidationStatsCard 
+            data={validationStats!}
+            isLoading={isValidationLoading}
+            error={validationError}
+            lastUpdated={lastUpdated || undefined}
+          />
+        </div>
+      )}
 
       {/* Recent Activity */}
-      {recentErrors && recentErrors.length > 0 && (
+      {currentServer && recentErrors && recentErrors.length > 0 && (
         <Card className="transition-all duration-300">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

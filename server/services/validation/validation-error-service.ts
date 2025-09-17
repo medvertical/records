@@ -2,7 +2,7 @@
 // Validation Error Service
 // ============================================================================
 
-import { storage } from '../storage.js';
+import { storage } from '../../storage';
 
 export interface ValidationError {
   id: string;

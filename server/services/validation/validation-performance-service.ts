@@ -2,7 +2,7 @@
 // Validation Performance Service
 // ============================================================================
 
-import { storage } from '../storage.js';
+import { storage } from '../../storage';
 
 export interface ValidationPerformanceMetrics {
   id: string;

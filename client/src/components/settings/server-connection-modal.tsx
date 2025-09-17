@@ -20,6 +20,7 @@ import {
   CheckCircle, 
   XCircle, 
   AlertTriangle,
+  AlertCircle,
   Eye,
   EyeOff,
   Edit,
@@ -94,9 +95,7 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [connectingId, setConnectingId] = useState<number | null>(null);
   const [disconnectingId, setDisconnectingId] = useState<number | null>(null);
-  const [retryAttempts, setRetryAttempts] = useState<{ [key: string]: number }>({});
-  const [retryErrors, setRetryErrors] = useState<{ [key: string]: any }>({});
-  const [isRetrying, setIsRetrying] = useState<{ [key: string]: boolean }>({});
+  // Simplified state - removed complex retry tracking
   const [urlValidationStatus, setUrlValidationStatus] = useState<{ isValid: boolean; error?: string; warning?: string }>({ isValid: true });
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -188,119 +187,26 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
     }
   };
 
-  // Retry utility function with exponential backoff
-  const retryWithBackoff = async (
-    operation: () => Promise<any>,
-    maxRetries: number = 3,
-    baseDelay: number = 1000,
-    operationKey: string
-  ): Promise<any> => {
-    let lastError: any;
-    
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        // Update retry attempts state
-        setRetryAttempts(prev => ({ ...prev, [operationKey]: attempt }));
-        
-        if (attempt > 0) {
-          // Set retry loading state
-          setIsRetrying(prev => ({ ...prev, [operationKey]: true }));
-          
-          // Show retry notification
-          const operationType = operationKey.includes('connect') ? 'connection' : 'disconnection';
-          const serverName = existingServers?.find((s: any) => operationKey.includes(s.id.toString()))?.name || 'server';
-          
-          toast({
-            title: "Retrying Operation",
-            description: `Attempting ${operationType} to ${serverName} (${attempt + 1}/${maxRetries + 1})`,
-            variant: "default",
-          });
-          
-          // Exponential backoff delay
-          const delay = baseDelay * Math.pow(2, attempt - 1);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-        
-        const result = await operation();
-        
-        // Clear retry state on success
-        setRetryAttempts(prev => {
-          const newState = { ...prev };
-          delete newState[operationKey];
-          return newState;
-        });
-        setRetryErrors(prev => {
-          const newState = { ...prev };
-          delete newState[operationKey];
-          return newState;
-        });
-        setIsRetrying(prev => {
-          const newState = { ...prev };
-          delete newState[operationKey];
-          return newState;
-        });
-        
-        return result;
-      } catch (error: any) {
-        lastError = error;
-        
-        // Store error for manual retry
-        setRetryErrors(prev => ({ ...prev, [operationKey]: error }));
-        
-        // Clear retry loading state on final failure
-        if (attempt === maxRetries) {
-          setIsRetrying(prev => {
-            const newState = { ...prev };
-            delete newState[operationKey];
-            return newState;
-          });
-        }
-        
-        // Don't retry on certain error types
-        const retryErrorData = (error as any).response?.data || error;
-        const retryErrorType = retryErrorData.type || 'UnknownError';
-        const isRetryableError = !['ValidationError', 'NotFoundError', 'AuthenticationError'].includes(retryErrorType);
-        
-        if (!isRetryableError || attempt === maxRetries) {
-          break;
-        }
-      }
+  // Simplified connection function without complex retry logic
+  const performConnection = async (operation: () => Promise<any>): Promise<any> => {
+    try {
+      return await operation();
+    } catch (error) {
+      // Simple error handling - let the UI handle retry if needed
+      throw error;
     }
-    
-    throw lastError;
   };
 
-  // Manual retry function
-  const handleManualRetry = async (operationKey: string, serverId: number, operation: 'connect' | 'disconnect') => {
+  // Simplified retry function
+  const handleRetry = async (serverId: number, operation: 'connect' | 'disconnect') => {
     try {
-      // Set retry loading state
-      setIsRetrying(prev => ({ ...prev, [operationKey]: true }));
-      
-      const serverName = existingServers?.find((s: any) => s.id === serverId)?.name || 'Unknown';
-      const operationType = operation === 'connect' ? 'connection' : 'disconnection';
-      
-      // Show retry start notification
-      toast({
-        title: "Retrying Operation",
-        description: `Attempting ${operationType} to "${serverName}"...`,
-        variant: "default",
-      });
-      
       if (operation === 'connect') {
         await connectServerMutation.mutateAsync(serverId);
       } else {
         await disconnectServerMutation.mutateAsync(serverId);
       }
     } catch (error) {
-      // Error handling is done in the mutation's onError handler
-      console.error(`Manual retry failed for ${operation}:`, error);
-    } finally {
-      // Clear retry loading state
-      setIsRetrying(prev => {
-        const newState = { ...prev };
-        delete newState[operationKey];
-        return newState;
-      });
+      console.error(`Retry failed for ${operation}:`, error);
     }
   };
 
@@ -348,10 +254,14 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
           query.queryKey[0] === "/api/fhir/connection/test"
       });
       
+      // Invalidate validation settings to trigger reload with new server configuration
+      queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+      
       toast({
-        title: "Server Added Successfully",
-        description: `FHIR server has been configured and is ready to use.`,
+        title: "🆕 Server Added Successfully",
+        description: `FHIR server has been configured and is ready to use. You can now connect to it.`,
         variant: "default",
+        duration: 4000,
       });
       
       setIsAddingNew(false);
@@ -431,10 +341,14 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
           query.queryKey[0] === "/api/fhir/connection/test"
       });
       
+      // Invalidate validation settings to trigger reload with new server configuration
+      queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+      
       toast({
-        title: "Server Updated Successfully",
-        description: `FHIR server settings have been updated successfully.`,
+        title: "✏️ Server Updated Successfully",
+        description: `FHIR server settings have been updated successfully. Changes will take effect on the next connection.`,
         variant: "default",
+        duration: 4000,
       });
       
       setIsAddingNew(false);
@@ -459,16 +373,16 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
       if (isDatabaseError) {
         title = "Database Connection Issue";
         description = "The server settings were updated but may not persist due to database connectivity issues. Please check your database connection.";
-      } else if (createErrorType === 'ValidationError') {
+      } else if (updateErrorType === 'ValidationError') {
         title = "Invalid Server Configuration";
         description = "Please check your server URL and authentication settings.";
-      } else if (createErrorType === 'NetworkError') {
+      } else if (updateErrorType === 'NetworkError') {
         title = "Network Error";
         description = "Unable to reach the server. Please check your network connection and server URL.";
-      } else if (createErrorType === 'AuthenticationError') {
+      } else if (updateErrorType === 'AuthenticationError') {
         title = "Authentication Failed";
         description = "The provided credentials are invalid. Please check your username and password.";
-      } else if (errorType === 'NotFoundError') {
+      } else if (updateErrorType === 'NotFoundError') {
         title = "Server Not Found";
         description = "The server you're trying to update no longer exists. Please refresh the page.";
       }
@@ -487,7 +401,7 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
         method: 'DELETE'
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, serverId) => {
       // Use refetchQueries to prevent data flashing while updating
       queryClient.refetchQueries({ 
         predicate: (query) => 
@@ -495,11 +409,15 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
           query.queryKey[0] === "/api/fhir/connection/test"
       });
       
-      const deletedServer = existingServers?.find(s => s.id === serverId);
+      // Invalidate validation settings to trigger reload with new server configuration
+      queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+      
+      const deletedServer = (existingServers as any[])?.find((s: any) => s.id === serverId);
       toast({
-        title: "Server Deleted Successfully",
+        title: "🗑️ Server Deleted Successfully",
         description: `FHIR server "${deletedServer?.name || 'Unknown'}" has been removed from your configuration.`,
         variant: "default",
+        duration: 4000,
       });
       
       refreshServerData();
@@ -511,11 +429,11 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
       const errorData = error.response?.data || error;
       const errorMessage = errorData.error || errorData.message || error.message || "Failed to delete server";
       const errorType = errorData.type || 'UnknownError';
-      const isDatabaseError = createErrorData.isDatabaseError || false;
+      const isDatabaseError = errorData.isDatabaseError || false;
       
       // Provide specific error messages based on error type
       let title = "Deletion Failed";
-      let description = createErrorMessage;
+      let description = errorMessage;
       
       if (isDatabaseError) {
         title = "Database Connection Issue";
@@ -542,22 +460,16 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
   const connectServerMutation = useMutation({
     mutationFn: async (serverId: number) => {
       setConnectingId(serverId);
-      const operationKey = `connect-${serverId}`;
       
-      return await retryWithBackoff(
-        async () => {
-          const res = await fetch(`/api/fhir/servers/${serverId}/activate`, { method: 'POST' });
-          if (!res.ok) {
-            const errorText = await res.text();
-            const errorData = errorText ? JSON.parse(errorText) : { error: 'Failed to activate server' };
-            throw new Error(errorData.error || errorText || 'Failed to activate server');
-          }
-          return await res.json();
-        },
-        3, // maxRetries
-        1000, // baseDelay
-        operationKey
-      );
+      return await performConnection(async () => {
+        const res = await fetch(`/api/fhir/servers/${serverId}/activate`, { method: 'POST' });
+        if (!res.ok) {
+          const errorText = await res.text();
+          const errorData = errorText ? JSON.parse(errorText) : { error: 'Failed to activate server' };
+          throw new Error(errorData.error || errorText || 'Failed to activate server');
+        }
+        return await res.json();
+      });
     },
     onMutate: async (serverId: number) => {
       // Cancel any outgoing refetches to avoid race conditions
@@ -587,11 +499,15 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
           query.queryKey[0] === "/api/fhir/connection/test"
       });
       
-      const connectedServer = existingServers?.find((s: any) => s.id === serverId);
+      // Invalidate validation settings to trigger reload with new server configuration
+      queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+      
+      const connectedServer = (existingServers as any[])?.find((s: any) => s.id === serverId);
       toast({
-        title: "Server Connected Successfully",
-        description: `Successfully connected to "${connectedServer?.name || 'Unknown'}" FHIR server.`,
+        title: "✅ Server Connected Successfully",
+        description: `Successfully connected to "${connectedServer?.name || 'Unknown'}" FHIR server. You can now browse and validate resources.`,
         variant: "default",
+        duration: 4000,
       });
       
       // Force refresh using the shared hook
@@ -605,64 +521,56 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
         predicate: (query) => query.queryKey[0] === "/api/fhir/servers" 
       });
       
-      // Extract detailed error information
-      const errorData = err.response?.data || err;
+      // Invalidate validation settings to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+      
+      // Enhanced error handling with better user feedback
+      const errorData = (err as any).response?.data || err;
       const errorMessage = errorData.error || errorData.message || err.message || "Failed to connect to server";
-      const errorType = errorData.type || 'UnknownError';
-      const isDatabaseError = createErrorData.isDatabaseError || false;
       
-      // Provide specific error messages based on error type
+      // Determine error type for better user guidance
       let title = "Connection Failed";
-      let description = createErrorMessage;
+      let description = errorMessage;
+      let action: React.ReactNode = undefined;
       
-      if (isDatabaseError) {
-        title = "Database Connection Issue";
-        description = "The server connection may not persist due to database connectivity issues. Please check your database connection.";
-      } else if (errorType === 'NotFoundError') {
-        title = "Server Not Found";
-        description = "The server you're trying to connect to no longer exists. Please refresh the page.";
-      } else if (createErrorType === 'NetworkError') {
-        title = "Network Error";
-        description = "Unable to reach the server. Please check your network connection and server URL.";
-      } else if (createErrorType === 'AuthenticationError') {
+      if (errorMessage.includes('timeout') || errorMessage.includes('ECONNREFUSED')) {
+        title = "Server Unreachable";
+        description = "The server is not responding. Please check if the server is running and the URL is correct.";
+        action = (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleRetry(serverId, 'connect')}
+            className="ml-2"
+          >
+            Retry
+          </Button>
+        );
+      } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
         title = "Authentication Failed";
-        description = "The server credentials are invalid. Please check your authentication settings.";
-      } else if (errorType === 'ServerUnavailableError') {
-        title = "Server Unavailable";
-        description = "The FHIR server is currently unavailable. Please try again later or check if the server is running.";
-      }
-      
-      // Check if this is a retryable error and show retry option
-        const connectErrorData = (err as any).response?.data || err;
-        const connectErrorType = connectErrorData.type || 'UnknownError';
-        const isRetryableError = !['ValidationError', 'NotFoundError', 'AuthenticationError'].includes(connectErrorType);
-      const operationKey = `connect-${serverId}`;
-      const attemptCount = retryAttempts[operationKey] || 0;
-      
-      if (isRetryableError && attemptCount < 3) {
-        // Show retry option for retryable errors
-      toast({
-          title,
-          description: `${description} (Attempt ${attemptCount + 1}/4)`,
-          variant: "destructive",
-          action: (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleManualRetry(operationKey, serverId, 'connect')}
-              className="ml-2"
-            >
-              Retry
-            </Button>
-          ),
-        });
+        description = "Invalid credentials. Please check your username and password.";
+      } else if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
+        title = "Server Not Found";
+        description = "The server URL appears to be incorrect. Please verify the URL.";
       } else {
-        toast({
-          title,
-          description,
-        variant: "destructive",
-      });
+        action = (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleRetry(serverId, 'connect')}
+            className="ml-2"
+          >
+            Retry
+          </Button>
+        );
       }
+      
+      toast({
+        title,
+        description,
+        variant: "destructive",
+        action,
+      });
     },
     onSettled: () => {
       setConnectingId(null);
@@ -672,22 +580,16 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
   const disconnectServerMutation = useMutation({
     mutationFn: async (serverId: number) => {
       setDisconnectingId(serverId);
-      const operationKey = `disconnect-${serverId}`;
       
-      return await retryWithBackoff(
-        async () => {
-          const res = await fetch(`/api/fhir/servers/${serverId}/deactivate`, { method: 'POST' });
-          if (!res.ok) {
-            const errorText = await res.text();
-            const errorData = errorText ? JSON.parse(errorText) : { error: 'Failed to deactivate server' };
-            throw new Error(errorData.error || errorText || 'Failed to deactivate server');
-          }
-          return await res.json();
-        },
-        3, // maxRetries
-        1000, // baseDelay
-        operationKey
-      );
+      return await performConnection(async () => {
+        const res = await fetch(`/api/fhir/servers/${serverId}/deactivate`, { method: 'POST' });
+        if (!res.ok) {
+          const errorText = await res.text();
+          const errorData = errorText ? JSON.parse(errorText) : { error: 'Failed to deactivate server' };
+          throw new Error(errorData.error || errorText || 'Failed to deactivate server');
+        }
+        return await res.json();
+      });
     },
     onMutate: async (serverId: number) => {
       // Cancel any outgoing refetches to avoid race conditions
@@ -717,11 +619,15 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
           query.queryKey[0] === "/api/fhir/connection/test"
       });
       
-      const disconnectedServer = existingServers?.find((s: any) => s.id === serverId);
+      // Invalidate validation settings to trigger reload with new server configuration
+      queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+      
+      const disconnectedServer = (existingServers as any[])?.find((s: any) => s.id === serverId);
       toast({
-        title: "Server Disconnected Successfully",
-        description: `Successfully disconnected from "${disconnectedServer?.name || 'Unknown'}" FHIR server.`,
+        title: "🔌 Server Disconnected Successfully",
+        description: `Successfully disconnected from "${disconnectedServer?.name || 'Unknown'}" FHIR server. You can connect to a different server or configure a new one.`,
         variant: "default",
+        duration: 4000,
       });
       
       // Force refresh using the shared hook
@@ -735,58 +641,53 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
         predicate: (query) => query.queryKey[0] === "/api/fhir/servers" 
       });
       
-      // Extract detailed error information
-      const errorData = err.response?.data || err;
+      // Invalidate validation settings to ensure consistency
+      queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+      
+      // Enhanced error handling with better user feedback
+      const errorData = (err as any).response?.data || err;
       const errorMessage = errorData.error || errorData.message || err.message || "Failed to disconnect from server";
-      const errorType = errorData.type || 'UnknownError';
-      const isDatabaseError = createErrorData.isDatabaseError || false;
       
-      // Provide specific error messages based on error type
+      // Determine error type for better user guidance
       let title = "Disconnection Failed";
-      let description = createErrorMessage;
+      let description = errorMessage;
+      let action: React.ReactNode = undefined;
       
-      if (isDatabaseError) {
-        title = "Database Connection Issue";
-        description = "The server disconnection may not persist due to database connectivity issues. Please check your database connection.";
-      } else if (errorType === 'NotFoundError') {
+      if (errorMessage.includes('timeout') || errorMessage.includes('ECONNREFUSED')) {
+        title = "Server Unreachable";
+        description = "Unable to communicate with the server. The disconnection may have succeeded on the server side.";
+        action = (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleRetry(serverId, 'disconnect')}
+            className="ml-2"
+          >
+            Retry
+          </Button>
+        );
+      } else if (errorMessage.includes('404') || errorMessage.includes('Not Found')) {
         title = "Server Not Found";
-        description = "The server you're trying to disconnect from no longer exists. Please refresh the page.";
-      } else if (createErrorType === 'NetworkError') {
-        title = "Network Error";
-        description = "Unable to communicate with the server. Please check your network connection.";
-      }
-      
-      // Check if this is a retryable error and show retry option
-        const connectErrorData = (err as any).response?.data || err;
-        const connectErrorType = connectErrorData.type || 'UnknownError';
-        const isRetryableError = !['ValidationError', 'NotFoundError', 'AuthenticationError'].includes(connectErrorType);
-      const operationKey = `disconnect-${serverId}`;
-      const attemptCount = retryAttempts[operationKey] || 0;
-      
-      if (isRetryableError && attemptCount < 3) {
-        // Show retry option for retryable errors
-      toast({
-          title,
-          description: `${description} (Attempt ${attemptCount + 1}/4)`,
-          variant: "destructive",
-          action: (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleManualRetry(operationKey, serverId, 'disconnect')}
-              className="ml-2"
-            >
-              Retry
-            </Button>
-          ),
-        });
+        description = "The server no longer exists. The disconnection may have already occurred.";
       } else {
-        toast({
-          title,
-          description,
-        variant: "destructive",
-      });
+        action = (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleRetry(serverId, 'disconnect')}
+            className="ml-2"
+          >
+            Retry
+          </Button>
+        );
       }
+      
+      toast({
+        title,
+        description,
+        variant: "destructive",
+        action,
+      });
     },
     onSettled: () => {
       setDisconnectingId(null);
@@ -820,8 +721,7 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
   const handleAddNewServer = () => {
     // Check if any operations are pending
     const isAnyOperationPending = createServerMutation.isPending || updateServerMutation.isPending || 
-      deleteServerMutation.isPending || connectingId !== null || disconnectingId !== null ||
-      Object.values(isRetrying).some(Boolean);
+      deleteServerMutation.isPending || connectingId !== null || disconnectingId !== null;
     
     if (isAnyOperationPending) {
       toast({
@@ -842,8 +742,7 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
   const handleEditServer = (server: FhirServer) => {
     // Check if any operations are pending
     const isAnyOperationPending = createServerMutation.isPending || updateServerMutation.isPending || 
-      deleteServerMutation.isPending || connectingId !== null || disconnectingId !== null ||
-      Object.values(isRetrying).some(Boolean);
+      deleteServerMutation.isPending || connectingId !== null || disconnectingId !== null;
     
     if (isAnyOperationPending) {
       toast({
@@ -895,15 +794,16 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
       const result = await testConnectionMutation.mutateAsync(testUrl);
       if (result.connected) {
         toast({
-          title: "Connection Test Successful",
-          description: `Successfully connected to FHIR ${result.version || 'R4'} server at ${testUrl}`,
+          title: "✅ Connection Test Successful",
+          description: `Successfully connected to FHIR ${result.version || 'R4'} server at ${testUrl}. You can now save this server configuration.`,
           variant: "default",
+          duration: 5000,
         });
       } else {
         // Enhanced error handling for connection test failures
         const errorMessage = result.error || "Unable to connect to server";
         let title = "Connection Failed";
-        let description = createErrorMessage;
+        let description = errorMessage;
         
         // Provide specific error messages based on error type
         if (errorMessage.includes('timeout') || errorMessage.includes('ECONNREFUSED')) {
@@ -1060,18 +960,13 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
             </div>
             
             <div className="space-y-3">
-              {existingServers?.sort((a, b) => a.name.localeCompare(b.name)).map((server) => {
+              {(existingServers as any[])?.sort((a: any, b: any) => a.name.localeCompare(b.name)).map((server: any) => {
                 const isConnecting = connectingId === server.id;
                 const isDisconnecting = disconnectingId === server.id;
-                const connectRetryAttempts = retryAttempts[`connect-${server.id}`] || 0;
-                const disconnectRetryAttempts = retryAttempts[`disconnect-${server.id}`] || 0;
-                const hasRetryError = retryErrors[`connect-${server.id}`] || retryErrors[`disconnect-${server.id}`];
-                const isRetryingConnect = isRetrying[`connect-${server.id}`] || false;
-                const isRetryingDisconnect = isRetrying[`disconnect-${server.id}`] || false;
+                // Simplified state tracking
                 
-                // Comprehensive loading state check
+                // Simplified loading state check
                 const isAnyOperationPending = isConnecting || isDisconnecting || 
-                  isRetryingConnect || isRetryingDisconnect ||
                   createServerMutation.isPending || updateServerMutation.isPending || 
                   deleteServerMutation.isPending;
 
@@ -1084,20 +979,11 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
                         <div>
                             <h4 className="font-medium flex items-center gap-2">
                               {server.name}
-                              {(isConnecting || isDisconnecting || isRetryingConnect || isRetryingDisconnect) && (
+                              {(isConnecting || isDisconnecting) && (
                                 <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                              )}
-                              {hasRetryError && !isRetryingConnect && !isRetryingDisconnect && (
-                                <AlertTriangle className="h-3 w-3 text-orange-500" />
                               )}
                             </h4>
                           <p className="text-sm text-gray-600">{server.url}</p>
-                            {(connectRetryAttempts > 0 || disconnectRetryAttempts > 0) && (
-                              <p className="text-xs text-orange-600">
-                                Retry attempts: {connectRetryAttempts + disconnectRetryAttempts}
-                                {(isRetryingConnect || isRetryingDisconnect) && " (Retrying...)"}
-                              </p>
-                            )}
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1135,12 +1021,12 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
                               disabled={isAnyOperationPending}
                               className="flex items-center gap-1 text-orange-600 hover:text-orange-700 disabled:opacity-50"
                             >
-                              {(isDisconnecting || isRetryingDisconnect) ? (
+                              {isDisconnecting ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
                             <PowerOff className="h-3 w-3" />
                               )}
-                              {(isDisconnecting || isRetryingDisconnect) ? "Disconnecting..." : "Disconnect"}
+                              {isDisconnecting ? "Disconnecting..." : "Disconnect"}
                           </Button>
                         ) : (
                           <Button 
@@ -1160,12 +1046,12 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
                               disabled={isAnyOperationPending}
                               className="flex items-center gap-1 text-green-600 hover:text-green-700 disabled:opacity-50"
                             >
-                              {(isConnecting || isRetryingConnect) ? (
+                              {isConnecting ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
                             <Power className="h-3 w-3" />
                               )}
-                              {(isConnecting || isRetryingConnect) ? "Connecting..." : "Connect"}
+                              {isConnecting ? "Connecting..." : "Connect"}
                           </Button>
                         )}
                         <Button 
@@ -1198,7 +1084,7 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
                 </Card>
                 );
               })}
-              {(!existingServers || existingServers.length === 0) && (
+              {(!existingServers || (existingServers as any[]).length === 0) && (
                 <div className="text-center py-8 text-gray-500">
                   <Server className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                   <p>No FHIR servers configured</p>

@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { FhirClient } from '../fhir/fhir-client.js';
-import { DatabaseStorage } from '../../storage.js';
+import { DatabaseStorage } from '../../storage';
 import { 
   FhirServerStats, 
   ValidationStats, 

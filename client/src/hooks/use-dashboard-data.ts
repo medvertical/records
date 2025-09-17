@@ -19,6 +19,7 @@ interface UseDashboardDataOptions {
   enableRealTimeUpdates?: boolean;
   refetchInterval?: number;
   enableCaching?: boolean;
+  enabled?: boolean;
 }
 
 interface UseDashboardDataReturn {
@@ -55,8 +56,12 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
   const {
     enableRealTimeUpdates = true,
     refetchInterval = 600000, // 10 minutes (reduced frequency for better performance)
-    enableCaching = true
+    enableCaching = true,
+    enabled = true
   } = options;
+
+  const isEnabled = Boolean(enabled);
+  const shouldRefetch = isEnabled && enableRealTimeUpdates;
 
   const queryClient = useQueryClient();
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -99,9 +104,10 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     refetch: refetchFhirServer
   } = useQuery({
     queryKey: ['/api/dashboard/fhir-server-stats'],
-    refetchInterval: enableRealTimeUpdates ? refetchInterval : false,
+    refetchInterval: shouldRefetch ? refetchInterval : false,
     staleTime: enableCaching ? 30 * 60 * 1000 : 0, // 30 minutes (extended for better performance)
     keepPreviousData: true, // Prevent flashing during refetch
+    enabled: isEnabled,
     onSuccess: () => {
       setLastUpdated(new Date());
       setIsStale(false);
@@ -119,9 +125,10 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     refetch: refetchValidation
   } = useQuery({
     queryKey: ['/api/dashboard/validation-stats'],
-    refetchInterval: enableRealTimeUpdates ? refetchInterval : false,
+    refetchInterval: shouldRefetch ? refetchInterval : false,
     staleTime: enableCaching ? 2 * 60 * 1000 : 0, // 2 minutes (extended for better performance)
     keepPreviousData: true, // Prevent flashing during refetch
+    enabled: isEnabled,
     onSuccess: () => {
       setLastUpdated(new Date());
       setIsStale(false);
@@ -139,9 +146,10 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     refetch: refetchCombined
   } = useQuery({
     queryKey: ['/api/dashboard/combined'],
-    refetchInterval: enableRealTimeUpdates ? refetchInterval : false,
+    refetchInterval: shouldRefetch ? refetchInterval : false,
     staleTime: enableCaching ? 2 * 60 * 1000 : 0, // 2 minutes (extended for better performance)
     keepPreviousData: true, // Prevent flashing during refetch
+    enabled: isEnabled,
     onSuccess: () => {
       setLastUpdated(new Date());
       setIsStale(false);
@@ -159,9 +167,10 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     refetch: refetchLegacy
   } = useQuery({
     queryKey: ['/api/dashboard/stats'],
-    refetchInterval: enableRealTimeUpdates ? refetchInterval : false,
+    refetchInterval: shouldRefetch ? refetchInterval : false,
     staleTime: enableCaching ? 2 * 60 * 1000 : 0, // 2 minutes (extended for better performance)
     keepPreviousData: true, // Prevent flashing during refetch
+    enabled: isEnabled,
     onSuccess: () => {
       setLastUpdated(new Date());
       setIsStale(false);

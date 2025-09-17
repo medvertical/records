@@ -1,28 +1,20 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useServerData } from "@/hooks/use-server-data";
+import type { ServerStatus } from "@/hooks/use-server-data";
 import { cn, formatCount } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import ServerConnectionModal from "@/components/settings/server-connection-modal";
 
 import { 
   Database, 
   ChartPie, 
   Settings, 
-  HospitalIcon,
   Package,
-  Server,
-  RefreshCw
+  Server
 } from "lucide-react";
-
-interface ServerStatus {
-  connected: boolean;
-  version?: string;
-  error?: string;
-}
 
 const navigationItems = [
   { href: "/", label: "Dashboard", icon: ChartPie },
@@ -57,12 +49,14 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
   }, [location]);
   
   const { servers, serverStatus, activeServer, isLoading, refreshServerData } = useServerData();
+  const isServerConnected = Boolean(activeServer && serverStatus?.connected);
   
   // Debug logging for server status changes
   console.log('[Sidebar] Server data:', { 
     serversCount: servers?.length, 
     activeServer: activeServer?.name, 
     serverStatus: serverStatus?.connected,
+    isServerConnected,
     isLoading 
   });
   
@@ -91,9 +85,11 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
 
   const { data: resourceCounts } = useQuery<Record<string, number>>({
     queryKey: ["/api/fhir/resource-counts"],
-    // Keep previous data during refetch to prevent flashing
-    keepPreviousData: true,
+    // Don't keep previous data to ensure UI updates immediately when server status changes
+    keepPreviousData: false,
     staleTime: 0,
+    // Only fetch resource counts when there's an active server
+    enabled: isServerConnected,
   });
 
   if (isMobile) {
@@ -112,14 +108,18 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
           "fixed left-0 top-16 h-full w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out z-40 md:hidden",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}>
-          <SidebarContent 
-            serverStatus={serverStatus} 
-            resourceCounts={resourceCounts} 
-            activeServer={activeServer}
-            location={location}
-            onItemClick={() => onToggle && onToggle()}
-            onChangeServer={() => setIsServerModalOpen(true)}
-          />
+        <SidebarContent 
+          serverStatus={serverStatus} 
+          resourceCounts={resourceCounts} 
+          activeServer={activeServer}
+          servers={servers}
+          isLoading={isLoading}
+          refreshServerData={refreshServerData}
+          location={location}
+          isServerConnected={isServerConnected}
+          onItemClick={() => onToggle && onToggle()}
+          onChangeServer={() => setIsServerModalOpen(true)}
+        />
         </aside>
       </>
     );
@@ -135,7 +135,11 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
           serverStatus={serverStatus} 
           resourceCounts={resourceCounts} 
           activeServer={activeServer}
+          servers={servers}
+          isLoading={isLoading}
+          refreshServerData={refreshServerData}
           location={location}
+          isServerConnected={isServerConnected}
           onChangeServer={() => setIsServerModalOpen(true)}
         />
       </div>
@@ -153,17 +157,49 @@ function SidebarContent({
   serverStatus, 
   resourceCounts, 
   activeServer,
+  servers,
+  isLoading,
+  refreshServerData,
   location, 
+  isServerConnected,
   onItemClick,
   onChangeServer
 }: {
   serverStatus?: ServerStatus;
   resourceCounts?: Record<string, number>;
   activeServer?: any;
+  servers?: any[];
+  isLoading?: boolean;
+  refreshServerData?: () => void;
   location: string;
+  isServerConnected: boolean;
   onItemClick?: () => void;
   onChangeServer?: () => void;
 }) {
+  // Determine connection state for UI gating
+  const isCheckingConnection = Boolean(activeServer && serverStatus === undefined);
+  const connectionLabel = (isLoading || isCheckingConnection)
+    ? "Checking..."
+    : isServerConnected
+      ? "Connected"
+      : activeServer
+        ? "Disconnected"
+        : "No Server";
+  const indicatorColor = (isLoading || isCheckingConnection)
+    ? "bg-yellow-500"
+    : isServerConnected
+      ? "bg-fhir-success"
+      : activeServer
+        ? "bg-fhir-error"
+        : "bg-fhir-error";
+  const connectionTextStyle = (isLoading || isCheckingConnection)
+    ? "text-yellow-600"
+    : isServerConnected
+      ? "text-fhir-success"
+      : activeServer
+        ? "text-fhir-error"
+        : "text-fhir-error";
+
   // Get the current location to make the component reactive to URL changes
   const [currentLocation] = useLocation();
   const [currentUrl, setCurrentUrl] = useState(window.location.href);
@@ -203,23 +239,13 @@ function SidebarContent({
           <div className="flex items-center space-x-1">
             <div className={cn(
               "w-2 h-2 rounded-full transition-colors duration-200",
-              activeServer && serverStatus?.connected 
-                ? "bg-fhir-success" 
-                : activeServer 
-                  ? "bg-yellow-500" 
-                  : "bg-fhir-error"
+              indicatorColor
             )} />
             <span className={cn(
               "text-xs transition-colors duration-200 font-medium",
-              activeServer && serverStatus?.connected 
-                ? "text-fhir-success" 
-                : activeServer 
-                  ? "text-yellow-600" 
-                  : "text-fhir-error"
+              connectionTextStyle
             )}>
-              {isLoading ? "Checking..." : 
-               activeServer && serverStatus?.connected ? "Connected" : 
-               activeServer ? "Configured" : "No Server"}
+              {connectionLabel}
             </span>
           </div>
         </div>
@@ -234,11 +260,6 @@ function SidebarContent({
               ) : (
                 <>
                   {activeServer?.name || "No Server"}
-                  {activeServer && (
-                    <span className="text-xs text-gray-400 font-normal">
-                      (ID: {activeServer.id})
-                    </span>
-                  )}
                 </>
               )}
               {isLoading && activeServer && (
@@ -251,11 +272,6 @@ function SidebarContent({
               ) : (
                 <>
                   {activeServer?.url || "Not connected"}
-                  {servers && servers.length > 1 && (
-                    <span className="ml-1 text-gray-400">
-                      ({servers.length} servers)
-                    </span>
-                  )}
                 </>
               )}
             </div>
@@ -265,34 +281,9 @@ function SidebarContent({
                   🔄 Switching...
                 </div>
               </div>
-            ) : activeServer && serverStatus ? (
-              <div className="flex items-center gap-2 mt-1">
-                <div className={cn(
-                  "text-xs px-2 py-1 rounded-full font-medium",
-                  serverStatus.connected 
-                    ? "bg-green-100 text-green-700" 
-                    : "bg-red-100 text-red-700"
-                )}>
-                  {serverStatus.connected ? "✓ Connected" : "✗ Failed"}
-                </div>
-                {serverStatus.version && (
-                  <span className="text-xs text-gray-500">
-                    FHIR {serverStatus.version}
-                  </span>
-                )}
-              </div>
             ) : null}
           </div>
           <div className="flex items-center gap-1">
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={refreshServerData}
-              className="h-auto p-1 text-gray-500 hover:text-fhir-blue hover:bg-gray-100"
-              title="Refresh connection status"
-            >
-              <RefreshCw className="h-3 w-3" />
-            </Button>
             <Button 
               variant="ghost" 
               size="sm"
@@ -308,78 +299,120 @@ function SidebarContent({
 
       {/* Navigation Menu */}
       <nav className="flex-1 p-4">
-        <ul className="space-y-2">
-          {navigationItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location === item.href || 
-              (item.href === "/" && location === "/dashboard") ||
-              (item.href === "/resources" && location.startsWith("/resources"));
-            
-            return (
-              <li key={item.href}>
-                <Link href={item.href}>
-                  <div 
-                    className={cn(
-                      "flex items-center space-x-3 p-2 rounded-lg font-medium transition-colors cursor-pointer",
-                      isActive 
-                        ? "text-fhir-blue bg-blue-50" 
-                        : "text-gray-700 hover:bg-gray-100"
-                    )}
-                    onClick={onItemClick}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span>{item.label}</span>
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-
-        {/* Resource Types Quick Access */}
-        <div className="mt-8">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            Quick Access
-          </h3>
-          <ul className="space-y-1">
-            {quickAccessItems.map((item) => {
-              // Check if this resource type is currently selected
-              const url = new URL(currentUrl);
-              const selectedType = url.searchParams.get('type');
-              const isSelected = selectedType === item.resourceType;
+        {!isServerConnected ? (
+          <div className="text-center py-8">
+            <Server className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-sm font-medium text-gray-500 mb-2">
+              {activeServer ? "Server Connection Lost" : "No Server Connected"}
+            </h3>
+            <p className="text-xs text-gray-400 mb-4">
+              {activeServer 
+                ? "Reconnect to the FHIR server to access resources and validation features."
+                : "Connect to a FHIR server to access resources and validation features."}
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={onChangeServer}
+                className="w-full"
+              >
+                <Server className="w-4 h-4 mr-2" />
+                {activeServer ? "Reconnect Server" : "Connect Server"}
+              </Button>
+              {activeServer && refreshServerData && (
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  className="w-full"
+                  onClick={refreshServerData}
+                >
+                  Retry Connection
+                </Button>
+              )}
+              {activeServer && serverStatus?.error && (
+                <span className="text-xs text-fhir-error">
+                  {serverStatus.error}
+                </span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {navigationItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location === item.href || 
+                (item.href === "/" && location === "/dashboard") ||
+                (item.href === "/resources" && location.startsWith("/resources"));
               
               return (
                 <li key={item.href}>
                   <Link href={item.href}>
                     <div 
                       className={cn(
-                        "flex items-center justify-between p-2 text-sm rounded transition-colors cursor-pointer",
-                        isSelected 
-                          ? "text-fhir-blue bg-blue-50 font-medium" 
-                          : "text-gray-600 hover:bg-gray-100"
+                        "flex items-center space-x-3 p-2 rounded-lg font-medium transition-colors cursor-pointer",
+                        isActive 
+                          ? "text-fhir-blue bg-blue-50" 
+                          : "text-gray-700 hover:bg-gray-100"
                       )}
                       onClick={onItemClick}
                     >
+                      <Icon className="w-4 h-4" />
                       <span>{item.label}</span>
-                      {resourceCounts && resourceCounts[item.resourceType] ? (
-                        <span className={cn(
-                          "text-xs font-medium",
-                          isSelected 
-                            ? "text-blue-600" 
-                            : "text-gray-400"
-                        )}>
-                          {formatCount(resourceCounts[item.resourceType])}
-                        </span>
-                      ) : (
-                        <div className="w-4 h-4 border border-gray-300 border-t-transparent rounded-full animate-spin"></div>
-                      )}
                     </div>
                   </Link>
                 </li>
               );
             })}
           </ul>
-        </div>
+        )}
+
+        {/* Resource Types Quick Access */}
+        {isServerConnected && (
+          <div className="mt-8">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+              Quick Access
+            </h3>
+            <ul className="space-y-1">
+              {quickAccessItems.map((item) => {
+                // Check if this resource type is currently selected
+                const url = new URL(currentUrl);
+                const selectedType = url.searchParams.get('type');
+                const isSelected = selectedType === item.resourceType;
+                
+                return (
+                  <li key={item.href}>
+                    <Link href={item.href}>
+                      <div 
+                        className={cn(
+                          "flex items-center justify-between p-2 text-sm rounded transition-colors cursor-pointer",
+                          isSelected 
+                            ? "text-fhir-blue bg-blue-50 font-medium" 
+                            : "text-gray-600 hover:bg-gray-100"
+                        )}
+                        onClick={onItemClick}
+                      >
+                        <span>{item.label}</span>
+                        {resourceCounts && resourceCounts[item.resourceType] ? (
+                          <span className={cn(
+                            "text-xs font-medium",
+                            isSelected 
+                              ? "text-blue-600" 
+                              : "text-gray-400"
+                          )}>
+                            {formatCount(resourceCounts[item.resourceType])}
+                          </span>
+                        ) : (
+                          <div className="w-4 h-4 border border-gray-300 border-t-transparent rounded-full animate-spin"></div>
+                        )}
+                      </div>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
       </nav>
 
       {/* Settings at Bottom */}

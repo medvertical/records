@@ -6,7 +6,7 @@ import { ValidationStateService } from './validation-state-service.js';
 import { BulkValidationService } from './bulk-validation.js';
 import { FhirClient } from './fhir-client.js';
 import { ValidationEngine } from './validation-engine.js';
-import { storage } from '../storage.js';
+import { storage } from '../../storage';
 
 export interface ValidationSchedule {
   id: string;

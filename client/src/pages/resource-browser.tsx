@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useServerData } from "@/hooks/use-server-data";
 import ResourceSearch from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -114,14 +115,18 @@ export default function ResourceBrowser() {
     return;
   }, []);
 
+  const { activeServer } = useServerData();
+
   const { data: resourceTypes } = useQuery<string[]>({
     queryKey: ["/api/fhir/resource-types"],
+    // Only fetch resource types when there's an active server
+    enabled: !!activeServer,
   });
-
-
 
   const { data: resourcesData, isLoading } = useQuery<ResourcesResponse>({
     queryKey: ["/api/fhir/resources", { resourceType, search: searchQuery, page, location }],
+    // Only fetch resources when there's an active server
+    enabled: !!activeServer,
     queryFn: ({ queryKey }) => {
       const [url, params] = queryKey as [string, { resourceType?: string; search?: string; page: number; location: string }];
       const searchParams = new URLSearchParams();

@@ -2,7 +2,7 @@
 // Validation Comparison Service
 // ============================================================================
 
-import { storage } from '../storage.js';
+import { storage } from '../../storage';
 import { ValidationPerformanceService } from './validation-performance-service.js';
 import { ValidationErrorService } from './validation-error-service.js';
 

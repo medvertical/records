@@ -1,5 +1,5 @@
 import { simplifierClient, SimplifierPackage, SimplifierProfile } from './simplifier-client';
-import { storage } from '../storage.js';
+import { storage } from '../../storage';
 import { ValidationProfile, InsertValidationProfile } from '@shared/schema.js';
 import fs from 'fs/promises';
 import path from 'path';

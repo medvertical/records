@@ -1,21 +1,20 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
-import { FhirClient } from "./services/fhir-client.js";
-import { ValidationEngine } from "./services/validation-engine.js";
-import { UnifiedValidationService } from "./services/unified-validation.js";
-import { profileManager } from "./services/profile-manager.js";
-import { RobustValidationService } from "./services/robust-validation.js";
+import { FhirClient } from "./services/fhir/fhir-client";
+import { ValidationEngine } from "./services/validation/validation-engine";
+import { UnifiedValidationService } from "./services/validation/unified-validation";
+import { profileManager } from "./services/fhir/profile-manager";
+import { RobustValidationService } from "./services/validation/robust-validation";
 import { insertFhirServerSchema, insertFhirResourceSchema, insertValidationProfileSchema, type ValidationResult } from "@shared/schema.js";
-import { validationWebSocket, initializeWebSocket } from "./services/websocket-server.js";
 import { z } from "zod";
 
 // Rock Solid Validation Settings imports
-import { getValidationSettingsService } from "./services/validation-settings-service.js";
-import { getValidationSettingsRepository } from "./repositories/validation-settings-repository.js";
-import { getRockSolidValidationEngine } from "./services/rock-solid-validation-engine.js";
-import { getValidationPipeline } from "./services/validation-pipeline.js";
-import { DashboardService } from "./services/dashboard-service.js";
+import { getValidationSettingsService } from "./services/validation/validation-settings-service";
+import { getValidationSettingsRepository } from "./repositories/validation-settings-repository";
+import { getRockSolidValidationEngine } from "./services/validation/rock-solid-validation-engine";
+import { getValidationPipeline } from "./services/validation/validation-pipeline";
+import { DashboardService } from "./services/dashboard/dashboard-service";
 import type { ValidationSettings, ValidationSettingsUpdate } from "@shared/validation-settings.js";
 import { BUILT_IN_PRESETS } from "@shared/validation-settings.js";
 
@@ -238,9 +237,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const settingsService = getValidationSettingsService();
       const savedSettings = await settingsService.getActiveSettings();
-      if (savedSettings && unifiedValidationService) {
+    if (savedSettings && unifiedValidationService) {
         console.log('[Routes] Loading saved validation settings from rock-solid service');
-        const config = {
+      const config = {
           enableStructuralValidation: savedSettings.structural?.enabled ?? true,
           enableProfileValidation: savedSettings.profile?.enabled ?? true,
           enableTerminologyValidation: savedSettings.terminology?.enabled ?? true,
@@ -251,9 +250,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           profiles: savedSettings.customRules as string[] || [],
           terminologyServers: savedSettings.terminologyServers as any[] || [],
           profileResolutionServers: savedSettings.profileResolutionServers as any[] || []
-        };
-        unifiedValidationService.updateConfig(config);
-        console.log('[Routes] Applied saved validation settings to services');
+      };
+      unifiedValidationService.updateConfig(config);
+      console.log('[Routes] Applied saved validation settings to services');
       }
     } catch (error) {
       console.warn('[Routes] Failed to load validation settings from service:', error);
@@ -285,6 +284,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const id = parseInt(req.params.id);
       await storage.updateFhirServerStatus(id, true);
       
+      // Notify validation settings service about server configuration change
+      try {
+        const settingsService = getValidationSettingsService();
+        settingsService.emit('serverConfigurationChanged', { 
+          serverId: id.toString(), 
+          serverType: 'terminology' 
+        });
+        settingsService.emit('serverConfigurationChanged', { 
+          serverId: id.toString(), 
+          serverType: 'profile' 
+        });
+      } catch (error) {
+        console.warn('[Routes] Failed to notify validation settings service about server activation:', error);
+      }
+      
       // Reinitialize FHIR client with new server
       const servers = await storage.getFhirServers();
       const activeServer = servers.find(s => s.id === id);
@@ -298,8 +312,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           const settingsService = getValidationSettingsService();
           const savedSettings = await settingsService.getActiveSettings();
-          if (savedSettings && unifiedValidationService) {
-            const config = {
+        if (savedSettings && unifiedValidationService) {
+          const config = {
               enableStructuralValidation: savedSettings.structural?.enabled ?? true,
               enableProfileValidation: savedSettings.profile?.enabled ?? true,
               enableTerminologyValidation: savedSettings.terminology?.enabled ?? true,
@@ -310,8 +324,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               profiles: savedSettings.customRules as string[] || [],
               terminologyServers: savedSettings.terminologyServers as any[] || [],
               profileResolutionServers: savedSettings.profileResolutionServers as any[] || []
-            };
-            unifiedValidationService.updateConfig(config);
+          };
+          unifiedValidationService.updateConfig(config);
           }
         } catch (error) {
           console.warn('[Routes] Failed to reapply validation settings after server activation:', error);
@@ -328,6 +342,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = parseInt(req.params.id);
       await storage.updateFhirServerStatus(id, false);
+      
+      // Notify validation settings service about server configuration change
+      try {
+        const settingsService = getValidationSettingsService();
+        settingsService.emit('serverConfigurationChanged', { 
+          serverId: id.toString(), 
+          serverType: 'terminology' 
+        });
+        settingsService.emit('serverConfigurationChanged', { 
+          serverId: id.toString(), 
+          serverType: 'profile' 
+        });
+      } catch (error) {
+        console.warn('[Routes] Failed to notify validation settings service about server deactivation:', error);
+      }
       
       // Clear the FHIR client since no server is active
       fhirClient = null as any;
@@ -357,6 +386,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         authConfig
       });
 
+      // Notify validation settings service about server configuration change
+      try {
+        const settingsService = getValidationSettingsService();
+        settingsService.emit('serverConfigurationChanged', { 
+          serverId: id.toString(), 
+          serverType: 'terminology' 
+        });
+        settingsService.emit('serverConfigurationChanged', { 
+          serverId: id.toString(), 
+          serverType: 'profile' 
+        });
+      } catch (error) {
+        console.warn('[Routes] Failed to notify validation settings service about server update:', error);
+      }
+
       res.json(updatedServer);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -376,6 +420,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       await storage.deleteFhirServer(id);
+      
+      // Notify validation settings service about server configuration change
+      try {
+        const settingsService = getValidationSettingsService();
+        settingsService.emit('serverConfigurationChanged', { 
+          serverId: id.toString(), 
+          serverType: 'terminology' 
+        });
+        settingsService.emit('serverConfigurationChanged', { 
+          serverId: id.toString(), 
+          serverType: 'profile' 
+        });
+      } catch (error) {
+        console.warn('[Routes] Failed to notify validation settings service about server deletion:', error);
+      }
+      
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -446,6 +506,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: true,
         authConfig
       });
+
+      // Notify validation settings service about new server configuration
+      try {
+        const settingsService = getValidationSettingsService();
+        settingsService.emit('serverConfigurationChanged', { 
+          serverId: newServer.id.toString(), 
+          serverType: 'terminology' 
+        });
+        settingsService.emit('serverConfigurationChanged', { 
+          serverId: newServer.id.toString(), 
+          serverType: 'profile' 
+        });
+      } catch (error) {
+        console.warn('[Routes] Failed to notify validation settings service about server creation:', error);
+      }
 
       // Update the global FHIR client
       fhirClient = new FhirClient(url);
@@ -974,9 +1049,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log('Validation stopped during initialization phase');
           globalValidationState.isRunning = false;
           globalValidationState.isPaused = false;
-          if (validationWebSocket) {
-            validationWebSocket.broadcastValidationStopped();
-          }
           return res.json({ message: "Validation stopped during initialization" });
         }
         
@@ -1003,24 +1075,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Send "running" status now that initialization is complete
-      if (validationWebSocket) {
-        validationWebSocket.broadcastValidationStart();
-      }
-      
-      // Broadcast initializing status via WebSocket
-      if (validationWebSocket) {
-        validationWebSocket.broadcastProgress({
-          totalResources: 0,
-          processedResources: 0,
-          validResources: 0,
-          errorResources: 0,
-          currentResourceType: 'Initializing...',
-          startTime: new Date(),
-          estimatedTimeRemaining: undefined,
-          isComplete: false,
-          errors: []
-        });
-      }
+      // Broadcast initializing status via SSE
+      // Note: SSE broadcasts are handled by the validation service
 
       // Start real FHIR server validation using authentic data
       console.log('Starting real FHIR server validation with authentic data from Fire.ly server...');
@@ -1034,20 +1090,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('NEW START: Reset all counters to 0 (processedResources=0, validResources=0, errorResources=0)');
       
       // Broadcast RESET progress immediately to ensure UI shows 0/617442
-      if (validationWebSocket) {
-        validationWebSocket.broadcastProgress({
-          totalResources: realTotalResources,
-          processedResources: 0, // RESET to 0
-          validResources: 0, // RESET to 0 
-          errorResources: 0, // RESET to 0
-          currentResourceType: 'Starting validation...',
-          startTime: startTime.toISOString(),
-          estimatedTimeRemaining: undefined,
-          isComplete: false,
-          errors: [],
-          status: 'running' as const
-        });
-      }
+      // SSE progress broadcast handled by validation service
 
       // Process resource types with real FHIR server data (EXCLUDING types with >50k resources)
       for (let i = 0; i < resourceTypes.length; i++) {
@@ -1195,39 +1238,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 }
               });
               
-              // Broadcast real progress with AUTHENTIC total resource count
-              if (validationWebSocket && processedResources % 10 === 0) {
-                // Calculate estimated time remaining
-                let estimatedTimeRemaining = undefined;
-                if (processedResources > 0) {
-                  const elapsedMs = Date.now() - startTime.getTime();
-                  const processingRate = processedResources / (elapsedMs / 1000); // resources per second
-                  const remainingResources = realTotalResources - processedResources;
-                  estimatedTimeRemaining = Math.round((remainingResources / processingRate) * 1000); // in milliseconds
-                }
-                
-                // Throttle WebSocket updates to prevent UI flashing
-                // Only broadcast every 100 processed resources or every 5 seconds
-                const shouldBroadcast = processedResources % 100 === 0 || 
-                  (Date.now() - (globalValidationState.lastBroadcastTime || 0)) > 5000;
-                
-                if (shouldBroadcast) {
-                  const progress = {
-                    totalResources: realTotalResources, // REAL total from FHIR server (617,442+)
-                    processedResources,
-                    validResources,
-                    errorResources,
-                    currentResourceType: resourceType,
-                    startTime: startTime.toISOString(),
-                    estimatedTimeRemaining,
-                    isComplete: false,
-                    errors: errors.slice(-10), // Last 10 errors
-                    status: 'running' as const
-                  };
-                  validationWebSocket.broadcastProgress(progress);
-                  globalValidationState.lastBroadcastTime = Date.now();
-                }
-              }
+              // SSE progress updates handled by validation service
             }
             
             offset += batchSize;
@@ -1284,33 +1295,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         globalValidationState.isPaused = false;
         globalValidationState.resumeData = null;
         
-        if (validationWebSocket) {
-          validationWebSocket.broadcastValidationComplete(finalProgress);
-        }
+        // SSE completion broadcast handled by validation service
       } else if (globalValidationState.isPaused) {
         console.log('Validation was paused - not broadcasting completion');
-        // Broadcast paused state to ensure UI shows correct status
-        if (validationWebSocket) {
-          validationWebSocket.broadcastProgress({
-            totalResources: realTotalResources,
-            processedResources,
-            validResources,
-            errorResources,
-            currentResourceType: globalValidationState.resumeData?.resourceType || 'Paused',
-            startTime: startTime.toISOString(),
-            isComplete: false,
-            errors: errors.slice(-10),
-            status: 'paused' as const
-          });
-        }
+        // SSE paused state broadcast handled by validation service
       }
 
           console.log("Background validation started successfully");
         } catch (error: any) {
           console.error('Background validation startup error:', error);
-          if (validationWebSocket) {
-            validationWebSocket.broadcastError('Failed to start validation: ' + error.message);
-          }
+          // SSE error broadcast handled by validation service
         }
       });
     } catch (error: any) {
@@ -1446,10 +1440,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       globalValidationState.isPaused = true; // Set paused state immediately
       console.log('Validation pause requested - setting paused state immediately');
       
-      // Broadcast paused state to ensure UI shows correct status
-      if (validationWebSocket) {
-        validationWebSocket.broadcastValidationPaused();
-      }
+      // SSE paused state broadcast handled by validation service
       
       res.json({ message: "Validation paused successfully" });
     } catch (error: any) {
@@ -1473,25 +1464,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log('Resuming validation from saved state:', resumeData);
       
-      // Broadcast resume via WebSocket
-      if (validationWebSocket) {
-        // Get the actual total resources from FHIR server
-        const fhirServerStats = await dashboardService.getFhirServerStats();
-        const totalResources = fhirServerStats.totalResources;
-        
-        validationWebSocket.broadcastValidationStart();
-        validationWebSocket.broadcastProgress({
-          totalResources,
-          processedResources: resumeData.processedResources,
-          validResources: resumeData.validResources,
-          errorResources: resumeData.errorResources,
-          currentResourceType: `Resuming ${resumeData.resourceType}...`,
-          startTime: resumeData.startTime,
-          isComplete: false,
-          errors: resumeData.errors.slice(-10),
-          status: 'running' as const
-        });
-      }
+      // Broadcast resume via SSE
+      // SSE resume broadcasts handled by validation service
 
       res.json({ message: "Validation resumed successfully" });
       
@@ -1584,27 +1558,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                         validResources++;
                       }
                       
-                      // Broadcast progress every 100 resources or every 5 seconds
-                      if (validationWebSocket && (processedResources % 100 === 0 || 
-                          (Date.now() - (globalValidationState.lastBroadcastTime || 0)) > 5000)) {
-                        // Get the actual total resources from FHIR server
-                        const fhirServerStats = await dashboardService.getFhirServerStats();
-                        const totalResources = fhirServerStats.totalResources;
-                        
-                        const progress = {
-                          totalResources,
-                          processedResources,
-                          validResources,
-                          errorResources,
-                          currentResourceType: resourceType,
-                          startTime: startTime,
-                          isComplete: false,
-                          errors: errors.slice(-10),
-                          status: 'running' as const
-                        };
-                        validationWebSocket.broadcastProgress(progress);
-                        globalValidationState.lastBroadcastTime = Date.now();
-                      }
+                      // SSE progress updates handled by validation service
                       
                     } catch (validationError) {
                       processedResources++;
@@ -1659,17 +1613,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             startTime
           };
           
-          if (validationWebSocket) {
-            validationWebSocket.broadcastValidationComplete(finalProgress);
-          }
+          // SSE completion broadcast handled by validation service
           
         } catch (error) {
           console.error('Error during resume validation:', error);
           globalValidationState.isRunning = false;
           globalValidationState.isPaused = false;
-          if (validationWebSocket) {
-            validationWebSocket.broadcastError(`Resume validation failed: ${error}`);
-          }
+          // SSE error broadcast handled by validation service
         }
       });
       
@@ -1698,10 +1648,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         robustValidationService.stopValidation();
       }
       
-      // Broadcast validation stopped via WebSocket to clear frontend state
-      if (validationWebSocket) {
-        validationWebSocket.broadcastValidationStopped();
-      }
+      // SSE stopped broadcast handled by validation service
       
       res.json({ message: "Validation stopped successfully" });
     } catch (error: any) {
@@ -2097,9 +2044,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Clear validation service cache and force reload settings to ensure new settings are used
       try {
-        if (unifiedValidationService) {
-          await unifiedValidationService.forceReloadSettings();
-          console.log('[ValidationSettings] Cleared validation service cache and reloaded settings after update');
+      if (unifiedValidationService) {
+        await unifiedValidationService.forceReloadSettings();
+        console.log('[ValidationSettings] Cleared validation service cache and reloaded settings after update');
         }
       } catch (cacheError) {
         console.warn('[ValidationSettings] Failed to clear validation service cache:', cacheError);
@@ -2625,7 +2572,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Validate required parameters
       if (!settings || !sampleResource) {
-        return res.status(400).json({
+        return res.status(400).json({ 
           success: false,
           message: "Settings and sample resource are required",
           error: "MISSING_REQUIRED_PARAMETERS",
@@ -2952,10 +2899,311 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+// ========================================================================
+// Backup and Restore API Endpoints
+// ========================================================================
+
+// GET /api/validation/backups - List all available backups
+app.get("/api/validation/backups", async (req, res) => {
+  try {
+    const settingsService = getValidationSettingsService();
+    const backups = await settingsService.listBackups();
+    
+    res.json({
+      success: true,
+      data: backups,
+      count: backups.length
+    });
+  } catch (error) {
+    console.error('[API] Error listing backups:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to list backups',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// POST /api/validation/backups - Create a new backup
+app.post("/api/validation/backups", async (req, res) => {
+  try {
+    const { description, createdBy, tags } = req.body;
+    const settingsService = getValidationSettingsService();
+    
+    const backupId = await settingsService.createManualBackup(
+      description,
+      createdBy || 'api',
+      tags
+    );
+    
+    res.json({
+      success: true,
+      data: { backupId },
+      message: 'Backup created successfully'
+    });
+  } catch (error) {
+    console.error('[API] Error creating backup:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create backup',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GET /api/validation/backups/:backupId - Get backup details
+app.get("/api/validation/backups/:backupId", async (req, res) => {
+  try {
+    const { backupId } = req.params;
+    const settingsService = getValidationSettingsService();
+    
+    const backups = await settingsService.listBackups();
+    const backup = backups.find(b => b.id === backupId);
+    
+    if (!backup) {
+      return res.status(404).json({
+        success: false,
+        error: 'Backup not found',
+        message: `Backup with ID ${backupId} not found`
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: backup
+    });
+  } catch (error) {
+    console.error('[API] Error getting backup details:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get backup details',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// DELETE /api/validation/backups/:backupId - Delete a backup
+app.delete("/api/validation/backups/:backupId", async (req, res) => {
+  try {
+    const { backupId } = req.params;
+    const settingsService = getValidationSettingsService();
+    
+    await settingsService.deleteBackup(backupId);
+    
+    res.json({
+      success: true,
+      message: 'Backup deleted successfully'
+    });
+  } catch (error) {
+    console.error('[API] Error deleting backup:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete backup',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// POST /api/validation/backups/:backupId/verify - Verify backup integrity
+app.post("/api/validation/backups/:backupId/verify", async (req, res) => {
+  try {
+    const { backupId } = req.params;
+    const settingsService = getValidationSettingsService();
+    
+    const isValid = await settingsService.verifyBackup(backupId);
+    
+    res.json({
+      success: true,
+      data: { isValid },
+      message: isValid ? 'Backup is valid' : 'Backup is invalid or corrupted'
+    });
+  } catch (error) {
+    console.error('[API] Error verifying backup:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to verify backup',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// POST /api/validation/backups/:backupId/restore - Restore from backup
+app.post("/api/validation/backups/:backupId/restore", async (req, res) => {
+  try {
+    const { backupId } = req.params;
+    const { options } = req.body;
+    const settingsService = getValidationSettingsService();
+    
+    await settingsService.restoreFromBackup(backupId, options);
+    
+    res.json({
+      success: true,
+      message: 'Backup restored successfully'
+    });
+  } catch (error) {
+    console.error('[API] Error restoring backup:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to restore backup',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// POST /api/validation/backups/cleanup - Clean up old backups
+app.post("/api/validation/backups/cleanup", async (req, res) => {
+  try {
+    const settingsService = getValidationSettingsService();
+    const deletedCount = await settingsService.cleanupOldBackups();
+    
+    res.json({
+      success: true,
+      data: { deletedCount },
+      message: `Cleaned up ${deletedCount} old backups`
+    });
+  } catch (error) {
+    console.error('[API] Error cleaning up backups:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clean up backups',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// ========================================================================
+// Server-Sent Events (SSE) for Real-time Settings Notifications
+// ========================================================================
+
+  // GET /api/validation/stream - SSE endpoint for real-time validation and settings updates
+  app.get("/api/validation/stream", (req, res) => {
+    // Set SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    // Send initial connection message
+    res.write(`data: ${JSON.stringify({
+      type: 'connected',
+      data: { message: 'Connected to validation stream', timestamp: new Date().toISOString() }
+    })}\n\n`);
+
+    // Get validation settings service for event listening
+    const settingsService = getValidationSettingsService();
+
+    // Send heartbeat every 30 seconds to keep connection alive
+    const heartbeatInterval = setInterval(() => {
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'heartbeat',
+          data: { timestamp: new Date().toISOString() }
+        })}\n\n`);
+      } catch (error) {
+        console.error('[SSE] Error sending heartbeat:', error);
+        clearInterval(heartbeatInterval);
+      }
+    }, 30000);
+
+    // Listen for settings change events
+    const onSettingsChanged = (event: any) => {
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'settings-changed',
+          data: {
+            changeType: event.type,
+            settingsId: event.settingsId,
+            timestamp: new Date().toISOString(),
+            previousVersion: event.previousVersion,
+            newVersion: event.newVersion
+          }
+        })}\n\n`);
+      } catch (error) {
+        console.error('[SSE] Error sending settings change event:', error);
+      }
+    };
+
+    const onSettingsActivated = (event: any) => {
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'settings-activated',
+          data: {
+            settingsId: event.settingsId,
+            settings: event.settings,
+            timestamp: new Date().toISOString()
+          }
+        })}\n\n`);
+      } catch (error) {
+        console.error('[SSE] Error sending settings activated event:', error);
+      }
+    };
+
+    const onCacheInvalidated = (event: any) => {
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'cache-invalidated',
+          data: {
+            tag: event.tag,
+            dependencyId: event.dependencyId,
+            entriesInvalidated: event.entriesInvalidated,
+            timestamp: new Date().toISOString()
+          }
+        })}\n\n`);
+      } catch (error) {
+        console.error('[SSE] Error sending cache invalidated event:', error);
+      }
+    };
+
+    const onCacheWarmed = (event: any) => {
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'cache-warmed',
+          data: {
+            entriesWarmed: event.entriesWarmed,
+            timestamp: new Date().toISOString()
+          }
+        })}\n\n`);
+      } catch (error) {
+        console.error('[SSE] Error sending cache warmed event:', error);
+      }
+    };
+
+    // Register event listeners
+    settingsService.on('settingsChanged', onSettingsChanged);
+    settingsService.on('settingsActivated', onSettingsActivated);
+    settingsService.on('cacheInvalidated', onCacheInvalidated);
+    settingsService.on('cacheWarmed', onCacheWarmed);
+
+    // Handle client disconnect
+    req.on('close', () => {
+      console.log('[SSE] Client disconnected from validation stream');
+      clearInterval(heartbeatInterval);
+      
+      // Remove event listeners
+      settingsService.off('settingsChanged', onSettingsChanged);
+      settingsService.off('settingsActivated', onSettingsActivated);
+      settingsService.off('cacheInvalidated', onCacheInvalidated);
+      settingsService.off('cacheWarmed', onCacheWarmed);
+    });
+
+    req.on('error', (error) => {
+      console.error('[SSE] Client connection error:', error);
+      clearInterval(heartbeatInterval);
+      
+      // Remove event listeners
+      settingsService.off('settingsChanged', onSettingsChanged);
+      settingsService.off('settingsActivated', onSettingsActivated);
+      settingsService.off('cacheInvalidated', onCacheInvalidated);
+      settingsService.off('cacheWarmed', onCacheWarmed);
+    });
+  });
+
   const httpServer = createServer(app);
   
-  // Initialize WebSocket server for real-time validation updates
-  initializeWebSocket(httpServer);
+  // SSE is handled by the validation service, no WebSocket initialization needed
   
   return httpServer;
 }

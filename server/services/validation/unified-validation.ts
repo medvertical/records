@@ -1,10 +1,11 @@
 import { createHash } from 'crypto';
-import { storage } from '../../storage.js';
+import { storage } from '../../storage';
 import { ValidationEngine } from './validation-engine.js';
 import { EnhancedValidationEngine } from './enhanced-validation-engine.js';
 import { FhirClient } from '../fhir/fhir-client.js';
 import { getValidationSettingsService } from './validation-settings-service.js';
 import type { FhirResource, InsertFhirResource, InsertValidationResult, ValidationResult } from '@shared/schema.js';
+import type { ValidationSettings } from '@shared/validation-settings.js';
 
 /**
  * Unified validation service that handles both batch and individual resource validation
@@ -12,14 +13,18 @@ import type { FhirResource, InsertFhirResource, InsertValidationResult, Validati
  */
 export class UnifiedValidationService {
   private enhancedValidationEngine: EnhancedValidationEngine;
-  private cachedSettings: any = null;
+  private cachedSettings: ValidationSettings | null = null;
   private settingsCacheTime: number = 0;
   private SETTINGS_CACHE_TTL = 60000; // Cache settings for 1 minute
+  private settingsService: ReturnType<typeof getValidationSettingsService>;
 
   constructor(
     private fhirClient: FhirClient,
     private validationEngine: ValidationEngine
   ) {
+    // Get the validation settings service instance
+    this.settingsService = getValidationSettingsService();
+    
     // Initialize enhanced validation engine with default settings
     // Actual settings will be loaded from database when needed
     this.enhancedValidationEngine = new EnhancedValidationEngine(fhirClient, {
@@ -35,6 +40,39 @@ export class UnifiedValidationService {
         'http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab'
       ]
     });
+
+    // Set up event listeners for settings changes
+    this.setupSettingsEventListeners();
+  }
+
+  /**
+   * Set up event listeners for settings changes
+   */
+  private setupSettingsEventListeners(): void {
+    // Listen for settings changes and automatically reload configuration
+    this.settingsService.on('settingsChanged', (event) => {
+      console.log('[UnifiedValidation] Settings changed, clearing cache and reloading configuration');
+      this.clearSettingsCache();
+      this.loadValidationSettings().catch(error => {
+        console.error('[UnifiedValidation] Failed to reload settings after change:', error);
+      });
+    });
+
+    // Listen for settings activation
+    this.settingsService.on('settingsActivated', (event) => {
+      console.log('[UnifiedValidation] Settings activated, reloading configuration');
+      this.clearSettingsCache();
+      this.loadValidationSettings().catch(error => {
+        console.error('[UnifiedValidation] Failed to reload settings after activation:', error);
+      });
+    });
+
+    // Listen for settings service errors
+    this.settingsService.on('error', (error) => {
+      console.error('[UnifiedValidation] Settings service error:', error);
+      // Clear cache to force reload on next access
+      this.clearSettingsCache();
+    });
   }
 
   /**
@@ -48,52 +86,72 @@ export class UnifiedValidationService {
     }
     
     try {
-      const settingsService = getValidationSettingsService();
-      const settings = await settingsService.getActiveSettings();
+      const settings = await this.settingsService.getActiveSettings();
       if (settings) {
         // Cache the settings
         this.cachedSettings = settings;
         this.settingsCacheTime = now;
       
-      // Only log in development mode to reduce overhead
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[UnifiedValidation] Loading validation settings from database');
-      }
-      
-      // Access the nested settings structure
-      const nestedSettings = settings.settings || settings;
-      
-      // Debug logging to see what settings are being loaded
-      console.log('[UnifiedValidation] Loading settings:', {
-        structural: nestedSettings.structural?.enabled,
-        profile: nestedSettings.profile?.enabled,
-        terminology: nestedSettings.terminology?.enabled,
-        reference: nestedSettings.reference?.enabled,
-        businessRule: nestedSettings.businessRule?.enabled,
-        metadata: nestedSettings.metadata?.enabled
-      });
-      
-      this.enhancedValidationEngine.updateConfig({
-        enableStructuralValidation: nestedSettings.structural?.enabled ?? true,
-        enableProfileValidation: nestedSettings.profile?.enabled ?? true,
-        enableTerminologyValidation: nestedSettings.terminology?.enabled ?? true,
-        enableReferenceValidation: nestedSettings.reference?.enabled ?? true,
-        enableBusinessRuleValidation: nestedSettings.businessRule?.enabled ?? true,
-        enableMetadataValidation: nestedSettings.metadata?.enabled ?? true,
-        strictMode: nestedSettings.strictMode ?? false,
-        profiles: nestedSettings.validationProfiles ?? [
-          'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient',
-          'http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab'
-        ],
-        terminologyServers: nestedSettings.terminologyServers ?? [],
-        profileResolutionServers: nestedSettings.profileResolutionServers ?? []
-      });
+        // Only log in development mode to reduce overhead
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[UnifiedValidation] Loading validation settings from database');
+        }
+        
+        // Debug logging to see what settings are being loaded
+        console.log('[UnifiedValidation] Loading settings:', {
+          structural: settings.structural?.enabled,
+          profile: settings.profile?.enabled,
+          terminology: settings.terminology?.enabled,
+          reference: settings.reference?.enabled,
+          businessRule: settings.businessRule?.enabled,
+          metadata: settings.metadata?.enabled,
+          strictMode: settings.strictMode,
+          fhirVersion: settings.fhirVersion
+        });
+        
+        // Update the enhanced validation engine with the new settings
+        this.enhancedValidationEngine.updateConfig({
+          enableStructuralValidation: settings.structural?.enabled ?? true,
+          enableProfileValidation: settings.profile?.enabled ?? true,
+          enableTerminologyValidation: settings.terminology?.enabled ?? true,
+          enableReferenceValidation: settings.reference?.enabled ?? true,
+          enableBusinessRuleValidation: settings.businessRule?.enabled ?? true,
+          enableMetadataValidation: settings.metadata?.enabled ?? true,
+          strictMode: settings.strictMode ?? false,
+          profiles: this.extractProfilesFromSettings(settings),
+          terminologyServers: settings.terminologyServers ?? [],
+          profileResolutionServers: settings.profileResolutionServers ?? [],
+          timeoutSettings: settings.timeoutSettings,
+          cacheSettings: settings.cacheSettings,
+          maxConcurrentValidations: settings.maxConcurrentValidations ?? 10
+        });
+
+        console.log('[UnifiedValidation] Validation engine configuration updated successfully');
       }
     } catch (error) {
-      console.warn('[UnifiedValidation] Failed to load validation settings:', error);
+      console.error('[UnifiedValidation] Failed to load validation settings:', error);
+      // Don't throw the error, just log it and continue with default settings
     }
   }
   
+  /**
+   * Extract profiles from validation settings
+   */
+  private extractProfilesFromSettings(settings: ValidationSettings): string[] {
+    // Extract profiles from custom rules or other sources
+    const profiles: string[] = [];
+    
+    // Add default profiles if none are specified
+    if (profiles.length === 0) {
+      profiles.push(
+        'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient',
+        'http://hl7.org/fhir/us/core/StructureDefinition/us-core-observation-lab'
+      );
+    }
+    
+    return profiles;
+  }
+
   /**
    * Clear cached settings (e.g., when settings are updated)
    */
@@ -111,6 +169,34 @@ export class UnifiedValidationService {
   }
 
   /**
+   * Get current validation settings
+   */
+  async getCurrentSettings(): Promise<ValidationSettings | null> {
+    try {
+      if (!this.cachedSettings) {
+        await this.loadValidationSettings();
+      }
+      return this.cachedSettings;
+    } catch (error) {
+      console.error('[UnifiedValidation] Failed to get current settings:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if settings service is healthy
+   */
+  async isSettingsServiceHealthy(): Promise<boolean> {
+    try {
+      const healthStatus = await this.settingsService.getHealthStatus();
+      return healthStatus.isHealthy;
+    } catch (error) {
+      console.error('[UnifiedValidation] Failed to check settings service health:', error);
+      return false;
+    }
+  }
+
+  /**
    * Filter validation issues based on current settings
    * This determines what the UI considers "valid" vs "error"
    */
@@ -120,24 +206,25 @@ export class UnifiedValidationService {
       return { filteredIssues: issues, isValid: issues.length === 0 };
     }
 
+    const settings = this.cachedSettings;
+    
     // Check if ALL validation aspects are disabled
-    const settings = this.cachedSettings?.settings || this.cachedSettings;
     const allAspectsDisabled = 
-      settings?.structural?.enabled !== true &&
-      settings?.profile?.enabled !== true &&
-      settings?.terminology?.enabled !== true &&
-      settings?.reference?.enabled !== true &&
-      settings?.businessRule?.enabled !== true &&
-      settings?.metadata?.enabled !== true;
+      settings.structural?.enabled !== true &&
+      settings.profile?.enabled !== true &&
+      settings.terminology?.enabled !== true &&
+      settings.reference?.enabled !== true &&
+      settings.businessRule?.enabled !== true &&
+      settings.metadata?.enabled !== true;
 
     // Debug logging
     console.log('[FilterValidation] Settings check:', {
-      structural: settings?.structural?.enabled,
-      profile: settings?.profile?.enabled,
-      terminology: settings?.terminology?.enabled,
-      reference: settings?.reference?.enabled,
-      businessRule: settings?.businessRule?.enabled,
-      metadata: settings?.metadata?.enabled,
+      structural: settings.structural?.enabled,
+      profile: settings.profile?.enabled,
+      terminology: settings.terminology?.enabled,
+      reference: settings.reference?.enabled,
+      businessRule: settings.businessRule?.enabled,
+      metadata: settings.metadata?.enabled,
       allAspectsDisabled
     });
 
@@ -153,18 +240,18 @@ export class UnifiedValidationService {
       // Check if this category is enabled in settings
       switch (category) {
         case 'structural':
-          return settings?.structural?.enabled === true;
+          return settings.structural?.enabled === true;
         case 'profile':
-          return settings?.profile?.enabled === true;
+          return settings.profile?.enabled === true;
         case 'terminology':
-          return settings?.terminology?.enabled === true;
+          return settings.terminology?.enabled === true;
         case 'reference':
-          return settings?.reference?.enabled === true;
+          return settings.reference?.enabled === true;
         case 'business-rule':
         case 'businessRule':
-          return settings?.businessRule?.enabled === true;
+          return settings.businessRule?.enabled === true;
         case 'metadata':
-          return settings?.metadata?.enabled === true;
+          return settings.metadata?.enabled === true;
         case 'general':
           return true; // Always show general category issues
         default:

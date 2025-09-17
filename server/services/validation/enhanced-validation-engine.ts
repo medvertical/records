@@ -1,7 +1,7 @@
 import { FhirClient, FhirOperationOutcome } from '../fhir/fhir-client.js';
 import { ValidationError } from '@shared/schema.js';
 import { TerminologyClient, defaultTerminologyConfig } from '../fhir/terminology-client.js';
-import { storage } from '../../storage.js';
+import { storage } from '../../storage';
 import axios from 'axios';
 
 /**
@@ -50,6 +50,25 @@ export interface EnhancedValidationConfig {
     enabled: boolean;
     url: string;
   };
+  // New settings properties
+  timeoutSettings?: {
+    defaultTimeoutMs: number;
+    structuralValidationTimeoutMs: number;
+    profileValidationTimeoutMs: number;
+    terminologyValidationTimeoutMs: number;
+    referenceValidationTimeoutMs: number;
+    businessRuleValidationTimeoutMs: number;
+    metadataValidationTimeoutMs: number;
+  };
+  cacheSettings?: {
+    enabled: boolean;
+    ttlMs: number;
+    maxSizeMB: number;
+    cacheValidationResults: boolean;
+    cacheTerminologyExpansions: boolean;
+    cacheProfileResolutions: boolean;
+  };
+  maxConcurrentValidations?: number;
 }
 
 export interface ValidationIssue {
@@ -80,16 +99,19 @@ export interface EnhancedValidationResult {
   validatedAt: Date;
 }
 
-export class EnhancedValidationEngine {
+import { EventEmitter } from 'events';
+
+export class EnhancedValidationEngine extends EventEmitter {
   private fhirClient: FhirClient;
   private terminologyClient: TerminologyClient;
   private config: EnhancedValidationConfig;
   
   // Performance optimization: Cache resolved profiles to avoid repeated network calls
   private profileCache = new Map<string, { profile: any; timestamp: number }>();
-  private readonly PROFILE_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+  private PROFILE_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
   constructor(fhirClient: FhirClient, config?: Partial<EnhancedValidationConfig>) {
+    super();
     this.fhirClient = fhirClient;
     this.terminologyClient = new TerminologyClient(defaultTerminologyConfig);
     this.config = {
@@ -120,9 +142,135 @@ export class EnhancedValidationEngine {
    * Update configuration and terminology servers
    */
   updateConfig(config: Partial<EnhancedValidationConfig>) {
-    this.config = { ...this.config, ...config };
-    this.updateTerminologyServers();
-    this.updateProfileResolutionServers();
+    try {
+      // Validate configuration before applying
+      this.validateConfiguration(config);
+      
+      // Store previous configuration for rollback capability
+      const previousConfig = { ...this.config };
+      
+      // Update configuration
+      this.config = { ...this.config, ...config };
+      
+      // Apply configuration changes
+      this.applyConfigurationChanges(previousConfig);
+      
+      // Emit configuration change event
+      this.emit('configurationUpdated', {
+        previousConfig,
+        newConfig: this.config,
+        timestamp: new Date()
+      });
+      
+      console.log('[EnhancedValidation] Configuration updated successfully');
+    } catch (error) {
+      console.error('[EnhancedValidation] Failed to update configuration:', error);
+      
+      // Emit configuration error event
+      this.emit('configurationError', {
+        error: error instanceof Error ? error : new Error('Unknown error'),
+        config,
+        timestamp: new Date()
+      });
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Validate configuration before applying
+   */
+  private validateConfiguration(config: Partial<EnhancedValidationConfig>) {
+    // Validate timeout settings
+    if (config.timeoutSettings) {
+      const timeouts = config.timeoutSettings;
+      const timeoutValues = [
+        timeouts.defaultTimeoutMs,
+        timeouts.structuralValidationTimeoutMs,
+        timeouts.profileValidationTimeoutMs,
+        timeouts.terminologyValidationTimeoutMs,
+        timeouts.referenceValidationTimeoutMs,
+        timeouts.businessRuleValidationTimeoutMs,
+        timeouts.metadataValidationTimeoutMs
+      ];
+      
+      for (const timeout of timeoutValues) {
+        if (timeout !== undefined && (timeout < 1000 || timeout > 300000)) {
+          throw new Error(`Invalid timeout value: ${timeout}. Must be between 1000ms and 300000ms (5 minutes)`);
+        }
+      }
+    }
+    
+    // Validate cache settings
+    if (config.cacheSettings) {
+      const cache = config.cacheSettings;
+      if (cache.ttlMs !== undefined && (cache.ttlMs < 1000 || cache.ttlMs > 3600000)) {
+        throw new Error(`Invalid cache TTL: ${cache.ttlMs}. Must be between 1000ms and 3600000ms (1 hour)`);
+      }
+      if (cache.maxSizeMB !== undefined && (cache.maxSizeMB < 1 || cache.maxSizeMB > 10000)) {
+        throw new Error(`Invalid cache max size: ${cache.maxSizeMB}. Must be between 1MB and 10000MB (10GB)`);
+      }
+    }
+    
+    // Validate concurrent validations
+    if (config.maxConcurrentValidations !== undefined && (config.maxConcurrentValidations < 1 || config.maxConcurrentValidations > 100)) {
+      throw new Error(`Invalid max concurrent validations: ${config.maxConcurrentValidations}. Must be between 1 and 100`);
+    }
+    
+    // Validate terminology servers
+    if (config.terminologyServers) {
+      for (const server of config.terminologyServers) {
+        if (!server.url || !server.name) {
+          throw new Error('Terminology server must have both URL and name');
+        }
+        if (server.priority < 0) {
+          throw new Error('Terminology server priority must be non-negative');
+        }
+      }
+    }
+    
+    // Validate profile resolution servers
+    if (config.profileResolutionServers) {
+      for (const server of config.profileResolutionServers) {
+        if (!server.url || !server.name) {
+          throw new Error('Profile resolution server must have both URL and name');
+        }
+        if (server.priority < 0) {
+          throw new Error('Profile resolution server priority must be non-negative');
+        }
+      }
+    }
+  }
+
+  /**
+   * Apply configuration changes with validation and error handling
+   */
+  private applyConfigurationChanges(previousConfig: EnhancedValidationConfig) {
+    try {
+      // Update terminology servers
+      this.updateTerminologyServers();
+      
+      // Update profile resolution servers
+      this.updateProfileResolutionServers();
+      
+      // Update cache settings
+      this.updateCacheSettings();
+      
+      // Update timeout settings
+      this.updateTimeoutSettings();
+      
+      // Update concurrent validation settings
+      this.updateConcurrentValidationSettings();
+      
+      // Log configuration changes
+      this.logConfigurationChanges(previousConfig);
+      
+    } catch (error) {
+      console.error('[EnhancedValidation] Failed to apply configuration changes:', error);
+      // Rollback to previous configuration
+      this.config = previousConfig;
+      throw error;
+    }
   }
 
   /**
@@ -180,6 +328,117 @@ export class EnhancedValidationEngine {
       }
     } else {
       console.log(`[EnhancedValidation] No profile resolution servers configured`);
+    }
+  }
+
+  /**
+   * Update cache settings
+   */
+  private updateCacheSettings() {
+    if (this.config.cacheSettings) {
+      const cacheSettings = this.config.cacheSettings;
+      
+      // Update profile cache TTL
+      if (cacheSettings.ttlMs) {
+        this.PROFILE_CACHE_TTL = cacheSettings.ttlMs;
+      }
+      
+      // Clear cache if caching is disabled
+      if (!cacheSettings.enabled) {
+        this.profileCache.clear();
+        console.log('[EnhancedValidation] Cache disabled, cleared profile cache');
+      }
+      
+      // Log cache configuration
+      console.log('[EnhancedValidation] Cache settings updated:', {
+        enabled: cacheSettings.enabled,
+        ttlMs: cacheSettings.ttlMs,
+        maxSizeMB: cacheSettings.maxSizeMB,
+        cacheValidationResults: cacheSettings.cacheValidationResults,
+        cacheTerminologyExpansions: cacheSettings.cacheTerminologyExpansions,
+        cacheProfileResolutions: cacheSettings.cacheProfileResolutions
+      });
+    }
+  }
+
+  /**
+   * Update timeout settings
+   */
+  private updateTimeoutSettings() {
+    if (this.config.timeoutSettings) {
+      const timeoutSettings = this.config.timeoutSettings;
+      
+      console.log('[EnhancedValidation] Timeout settings updated:', {
+        defaultTimeoutMs: timeoutSettings.defaultTimeoutMs,
+        structuralValidationTimeoutMs: timeoutSettings.structuralValidationTimeoutMs,
+        profileValidationTimeoutMs: timeoutSettings.profileValidationTimeoutMs,
+        terminologyValidationTimeoutMs: timeoutSettings.terminologyValidationTimeoutMs,
+        referenceValidationTimeoutMs: timeoutSettings.referenceValidationTimeoutMs,
+        businessRuleValidationTimeoutMs: timeoutSettings.businessRuleValidationTimeoutMs,
+        metadataValidationTimeoutMs: timeoutSettings.metadataValidationTimeoutMs
+      });
+    }
+  }
+
+  /**
+   * Update concurrent validation settings
+   */
+  private updateConcurrentValidationSettings() {
+    if (this.config.maxConcurrentValidations !== undefined) {
+      console.log('[EnhancedValidation] Max concurrent validations updated:', this.config.maxConcurrentValidations);
+    }
+  }
+
+  /**
+   * Log configuration changes for debugging
+   */
+  private logConfigurationChanges(previousConfig: EnhancedValidationConfig) {
+    const changes: string[] = [];
+    
+    // Check for changes in validation aspects
+    if (previousConfig.enableStructuralValidation !== this.config.enableStructuralValidation) {
+      changes.push(`Structural validation: ${previousConfig.enableStructuralValidation} → ${this.config.enableStructuralValidation}`);
+    }
+    if (previousConfig.enableProfileValidation !== this.config.enableProfileValidation) {
+      changes.push(`Profile validation: ${previousConfig.enableProfileValidation} → ${this.config.enableProfileValidation}`);
+    }
+    if (previousConfig.enableTerminologyValidation !== this.config.enableTerminologyValidation) {
+      changes.push(`Terminology validation: ${previousConfig.enableTerminologyValidation} → ${this.config.enableTerminologyValidation}`);
+    }
+    if (previousConfig.enableReferenceValidation !== this.config.enableReferenceValidation) {
+      changes.push(`Reference validation: ${previousConfig.enableReferenceValidation} → ${this.config.enableReferenceValidation}`);
+    }
+    if (previousConfig.enableBusinessRuleValidation !== this.config.enableBusinessRuleValidation) {
+      changes.push(`Business rule validation: ${previousConfig.enableBusinessRuleValidation} → ${this.config.enableBusinessRuleValidation}`);
+    }
+    if (previousConfig.enableMetadataValidation !== this.config.enableMetadataValidation) {
+      changes.push(`Metadata validation: ${previousConfig.enableMetadataValidation} → ${this.config.enableMetadataValidation}`);
+    }
+    
+    // Check for changes in strict mode
+    if (previousConfig.strictMode !== this.config.strictMode) {
+      changes.push(`Strict mode: ${previousConfig.strictMode} → ${this.config.strictMode}`);
+    }
+    
+    // Check for changes in profiles
+    if (JSON.stringify(previousConfig.profiles) !== JSON.stringify(this.config.profiles)) {
+      changes.push(`Profiles: ${previousConfig.profiles.length} → ${this.config.profiles.length}`);
+    }
+    
+    // Check for changes in terminology servers
+    if (JSON.stringify(previousConfig.terminologyServers) !== JSON.stringify(this.config.terminologyServers)) {
+      changes.push(`Terminology servers: ${previousConfig.terminologyServers?.length || 0} → ${this.config.terminologyServers?.length || 0}`);
+    }
+    
+    // Check for changes in profile resolution servers
+    if (JSON.stringify(previousConfig.profileResolutionServers) !== JSON.stringify(this.config.profileResolutionServers)) {
+      changes.push(`Profile resolution servers: ${previousConfig.profileResolutionServers?.length || 0} → ${this.config.profileResolutionServers?.length || 0}`);
+    }
+    
+    if (changes.length > 0) {
+      console.log('[EnhancedValidation] Configuration changes applied:', changes);
+    } else {
+      console.log('[EnhancedValidation] No significant configuration changes detected');
     }
   }
 

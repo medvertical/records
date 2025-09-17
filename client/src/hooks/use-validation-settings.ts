@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from './use-toast';
+import { useSettingsChangeListener } from './use-settings-notifications';
 import type {
   ValidationSettings,
   ValidationSettingsUpdate,
@@ -101,6 +102,65 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
   const queryClient = useQueryClient();
 
   const { toast } = useToast();
+  
+  // SSE notifications for real-time updates
+  const notifications = useSettingsChangeListener(
+    // On settings changed - invalidate cache and reload
+    useCallback(async (event) => {
+      console.log('[ValidationSettings] Settings changed via SSE:', event);
+      if (enableRealTimeSync) {
+        // Invalidate React Query cache
+        queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+        
+        // Reload settings if this affects the current settings
+        if (event.settingsId === settings?.id || event.changeType === 'activated') {
+          await loadSettingsFromAPI();
+        }
+        
+        toast({
+          title: "Settings Updated",
+          description: `Settings ${event.changeType} successfully`,
+          variant: "default"
+        });
+      }
+    }, [enableRealTimeSync, queryClient, settings?.id, toast]),
+    
+    // On settings activated - reload active settings
+    useCallback(async (event) => {
+      console.log('[ValidationSettings] Settings activated via SSE:', event);
+      if (enableRealTimeSync) {
+        // Invalidate React Query cache
+        queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+        
+        // Reload settings
+        await loadSettingsFromAPI();
+        
+        toast({
+          title: "Settings Activated",
+          description: "New settings configuration is now active",
+          variant: "default"
+        });
+      }
+    }, [enableRealTimeSync, queryClient, toast]),
+    
+    // On cache invalidated - clear local cache
+    useCallback((event) => {
+      console.log('[ValidationSettings] Cache invalidated via SSE:', event);
+      if (enableCaching) {
+        // Clear React Query cache
+        queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+        
+        // Clear local cache
+        setSettings(null);
+        setValidationResult(null);
+      }
+    }, [enableCaching, queryClient]),
+    
+    // On cache warmed - no action needed, just log
+    useCallback((event) => {
+      console.log('[ValidationSettings] Cache warmed via SSE:', event);
+    }, [])
+  );
   
   // State
   const [settings, setSettings] = useState<ValidationSettings | null>(null);
@@ -658,6 +718,9 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
     // Presets
     presets,
     applyPreset,
+    
+    // Real-time notifications
+    notifications,
     
     // Cache management
     clearCache,

@@ -2,7 +2,7 @@
 // Validation Report Service
 // ============================================================================
 
-import { storage } from '../storage.js';
+import { storage } from '../../storage';
 import { ValidationErrorService } from './validation-error-service.js';
 import { ValidationPerformanceService } from './validation-performance-service.js';
 

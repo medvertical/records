@@ -1,9 +1,9 @@
 import { FhirClient } from './fhir-client';
 import { ValidationEngine } from './validation-engine';
 import { UnifiedValidationService } from './unified-validation';
-import { storage } from '../storage';
+import { storage } from '../../storage';
 import { InsertFhirResource, InsertValidationResult } from '../../shared/schema';
-import { validationWebSocket } from './websocket-server';
+// WebSocket removed - using SSE instead
 import { createHash } from 'crypto';
 
 export interface RobustValidationProgress {

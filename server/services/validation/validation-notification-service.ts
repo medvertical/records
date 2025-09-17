@@ -2,7 +2,7 @@
 // Validation Notification Service
 // ============================================================================
 
-import { storage } from '../storage.js';
+import { storage } from '../../storage';
 
 export interface ValidationNotification {
   id: string;

@@ -1,6 +1,6 @@
 import { FhirClient } from '../fhir/fhir-client.js';
 import { ValidationEngine } from './validation-engine.js';
-import { storage } from '../../storage.js';
+import { storage } from '../../storage';
 import { InsertFhirResource, InsertValidationResult } from '@shared/schema.js';
 import { errorHandler } from '../../utils/error-handler.js';
 import { logger } from '../../utils/logger.js';

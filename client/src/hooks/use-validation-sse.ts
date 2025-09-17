@@ -17,11 +17,12 @@ export interface ValidationProgress {
 export interface SSEMessage {
   type: 'connected' | 'status' | 'validation_progress' | 'validation-progress' | 'validation_started' | 'validation-started' 
     | 'validation_complete' | 'validation-completed' | 'validation_error' | 'validation-error' 
-    | 'validation_stopped' | 'validation-stopped' | 'validation-paused' | 'validation-resumed' | 'server-switched';
+    | 'validation_stopped' | 'validation-stopped' | 'validation-paused' | 'validation-resumed' | 'server-switched'
+    | 'settings-changed' | 'settings-activated' | 'cache-invalidated' | 'cache-warmed' | 'heartbeat';
   data: any;
 }
 
-export function useValidationSSE() {
+export function useValidationSSE(hasActiveServer: boolean = true) {
   const [isConnected, setIsConnected] = useState(false);
   const [progress, setProgress] = useState<ValidationProgress | null>(null);
   const [validationStatus, setValidationStatus] = useState<'idle' | 'running' | 'paused' | 'completed' | 'error'>('idle');
@@ -44,6 +45,17 @@ export function useValidationSSE() {
     isPaused: false,
     lastSync: null
   });
+  const [settingsState, setSettingsState] = useState<{
+    lastChanged: Date | null;
+    lastActivated: Date | null;
+    cacheInvalidated: Date | null;
+    cacheWarmed: Date | null;
+  }>({
+    lastChanged: null,
+    lastActivated: null,
+    cacheInvalidated: null,
+    cacheWarmed: null
+  });
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasReceivedMessage = useRef(false);
@@ -53,6 +65,8 @@ export function useValidationSSE() {
 
   // API state synchronization
   const syncWithApi = useCallback(async () => {
+    if (!hasActiveServer) return; // Don't make API calls when no server is active
+    
     try {
       const response = await fetch('/api/validation/bulk/progress');
       if (response.ok) {
@@ -90,7 +104,7 @@ export function useValidationSSE() {
     } catch (error) {
       console.warn('[ValidationSSE] Failed to sync with API:', error);
     }
-  }, [validationStatus]);
+  }, [validationStatus, hasActiveServer]);
 
   const startApiSync = useCallback(() => {
     // Sync immediately
@@ -236,6 +250,59 @@ export function useValidationSSE() {
         }, 1000);
         break;
         
+      case 'settings-changed':
+        console.log('[ValidationSSE] Settings changed:', message.data);
+        setSettingsState(prev => ({
+          ...prev,
+          lastChanged: new Date()
+        }));
+        // Emit custom event for settings components to listen to
+        window.dispatchEvent(new CustomEvent('settingsChanged', {
+          detail: message.data
+        }));
+        break;
+        
+      case 'settings-activated':
+        console.log('[ValidationSSE] Settings activated:', message.data);
+        setSettingsState(prev => ({
+          ...prev,
+          lastActivated: new Date()
+        }));
+        // Emit custom event for settings components to listen to
+        window.dispatchEvent(new CustomEvent('settingsActivated', {
+          detail: message.data
+        }));
+        break;
+        
+      case 'cache-invalidated':
+        console.log('[ValidationSSE] Cache invalidated:', message.data);
+        setSettingsState(prev => ({
+          ...prev,
+          cacheInvalidated: new Date()
+        }));
+        // Emit custom event for cache management
+        window.dispatchEvent(new CustomEvent('cacheInvalidated', {
+          detail: message.data
+        }));
+        break;
+        
+      case 'cache-warmed':
+        console.log('[ValidationSSE] Cache warmed:', message.data);
+        setSettingsState(prev => ({
+          ...prev,
+          cacheWarmed: new Date()
+        }));
+        // Emit custom event for cache management
+        window.dispatchEvent(new CustomEvent('cacheWarmed', {
+          detail: message.data
+        }));
+        break;
+        
+      case 'heartbeat':
+        // Heartbeat received - connection is alive
+        // No action needed, just keep connection alive
+        break;
+        
       default:
         console.log('[ValidationSSE] Unknown message type:', message.type);
     }
@@ -299,6 +366,7 @@ export function useValidationSSE() {
     lastError,
     currentServer,
     apiState,
+    settingsState,
     resetProgress,
     reconnect,
     syncWithApi
