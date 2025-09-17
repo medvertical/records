@@ -60,6 +60,184 @@ import type {
 } from '@shared/validation-settings';
 
 // ============================================================================
+// Sample Resources for Testing
+// ============================================================================
+
+const SAMPLE_RESOURCES = {
+  patient: {
+    resourceType: "Patient",
+    id: "test-patient-001",
+    meta: {
+      profile: ["http://hl7.org/fhir/StructureDefinition/Patient"],
+      lastUpdated: "2024-01-15T10:30:00Z"
+    },
+    identifier: [
+      {
+        use: "usual",
+        system: "http://hospital.example.org/patients",
+        value: "12345"
+      }
+    ],
+    name: [
+      {
+        use: "official",
+        family: "Doe",
+        given: ["John"]
+      }
+    ],
+    gender: "male",
+    birthDate: "1990-01-01",
+    address: [
+      {
+        use: "home",
+        line: ["123 Main St"],
+        city: "Anytown",
+        state: "CA",
+        postalCode: "12345",
+        country: "US"
+      }
+    ]
+  },
+  observation: {
+    resourceType: "Observation",
+    id: "test-observation-001",
+    meta: {
+      profile: ["http://hl7.org/fhir/StructureDefinition/Observation"],
+      lastUpdated: "2024-01-15T10:30:00Z"
+    },
+    status: "final",
+    category: [
+      {
+        coding: [
+          {
+            system: "http://terminology.hl7.org/CodeSystem/observation-category",
+            code: "vital-signs",
+            display: "Vital Signs"
+          }
+        ]
+      }
+    ],
+    code: {
+      coding: [
+        {
+          system: "http://loinc.org",
+          code: "8310-5",
+          display: "Body temperature"
+        }
+      ]
+    },
+    subject: {
+      reference: "Patient/test-patient-001"
+    },
+    effectiveDateTime: "2024-01-15T10:30:00Z",
+    valueQuantity: {
+      value: 98.6,
+      unit: "°F",
+      system: "http://unitsofmeasure.org",
+      code: "[degF]"
+    }
+  },
+  medication: {
+    resourceType: "Medication",
+    id: "test-medication-001",
+    meta: {
+      profile: ["http://hl7.org/fhir/StructureDefinition/Medication"],
+      lastUpdated: "2024-01-15T10:30:00Z"
+    },
+    code: {
+      coding: [
+        {
+          system: "http://www.nlm.nih.gov/research/umls/rxnorm",
+          code: "7980",
+          display: "Acetaminophen"
+        }
+      ]
+    },
+    form: {
+      coding: [
+        {
+          system: "http://snomed.info/sct",
+          code: "385219001",
+          display: "Oral tablet"
+        }
+      ]
+    }
+  },
+  invalid: {
+    resourceType: "InvalidResource",
+    id: "test-invalid-001",
+    // Missing required fields to test validation
+    invalidField: "This should cause validation errors"
+  }
+};
+
+// ============================================================================
+// Testing Functions
+// ============================================================================
+
+async function testSettingsWithSamples(settings: ValidationSettings): Promise<any[]> {
+  const testResults = [];
+  
+  // Test with different types of sample resources
+  const testCases = [
+    { name: "Valid Patient", resource: SAMPLE_RESOURCES.patient, expectedValid: true },
+    { name: "Valid Observation", resource: SAMPLE_RESOURCES.observation, expectedValid: true },
+    { name: "Valid Medication", resource: SAMPLE_RESOURCES.medication, expectedValid: true },
+    { name: "Invalid Resource", resource: SAMPLE_RESOURCES.invalid, expectedValid: false }
+  ];
+  
+  for (const testCase of testCases) {
+    try {
+      const response = await fetch('/api/validation/settings/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          settings,
+          sampleResource: testCase.resource,
+          testType: 'validation'
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Test request failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Test request failed');
+      }
+      
+      testResults.push({
+        name: testCase.name,
+        resourceType: testCase.resource.resourceType,
+        isValid: result.data.isValid,
+        expectedValid: testCase.expectedValid,
+        validationResults: result.data.validationResults || [],
+        performanceMetrics: result.data.performanceMetrics || {},
+        recommendations: result.data.recommendations || [],
+        testedAt: result.data.testedAt
+      });
+      
+    } catch (error) {
+      console.error(`[SettingsTest] Test failed for ${testCase.name}:`, error);
+      testResults.push({
+        name: testCase.name,
+        resourceType: testCase.resource.resourceType,
+        isValid: false,
+        expectedValid: testCase.expectedValid,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        testedAt: new Date().toISOString()
+      });
+    }
+  }
+  
+  return testResults;
+}
+
+// ============================================================================
 // Types and Interfaces
 // ============================================================================
 
@@ -107,6 +285,8 @@ interface RockSolidSettingsProps {
 interface SettingsState {
   isTesting: boolean;
   testResult?: any;
+  isRollingBack: boolean;
+  rollbackError?: string;
 }
 
 // ============================================================================
@@ -132,7 +312,9 @@ export function RockSolidSettings({
   
   const [state, setState] = useState<SettingsState>({
     isTesting: false,
-    testResult: undefined
+    testResult: undefined,
+    isRollingBack: false,
+    rollbackError: undefined
   });
 
   const [activeTab, setActiveTab] = useState('aspects');
@@ -161,6 +343,16 @@ export function RockSolidSettings({
     if (!onSave) return;
     
     try {
+      // Validate settings before saving
+      if (validationResult && !validationResult.isValid) {
+        toast({
+          title: "Cannot Save Settings",
+          description: `Please fix ${validationResult.errors.length} error${validationResult.errors.length !== 1 ? 's' : ''} before saving.`,
+          variant: "destructive"
+        });
+        return;
+      }
+      
       await onSave(settings);
       toast({
         title: "Settings Saved",
@@ -168,13 +360,88 @@ export function RockSolidSettings({
         variant: "default"
       });
     } catch (error) {
+      console.error('[RockSolidSettings] Save failed:', error);
+      
+      // Enhanced error handling with rollback option
+      let errorTitle = "Save Failed";
+      let errorDescription = "Failed to save settings";
+      let showRollbackOption = false;
+      
+      if (error instanceof Error) {
+        // Check if rollback was attempted
+        if ((error as any).rollbackAttempted) {
+          errorTitle = "Save Failed - Rollback Attempted";
+          errorDescription = error.message;
+          showRollbackOption = true;
+        } else if (error.message.includes('validation') || error.message.includes('Validation')) {
+          errorTitle = "Validation Error";
+          errorDescription = error.message;
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorTitle = "Network Error";
+          errorDescription = "Unable to connect to the server. Please check your connection and try again.";
+        } else if (error.message.includes('timeout')) {
+          errorTitle = "Request Timeout";
+          errorDescription = "The request took too long to complete. Please try again.";
+        } else {
+          errorDescription = error.message;
+        }
+      }
+      
+      // Show error toast with rollback option if available
       toast({
-        title: "Save Failed",
-        description: error instanceof Error ? error.message : "Failed to save settings",
-        variant: "destructive"
+        title: errorTitle,
+        description: errorDescription,
+        variant: "destructive",
+        action: showRollbackOption ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleRollback((error as any).rollbackSettings)}
+          >
+            Rollback
+          </Button>
+        ) : undefined
       });
     }
-  }, [onSave, settings, toast]);
+  }, [onSave, settings, toast, validationResult]);
+
+  const handleRollback = useCallback(async (rollbackSettings?: any) => {
+    if (!rollbackSettings) {
+      toast({
+        title: "Rollback Failed",
+        description: "No rollback settings available.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setState(prev => ({ ...prev, isRollingBack: true, rollbackError: undefined }));
+
+    try {
+      // Apply rollback settings
+      onSettingsChange(rollbackSettings);
+      
+      toast({
+        title: "Settings Rolled Back",
+        description: "Your settings have been rolled back to the previous version.",
+        variant: "default"
+      });
+    } catch (error) {
+      console.error('[RockSolidSettings] Rollback failed:', error);
+      setState(prev => ({ 
+        ...prev, 
+        rollbackError: error instanceof Error ? error.message : 'Rollback failed'
+      }));
+      
+      toast({
+        title: "Rollback Failed",
+        description: error instanceof Error ? error.message : "Failed to rollback settings",
+        variant: "destructive"
+      });
+    } finally {
+      setState(prev => ({ ...prev, isRollingBack: false }));
+    }
+  }, [onSettingsChange, toast]);
 
   const handleReset = useCallback(async () => {
     if (!onReset) return;
@@ -200,21 +467,26 @@ export function RockSolidSettings({
   }, [onReset, toast]);
 
   const handleTest = useCallback(async () => {
-    if (!onTest) return;
-    
     setState(prev => ({ ...prev, isTesting: true }));
     
     try {
-      const result = await onTest(settings);
+      // Test settings with multiple sample resources
+      const testResults = await testSettingsWithSamples(settings);
+      
       setState(prev => ({
         ...prev,
-        testResult: result,
+        testResult: testResults,
         isTesting: false
       }));
+      
+      const hasErrors = testResults.some(result => !result.isValid);
+      const totalTests = testResults.length;
+      const passedTests = testResults.filter(result => result.isValid).length;
+      
       toast({
-        title: "Test Completed",
-        description: result.isValid ? "Settings test passed successfully." : "Settings test found issues.",
-        variant: result.isValid ? "default" : "destructive"
+        title: "Settings Test Completed",
+        description: `${passedTests}/${totalTests} test${totalTests !== 1 ? 's' : ''} passed. ${hasErrors ? 'Some issues found.' : 'All tests passed!'}`,
+        variant: hasErrors ? "destructive" : "default"
       });
     } catch (error) {
       setState(prev => ({ ...prev, isTesting: false }));
@@ -224,7 +496,7 @@ export function RockSolidSettings({
         variant: "destructive"
       });
     }
-  }, [onTest, settings, toast]);
+  }, [settings, toast]);
 
   const handlePresetApply = useCallback((preset: ValidationSettingsPreset) => {
     const newSettings = {
@@ -245,103 +517,91 @@ export function RockSolidSettings({
   // ========================================================================
 
   const validateSettings = useCallback(async (settings: ValidationSettings) => {
-    // Comprehensive validation logic
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    const suggestions: string[] = [];
-    
-    // Cross-field validation
-    if (settings.terminology?.enabled && (!settings.terminologyServers || settings.terminologyServers.length === 0)) {
-      warnings.push('Terminology validation is enabled but no servers are configured');
-      suggestions.push('Add at least one terminology server to enable terminology validation');
-    }
-    
-    if (settings.profile?.enabled && (!settings.profileResolutionServers || settings.profileResolutionServers.length === 0)) {
-      warnings.push('Profile validation is enabled but no servers are configured');
-      suggestions.push('Add at least one profile resolution server to enable profile validation');
-    }
-    
-    // Validate server configurations
-    if (settings.terminologyServers) {
-      settings.terminologyServers.forEach((server, index) => {
-        if (!server.url || !isValidUrl(server.url)) {
-          errors.push(`Terminology server ${index + 1} has an invalid URL`);
-        }
-        if (server.timeoutMs && (server.timeoutMs < 1000 || server.timeoutMs > 300000)) {
-          warnings.push(`Terminology server ${index + 1} timeout is outside recommended range (1-300 seconds)`);
-        }
+    try {
+      setState(prev => ({ ...prev, isValidating: true }));
+      
+      // Use backend validation API for comprehensive validation
+      const response = await fetch('/api/validation/settings/validate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(settings),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Validation request failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.message || 'Validation request failed');
+      }
+      
+      const validationResult: ValidationSettingsValidationResult = result.data;
+      
+      setState(prev => ({
+        ...prev,
+        validationResult,
+        isValidating: false
+      }));
+      
+    } catch (error) {
+      console.error('[RockSolidSettings] Validation failed:', error);
+      
+      // Fallback to basic client-side validation if backend fails
+      const errors: string[] = [];
+      const warnings: string[] = [];
+      const suggestions: string[] = [];
+      
+      // Basic validation as fallback
+      if (settings.terminology?.enabled && (!settings.terminologyServers || settings.terminologyServers.length === 0)) {
+        warnings.push('Terminology validation is enabled but no servers are configured');
+        suggestions.push('Add at least one terminology server to enable terminology validation');
+      }
+      
+      if (settings.profile?.enabled && (!settings.profileResolutionServers || settings.profileResolutionServers.length === 0)) {
+        warnings.push('Profile validation is enabled but no servers are configured');
+        suggestions.push('Add at least one profile resolution server to enable profile validation');
+      }
+      
+      const validationResult: ValidationSettingsValidationResult = {
+        isValid: errors.length === 0,
+        errors: errors.map(error => ({
+          code: 'VALIDATION_ERROR',
+          message: error,
+          path: '',
+          suggestion: 'Please check your settings'
+        })),
+        warnings: warnings.map(warning => ({
+          code: 'VALIDATION_WARNING',
+          message: warning,
+          path: '',
+          suggestion: 'Consider reviewing this setting'
+        })),
+        suggestions: suggestions.map(suggestion => ({
+          code: 'VALIDATION_SUGGESTION',
+          message: suggestion,
+          path: '',
+          suggestedValue: undefined
+        }))
+      };
+      
+      setState(prev => ({
+        ...prev,
+        validationResult,
+        isValidating: false
+      }));
+      
+      // Show error toast for validation failure
+      toast({
+        title: "Validation Error",
+        description: `Failed to validate settings: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
       });
     }
-    
-    if (settings.profileResolutionServers) {
-      settings.profileResolutionServers.forEach((server, index) => {
-        if (!server.url || !isValidUrl(server.url)) {
-          errors.push(`Profile resolution server ${index + 1} has an invalid URL`);
-        }
-        if (server.timeoutMs && (server.timeoutMs < 1000 || server.timeoutMs > 300000)) {
-          warnings.push(`Profile resolution server ${index + 1} timeout is outside recommended range (1-300 seconds)`);
-        }
-      });
-    }
-    
-    // Performance validation
-    if (settings.maxConcurrentValidations < 1 || settings.maxConcurrentValidations > 50) {
-      errors.push('Max concurrent validations must be between 1 and 50');
-    }
-    
-    if (settings.timeoutSettings?.defaultTimeoutMs && 
-        (settings.timeoutSettings.defaultTimeoutMs < 1000 || settings.timeoutSettings.defaultTimeoutMs > 300000)) {
-      warnings.push('Default timeout is outside recommended range (1-300 seconds)');
-    }
-    
-    // Cache validation
-    if (settings.cacheSettings?.enabled) {
-      if (settings.cacheSettings.ttlMs && (settings.cacheSettings.ttlMs < 60000 || settings.cacheSettings.ttlMs > 86400000)) {
-        warnings.push('Cache TTL is outside recommended range (1 minute to 24 hours)');
-      }
-      if (settings.cacheSettings.maxSizeMB && (settings.cacheSettings.maxSizeMB < 1 || settings.cacheSettings.maxSizeMB > 10000)) {
-        warnings.push('Cache size is outside recommended range (1MB to 10GB)');
-      }
-    }
-    
-    // Aspect-specific validation
-    const aspects: ValidationAspect[] = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'];
-    aspects.forEach(aspect => {
-      const aspectSettings = settings[aspect];
-      if (aspectSettings?.enabled) {
-        if (aspectSettings.timeoutMs && (aspectSettings.timeoutMs < 1000 || aspectSettings.timeoutMs > 300000)) {
-          warnings.push(`${aspect} validation timeout is outside recommended range (1-300 seconds)`);
-        }
-      }
-    });
-    
-    const validationResult: ValidationSettingsValidationResult = {
-      isValid: errors.length === 0,
-      errors: errors.map(error => ({
-        code: 'VALIDATION_ERROR',
-        message: error,
-        path: '',
-        suggestion: 'Please check your settings'
-      })),
-      warnings: warnings.map(warning => ({
-        code: 'VALIDATION_WARNING',
-        message: warning,
-        path: '',
-        suggestion: 'Consider adjusting the setting to the recommended range'
-      })),
-      suggestions: suggestions.map(suggestion => ({
-        code: 'VALIDATION_SUGGESTION',
-        message: suggestion,
-        path: '',
-        suggestion: ''
-      }))
-    };
-    
-    setState(prev => ({
-      ...prev,
-      validationResult
-    }));
-  }, []);
+  }, [toast]);
 
   // Debounced validation effect
   useEffect(() => {
@@ -409,6 +669,19 @@ export function RockSolidSettings({
       {showValidationDetails && validationResult && (
         <ValidationDetailsCard validationResult={validationResult} />
       )}
+
+      {/* Test Results */}
+      {state.testResult && (
+        <TestResultsCard testResults={state.testResult} />
+      )}
+
+      {/* Rollback Confirmation Dialog */}
+      <RollbackConfirmationDialog 
+        isOpen={state.isRollingBack}
+        onConfirm={handleRollback}
+        onCancel={() => setState(prev => ({ ...prev, isRollingBack: false }))}
+        error={state.rollbackError}
+      />
 
       {/* Presets */}
       {presets.length > 0 && (
@@ -580,29 +853,59 @@ function ValidationSummaryCard({
 }
 
 function ValidationDetailsCard({ validationResult }: { validationResult: ValidationSettingsValidationResult }) {
+  const hasErrors = validationResult.errors.length > 0;
+  const hasWarnings = validationResult.warnings.length > 0;
+  const hasSuggestions = validationResult.suggestions.length > 0;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center space-x-2">
           <Shield className="h-5 w-5" />
           <span>Validation Results</span>
+          <Badge variant={hasErrors ? "destructive" : hasWarnings ? "secondary" : "default"}>
+            {hasErrors ? `${validationResult.errors.length} Error${validationResult.errors.length !== 1 ? 's' : ''}` :
+             hasWarnings ? `${validationResult.warnings.length} Warning${validationResult.warnings.length !== 1 ? 's' : ''}` :
+             hasSuggestions ? `${validationResult.suggestions.length} Suggestion${validationResult.suggestions.length !== 1 ? 's' : ''}` :
+             'Valid'}
+          </Badge>
         </CardTitle>
+        <CardDescription>
+          {hasErrors ? 'Please fix the errors below before saving your settings.' :
+           hasWarnings ? 'Review the warnings below to optimize your configuration.' :
+           hasSuggestions ? 'Consider the suggestions below to improve your settings.' :
+           'All settings are properly configured and ready to use.'}
+        </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {validationResult.errors.length > 0 && (
+      <CardContent className="space-y-6">
+        {hasErrors && (
           <div>
-            <h4 className="font-medium text-red-600 mb-2">Errors</h4>
-            <div className="space-y-2">
+            <h4 className="font-medium text-red-600 mb-3 flex items-center">
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              Errors ({validationResult.errors.length})
+            </h4>
+            <div className="space-y-3">
               {validationResult.errors.map((error, index) => (
-                <Alert key={index} variant="destructive">
+                <Alert key={index} variant="destructive" className="border-l-4 border-l-red-500">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
-                    <strong>{error.code}:</strong> {error.message}
-                    {error.suggestion && (
-                      <div className="mt-1 text-sm text-red-200">
-                        Suggestion: {error.suggestion}
+                    <div className="space-y-2">
+                      <div>
+                        <span className="font-medium text-red-800">{error.code}:</span>
+                        <span className="ml-2 text-red-700">{error.message}</span>
                       </div>
-                    )}
+                      {error.path && (
+                        <div className="text-sm text-red-600">
+                          <span className="font-medium">Location:</span> {error.path}
+                        </div>
+                      )}
+                      {error.suggestion && (
+                        <div className="mt-2 p-2 bg-red-100 rounded border border-red-200">
+                          <div className="text-sm font-medium text-red-800 mb-1">💡 Suggestion:</div>
+                          <div className="text-sm text-red-700">{error.suggestion}</div>
+                        </div>
+                      )}
+                    </div>
                   </AlertDescription>
                 </Alert>
               ))}
@@ -610,20 +913,34 @@ function ValidationDetailsCard({ validationResult }: { validationResult: Validat
           </div>
         )}
         
-        {validationResult.warnings.length > 0 && (
+        {hasWarnings && (
           <div>
-            <h4 className="font-medium text-yellow-600 mb-2">Warnings</h4>
-            <div className="space-y-2">
+            <h4 className="font-medium text-yellow-600 mb-3 flex items-center">
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              Warnings ({validationResult.warnings.length})
+            </h4>
+            <div className="space-y-3">
               {validationResult.warnings.map((warning, index) => (
-                <Alert key={index} variant="default" className="border-yellow-200 bg-yellow-50">
+                <Alert key={index} variant="default" className="border-l-4 border-l-yellow-500 bg-yellow-50 border-yellow-200">
                   <AlertTriangle className="h-4 w-4 text-yellow-600" />
                   <AlertDescription className="text-yellow-800">
-                    <strong>{warning.code}:</strong> {warning.message}
-                    {warning.suggestion && (
-                      <div className="mt-1 text-sm text-yellow-700">
-                        Suggestion: {warning.suggestion}
+                    <div className="space-y-2">
+                      <div>
+                        <span className="font-medium text-yellow-800">{warning.code}:</span>
+                        <span className="ml-2 text-yellow-700">{warning.message}</span>
                       </div>
-                    )}
+                      {warning.path && (
+                        <div className="text-sm text-yellow-600">
+                          <span className="font-medium">Location:</span> {warning.path}
+                        </div>
+                      )}
+                      {warning.suggestion && (
+                        <div className="mt-2 p-2 bg-yellow-100 rounded border border-yellow-200">
+                          <div className="text-sm font-medium text-yellow-800 mb-1">💡 Suggestion:</div>
+                          <div className="text-sm text-yellow-700">{warning.suggestion}</div>
+                        </div>
+                      )}
+                    </div>
                   </AlertDescription>
                 </Alert>
               ))}
@@ -631,19 +948,48 @@ function ValidationDetailsCard({ validationResult }: { validationResult: Validat
           </div>
         )}
         
-        {validationResult.suggestions.length > 0 && (
+        {hasSuggestions && (
           <div>
-            <h4 className="font-medium text-blue-600 mb-2">Suggestions</h4>
-            <div className="space-y-2">
+            <h4 className="font-medium text-blue-600 mb-3 flex items-center">
+              <Info className="h-4 w-4 mr-2" />
+              Suggestions ({validationResult.suggestions.length})
+            </h4>
+            <div className="space-y-3">
               {validationResult.suggestions.map((suggestion, index) => (
-                <Alert key={index} variant="default" className="border-blue-200 bg-blue-50">
+                <Alert key={index} variant="default" className="border-l-4 border-l-blue-500 bg-blue-50 border-blue-200">
                   <Info className="h-4 w-4 text-blue-600" />
                   <AlertDescription className="text-blue-800">
-                    <strong>{suggestion.code}:</strong> {suggestion.message}
+                    <div className="space-y-2">
+                      <div>
+                        <span className="font-medium text-blue-800">{suggestion.code}:</span>
+                        <span className="ml-2 text-blue-700">{suggestion.message}</span>
+                      </div>
+                      {suggestion.path && (
+                        <div className="text-sm text-blue-600">
+                          <span className="font-medium">Location:</span> {suggestion.path}
+                        </div>
+                      )}
+                      {suggestion.suggestedValue && (
+                        <div className="mt-2 p-2 bg-blue-100 rounded border border-blue-200">
+                          <div className="text-sm font-medium text-blue-800 mb-1">💡 Suggested Value:</div>
+                          <div className="text-sm text-blue-700 font-mono">{JSON.stringify(suggestion.suggestedValue)}</div>
+                        </div>
+                      )}
+                    </div>
                   </AlertDescription>
                 </Alert>
               ))}
             </div>
+          </div>
+        )}
+
+        {!hasErrors && !hasWarnings && !hasSuggestions && (
+          <div className="text-center py-8">
+            <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
+            <h4 className="font-medium text-green-600 mb-2">All Settings Valid</h4>
+            <p className="text-sm text-green-600">
+              Your validation settings are properly configured and ready to use.
+            </p>
           </div>
         )}
       </CardContent>
@@ -1816,10 +2162,213 @@ function updateNestedProperty(obj: any, path: string, value: any): any {
   return result;
 }
 
+function TestResultsCard({ testResults }: { testResults: any[] }) {
+  const totalTests = testResults.length;
+  const passedTests = testResults.filter(result => result.isValid).length;
+  const failedTests = totalTests - passedTests;
+  const hasErrors = failedTests > 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center space-x-2">
+          <TestTube className="h-5 w-5" />
+          <span>Settings Test Results</span>
+          <Badge variant={hasErrors ? "destructive" : "default"}>
+            {passedTests}/{totalTests} Passed
+          </Badge>
+        </CardTitle>
+        <CardDescription>
+          Results from testing your validation settings with sample FHIR resources.
+          {hasErrors ? ' Some tests failed - review the results below.' : ' All tests passed successfully!'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Test Summary */}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center p-3 bg-green-50 rounded-lg border border-green-200">
+            <div className="text-2xl font-bold text-green-600">{passedTests}</div>
+            <div className="text-sm text-green-600">Passed</div>
+          </div>
+          <div className="text-center p-3 bg-red-50 rounded-lg border border-red-200">
+            <div className="text-2xl font-bold text-red-600">{failedTests}</div>
+            <div className="text-sm text-red-600">Failed</div>
+          </div>
+          <div className="text-center p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="text-2xl font-bold text-blue-600">{totalTests}</div>
+            <div className="text-sm text-blue-600">Total</div>
+          </div>
+        </div>
+
+        {/* Individual Test Results */}
+        <div className="space-y-3">
+          {testResults.map((result, index) => (
+            <div key={index} className={`p-4 rounded-lg border ${
+              result.isValid 
+                ? 'bg-green-50 border-green-200' 
+                : 'bg-red-50 border-red-200'
+            }`}>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  {result.isValid ? (
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <AlertTriangle className="h-5 w-5 text-red-600" />
+                  )}
+                  <h4 className="font-medium">{result.name}</h4>
+                  <Badge variant="outline" className="text-xs">
+                    {result.resourceType}
+                  </Badge>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {new Date(result.testedAt).toLocaleTimeString()}
+                </div>
+              </div>
+              
+              <div className="text-sm text-muted-foreground mb-2">
+                Expected: {result.expectedValid ? 'Valid' : 'Invalid'} | 
+                Actual: {result.isValid ? 'Valid' : 'Invalid'}
+                {result.isValid === result.expectedValid ? (
+                  <span className="text-green-600 ml-2">✓ Correct</span>
+                ) : (
+                  <span className="text-red-600 ml-2">✗ Unexpected</span>
+                )}
+              </div>
+
+              {result.error && (
+                <Alert variant="destructive" className="mt-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Test Error:</strong> {result.error}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {result.validationResults && result.validationResults.length > 0 && (
+                <div className="mt-2">
+                  <div className="text-sm font-medium mb-1">Validation Issues:</div>
+                  <div className="space-y-1">
+                    {result.validationResults.slice(0, 3).map((issue: any, issueIndex: number) => (
+                      <div key={issueIndex} className="text-xs p-2 bg-white rounded border">
+                        <span className="font-medium">{issue.severity}:</span> {issue.message}
+                      </div>
+                    ))}
+                    {result.validationResults.length > 3 && (
+                      <div className="text-xs text-muted-foreground">
+                        ... and {result.validationResults.length - 3} more issues
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {result.recommendations && result.recommendations.length > 0 && (
+                <div className="mt-2">
+                  <div className="text-sm font-medium mb-1">Recommendations:</div>
+                  <div className="space-y-1">
+                    {result.recommendations.slice(0, 2).map((rec: any, recIndex: number) => (
+                      <div key={recIndex} className="text-xs p-2 bg-blue-50 rounded border border-blue-200">
+                        💡 {rec}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Performance Summary */}
+        {testResults.some(result => result.performanceMetrics && Object.keys(result.performanceMetrics).length > 0) && (
+          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+            <h4 className="font-medium mb-2">Performance Summary</h4>
+            <div className="text-sm text-muted-foreground">
+              Average validation time: {Math.round(
+                testResults
+                  .filter(result => result.performanceMetrics?.validationTimeMs)
+                  .reduce((sum, result) => sum + (result.performanceMetrics?.validationTimeMs || 0), 0) / 
+                testResults.filter(result => result.performanceMetrics?.validationTimeMs).length
+              )}ms
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function RollbackConfirmationDialog({ 
+  isOpen, 
+  onConfirm, 
+  onCancel, 
+  error 
+}: { 
+  isOpen: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  error?: string;
+}) {
+  return (
+    <Dialog open={isOpen} onOpenChange={onCancel}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center space-x-2">
+            <AlertTriangle className="h-5 w-5 text-orange-500" />
+            <span>Confirm Settings Rollback</span>
+          </DialogTitle>
+          <DialogDescription>
+            This will restore your settings to the previous version. This action cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4">
+          {error && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Rollback Error:</strong> {error}
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+            <div className="flex items-start space-x-3">
+              <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5" />
+              <div className="space-y-2">
+                <h4 className="font-medium text-orange-800">What will happen:</h4>
+                <ul className="text-sm text-orange-700 space-y-1">
+                  <li>• Your current settings will be replaced with the previous version</li>
+                  <li>• Any unsaved changes will be lost</li>
+                  <li>• The validation engine will be reconfigured with the rolled-back settings</li>
+                  <li>• This action will be logged for audit purposes</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <DialogFooter className="space-x-2">
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button 
+            variant="destructive" 
+            onClick={onConfirm}
+            className="bg-orange-600 hover:bg-orange-700"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Rollback Settings
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function isValidUrl(url: string): boolean {
   try {
     const urlObj = new URL(url);
-    return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
+    return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';                                                           
   } catch {
     return false;
   }

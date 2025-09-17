@@ -9,7 +9,7 @@ import { EventEmitter } from 'events';
 import { ValidationSettingsRepository } from '../../repositories/validation-settings-repository';
 import { ValidationSettings } from '@shared/validation-settings';
 import { ValidationSettingsRecord } from '../../repositories/validation-settings-repository';
-import { createHash, createCipher, createDecipher } from 'crypto';
+import { createHash, createCipheriv, createDecipheriv, randomBytes, scrypt } from 'crypto';
 import { gzip, gunzip } from 'zlib';
 import { promisify } from 'util';
 import { writeFile, readFile, unlink, mkdir, readdir, stat } from 'fs';
@@ -532,17 +532,38 @@ export class ValidationSettingsBackupService extends EventEmitter {
   }
 
   private async encryptData(data: Buffer, key: string): Promise<Buffer> {
-    // Simple encryption implementation - in production, use proper encryption
-    const cipher = createCipher('aes-256-cbc', key);
+    // Modern encryption implementation using createCipheriv
+    const salt = randomBytes(16);
+    const derivedKey = await this.deriveKey(key, salt);
+    const iv = randomBytes(16);
+    
+    const cipher = createCipheriv('aes-256-cbc', derivedKey, iv);
     const encrypted = Buffer.concat([cipher.update(data), cipher.final()]);
-    return encrypted;
+    
+    // Prepend salt and iv to the encrypted data
+    return Buffer.concat([salt, iv, encrypted]);
   }
 
   private async decryptData(data: Buffer, key: string): Promise<Buffer> {
-    // Simple decryption implementation - in production, use proper decryption
-    const decipher = createDecipher('aes-256-cbc', key);
-    const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
+    // Modern decryption implementation using createDecipheriv
+    const salt = data.slice(0, 16);
+    const iv = data.slice(16, 32);
+    const encrypted = data.slice(32);
+    
+    const derivedKey = await this.deriveKey(key, salt);
+    const decipher = createDecipheriv('aes-256-cbc', derivedKey, iv);
+    const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+    
     return decrypted;
+  }
+
+  private async deriveKey(password: string, salt: Buffer): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      scrypt(password, salt, 32, (err, derivedKey) => {
+        if (err) reject(err);
+        else resolve(derivedKey);
+      });
+    });
   }
 
   private async findBackupFile(backupId: string): Promise<string | null> {

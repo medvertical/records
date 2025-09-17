@@ -138,8 +138,7 @@ export default function ResourceBrowser() {
       const fullUrl = `${url}?${searchParams}`;
       
       return fetch(fullUrl).then(res => res.json());
-    },
-    enabled: true, // Explicitly enable the query
+    }
   });
 
   const handlePageChange = (newPage: number) => {

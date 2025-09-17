@@ -2067,9 +2067,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let errorCode = "UPDATE_FAILED";
       let message = "Failed to update validation settings";
       
-      if (error.name === 'ValidationError') {
+      if (error.name === 'ValidationError' || error.name === 'ValidationSettingsError') {
         errorCode = "VALIDATION_ERROR";
         message = "Settings validation failed";
+        
+        // Include detailed validation information if available
+        const validationDetails = {
+          errors: error.context?.validationErrors || [],
+          warnings: error.context?.validationWarnings || [],
+          suggestions: error.context?.validationSuggestions || []
+        };
+        
+        res.status(statusCode).json({
+          success: false,
+          message,
+          error: errorCode,
+          details: error.message,
+          validation: validationDetails,
+          timestamp: new Date().toISOString()
+        });
+        return;
       } else if (error.name === 'DatabaseError') {
         statusCode = 503;
         errorCode = "DATABASE_ERROR";
@@ -2127,7 +2144,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           errors: validationResult.errors || [],
           warnings: validationResult.warnings || [],
           suggestions: validationResult.suggestions || [],
-          validatedAt: new Date().toISOString()
+          validatedAt: new Date().toISOString(),
+          // Add summary information for better UX
+          summary: {
+            totalErrors: validationResult.errors?.length || 0,
+            totalWarnings: validationResult.warnings?.length || 0,
+            totalSuggestions: validationResult.suggestions?.length || 0,
+            hasErrors: (validationResult.errors?.length || 0) > 0,
+            hasWarnings: (validationResult.warnings?.length || 0) > 0,
+            hasSuggestions: (validationResult.suggestions?.length || 0) > 0
+          }
         },
         message: validationResult.isValid ? "Settings validation passed" : "Settings validation failed",
         timestamp: new Date().toISOString()
@@ -2553,6 +2579,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
         statusCode = 403;
         errorCode = "PERMISSION_DENIED";
         message = "Insufficient permissions to apply preset";
+      }
+      
+      res.status(statusCode).json({
+        success: false,
+        message,
+        error: errorCode,
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // POST /api/validation/settings/rollback - Rollback to previous settings version
+  app.post("/api/validation/settings/rollback", async (req, res) => {
+    try {
+      const { settingsId, rollbackToVersion, rolledBackBy } = req.body;
+      
+      // Validate required parameters
+      if (!settingsId || rollbackToVersion === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "Settings ID and rollback version are required",
+          error: "MISSING_PARAMETERS",
+          required: ["settingsId", "rollbackToVersion"],
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const settingsService = getValidationSettingsService();
+      const rollbackResult = await settingsService.rollbackToVersion(
+        settingsId, 
+        rollbackToVersion, 
+        rolledBackBy || 'user-rollback'
+      );
+      
+      // Clear relevant caches
+      // Note: queryClient is not available in server context, cache invalidation handled by service
+      
+      res.json({
+        success: true,
+        data: {
+          rollbackResult,
+          rolledBackAt: new Date().toISOString(),
+          rolledBackBy: rolledBackBy || 'user-rollback'
+        },
+        message: "Settings successfully rolled back",
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error: any) {
+      console.error('[ValidationSettings] Rollback failed:', error);
+      
+      // Determine error type and appropriate response
+      let statusCode = 400;
+      let errorCode = "ROLLBACK_FAILED";
+      let message = "Failed to rollback settings";
+      
+      if (error.message?.includes('not found')) {
+        statusCode = 404;
+        errorCode = "SETTINGS_NOT_FOUND";
+        message = "Settings not found";
+      } else if (error.message?.includes('validation failed')) {
+        errorCode = "ROLLBACK_VALIDATION_ERROR";
+        message = "Rollback settings validation failed";
+      } else if (error.message?.includes('database')) {
+        statusCode = 503;
+        errorCode = "DATABASE_ERROR";
+        message = "Database error during rollback";
       }
       
       res.status(statusCode).json({

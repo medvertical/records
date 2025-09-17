@@ -25,6 +25,8 @@ import {
 import { ValidationSettingsRepository } from '../../repositories/validation-settings-repository';
 import {
   ValidationSettingsError,
+  ValidationSettingsErrorCode,
+  ErrorSeverity,
   ValidationSettingsErrorLogger,
   createInitializationError,
   createDatabaseError,
@@ -308,7 +310,19 @@ export class ValidationSettingsService extends EventEmitter {
       await this.initialize();
     }
 
+    // Store current settings for potential rollback
+    let rollbackSettings: ValidationSettings | null = null;
+    let rollbackSettingsId: string | null = null;
+
     try {
+      // Get current settings for rollback
+      const currentSettings = await this.getActiveSettings();
+      if (currentSettings) {
+        rollbackSettings = { ...currentSettings };
+        rollbackSettingsId = currentSettings.id!;
+        console.log('[ValidationSettingsService] Stored rollback settings with ID:', rollbackSettingsId);
+    }
+
     // Transform string dates to Date objects before validation
     const transformedSettings = this.transformStringDatesToObjects(update.settings);
     
@@ -317,11 +331,35 @@ export class ValidationSettingsService extends EventEmitter {
     const validationResult = validatePartialValidationSettings(transformedSettings);
     if (!validationResult.isValid) {
       console.error('[ValidationSettingsService] Validation failed:', validationResult.errors);
-      throw new Error(`Invalid settings update: ${validationResult.errors.map(e => e.message).join(', ')}`);
-    }
-
-    // Get current settings
-    const currentSettings = await this.getActiveSettings();
+        
+      // Create detailed validation error with suggestions
+      const detailedError = new ValidationSettingsError(
+        ValidationSettingsErrorCode.VALIDATION_FAILED,
+        'Settings validation failed',
+        {
+          severity: ErrorSeverity.HIGH,
+          userMessage: 'Settings validation failed',
+          context: {
+            operation: 'updateSettings',
+            additionalData: {
+              validationErrors: validationResult.errors,
+              validationWarnings: validationResult.warnings,
+              validationSuggestions: validationResult.suggestions
+            }
+          }
+        }
+      );
+        
+        throw detailedError;
+      }
+      
+      // Log warnings and suggestions for user awareness
+      if (validationResult.warnings.length > 0) {
+        console.warn('[ValidationSettingsService] Validation warnings:', validationResult.warnings);
+      }
+      if (validationResult.suggestions.length > 0) {
+        console.info('[ValidationSettingsService] Validation suggestions:', validationResult.suggestions);
+      }
     
     // Merge with current settings
     const updatedSettings: ValidationSettings = {
@@ -361,15 +399,160 @@ export class ValidationSettingsService extends EventEmitter {
     } catch (error) {
       console.error('[ValidationSettingsService] Error updating settings:', error);
       
+      // Attempt rollback if we have rollback settings
+      if (rollbackSettings && rollbackSettingsId) {
+        try {
+          console.log('[ValidationSettingsService] Attempting rollback to previous settings...');
+          
+          // Restore the previous settings
+          const rollbackUpdate: ValidationSettingsUpdate = {
+            settings: rollbackSettings,
+            updatedBy: update.updatedBy || 'system-rollback',
+            createNewVersion: false // Don't create a new version for rollback
+          };
+          
+          // Perform rollback
+          const rollbackResult = await this.repository.update({
+            id: parseInt(rollbackSettingsId),
+            settings: rollbackSettings,
+            updatedBy: update.updatedBy || 'system-rollback',
+            changeType: 'rolled_back'
+          });
+          
+          // Update cache with rollback settings
+          this.setCachedSettings(rollbackSettingsId, rollbackSettings, ['rollback']);
+          
+          // Emit rollback event
+          this.emit('settingsRolledBack', {
+            originalUpdate: update,
+            rollbackSettings: rollbackResult.settings,
+            error: error instanceof Error ? error : new Error('Unknown error'),
+            timestamp: new Date()
+          });
+          
+          console.log('[ValidationSettingsService] Rollback successful');
+          
+        } catch (rollbackError) {
+          console.error('[ValidationSettingsService] Rollback failed:', rollbackError);
+          
+          // Emit rollback failure event
+          this.emit('settingsRollbackFailed', {
+            originalUpdate: update,
+            rollbackSettings,
+            originalError: error instanceof Error ? error : new Error('Unknown error'),
+            rollbackError: rollbackError instanceof Error ? rollbackError : new Error('Unknown rollback error'),
+            timestamp: new Date()
+          });
+        }
+      }
+      
       // Emit error event
       this.emit('settingsUpdateError', {
         error: error instanceof Error ? error : new Error('Unknown error'),
         update,
+        rollbackAttempted: !!rollbackSettings,
+        rollbackSuccessful: false, // Will be updated if rollback succeeds
         timestamp: new Date()
       });
 
-      // Re-throw with more context
-      throw new Error(`Failed to update settings: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Create enhanced error with rollback information
+      const enhancedError = new Error(
+        `Failed to update settings: ${error instanceof Error ? error.message : 'Unknown error'}${
+          rollbackSettings ? ' (Rollback attempted)' : ' (No rollback available)'
+        }`
+      );
+      
+      // Add rollback information to error
+      (enhancedError as any).rollbackAttempted = !!rollbackSettings;
+      (enhancedError as any).rollbackSettings = rollbackSettings;
+      
+      throw enhancedError;
+    }
+  }
+
+  /**
+   * Manually rollback to a previous settings version
+   */
+  async rollbackToVersion(settingsId: string, rollbackToVersion: number, rolledBackBy?: string): Promise<ValidationSettings> {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    try {
+      console.log(`[ValidationSettingsService] Rolling back settings ${settingsId} to version ${rollbackToVersion}`);
+      
+      // Get the target version
+      const targetVersion = await this.repository.getById(parseInt(settingsId));
+      if (!targetVersion) {
+        throw new Error(`Settings with ID ${settingsId} not found`);
+      }
+
+      // Get current active settings for comparison
+      const currentSettings = await this.getActiveSettings();
+      
+      // Create a new version with the rolled-back settings
+      const rollbackSettings: ValidationSettings = {
+        ...targetVersion.settings,
+        id: undefined, // Will be assigned by repository
+        version: (currentSettings?.version || 0) + 1,
+        isActive: true,
+        createdAt: new Date(),
+        createdBy: rolledBackBy || 'system-rollback',
+        updatedAt: new Date(),
+        updatedBy: rolledBackBy || 'system-rollback'
+      };
+
+      // Validate the rollback settings
+      const validationResult = validateValidationSettings(rollbackSettings);
+      if (!validationResult.isValid) {
+        throw new Error(`Rollback settings validation failed: ${validationResult.errors.map(e => e.message).join(', ')}`);
+      }
+
+      // Deactivate current settings
+      if (currentSettings) {
+        await this.repository.update({
+          id: parseInt(currentSettings.id!),
+          settings: { isActive: false },
+          updatedBy: rolledBackBy || 'system-rollback',
+          changeType: 'deactivated'
+        });
+      }
+
+      // Create new active settings with rolled-back configuration
+      const newSettings = await this.repository.create({
+        settings: rollbackSettings,
+        isActive: true,
+        createdBy: rolledBackBy || 'system-rollback'
+      });
+
+      // Update cache
+      this.setCachedSettings(newSettings.id!.toString(), newSettings.settings, ['rollback']);
+      this.activeSettings = newSettings.settings;
+
+      // Emit rollback event
+      this.emit('settingsRolledBack', {
+        originalSettings: currentSettings,
+        rollbackSettings: newSettings.settings,
+        rolledBackBy: rolledBackBy || 'system-rollback',
+        timestamp: new Date()
+      });
+
+      console.log(`[ValidationSettingsService] Successfully rolled back to version ${rollbackToVersion}`);
+      return newSettings.settings;
+
+    } catch (error) {
+      console.error('[ValidationSettingsService] Rollback failed:', error);
+      
+      // Emit rollback failure event
+      this.emit('settingsRollbackFailed', {
+        settingsId,
+        rollbackToVersion,
+        error: error instanceof Error ? error : new Error('Unknown error'),
+        rolledBackBy: rolledBackBy || 'system-rollback',
+        timestamp: new Date()
+      });
+      
+      throw error;
     }
   }
 
@@ -390,6 +573,40 @@ export class ValidationSettingsService extends EventEmitter {
       createdAt: new Date(),
       createdBy
     };
+
+    // Validate the new settings
+    const validationResult = validateValidationSettings(newSettings);
+    if (!validationResult.isValid) {
+      console.error('[ValidationSettingsService] Settings creation validation failed:', validationResult.errors);
+      
+      // Create detailed validation error with suggestions
+      const detailedError = new ValidationSettingsError(
+        ValidationSettingsErrorCode.VALIDATION_FAILED,
+        'Settings validation failed',
+        {
+          severity: ErrorSeverity.HIGH,
+          userMessage: 'Settings validation failed',
+          context: {
+            operation: 'createSettings',
+            additionalData: {
+              validationErrors: validationResult.errors,
+              validationWarnings: validationResult.warnings,
+              validationSuggestions: validationResult.suggestions
+            }
+          }
+        }
+      );
+      
+      throw detailedError;
+    }
+    
+    // Log warnings and suggestions for user awareness
+    if (validationResult.warnings.length > 0) {
+      console.warn('[ValidationSettingsService] Settings creation warnings:', validationResult.warnings);
+    }
+    if (validationResult.suggestions.length > 0) {
+      console.info('[ValidationSettingsService] Settings creation suggestions:', validationResult.suggestions);
+    }
 
     // Normalize and validate
     const normalizedSettings = normalizeValidationSettings(newSettings);
