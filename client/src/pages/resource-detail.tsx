@@ -19,7 +19,7 @@ export default function ResourceDetail() {
   
   // Listen for validation settings changes to invalidate resource cache
   useEffect(() => {
-    const handleWebSocketMessage = (event: MessageEvent) => {
+    const handleSSEMessage = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
@@ -32,11 +32,11 @@ export default function ResourceDetail() {
       }
     };
 
-    // Add event listener for WebSocket messages
-    const ws = (window as any).validationWebSocket;
-    if (ws) {
-      ws.addEventListener('message', handleWebSocketMessage);
-      return () => ws.removeEventListener('message', handleWebSocketMessage);
+    // Add event listener for SSE messages
+    const sse = (window as any).validationSSE;
+    if (sse) {
+      sse.addEventListener('message', handleSSEMessage);
+      return () => sse.removeEventListener('message', handleSSEMessage);
     }
   }, [queryClient, id]);
   

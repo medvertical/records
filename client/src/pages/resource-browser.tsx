@@ -86,7 +86,7 @@ export default function ResourceBrowser() {
 
   // Listen for validation settings changes to invalidate resource cache
   useEffect(() => {
-    const handleWebSocketMessage = (event: MessageEvent) => {
+    const handleSSEMessage = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
@@ -99,76 +99,20 @@ export default function ResourceBrowser() {
       }
     };
 
-    // Add event listener for WebSocket messages
-    const ws = (window as any).validationWebSocket;
-    if (ws) {
-      ws.addEventListener('message', handleWebSocketMessage);
-      return () => ws.removeEventListener('message', handleWebSocketMessage);
+    // Add event listener for SSE messages
+    const sse = (window as any).validationSSE;
+    if (sse) {
+      sse.addEventListener('message', handleSSEMessage);
+      return () => sse.removeEventListener('message', handleSSEMessage);
     }
   }, [queryClient]);
 
-  // WebSocket connection for real-time validation updates
+  // SSE connection for real-time validation updates
   useEffect(() => {
-    // Temporarily disable WebSocket to prevent connection errors
+    // SSE connection is handled by useValidationSSE hook
+    // Real-time validation updates are managed through SSE events
     return;
-
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host || 'localhost:3000';
-    const wsUrl = `${protocol}//${host}/ws`;
-
-    console.log('[Resource Browser] Connecting to WebSocket for validation updates:', wsUrl);
-    const socket = new WebSocket(wsUrl);
-    
-    socket.onopen = () => {
-      console.log('[Resource Browser] WebSocket connected for validation updates');
-    };
-    
-    socket.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data) as ValidationUpdateMessage;
-        
-        if (message.type === 'resource_validation_updated') {
-          console.log('[Resource Browser] Received validation update for resource:', message.fhirResourceId);
-          
-          // Update the cached resource data with new validation summary
-          const queryKey = ["/api/fhir/resources", { resourceType, search: searchQuery, page }];
-          queryClient.setQueryData(queryKey, (oldData: ResourcesResponse | undefined) => {
-            if (!oldData) return oldData;
-            
-            return {
-              ...oldData,
-              resources: oldData.resources.map(resource => {
-                if (resource._dbId === message.resourceId) {
-                  return {
-                    ...resource,
-                    _validationSummary: {
-                      ...message.validationSummary,
-                      needsValidation: false // Clear the validation pending flag
-                    }
-                  };
-                }
-                return resource;
-              })
-            };
-          });
-        }
-      } catch (error) {
-        console.warn('[Resource Browser] Failed to parse WebSocket message:', error);
-      }
-    };
-    
-    socket.onclose = () => {
-      console.log('[Resource Browser] WebSocket disconnected');
-    };
-    
-    socket.onerror = (error) => {
-      console.error('[Resource Browser] WebSocket error:', error);
-    };
-    
-    return () => {
-      socket.close();
-    };
-  }, [queryClient, resourceType, searchQuery, page]);
+  }, []);
 
   const { data: resourceTypes } = useQuery<string[]>({
     queryKey: ["/api/fhir/resource-types"],

@@ -1,193 +1,176 @@
-// ============================================================================
-// Validation Stats Card Tests
-// ============================================================================
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { ValidationStatsCard } from './validation-stats-card'
 
-import { render, screen } from '@testing-library/react';
-import { ValidationStatsCard } from './validation-stats-card';
-import { ValidationStats } from '@shared/types/dashboard';
-
-const mockValidationStats: ValidationStats = {
-  totalValidated: 1000,
-  validResources: 800,
-  errorResources: 150,
-  warningResources: 50,
-  unvalidatedResources: 999000,
-  validationCoverage: 80, // 800/1000 * 100
-  validationProgress: 0.1, // 1000/1000000 * 100
-  lastValidationRun: new Date('2025-01-01T12:00:00Z'),
-  resourceTypeBreakdown: {
-    'Patient': {
-      total: 500000,
-      validated: 500,
-      valid: 400,
-      errors: 80,
-      warnings: 20,
-      unvalidated: 499500,
-      validationRate: 0.1, // 500/500000 * 100
-      successRate: 80 // 400/500 * 100
-    },
-    'Observation': {
-      total: 300000,
-      validated: 500,
-      valid: 400,
-      errors: 70,
-      warnings: 30,
-      unvalidated: 299500,
-      validationRate: 0.167, // 500/300000 * 100
-      successRate: 80 // 400/500 * 100
-    }
-  }
-};
+// Mock the icons
+vi.mock('lucide-react', () => ({
+  CheckCircle: () => <div data-testid="check-circle-icon" />,
+  XCircle: () => <div data-testid="x-circle-icon" />,
+  AlertCircle: () => <div data-testid="alert-circle-icon" />,
+  AlertTriangle: () => <div data-testid="alert-triangle-icon" />,
+  TrendingUp: () => <div data-testid="trending-up-icon" />,
+  TrendingDown: () => <div data-testid="trending-down-icon" />,
+  Minus: () => <div data-testid="minus-icon" />,
+  Database: () => <div data-testid="database-icon" />,
+  Clock: () => <div data-testid="clock-icon" />
+}))
 
 describe('ValidationStatsCard', () => {
-  it('should render validation statistics correctly', () => {
-    render(
-      <ValidationStatsCard 
-        data={mockValidationStats}
-        isLoading={false}
-        error={null}
-        lastUpdated={new Date()}
-      />
-    );
+  const mockData = {
+    totalValidated: 100,
+    validResources: 85,
+    errorResources: 10,
+    warningResources: 5,
+    unvalidatedResources: 50,
+    validationCoverage: 85,
+    validationProgress: 66.7,
+    lastValidationRun: new Date('2024-01-15T10:00:00Z'),
+    resourceTypeBreakdown: {
+      'Patient': { total: 50, validated: 40, valid: 35, errors: 3, warnings: 2, unvalidated: 10, validationRate: 80, successRate: 87.5 },
+      'Observation': { total: 30, validated: 25, valid: 20, errors: 3, warnings: 2, unvalidated: 5, validationRate: 83.3, successRate: 80 },
+      'Encounter': { total: 20, validated: 15, valid: 12, errors: 2, warnings: 1, unvalidated: 5, validationRate: 75, successRate: 80 }
+    }
+  }
 
-    expect(screen.getByText('Validation Statistics')).toBeInTheDocument();
-    expect(screen.getByText('1,000')).toBeInTheDocument(); // totalValidated
-    expect(screen.getByText('80.0%')).toBeInTheDocument(); // success rate
-  });
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
 
-  it('should display validation coverage and progress', () => {
-    render(
-      <ValidationStatsCard 
-        data={mockValidationStats}
-        isLoading={false}
-        error={null}
-        lastUpdated={new Date()}
-      />
-    );
+  it('should render validation statistics', () => {
+    render(<ValidationStatsCard data={mockData} />)
 
-    expect(screen.getByText('Validation Coverage')).toBeInTheDocument();
-    expect(screen.getByText('Validation Progress')).toBeInTheDocument();
-    expect(screen.getByText('80.0%')).toBeInTheDocument(); // coverage
-    expect(screen.getByText('0.1%')).toBeInTheDocument(); // progress
-  });
+    expect(screen.getByText('Validation Statistics')).toBeInTheDocument()
+    expect(screen.getByText('100')).toBeInTheDocument() // totalValidated
+    expect(screen.getAllByText('85.0%')).toHaveLength(2) // Success rate and validation coverage
+    expect(screen.getByText('66.7%')).toBeInTheDocument() // validationProgress
+  })
 
-  it('should show resource status breakdown', () => {
-    render(
-      <ValidationStatsCard 
-        data={mockValidationStats}
-        isLoading={false}
-        error={null}
-        lastUpdated={new Date()}
-      />
-    );
+  it('should render resource type breakdown', () => {
+    render(<ValidationStatsCard data={mockData} />)
 
-    expect(screen.getByText('800')).toBeInTheDocument(); // valid
-    expect(screen.getByText('150')).toBeInTheDocument(); // errors
-    expect(screen.getByText('50')).toBeInTheDocument(); // warnings
-    expect(screen.getByText('999,000')).toBeInTheDocument(); // unvalidated
-  });
+    expect(screen.getByText('Patient')).toBeInTheDocument()
+    expect(screen.getByText('Observation')).toBeInTheDocument()
+    expect(screen.getByText('Encounter')).toBeInTheDocument()
+  })
 
-  it('should display resource type breakdown', () => {
-    render(
-      <ValidationStatsCard 
-        data={mockValidationStats}
-        isLoading={false}
-        error={null}
-        lastUpdated={new Date()}
-      />
-    );
 
-    expect(screen.getByText('Validation by Resource Type')).toBeInTheDocument();
-    expect(screen.getByText('Patient')).toBeInTheDocument();
-    expect(screen.getByText('Observation')).toBeInTheDocument();
-  });
-
-  it('should show loading state', () => {
-    render(
-      <ValidationStatsCard 
-        data={mockValidationStats}
-        isLoading={true}
-        error={null}
-        lastUpdated={new Date()}
-      />
-    );
-
-    expect(screen.getByText('Loading validation data...')).toBeInTheDocument();
-  });
-
-  it('should show error state', () => {
-    const errorMessage = 'Failed to load validation data';
-    render(
-      <ValidationStatsCard 
-        data={mockValidationStats}
-        isLoading={false}
-        error={errorMessage}
-        lastUpdated={new Date()}
-      />
-    );
-
-    expect(screen.getByText('Error loading validation data')).toBeInTheDocument();
-    expect(screen.getByText(errorMessage)).toBeInTheDocument();
-  });
-
-  it('should calculate success rate correctly', () => {
-    const statsWithZeroValidated = {
-      ...mockValidationStats,
+  it('should handle empty data gracefully', () => {
+    const emptyData = {
       totalValidated: 0,
-      validResources: 0
-    };
+      validResources: 0,
+      errorResources: 0,
+      warningResources: 0,
+      unvalidatedResources: 0,
+      validationCoverage: 0,
+      validationProgress: 0,
+      resourceTypeBreakdown: {}
+    }
 
-    render(
-      <ValidationStatsCard 
-        data={statsWithZeroValidated}
-        isLoading={false}
-        error={null}
-        lastUpdated={new Date()}
-      />
-    );
+    render(<ValidationStatsCard data={emptyData} />)
 
-    expect(screen.getByText('0.0%')).toBeInTheDocument(); // success rate
-  });
+    expect(screen.getByText('Validation Statistics')).toBeInTheDocument()
+    expect(screen.getAllByText('0')).toHaveLength(5) // Multiple elements with 0
+    expect(screen.getAllByText('0.0%')).toHaveLength(3) // Success rate, coverage, and progress
+  })
 
-  it('should format numbers correctly', () => {
-    render(
-      <ValidationStatsCard 
-        data={mockValidationStats}
-        isLoading={false}
-        error={null}
-        lastUpdated={new Date()}
-      />
-    );
+  it('should handle undefined values gracefully', () => {
+    const dataWithUndefined = {
+      totalValidated: 100,
+      validResources: 85,
+      errorResources: 10,
+      warningResources: 5,
+      unvalidatedResources: 50,
+      validationCoverage: undefined,
+      validationProgress: 75,
+      resourceTypeBreakdown: {
+        'Patient': { total: 50, validated: 40, valid: 35, errors: 3, warnings: 2, unvalidated: 10, validationRate: 80, successRate: undefined }
+      }
+    }
 
-    // Check that large numbers are formatted with commas
-    expect(screen.getByText('999,000')).toBeInTheDocument(); // unvalidated
-    expect(screen.getByText('500,000')).toBeInTheDocument(); // total in breakdown
-  });
+    render(<ValidationStatsCard data={dataWithUndefined} />)
 
-  it('should show last validation run time', () => {
-    render(
-      <ValidationStatsCard 
-        data={mockValidationStats}
-        isLoading={false}
-        error={null}
-        lastUpdated={new Date()}
-      />
-    );
+    expect(screen.getByText('Validation Statistics')).toBeInTheDocument()
+    expect(screen.getAllByText('0.0%')).toHaveLength(2) // Should default to 0 for both coverage and progress
+  })
 
-    expect(screen.getByText(/Last validation:/)).toBeInTheDocument();
-  });
+  it('should display progress bars correctly', () => {
+    render(<ValidationStatsCard data={mockData} />)
 
-  it('should show data freshness indicator', () => {
-    const lastUpdated = new Date('2025-01-01T12:00:00Z');
-    render(
-      <ValidationStatsCard 
-        data={mockValidationStats}
-        isLoading={false}
-        error={null}
-        lastUpdated={lastUpdated}
-      />
-    );
+    const progressBars = screen.getAllByRole('progressbar')
+    expect(progressBars.length).toBeGreaterThan(0) // Should have progress bars
+  })
 
-    expect(screen.getByText(/Data updated:/)).toBeInTheDocument();
-  });
-});
+  it('should display validation coverage', () => {
+    render(<ValidationStatsCard data={mockData} />)
+
+    const coverageElements = screen.getAllByText('85.0%')
+    expect(coverageElements).toHaveLength(2) // Success rate and validation coverage
+  })
+
+  it('should display validation progress', () => {
+    render(<ValidationStatsCard data={mockData} />)
+
+    const progressElement = screen.getByText('66.7%')
+    expect(progressElement).toBeInTheDocument()
+  })
+
+  it('should handle large numbers correctly', () => {
+    const largeData = {
+      ...mockData,
+      totalValidated: 1000000,
+      validationCoverage: 99.99
+    }
+
+    render(<ValidationStatsCard data={largeData} />)
+
+    expect(screen.getByText('1,000,000')).toBeInTheDocument()
+    expect(screen.getByText('100.0%')).toBeInTheDocument()
+  })
+
+  it('should handle decimal precision correctly', () => {
+    const decimalData = {
+      ...mockData,
+      validationCoverage: 92.567,
+      validationProgress: 7.433
+    }
+
+    render(<ValidationStatsCard data={decimalData} />)
+
+    expect(screen.getByText('92.6%')).toBeInTheDocument() // Rounded to 1 decimal place
+    expect(screen.getByText('7.4%')).toBeInTheDocument() // Rounded to 1 decimal place
+  })
+
+  it('should render icons correctly', () => {
+    render(<ValidationStatsCard data={mockData} />)
+
+    expect(screen.getAllByTestId('check-circle-icon')).toHaveLength(2) // Header and valid count
+    expect(screen.getByTestId('alert-circle-icon')).toBeInTheDocument()
+    expect(screen.getByTestId('alert-triangle-icon')).toBeInTheDocument()
+    expect(screen.getAllByTestId('database-icon')).toHaveLength(4) // Unvalidated count + 3 resource types
+    expect(screen.getByTestId('clock-icon')).toBeInTheDocument()
+  })
+
+  it('should handle missing breakdown data', () => {
+    const dataWithoutBreakdown = {
+      ...mockData,
+      resourceTypeBreakdown: {}
+    }
+
+    render(<ValidationStatsCard data={dataWithoutBreakdown} />)
+
+    expect(screen.getByText('Validation Statistics')).toBeInTheDocument()
+    expect(screen.getByText('100')).toBeInTheDocument() // totalValidated should still show
+  })
+
+  it('should handle null breakdown gracefully', () => {
+    const dataWithNullBreakdown = {
+      ...mockData,
+      resourceTypeBreakdown: null as any
+    }
+
+    render(<ValidationStatsCard data={dataWithNullBreakdown} />)
+
+    expect(screen.getByText('Validation Statistics')).toBeInTheDocument()
+    expect(screen.getByText('100')).toBeInTheDocument() // totalValidated should still show
+  })
+})

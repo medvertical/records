@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { serveStatic, log } from "./server/static";
+import { logger } from "./server/utils/logger.js";
 
 const app = express();
 app.use(express.json());
@@ -64,33 +65,6 @@ const mockFhirVersion = {
 };
 
 // API Routes with fallbacks for Vercel deployment
-app.get("/api/fhir/servers", async (req, res) => {
-  try {
-    // Try to import and use storage, but fallback to mock data
-    const { storage } = await import("./server/storage.js");
-    const servers = await storage.getFhirServers();
-    res.json(servers);
-  } catch (error) {
-    console.log('Database not available, using mock FHIR servers');
-    res.json(mockFhirServers);
-  }
-});
-
-app.post("/api/fhir/servers", async (req, res) => {
-  try {
-    const { storage } = await import("./server/storage.js");
-    const { name, url } = req.body;
-    if (!name || !url) {
-      return res.status(400).json({ error: 'Name and URL are required' });
-    }
-    const server = await storage.addFhirServer({ name, url });
-    res.json(server);
-  } catch (error) {
-    console.log('Database not available, using mock response');
-    const { name, url } = req.body;
-    res.json({ id: Date.now(), name, url, message: 'Server added (demo mode)' });
-  }
-});
 
 app.get("/api/validation/bulk/progress", async (req, res) => {
   try {
@@ -128,20 +102,861 @@ app.get("/api/validation/errors/recent", async (req, res) => {
 
 app.get("/api/fhir/version", async (req, res) => {
   try {
-    // Try to get real FHIR version info
-    const { FhirClient } = await import("./server/services/fhir-client.js");
-    const fhirClient = new FhirClient("http://hapi.fhir.org/baseR4");
-    const result = await fhirClient.testConnection();
-    res.json({
-      version: "R4",
-      release: "4.0.1",
-      date: "2019-10-30",
-      fhirVersion: "4.0.1",
-      connection: result
-    });
+    // Try to get real FHIR version info from the active server
+    const { storage } = await import("./server/storage.js");
+    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
+    
+    const servers = await storage.getFhirServers();
+    const activeServer = servers.find(s => s.isActive) || servers[0];
+    
+    if (!activeServer) {
+      return res.json({
+        ...mockFhirVersion,
+        connection: { connected: false, error: "No FHIR server configured" }
+      });
+    }
+
+    const fhirClient = new FhirClient(activeServer.url, activeServer.authConfig as any);
+    const connectionResult = await fhirClient.testConnection();
+    const capabilityStatement = await fhirClient.getCapabilityStatement();
+    
+    if (capabilityStatement) {
+      res.json({
+        version: capabilityStatement.fhirVersion || "Unknown",
+        release: capabilityStatement.fhirVersion || "Unknown",
+        date: capabilityStatement.date || new Date().toISOString(),
+        fhirVersion: capabilityStatement.fhirVersion || "Unknown",
+        connection: connectionResult,
+        serverInfo: {
+          name: capabilityStatement.software?.name || activeServer.name,
+          version: capabilityStatement.software?.version || "Unknown",
+          publisher: capabilityStatement.software?.publisher || "Unknown",
+          description: capabilityStatement.software?.description || "Unknown"
+        },
+        capabilities: {
+          rest: capabilityStatement.rest?.length || 0,
+          resourceTypes: capabilityStatement.rest?.[0]?.resource?.length || 0,
+          operations: capabilityStatement.rest?.[0]?.operation?.length || 0
+        }
+      });
+    } else {
+      res.json({
+        ...mockFhirVersion,
+        connection: connectionResult,
+        serverInfo: {
+          name: activeServer.name,
+          url: activeServer.url,
+          status: connectionResult.connected ? "connected" : "disconnected"
+        }
+      });
+    }
   } catch (error) {
     console.log('FHIR client not available, using mock version info');
     res.json(mockFhirVersion);
+  }
+});
+
+app.get("/api/fhir/connection/test", async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    // Try to test connection to the active FHIR server
+    const { storage } = await import("./server/storage.js");
+    const servers = await storage.getFhirServers();
+    const activeServer = servers.find(s => s.isActive) || servers[0];
+    
+    if (!activeServer) {
+      return res.json({
+        connected: false,
+        error: "No FHIR server configured",
+        version: null,
+        url: null,
+        serverName: null,
+        timestamp: new Date().toISOString(),
+        responseTime: Date.now() - startTime
+      });
+    }
+
+          const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
+          const fhirClient = new FhirClient(activeServer.url, activeServer.authConfig as any);
+          const result = await fhirClient.testConnection();
+    
+    res.json({
+      connected: result.connected,
+      version: result.version || "Unknown",
+      url: activeServer.url,
+      serverName: activeServer.name,
+      error: result.error || null,
+      errorType: result.errorType || null,
+      statusCode: result.statusCode || null,
+      timestamp: new Date().toISOString(),
+      responseTime: result.responseTime || (Date.now() - startTime)
+    });
+  } catch (error: any) {
+    console.log('FHIR connection test failed, using mock data');
+    res.json({
+      connected: true,
+      version: "R4",
+      url: "http://hapi.fhir.org/baseR4",
+      serverName: "HAPI Test Server",
+      error: null,
+      errorType: null,
+      statusCode: null,
+      message: "Mock connection (database unavailable)",
+      timestamp: new Date().toISOString(),
+      responseTime: Date.now() - startTime
+    });
+  }
+});
+
+// Test connection to a specific server URL
+app.post("/api/fhir/connection/test", async (req, res) => {
+  const startTime = Date.now();
+  const { url, name } = req.body;
+  
+  if (!url) {
+    return res.status(400).json({
+      connected: false,
+      error: "URL is required",
+      timestamp: new Date().toISOString(),
+      responseTime: Date.now() - startTime
+    });
+  }
+
+  try {
+    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
+    const fhirClient = new FhirClient(url);
+    const result = await fhirClient.testConnection();
+    
+    res.json({
+      connected: result.connected,
+      version: result.version || "Unknown",
+      url: url,
+      serverName: name || "Test Server",
+      error: result.error || null,
+      errorType: result.errorType || null,
+      statusCode: result.statusCode || null,
+      timestamp: new Date().toISOString(),
+      responseTime: result.responseTime || (Date.now() - startTime)
+    });
+  } catch (error: any) {
+    res.json({
+      connected: false,
+      version: null,
+      url: url,
+      serverName: name || "Test Server",
+      error: error.message || "Connection test failed",
+      errorType: "server_error",
+      statusCode: null,
+      timestamp: new Date().toISOString(),
+      responseTime: Date.now() - startTime
+    });
+  }
+});
+
+// FHIR Server Management Endpoints
+app.get("/api/fhir/servers", async (req, res) => {
+  try {
+    const { storage } = await import("./server/storage.js");
+    const servers = await storage.getFhirServers();
+    
+    // Remove sensitive auth data from response
+    const safeServers = servers.map(server => ({
+      id: server.id,
+      name: server.name,
+      url: server.url,
+      isActive: server.isActive,
+      hasAuth: !!server.authConfig,
+      authType: server.authConfig?.type || 'none',
+      createdAt: server.createdAt
+    }));
+    
+    res.json(safeServers);
+  } catch (error: any) {
+    // Enhanced error handling and logging for database connection failures
+    const errorType = error.code || error.name || 'UnknownError';
+    const isDatabaseError = error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || 
+                           error.message?.includes('database') || error.message?.includes('connection');
+    
+    console.warn('Database not available, using mock FHIR servers:', {
+      error: error.message,
+      type: errorType,
+      code: error.code,
+      isDatabaseError,
+      timestamp: new Date().toISOString()
+    });
+    
+    res.json(mockFhirServers.map(server => ({
+      id: server.id,
+      name: server.name,
+      url: server.url,
+      isActive: server.isActive,
+      hasAuth: false,
+      authType: 'none',
+      createdAt: new Date().toISOString()
+    })));
+  }
+});
+
+app.post("/api/fhir/servers", async (req, res) => {
+  try {
+    const { storage } = await import("./server/storage.js");
+    const { name, url, authConfig } = req.body;
+    
+    if (!name || !url) {
+      return res.status(400).json({
+        error: "Name and URL are required"
+      });
+    }
+    
+    try {
+      const newServer = await storage.createFhirServer({
+        name,
+        url,
+        authConfig: authConfig || { type: 'none' },
+        isActive: false
+      });
+      
+      res.status(201).json({
+        id: newServer.id,
+        name: newServer.name,
+        url: newServer.url,
+        isActive: newServer.isActive,
+        hasAuth: !!newServer.authConfig,
+        authType: newServer.authConfig?.type || 'none',
+        createdAt: newServer.createdAt
+      });
+    } catch (e) {
+      // Fallback path: add to in-memory mock list when database is disconnected
+      console.log('Database not available, adding server to mock data');
+      
+      const newId = Math.max(...mockFhirServers.map(s => s.id), 0) + 1;
+      const newServer = {
+        id: newId,
+        name,
+        url,
+        isActive: false
+      };
+      
+      mockFhirServers.push(newServer);
+      
+      res.status(201).json({
+        id: newServer.id,
+        name: newServer.name,
+        url: newServer.url,
+        isActive: newServer.isActive,
+        hasAuth: false,
+        authType: 'none',
+        createdAt: new Date().toISOString()
+      });
+    }
+  } catch (error: any) {
+    // Enhanced error handling and logging
+    const errorType = error.code || error.name || 'UnknownError';
+    const isDatabaseError = error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || 
+                           error.message?.includes('database') || error.message?.includes('connection');
+    
+    console.error('Failed to create FHIR server:', {
+      error: error.message,
+      type: errorType,
+      code: error.code,
+      stack: error.stack,
+      serverData: { name: req.body.name, url: req.body.url },
+      isDatabaseError,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Provide more specific error messages based on error type
+    let errorMessage = "Failed to create FHIR server";
+    if (isDatabaseError) {
+      errorMessage = "Database connection failed. Server creation may not persist.";
+    } else if (error.code === 'ECONNREFUSED') {
+      errorMessage = "Database server is not available";
+    } else if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
+      errorMessage = "Server with this name or URL already exists";
+    }
+    
+    res.status(500).json({
+      error: errorMessage,
+      message: error.message,
+      type: errorType,
+      isDatabaseError
+    });
+  }
+});
+
+app.put("/api/fhir/servers/:id", async (req, res) => {
+  try {
+    const { storage } = await import("./server/storage.js");
+    const { id } = req.params;
+    const { name, url, authConfig, isActive } = req.body;
+    const serverId = parseInt(id);
+    
+    try {
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (url !== undefined) updates.url = url;
+      if (authConfig !== undefined) updates.authConfig = authConfig;
+      
+      const updatedServer = await storage.updateFhirServer(serverId, updates);
+      
+      // Handle active status separately
+      if (isActive !== undefined) {
+        await storage.updateFhirServerStatus(serverId, isActive);
+        updatedServer.isActive = isActive;
+      }
+      
+      res.json({
+        id: updatedServer.id,
+        name: updatedServer.name,
+        url: updatedServer.url,
+        isActive: updatedServer.isActive,
+        hasAuth: !!updatedServer.authConfig,
+        authType: updatedServer.authConfig?.type || 'none',
+        createdAt: updatedServer.createdAt
+      });
+    } catch (e) {
+      // Fallback path: update in-memory mock list when database is disconnected
+      console.log('Database not available, updating server in mock data');
+      
+      const serverIndex = mockFhirServers.findIndex(s => s.id === serverId);
+      if (serverIndex === -1) {
+        return res.status(404).json({ error: "FHIR server not found" });
+      }
+      
+      const server = mockFhirServers[serverIndex];
+      if (name !== undefined) server.name = name;
+      if (url !== undefined) server.url = url;
+      if (isActive !== undefined) server.isActive = isActive;
+      
+      res.json({
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        isActive: server.isActive,
+        hasAuth: false,
+        authType: 'none',
+        createdAt: new Date().toISOString()
+      });
+    }
+  } catch (error: any) {
+    // Enhanced error handling and logging
+    const errorType = error.code || error.name || 'UnknownError';
+    const isDatabaseError = error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || 
+                           error.message?.includes('database') || error.message?.includes('connection');
+    
+    console.error('Failed to update FHIR server:', {
+      error: error.message,
+      type: errorType,
+      code: error.code,
+      stack: error.stack,
+      serverId: serverId,
+      updateData: req.body,
+      isDatabaseError,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Provide more specific error messages based on error type
+    let errorMessage = "Failed to update FHIR server";
+    if (isDatabaseError) {
+      errorMessage = "Database connection failed. Server update may not persist.";
+    } else if (error.code === 'ECONNREFUSED') {
+      errorMessage = "Database server is not available";
+    } else if (error.message?.includes('not found')) {
+      errorMessage = "Server not found";
+    } else if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
+      errorMessage = "Server with this name or URL already exists";
+    }
+    
+    res.status(500).json({
+      error: errorMessage,
+      message: error.message,
+      type: errorType,
+      isDatabaseError
+    });
+  }
+});
+
+app.delete("/api/fhir/servers/:id", async (req, res) => {
+  try {
+    const { storage } = await import("./server/storage.js");
+    const { id } = req.params;
+    const serverId = parseInt(id);
+    
+    try {
+      await storage.deleteFhirServer(serverId);
+      res.status(204).send();
+    } catch (e) {
+      // Fallback path: remove from in-memory mock list when database is disconnected
+      console.log('Database not available, removing server from mock data');
+      
+      const serverIndex = mockFhirServers.findIndex(s => s.id === serverId);
+      if (serverIndex === -1) {
+        return res.status(404).json({ error: "FHIR server not found" });
+      }
+      
+      mockFhirServers.splice(serverIndex, 1);
+      res.status(204).send();
+    }
+  } catch (error: any) {
+    // Enhanced error handling and logging
+    const errorType = error.code || error.name || 'UnknownError';
+    const isDatabaseError = error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || 
+                           error.message?.includes('database') || error.message?.includes('connection');
+    
+    console.error('Failed to delete FHIR server:', {
+      error: error.message,
+      type: errorType,
+      code: error.code,
+      stack: error.stack,
+      serverId: serverId,
+      isDatabaseError,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Provide more specific error messages based on error type
+    let errorMessage = "Failed to delete FHIR server";
+    if (isDatabaseError) {
+      errorMessage = "Database connection failed. Server deletion may not persist.";
+    } else if (error.code === 'ECONNREFUSED') {
+      errorMessage = "Database server is not available";
+    } else if (error.message?.includes('not found')) {
+      errorMessage = "Server not found";
+    } else if (error.message?.includes('foreign key') || error.message?.includes('constraint')) {
+      errorMessage = "Cannot delete server with associated resources";
+    }
+    
+    res.status(500).json({
+      error: errorMessage,
+      message: error.message,
+      type: errorType,
+      isDatabaseError
+    });
+  }
+});
+
+app.post("/api/fhir/servers/:id/test", async (req, res) => {
+  try {
+    const { storage } = await import("./server/storage.js");
+    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
+    const { id } = req.params;
+    
+    const servers = await storage.getFhirServers();
+    const server = servers.find(s => s.id === parseInt(id));
+    
+    if (!server) {
+      return res.status(404).json({
+        error: "FHIR server not found"
+      });
+    }
+    
+    const fhirClient = new FhirClient(server.url, server.authConfig as any);
+    const result = await fhirClient.testConnection();
+    
+    res.json({
+      connected: result.connected,
+      version: result.version || "Unknown",
+      url: server.url,
+      serverName: server.name,
+      error: result.error || null,
+      errorType: result.errorType || null,
+      statusCode: result.statusCode || null,
+      timestamp: new Date().toISOString(),
+      responseTime: result.responseTime || 0
+    });
+  } catch (error: any) {
+    console.error('Failed to test FHIR server:', error);
+    res.status(500).json({
+      error: "Failed to test FHIR server connection",
+      message: error.message
+    });
+  }
+});
+
+// Activate a FHIR server (set as active)
+app.post("/api/fhir/servers/:id/activate", async (req, res) => {
+  try {
+    const { storage } = await import("./server/storage.js");
+    const { id } = req.params;
+    const targetId = parseInt(id);
+    
+    try {
+      const servers = await storage.getFhirServers();
+      const targetServer = servers.find(s => s.id === targetId);
+      if (!targetServer) {
+        return res.status(404).json({ error: "FHIR server not found" });
+      }
+
+      // Deactivate all other servers first, then activate target
+      await storage.updateFhirServerStatus(targetId, true);
+
+      const updatedServers = await storage.getFhirServers();
+      const safeServers = updatedServers.map(server => ({
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        isActive: server.isActive,
+        hasAuth: !!server.authConfig,
+        authType: server.authConfig?.type || 'none',
+        createdAt: server.createdAt
+      }));
+
+      // Broadcast server switching event to all SSE clients
+      broadcastValidationUpdate({
+        type: "server-switched",
+        data: {
+          action: "activated",
+          serverId: targetId,
+          serverName: targetServer.name,
+          serverUrl: targetServer.url,
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      return res.json({
+        success: true,
+        message: "Server activated successfully",
+        serverId: targetId,
+        serverName: targetServer.name,
+        servers: safeServers
+      });
+    } catch (e) {
+      // Fallback path: update in-memory mock list so UI works without DB
+      console.log('Database not available, using mock data for server activation');
+      
+      // Deactivate all servers first, then activate target
+      for (const s of mockFhirServers) {
+        s.isActive = s.id === targetId;
+      }
+      
+      const target = mockFhirServers.find(s => s.id === targetId);
+      if (!target) {
+        return res.status(404).json({ error: "FHIR server not found" });
+      }
+
+      const safeServers = mockFhirServers.map(server => ({
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        isActive: server.isActive,
+        hasAuth: false,
+        authType: 'none',
+        createdAt: new Date().toISOString()
+      }));
+
+      // Broadcast server switching event to all SSE clients
+      broadcastValidationUpdate({
+        type: "server-switched",
+        data: {
+          action: "activated",
+          serverId: targetId,
+          serverName: target.name,
+          serverUrl: target.url,
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      return res.json({
+        success: true,
+        message: "Server activated successfully (mock data)",
+        serverId: targetId,
+        serverName: target.name,
+        servers: safeServers
+      });
+    }
+  } catch (error: any) {
+    // Enhanced error handling and logging
+    const errorType = error.code || error.name || 'UnknownError';
+    const isDatabaseError = error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || 
+                           error.message?.includes('database') || error.message?.includes('connection');
+    
+    console.error('Failed to activate FHIR server:', {
+      error: error.message,
+      type: errorType,
+      code: error.code,
+      stack: error.stack,
+      serverId: targetId,
+      isDatabaseError,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Provide more specific error messages based on error type
+    let errorMessage = "Failed to activate FHIR server";
+    if (isDatabaseError) {
+      errorMessage = "Database connection failed. Server activation may not persist.";
+    } else if (error.code === 'ECONNREFUSED') {
+      errorMessage = "Database server is not available";
+    } else if (error.message?.includes('not found')) {
+      errorMessage = "Server not found";
+    }
+    
+    res.status(500).json({
+      error: errorMessage,
+      message: error.message,
+      type: errorType,
+      isDatabaseError
+    });
+  }
+});
+
+// Deactivate a FHIR server
+app.post("/api/fhir/servers/:id/deactivate", async (req, res) => {
+  try {
+    const { storage } = await import("./server/storage.js");
+    const { id } = req.params;
+    const targetId = parseInt(id);
+    
+    try {
+      const servers = await storage.getFhirServers();
+      const targetServer = servers.find(s => s.id === targetId);
+      if (!targetServer) {
+        return res.status(404).json({ error: "FHIR server not found" });
+      }
+
+      await storage.updateFhirServerStatus(targetId, false);
+
+      const updatedServers = await storage.getFhirServers();
+      const safeServers = updatedServers.map(server => ({
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        isActive: server.isActive,
+        hasAuth: !!server.authConfig,
+        authType: server.authConfig?.type || 'none',
+        createdAt: server.createdAt
+      }));
+
+      // Broadcast server switching event to all SSE clients
+      broadcastValidationUpdate({
+        type: "server-switched",
+        data: {
+          action: "deactivated",
+          serverId: targetId,
+          serverName: targetServer.name,
+          serverUrl: targetServer.url,
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      return res.json({
+        success: true,
+        message: "Server deactivated successfully",
+        serverId: targetId,
+        serverName: targetServer.name,
+        servers: safeServers
+      });
+    } catch (e) {
+      // Fallback path: update in-memory mock list so UI works without DB
+      console.log('Database not available, using mock data for server deactivation');
+      
+      const target = mockFhirServers.find(s => s.id === targetId);
+      if (!target) {
+        return res.status(404).json({ error: "FHIR server not found" });
+      }
+      
+      target.isActive = false;
+
+      const safeServers = mockFhirServers.map(server => ({
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        isActive: server.isActive,
+        hasAuth: false,
+        authType: 'none',
+        createdAt: new Date().toISOString()
+      }));
+
+      // Broadcast server switching event to all SSE clients
+      broadcastValidationUpdate({
+        type: "server-switched",
+        data: {
+          action: "deactivated",
+          serverId: targetId,
+          serverName: target.name,
+          serverUrl: target.url,
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      return res.json({
+        success: true,
+        message: "Server deactivated successfully (mock data)",
+        serverId: targetId,
+        serverName: target.name,
+        servers: safeServers
+      });
+    }
+  } catch (error: any) {
+    // Enhanced error handling and logging
+    const errorType = error.code || error.name || 'UnknownError';
+    const isDatabaseError = error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND' || 
+                           error.message?.includes('database') || error.message?.includes('connection');
+    
+    console.error('Failed to deactivate FHIR server:', {
+      error: error.message,
+      type: errorType,
+      code: error.code,
+      stack: error.stack,
+      serverId: targetId,
+      isDatabaseError,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Provide more specific error messages based on error type
+    let errorMessage = "Failed to deactivate FHIR server";
+    if (isDatabaseError) {
+      errorMessage = "Database connection failed. Server deactivation may not persist.";
+    } else if (error.code === 'ECONNREFUSED') {
+      errorMessage = "Database server is not available";
+    } else if (error.message?.includes('not found')) {
+      errorMessage = "Server not found";
+    }
+    
+    res.status(500).json({
+      error: errorMessage,
+      message: error.message,
+      type: errorType,
+      isDatabaseError
+    });
+  }
+});
+
+// Test authentication with different credential types
+app.post("/api/fhir/auth/test", async (req, res) => {
+  try {
+    const { url, authConfig } = req.body;
+    
+    if (!url) {
+      return res.status(400).json({
+        error: "URL is required"
+      });
+    }
+    
+    if (!authConfig) {
+      return res.status(400).json({
+        error: "Auth configuration is required"
+      });
+    }
+    
+    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
+    const fhirClient = new FhirClient(url, authConfig);
+    const result = await fhirClient.testConnection();
+    
+    res.json({
+      connected: result.connected,
+      version: result.version || "Unknown",
+      url: url,
+      authType: authConfig.type,
+      error: result.error || null,
+      errorType: result.errorType || null,
+      statusCode: result.statusCode || null,
+      timestamp: new Date().toISOString(),
+      responseTime: result.responseTime || 0
+    });
+  } catch (error: any) {
+    console.error('Failed to test authentication:', error);
+    res.status(500).json({
+      error: "Failed to test authentication",
+      message: error.message
+    });
+  }
+});
+
+// Get comprehensive server metadata
+app.get("/api/fhir/metadata", async (req, res) => {
+  try {
+    const { storage } = await import("./server/storage.js");
+    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
+    
+    const servers = await storage.getFhirServers();
+    const activeServer = servers.find(s => s.isActive) || servers[0];
+    
+    if (!activeServer) {
+      return res.status(404).json({
+        error: "No FHIR server configured",
+        message: "Please configure a FHIR server first"
+      });
+    }
+
+    const fhirClient = new FhirClient(activeServer.url, activeServer.authConfig as any);
+    const capabilityStatement = await fhirClient.getCapabilityStatement();
+    
+    if (!capabilityStatement) {
+      return res.status(500).json({
+        error: "Failed to retrieve server metadata",
+        message: "Server did not respond with a valid CapabilityStatement"
+      });
+    }
+
+    // Extract comprehensive metadata
+    const metadata = {
+      server: {
+        name: activeServer.name,
+        url: activeServer.url,
+        id: activeServer.id
+      },
+      fhir: {
+        version: capabilityStatement.fhirVersion,
+        date: capabilityStatement.date,
+        publisher: capabilityStatement.publisher,
+        description: capabilityStatement.description,
+        status: capabilityStatement.status,
+        experimental: capabilityStatement.experimental,
+        kind: capabilityStatement.kind
+      },
+      software: {
+        name: capabilityStatement.software?.name,
+        version: capabilityStatement.software?.version,
+        releaseDate: capabilityStatement.software?.releaseDate,
+        publisher: capabilityStatement.software?.publisher,
+        description: capabilityStatement.software?.description
+      },
+      implementation: {
+        description: capabilityStatement.implementation?.description,
+        url: capabilityStatement.implementation?.url,
+        custodian: capabilityStatement.implementation?.custodian?.display
+      },
+      capabilities: {
+        rest: capabilityStatement.rest?.map((rest: any) => ({
+          mode: rest.mode,
+          documentation: rest.documentation,
+          security: rest.security,
+          resourceCount: rest.resource?.length || 0,
+          operationCount: rest.operation?.length || 0,
+          interactionCount: rest.interaction?.length || 0,
+          searchParams: rest.searchParam?.length || 0
+        })) || [],
+        messaging: capabilityStatement.messaging?.length || 0,
+        document: capabilityStatement.document?.length || 0
+      },
+      resourceTypes: capabilityStatement.rest?.[0]?.resource?.map((resource: any) => ({
+        type: resource.type,
+        profile: resource.profile,
+        supportedProfiles: resource.supportedProfile?.length || 0,
+        interactions: resource.interaction?.map((i: any) => i.code) || [],
+        searchParams: resource.searchParam?.length || 0,
+        searchIncludes: resource.searchInclude?.length || 0,
+        searchRevIncludes: resource.searchRevInclude?.length || 0,
+        conditionalCreate: resource.conditionalCreate,
+        conditionalRead: resource.conditionalRead,
+        conditionalUpdate: resource.conditionalUpdate,
+        conditionalDelete: resource.conditionalDelete
+      })) || [],
+      operations: capabilityStatement.rest?.[0]?.operation?.map((op: any) => ({
+        name: op.name,
+        definition: op.definition,
+        documentation: op.documentation
+      })) || [],
+      timestamp: new Date().toISOString()
+    };
+
+    res.json(metadata);
+  } catch (error: any) {
+    console.error('Failed to retrieve FHIR metadata:', error);
+    res.status(500).json({
+      error: "Failed to retrieve server metadata",
+      message: error.message || "Unknown error occurred"
+    });
   }
 });
 
@@ -150,20 +965,28 @@ app.get("/api/validation/progress", async (req, res) => {
     const { storage } = await import("./server/storage.js");
     const summary = await storage.getResourceStatsWithSettings();
     res.json({
-      total: 100,
-      completed: summary.validResources + summary.errorResources,
-      errors: summary.errorResources,
-      warnings: summary.warningResources || 12,
-      status: "running"
+      totalResources: 100,
+      processedResources: (summary.validResources || 0) + (summary.errorResources || 0),
+      validResources: summary.validResources || 0,
+      errorResources: summary.errorResources || 0,
+      warningResources: summary.warningResources || 0,
+      status: "running",
+      isComplete: false,
+      startTime: new Date().toISOString(),
+      errors: []
     });
   } catch (error) {
     console.log('Database not available, using mock validation progress');
     res.json({
-      total: 100,
-      completed: 75,
-      errors: 3,
-      warnings: 12,
-      status: "running"
+      totalResources: 100,
+      processedResources: 75,
+      validResources: 60,
+      errorResources: 15,
+      warningResources: 12,
+      status: "running",
+      isComplete: false,
+      startTime: new Date().toISOString(),
+      errors: []
     });
   }
 });
@@ -264,14 +1087,20 @@ app.get("/api/dashboard/validation-stats", async (req, res) => {
   try {
     const { storage } = await import("./server/storage.js");
     const summary = await storage.getResourceStatsWithSettings();
+    // Calculate consistent data from database summary
+    const totalValidated = (summary.validResources || 0) + (summary.errorResources || 0);
+    const totalResources = totalValidated + 25; // Add unvalidated resources
+    const validationCoverage = totalValidated > 0 ? ((summary.validResources || 0) / totalValidated) * 100 : 0;
+    const validationProgress = totalResources > 0 ? (totalValidated / totalResources) * 100 : 0;
+
     res.json({
-      totalValidated: summary.validResources + summary.errorResources,
-      validResources: summary.validResources,
-      errorResources: summary.errorResources,
-      warningResources: summary.warningResources || 12,
+      totalValidated,
+      validResources: summary.validResources || 0,
+      errorResources: summary.errorResources || 0,
+      warningResources: summary.warningResources || 0,
       unvalidatedResources: 25,
-      validationCoverage: 75.0,
-      validationProgress: 75.0,
+      validationCoverage: Math.round(validationCoverage * 10) / 10,
+      validationProgress: Math.round(validationProgress * 10) / 10,
       lastValidationRun: new Date().toISOString(),
       resourceTypeBreakdown: {
         "Patient": {
@@ -318,57 +1147,72 @@ app.get("/api/dashboard/validation-stats", async (req, res) => {
     });
   } catch (error) {
     console.log('Database not available, using mock validation stats');
-    res.json({
-      totalValidated: 75,
-      validResources: 60,
-      errorResources: 15,
-      warningResources: 12,
-      unvalidatedResources: 25,
-      validationCoverage: 75.0,
-      validationProgress: 75.0,
-      lastValidationRun: new Date().toISOString(),
-      resourceTypeBreakdown: {
-        "Patient": {
-          total: 45,
-          validated: 40,
-          valid: 35,
-          errors: 3,
-          warnings: 2,
-          unvalidated: 5,
-          validationRate: 88.9,
-          successRate: 87.5
-        },
-        "Observation": {
-          total: 30,
-          validated: 25,
-          valid: 20,
-          errors: 3,
-          warnings: 2,
-          unvalidated: 5,
-          validationRate: 83.3,
-          successRate: 80.0
-        },
-        "Encounter": {
-          total: 15,
-          validated: 10,
-          valid: 8,
-          errors: 1,
-          warnings: 1,
-          unvalidated: 5,
-          validationRate: 66.7,
-          successRate: 80.0
-        },
-        "Medication": {
-          total: 10,
-          validated: 8,
-          valid: 7,
-          errors: 1,
-          warnings: 0,
-          unvalidated: 2,
-          validationRate: 80.0,
-          successRate: 87.5
-        }
+    // Consistent mock data with proper calculations
+    const resourceTypeBreakdown = {
+      "Patient": {
+        total: 45,
+        validated: 40,
+        valid: 35,
+        errors: 3,
+        warnings: 2,
+        unvalidated: 5,
+        validationRate: 88.9,
+        successRate: 87.5
+      },
+      "Observation": {
+        total: 30,
+        validated: 25,
+        valid: 20,
+        errors: 3,
+        warnings: 2,
+        unvalidated: 5,
+        validationRate: 83.3,
+        successRate: 80.0
+      },
+      "Encounter": {
+        total: 15,
+        validated: 10,
+        valid: 8,
+        errors: 1,
+        warnings: 1,
+        unvalidated: 5,
+        validationRate: 66.7,
+        successRate: 80.0
+      },
+      "Medication": {
+        total: 10,
+        validated: 8,
+        valid: 7,
+        errors: 1,
+        warnings: 0,
+        unvalidated: 2,
+        validationRate: 80.0,
+        successRate: 87.5
       }
+    };
+
+    // Calculate totals from breakdown
+    const totalValidated = Object.values(resourceTypeBreakdown).reduce((sum, rt) => sum + rt.validated, 0);
+    const validResources = Object.values(resourceTypeBreakdown).reduce((sum, rt) => sum + rt.valid, 0);
+    const errorResources = Object.values(resourceTypeBreakdown).reduce((sum, rt) => sum + rt.errors, 0);
+    const warningResources = Object.values(resourceTypeBreakdown).reduce((sum, rt) => sum + rt.warnings, 0);
+    const unvalidatedResources = Object.values(resourceTypeBreakdown).reduce((sum, rt) => sum + rt.unvalidated, 0);
+    const totalResources = Object.values(resourceTypeBreakdown).reduce((sum, rt) => sum + rt.total, 0);
+    
+    // Calculate percentages
+    const validationCoverage = totalValidated > 0 ? (validResources / totalValidated) * 100 : 0;
+    const validationProgress = totalResources > 0 ? (totalValidated / totalResources) * 100 : 0;
+
+    res.json({
+      totalValidated,
+      validResources,
+      errorResources,
+      warningResources,
+      unvalidatedResources,
+      validationCoverage: Math.round(validationCoverage * 10) / 10,
+      validationProgress: Math.round(validationProgress * 10) / 10,
+      lastValidationRun: new Date().toISOString(),
+      resourceTypeBreakdown
     });
   }
 });
@@ -394,13 +1238,15 @@ app.get("/api/dashboard/combined", async (req, res) => {
         }
       },
       validationStats: {
-        totalValidated: summary.validResources + summary.errorResources,
-        validResources: summary.validResources,
-        errorResources: summary.errorResources,
-        warningResources: summary.warningResources || 12,
+        totalValidated: (summary.validResources || 0) + (summary.errorResources || 0),
+        validResources: summary.validResources || 0,
+        errorResources: summary.errorResources || 0,
+        warningResources: summary.warningResources || 0,
         unvalidatedResources: 25,
-        validationCoverage: 75.0,
-        validationProgress: 75.0,
+        validationCoverage: (summary.validResources || 0) + (summary.errorResources || 0) > 0 
+          ? Math.round(((summary.validResources || 0) / ((summary.validResources || 0) + (summary.errorResources || 0))) * 1000) / 10 
+          : 0,
+        validationProgress: Math.round((((summary.validResources || 0) + (summary.errorResources || 0)) / 100) * 1000) / 10,
         lastValidationRun: new Date().toISOString(),
         resourceTypeBreakdown: {
           "Patient": {
@@ -522,7 +1368,7 @@ app.get("/api/dashboard/combined", async (req, res) => {
 
 app.get("/api/dashboard/fhir-version-info", async (req, res) => {
   try {
-    const { FhirClient } = await import("./server/services/fhir-client.js");
+    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
     const fhirClient = new FhirClient("http://hapi.fhir.org/baseR4");
     const result = await fhirClient.testConnection();
     res.json({
@@ -639,7 +1485,7 @@ const sseClients = new Set<Response>();
 
 // SSE endpoint for validation updates (must be before static file serving)
 app.get("/api/validation/stream", (req, res) => {
-  log("SSE client connected");
+  logger.sse(2, 'SSE client connected', 'stream');
   
   // Set SSE headers
   res.writeHead(200, {
@@ -662,12 +1508,12 @@ app.get("/api/validation/stream", (req, res) => {
 
   // Handle client disconnect
   req.on('close', () => {
-    log("SSE client disconnected");
+    logger.sse(2, 'SSE client disconnected', 'stream');
     sseClients.delete(res);
   });
 
   req.on('error', (error) => {
-    log(`SSE client error: ${error}`);
+    logger.sse(1, 'SSE client error', 'stream', { error: error.message });
     sseClients.delete(res);
   });
 });
@@ -679,7 +1525,7 @@ function broadcastValidationUpdate(data: any) {
     try {
       client.write(message);
     } catch (error) {
-      log(`Error sending SSE message: ${error}`);
+      logger.sse(1, 'Error sending SSE message', 'broadcast', { error: error.message });
       sseClients.delete(client);
     }
   });
@@ -729,39 +1575,240 @@ setInterval(() => {
   }
 }, 2000);
 
-// API endpoint to start mock validation
-app.post("/api/validation/start", (req, res) => {
-  mockValidationProgress = {
-    totalResources: 100,
-    processedResources: 0,
-    validResources: 0,
-    errorResources: 0,
-    currentResourceType: "Patient",
-    startTime: new Date().toISOString(),
-    isComplete: false,
-    errors: [],
-    status: 'running'
-  };
-  
-  broadcastValidationUpdate({
-    type: "validation-started",
-    data: mockValidationProgress
-  });
-  
-  res.json({ success: true, message: "Validation started" });
+// Real validation endpoints using BulkValidationService
+app.post("/api/validation/start", async (req, res) => {
+  try {
+    const { storage } = await import("./server/storage.js");
+    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
+    const { ValidationEngine } = await import("./server/services/validation/validation-engine.js");
+    const { BulkValidationService } = await import("./server/services/validation/bulk-validation.js");
+    
+    const servers = await storage.getFhirServers();
+    const activeServer = servers.find(s => s.isActive) || servers[0];
+    
+    if (!activeServer) {
+      return res.status(400).json({
+        error: "No active FHIR server configured"
+      });
+    }
+    
+    const fhirClient = new FhirClient(activeServer.url, activeServer.authConfig as any);
+    const validationEngine = new ValidationEngine();
+    const bulkValidationService = new BulkValidationService(fhirClient, validationEngine);
+    
+    // Check if validation is already running
+    if (bulkValidationService.isRunning) {
+      return res.status(409).json({
+        error: "Validation is already running"
+      });
+    }
+    
+    // Start validation
+    const progress = await bulkValidationService.validateAllResources({
+      onProgress: (progress) => {
+        broadcastValidationUpdate({
+          type: "validation-progress",
+          data: {
+            ...progress,
+            status: bulkValidationService.status
+          }
+        });
+      }
+    });
+    
+    res.json({ 
+      success: true, 
+      message: "Validation started",
+      progress: {
+        ...progress,
+        status: bulkValidationService.status
+      }
+    });
+  } catch (error: any) {
+    console.error('Failed to start validation:', error);
+    res.status(500).json({
+      error: "Failed to start validation",
+      message: error.message
+    });
+  }
 });
 
-// API endpoint to stop mock validation
-app.post("/api/validation/stop", (req, res) => {
-  mockValidationProgress.status = 'not_running';
-  mockValidationProgress.isComplete = false;
-  
-  broadcastValidationUpdate({
-    type: "validation-stopped",
-    data: mockValidationProgress
-  });
-  
-  res.json({ success: true, message: "Validation stopped" });
+app.post("/api/validation/stop", async (req, res) => {
+  try {
+    const { storage } = await import("./server/storage.js");
+    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
+    const { ValidationEngine } = await import("./server/services/validation/validation-engine.js");
+    const { BulkValidationService } = await import("./server/services/validation/bulk-validation.js");
+    
+    const servers = await storage.getFhirServers();
+    const activeServer = servers.find(s => s.isActive) || servers[0];
+    
+    if (!activeServer) {
+      return res.status(400).json({
+        error: "No active FHIR server configured"
+      });
+    }
+    
+    const fhirClient = new FhirClient(activeServer.url, activeServer.authConfig as any);
+    const validationEngine = new ValidationEngine();
+    const bulkValidationService = new BulkValidationService(fhirClient, validationEngine);
+    
+    bulkValidationService.stopValidation();
+    
+    broadcastValidationUpdate({
+      type: "validation-stopped",
+      data: {
+        status: 'idle',
+        isComplete: false
+      }
+    });
+    
+    res.json({ success: true, message: "Validation stopped" });
+  } catch (error: any) {
+    console.error('Failed to stop validation:', error);
+    res.status(500).json({
+      error: "Failed to stop validation",
+      message: error.message
+    });
+  }
+});
+
+app.post("/api/validation/pause", async (req, res) => {
+  try {
+    const { storage } = await import("./server/storage.js");
+    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
+    const { ValidationEngine } = await import("./server/services/validation/validation-engine.js");
+    const { BulkValidationService } = await import("./server/services/validation/bulk-validation.js");
+    
+    const servers = await storage.getFhirServers();
+    const activeServer = servers.find(s => s.isActive) || servers[0];
+    
+    if (!activeServer) {
+      return res.status(400).json({
+        error: "No active FHIR server configured"
+      });
+    }
+    
+    const fhirClient = new FhirClient(activeServer.url, activeServer.authConfig as any);
+    const validationEngine = new ValidationEngine();
+    const bulkValidationService = new BulkValidationService(fhirClient, validationEngine);
+    
+    if (!bulkValidationService.isRunning) {
+      return res.status(400).json({
+        error: "No validation is currently running"
+      });
+    }
+    
+    bulkValidationService.pauseValidation();
+    
+    broadcastValidationUpdate({
+      type: "validation-paused",
+      data: {
+        status: 'paused'
+      }
+    });
+    
+    res.json({ success: true, message: "Validation paused" });
+  } catch (error: any) {
+    console.error('Failed to pause validation:', error);
+    res.status(500).json({
+      error: "Failed to pause validation",
+      message: error.message
+    });
+  }
+});
+
+app.post("/api/validation/resume", async (req, res) => {
+  try {
+    const { storage } = await import("./server/storage.js");
+    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
+    const { ValidationEngine } = await import("./server/services/validation/validation-engine.js");
+    const { BulkValidationService } = await import("./server/services/validation/bulk-validation.js");
+    
+    const servers = await storage.getFhirServers();
+    const activeServer = servers.find(s => s.isActive) || servers[0];
+    
+    if (!activeServer) {
+      return res.status(400).json({
+        error: "No active FHIR server configured"
+      });
+    }
+    
+    const fhirClient = new FhirClient(activeServer.url, activeServer.authConfig as any);
+    const validationEngine = new ValidationEngine();
+    const bulkValidationService = new BulkValidationService(fhirClient, validationEngine);
+    
+    if (!bulkValidationService.isPaused) {
+      return res.status(400).json({
+        error: "No validation is currently paused"
+      });
+    }
+    
+    const progress = await bulkValidationService.resumeValidation({
+      onProgress: (progress) => {
+        broadcastValidationUpdate({
+          type: "validation-progress",
+          data: {
+            ...progress,
+            status: bulkValidationService.status
+          }
+        });
+      }
+    });
+    
+    res.json({ 
+      success: true, 
+      message: "Validation resumed",
+      progress: {
+        ...progress,
+        status: bulkValidationService.status
+      }
+    });
+  } catch (error: any) {
+    console.error('Failed to resume validation:', error);
+    res.status(500).json({
+      error: "Failed to resume validation",
+      message: error.message
+    });
+  }
+});
+
+app.get("/api/validation/status", async (req, res) => {
+  try {
+    const { storage } = await import("./server/storage.js");
+    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
+    const { ValidationEngine } = await import("./server/services/validation/validation-engine.js");
+    const { BulkValidationService } = await import("./server/services/validation/bulk-validation.js");
+    
+    const servers = await storage.getFhirServers();
+    const activeServer = servers.find(s => s.isActive) || servers[0];
+    
+    if (!activeServer) {
+      return res.json({
+        status: 'idle',
+        isRunning: false,
+        isPaused: false,
+        message: "No active FHIR server configured"
+      });
+    }
+    
+    const fhirClient = new FhirClient(activeServer.url, activeServer.authConfig as any);
+    const validationEngine = new ValidationEngine();
+    const bulkValidationService = new BulkValidationService(fhirClient, validationEngine);
+    
+    res.json({
+      status: bulkValidationService.status,
+      isRunning: bulkValidationService.isRunning,
+      isPaused: bulkValidationService.isPaused,
+      progress: bulkValidationService.getCurrentProgress()
+    });
+  } catch (error: any) {
+    console.error('Failed to get validation status:', error);
+    res.status(500).json({
+      error: "Failed to get validation status",
+      message: error.message
+    });
+  }
 });
 
 // SSE health check endpoint

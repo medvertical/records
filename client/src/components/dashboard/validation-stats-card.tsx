@@ -171,7 +171,7 @@ export function ValidationStatsCard({
           </div>
 
           {/* Resource Type Breakdown */}
-          {Object.keys(data.resourceTypeBreakdown).length > 0 && (
+          {data.resourceTypeBreakdown && Object.keys(data.resourceTypeBreakdown).length > 0 && (
             <div>
               <div className="text-sm font-medium mb-3">Validation by Resource Type</div>
               <div className="space-y-2">

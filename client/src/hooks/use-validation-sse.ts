@@ -17,7 +17,7 @@ export interface ValidationProgress {
 export interface SSEMessage {
   type: 'connected' | 'status' | 'validation_progress' | 'validation-progress' | 'validation_started' | 'validation-started' 
     | 'validation_complete' | 'validation-completed' | 'validation_error' | 'validation-error' 
-    | 'validation_stopped' | 'validation-stopped' | 'validation-paused' | 'validation-resumed';
+    | 'validation_stopped' | 'validation-stopped' | 'validation-paused' | 'validation-resumed' | 'server-switched';
   data: any;
 }
 
@@ -26,6 +26,15 @@ export function useValidationSSE() {
   const [progress, setProgress] = useState<ValidationProgress | null>(null);
   const [validationStatus, setValidationStatus] = useState<'idle' | 'running' | 'paused' | 'completed' | 'error'>('idle');
   const [lastError, setLastError] = useState<string | null>(null);
+  const [currentServer, setCurrentServer] = useState<{
+    id: number | null;
+    name: string | null;
+    url: string | null;
+  }>({
+    id: null,
+    name: null,
+    url: null
+  });
   const [apiState, setApiState] = useState<{
     isRunning: boolean;
     isPaused: boolean;
@@ -147,7 +156,7 @@ export function useValidationSSE() {
     }
   };
 
-  // Handle SSE messages (same logic as WebSocket)
+  // Handle SSE messages
   const handleSSEMessage = (message: SSEMessage) => {
     switch (message.type) {
       case 'connected':
@@ -206,18 +215,39 @@ export function useValidationSSE() {
         hasReceivedMessage.current = true;
         break;
         
+      case 'server-switched':
+        console.log('[ValidationSSE] Server switched:', message.data);
+        setCurrentServer({
+          id: message.data.serverId,
+          name: message.data.serverName,
+          url: message.data.serverUrl
+        });
+        
+        // Reset validation state when server changes
+        // This ensures we don't show stale validation data from the previous server
+        setProgress(null);
+        setValidationStatus('idle');
+        setLastError(null);
+        
+        // Reconnect SSE to ensure we get updates for the new server
+        console.log('[ValidationSSE] Reconnecting SSE for new server...');
+        setTimeout(() => {
+          reconnect();
+        }, 1000);
+        break;
+        
       default:
         console.log('[ValidationSSE] Unknown message type:', message.type);
     }
   };
 
   const connect = () => {
-    // Use SSE everywhere - it's more reliable than WebSocket
+    // Use SSE for real-time updates
     console.log('[ValidationSSE] Using SSE for real-time updates');
     connectSSE();
     return;
 
-    // WebSocket code removed - using SSE everywhere now
+    // SSE-only implementation
   };
 
   const disconnect = () => {
@@ -267,6 +297,7 @@ export function useValidationSSE() {
     progress,
     validationStatus,
     lastError,
+    currentServer,
     apiState,
     resetProgress,
     reconnect,

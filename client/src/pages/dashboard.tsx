@@ -81,7 +81,7 @@ export default function DashboardNew() {
   const [isValidationRunning, setIsValidationRunning] = useState(false);
   const [isValidationPaused, setIsValidationPaused] = useState(false);
   const [isValidationInitializing, setIsValidationInitializing] = useState(false);
-  const [validationProgress, setValidationProgress] = useState<WebSocketValidationProgress | null>(null);
+  const [validationProgress, setValidationProgress] = useState<SSEValidationProgress | null>(null);
   const [lastFetchUpdate, setLastFetchUpdate] = useState<number>(0);
   const [currentResourceType, setCurrentResourceType] = useState<string>('');
   const [nextResourceType, setNextResourceType] = useState<string>('');
@@ -91,42 +91,16 @@ export default function DashboardNew() {
   const [totalPausedTime, setTotalPausedTime] = useState<number>(0);
 
   // SSE for real-time validation updates
-  const { isConnected, progress, validationStatus } = useValidationSSE();
+  const { isConnected, progress, validationStatus, currentServer } = useValidationSSE();
 
-  // Listen for settings changes to invalidate dashboard cache
-  useEffect(() => {
-    const handleWebSocketMessage = (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
-          console.log('[Dashboard] Validation settings updated, invalidating cache');
-          // Invalidate dashboard-related queries
-          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/fhir-server-stats'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/validation-stats'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/combined'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/validation/bulk/progress'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/validation/errors/recent'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
-        }
-      } catch (error) {
-        // Ignore non-JSON messages
-      }
-    };
-
-    // Add event listener for WebSocket messages
-    const ws = (window as any).validationWebSocket;
-    if (ws) {
-      ws.addEventListener('message', handleWebSocketMessage);
-      return () => ws.removeEventListener('message', handleWebSocketMessage);
-    }
-  }, []);
+  // Note: Settings change notifications are now handled via SSE through the useValidationSSE hook
+  // No need for separate event listeners - SSE handles everything
 
   // Get current validation progress from server (using fetch for now)
   const [currentValidationProgress, setCurrentValidationProgress] = useState<ValidationProgress | null>(null);
   const [recentErrors, setRecentErrors] = useState([]);
 
-  // Fetch validation progress
+  // Fetch validation progress (fallback when SSE is not connected)
   useEffect(() => {
     const fetchValidationProgress = async () => {
       try {
@@ -139,15 +113,18 @@ export default function DashboardNew() {
           }
           setCurrentValidationProgress(data);
           
-          // Update processing blocks from fetch data
+          // Always update processing blocks from fetch data (SSE doesn't provide this)
           setCurrentResourceType(data.currentResourceType || '');
           setNextResourceType(data.nextResourceType || '');
           
-          // Sync frontend state with backend state
-          setIsValidationRunning(data.status === 'running');
-          setIsValidationPaused(data.status === 'paused');
-          setIsValidationInitializing(false);
-          setLastFetchUpdate(Date.now()); // Record when we last updated from fetch
+          // Only sync frontend state if SSE is not connected
+          // This prevents fetch from overriding real-time SSE updates
+          if (!isConnected) {
+            setIsValidationRunning(data.status === 'running');
+            setIsValidationPaused(data.status === 'paused');
+            setIsValidationInitializing(false);
+            setLastFetchUpdate(Date.now());
+          }
         }
       } catch (error) {
         console.error('Failed to fetch validation progress:', error);
@@ -157,7 +134,7 @@ export default function DashboardNew() {
     const interval = setInterval(fetchValidationProgress, 5000); // 5 seconds for processing blocks
     fetchValidationProgress(); // Initial fetch
     return () => clearInterval(interval);
-  }, []);
+  }, [isConnected]);
 
   // Fetch recent errors
   useEffect(() => {
@@ -182,82 +159,72 @@ export default function DashboardNew() {
   // Effects
   // ========================================================================
 
-  // WebSocket progress updates (real-time during validation)
+  // SSE progress updates (real-time during validation)
   useEffect(() => {
     if (progress) {
-      console.log('WebSocket progress received:', progress);
-      // Use WebSocket progress directly (startTime is already a string)
+      console.log('SSE progress received:', progress);
+      // Use SSE progress directly (startTime is already a string)
       setValidationProgress(progress);
       
-      // DISABLED: Don't update processing blocks via WebSocket to prevent flashing
-      // Processing blocks will only be updated via fetch (every 10 seconds)
-      // This prevents the constant re-rendering that causes flashing
-      
-      // Only update state if fetch hasn't been more recent (within last 5 seconds)
-      const now = Date.now();
-      const timeSinceLastFetch = now - lastFetchUpdate;
-      
-      if (timeSinceLastFetch > 5000) { // 5 seconds threshold
-        if (progress.status === 'running') {
-          setIsValidationRunning(true);
-          setIsValidationPaused(false);
-        } else if (progress.status === 'paused') {
-          setIsValidationRunning(false);
-          setIsValidationPaused(true);
-        } else if (progress.isComplete || progress.status === 'completed') {
-          setIsValidationRunning(false);
-          setIsValidationPaused(false);
-        }
-      } else {
-        console.log('Skipping WebSocket state update - fetch was more recent');
-      }
-    }
-  }, [progress, lastFetchUpdate, currentResourceType, nextResourceType]);
-
-  // WebSocket status updates
-  useEffect(() => {
-    // Only update state if fetch hasn't been more recent (within last 5 seconds)
-    const now = Date.now();
-    const timeSinceLastFetch = now - lastFetchUpdate;
-    
-    if (timeSinceLastFetch > 5000) { // 5 seconds threshold
-      if (validationStatus === 'running') {
-        setIsValidationInitializing(false);
+      // Always update status from SSE - it's real-time and more accurate than fetch
+      // SSE updates should take precedence over periodic fetch updates
+      if (progress.status === 'running') {
         setIsValidationRunning(true);
         setIsValidationPaused(false);
-        // Clear paused time tracking when running
-        if (pausedAt) {
-          const pauseDuration = Date.now() - pausedAt.getTime();
-          setTotalPausedTime(prev => prev + pauseDuration);
-          setPausedAt(null);
-        }
-      } else if (validationStatus === 'paused') {
-        setIsValidationInitializing(false);
+      } else if (progress.status === 'paused') {
         setIsValidationRunning(false);
         setIsValidationPaused(true);
-        // Track when validation was paused via WebSocket
-        if (!pausedAt) {
-          setPausedAt(new Date());
-        }
-      } else if (validationStatus === 'completed') {
-        setIsValidationInitializing(false);
+      } else if (progress.isComplete || progress.status === 'completed') {
         setIsValidationRunning(false);
         setIsValidationPaused(false);
-        // Reset paused time tracking when completed
-        setPausedAt(null);
-        setTotalPausedTime(0);
-      } else if (validationStatus === 'error') {
-        setIsValidationInitializing(false);
-        setIsValidationRunning(false);
-        setIsValidationPaused(false);
-        // Reset paused time tracking on error
-        setPausedAt(null);
-        setTotalPausedTime(0);
       }
-    } else {
-      console.log('Skipping WebSocket status update - fetch was more recent');
+      
+      // Update last fetch time to prevent fetch from overriding SSE updates
+      setLastFetchUpdate(Date.now());
     }
-  }, [validationStatus, lastFetchUpdate]);
+  }, [progress, currentResourceType, nextResourceType]);
+
+  // SSE status updates
+  useEffect(() => {
+    // Always process SSE status updates - they are real-time and more accurate
+    // SSE updates should take precedence over periodic fetch updates
+    if (validationStatus === 'running') {
+      setIsValidationInitializing(false);
+      setIsValidationRunning(true);
+      setIsValidationPaused(false);
+      // Clear paused time tracking when running
+      if (pausedAt) {
+        const pauseDuration = Date.now() - pausedAt.getTime();
+        setTotalPausedTime(prev => prev + pauseDuration);
+        setPausedAt(null);
+      }
+    } else if (validationStatus === 'paused') {
+      setIsValidationInitializing(false);
+      setIsValidationRunning(false);
+      setIsValidationPaused(true);
+      // Track when validation was paused via SSE
+      if (!pausedAt) {
+        setPausedAt(new Date());
+      }
+    } else if (validationStatus === 'completed') {
+      setIsValidationInitializing(false);
+      setIsValidationRunning(false);
+      setIsValidationPaused(false);
+      // Reset paused time tracking when completed
+      setPausedAt(null);
+      setTotalPausedTime(0);
+    } else if (validationStatus === 'error') {
+      setIsValidationInitializing(false);
+      setIsValidationRunning(false);
+      setIsValidationPaused(false);
+      // Reset paused time tracking on error
+      setPausedAt(null);
+      setTotalPausedTime(0);
+    }
+    
+    // Update last fetch time to prevent fetch from overriding SSE updates
+    setLastFetchUpdate(Date.now());
+  }, [validationStatus]);
 
   // ========================================================================
   // Validation Control Handlers
@@ -545,6 +512,36 @@ export default function DashboardNew() {
           </Button>
         </div>
       </div>
+
+      {/* Server Switching Indicator */}
+      {currentServer && currentServer.id && (
+        <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <Server className="h-5 w-5 text-blue-500" />
+            <div className="flex-1">
+              <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                Connected to: {currentServer.name}
+              </div>
+              <div className="text-xs text-blue-600 dark:text-blue-400">
+                {currentServer.url}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {isConnected ? (
+                <>
+                  <Wifi className="h-4 w-4 text-green-500" />
+                  <span className="text-xs text-green-600 dark:text-green-400">SSE Connected</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="h-4 w-4 text-red-500" />
+                  <span className="text-xs text-red-600 dark:text-red-400">SSE Disconnected</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Real-time Validation Control Panel */}
       <Card className={`border-2 transition-colors duration-300 ${

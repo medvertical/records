@@ -4,6 +4,15 @@
 
 The Records FHIR Validation Platform provides a RESTful API for FHIR server validation, resource management, and real-time monitoring. This document describes the available API endpoints and their usage.
 
+## Key Features
+
+- **Real-time Updates**: Server-Sent Events (SSE) for live validation progress
+- **Comprehensive Validation**: 6-aspect validation engine with configurable settings
+- **Type Safety**: Complete TypeScript definitions with runtime validation
+- **Error Handling**: Advanced error categorization with recovery strategies
+- **Performance**: Intelligent caching and query optimization
+- **Monitoring**: Structured logging and performance metrics
+
 ## Base URL
 
 - **Local Development**: `http://localhost:3000`
@@ -79,6 +88,68 @@ Get recent validation errors.
 ]
 ```
 
+#### POST `/api/validation/pause`
+
+Pause the current validation process.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Validation paused"
+}
+```
+
+#### POST `/api/validation/resume`
+
+Resume the paused validation process.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Validation resumed"
+}
+```
+
+#### GET `/api/validation/status`
+
+Get current validation status.
+
+**Response:**
+```json
+{
+  "status": "running",
+  "isRunning": true,
+  "isPaused": false,
+  "progress": {
+    "totalResources": 807575,
+    "processedResources": 42000,
+    "validResources": 39800,
+    "errorResources": 2200,
+    "warningResources": 150,
+    "currentResourceType": "Patient",
+    "processingRate": 1200,
+    "isComplete": false
+  }
+}
+```
+
+#### GET `/api/validation/health`
+
+Get SSE connection health status.
+
+**Response:**
+```json
+{
+  "connectedClients": 3,
+  "totalMessages": 1250,
+  "messagesPerMinute": 45,
+  "averageConnectionDuration": 300,
+  "lastHeartbeat": "2025-01-16T14:00:00.000Z"
+}
+```
+
 ### Real-time Updates
 
 #### GET `/api/validation/stream` (Server-Sent Events)
@@ -88,19 +159,25 @@ Establish a Server-Sent Events (SSE) connection for real-time validation updates
 **Headers:**
 - `Accept: text/event-stream`
 - `Cache-Control: no-cache`
+- `Connection: keep-alive`
 
 **Event Types:**
-- `connected`: Initial connection confirmation
-- `validation-progress`: Progress updates
-- `validation-started`: Validation process started
-- `validation-completed`: Validation process completed
+- `validation-progress`: Progress updates with detailed metrics
+- `validation-completed`: Validation process completed with summary
+- `validation-error`: Validation error occurred with recovery info
+- `validation-paused`: Validation process paused
+- `validation-resumed`: Validation process resumed
 - `validation-stopped`: Validation process stopped
-- `validation-error`: Validation error occurred
+- `connection-status`: Connection status updates
+- `heartbeat`: Periodic heartbeat messages
 
-**Example Event:**
+**Example Events:**
 ```
-data: {"type": "validation-progress", "data": {"totalResources": 807575, "processedResources": 42000, "validResources": 39800, "errorResources": 2200, "isComplete": false}}
+data: {"type": "validation-progress", "timestamp": "2025-01-16T14:00:00.000Z", "data": {"totalResources": 807575, "processedResources": 42000, "validResources": 39800, "errorResources": 2200, "warningResources": 150, "currentResourceType": "Patient", "processingRate": 1200, "isComplete": false}}
 
+data: {"type": "validation-completed", "timestamp": "2025-01-16T14:30:00.000Z", "data": {"progress": {...}, "summary": {"totalResources": 807575, "processedResources": 807575, "validResources": 765000, "errorResources": 42575, "duration": 1800, "successRate": 94.7}}}
+
+data: {"type": "heartbeat", "timestamp": "2025-01-16T14:00:00.000Z", "data": {"serverTime": "2025-01-16T14:00:00.000Z"}}
 ```
 
 **Usage Example (JavaScript):**
@@ -176,6 +253,113 @@ Get FHIR version information.
   "version": "4.0.1",
   "release": "R4",
   "fhirVersion": "4.0.1"
+}
+```
+
+#### POST `/api/fhir/servers`
+
+Create a new FHIR server configuration.
+
+**Request Body:**
+```json
+{
+  "name": "My FHIR Server",
+  "url": "https://my-fhir-server.com/fhir",
+  "authConfig": {
+    "type": "basic",
+    "username": "user",
+    "password": "pass"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "id": 2,
+  "name": "My FHIR Server",
+  "url": "https://my-fhir-server.com/fhir",
+  "isActive": false,
+  "authConfig": {
+    "type": "basic",
+    "username": "user"
+  },
+  "createdAt": "2025-01-16T14:00:00.000Z"
+}
+```
+
+#### PUT `/api/fhir/servers/:id`
+
+Update an existing FHIR server configuration.
+
+**Request Body:**
+```json
+{
+  "name": "Updated Server Name",
+  "url": "https://updated-server.com/fhir"
+}
+```
+
+#### DELETE `/api/fhir/servers/:id`
+
+Delete a FHIR server configuration.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Server deleted successfully"
+}
+```
+
+#### POST `/api/fhir/servers/:id/test`
+
+Test connection to a specific FHIR server.
+
+**Response:**
+```json
+{
+  "connected": true,
+  "version": "4.0.1",
+  "serverName": "HAPI FHIR Server",
+  "responseTime": 250,
+  "timestamp": "2025-01-16T14:00:00.000Z"
+}
+```
+
+#### POST `/api/fhir/auth/test`
+
+Test authentication configuration.
+
+**Request Body:**
+```json
+{
+  "url": "https://my-fhir-server.com/fhir",
+  "authConfig": {
+    "type": "bearer",
+    "token": "your-token-here"
+  }
+}
+```
+
+#### GET `/api/fhir/metadata`
+
+Get comprehensive FHIR server metadata.
+
+**Response:**
+```json
+{
+  "version": "4.0.1",
+  "isR5": false,
+  "totalResourceTypes": 143,
+  "priorityResourceTypes": ["Patient", "Observation", "Encounter"],
+  "allResourceTypes": ["Patient", "Observation", "Encounter", "..."],
+  "capabilities": {
+    "search": true,
+    "create": true,
+    "update": true,
+    "delete": false
+  }
 }
 ```
 
@@ -282,17 +466,71 @@ All endpoints may return error responses in the following format:
 
 ```json
 {
-  "error": "Error message",
-  "code": "ERROR_CODE",
+  "success": false,
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "Validation failed",
+    "details": "Missing required field: name",
+    "field": "name",
+    "context": {
+      "service": "validation",
+      "operation": "validateResource",
+      "resourceType": "Patient"
+    },
+    "severity": "high",
+    "recoverable": true,
+    "recoveryAction": "retry",
+    "suggestions": [
+      "Check if the resource structure is correct",
+      "Verify required fields are present"
+    ],
+    "timestamp": "2025-01-16T14:00:00.000Z"
+  },
   "timestamp": "2025-01-16T14:00:00.000Z"
 }
 ```
 
+**Error Categories:**
+- `validation`: Validation-related errors
+- `fhir-server`: FHIR server connection/communication errors
+- `database`: Database operation errors
+- `network`: Network connectivity errors
+- `authentication`: Authentication and authorization errors
+- `configuration`: Configuration-related errors
+- `system`: System-level errors
+- `user-input`: User input validation errors
+- `external-service`: External service integration errors
+- `timeout`: Request timeout errors
+- `rate-limit`: Rate limiting errors
+- `unknown`: Unclassified errors
+
+**Error Severities:**
+- `low`: Minor issues that don't affect functionality
+- `medium`: Issues that may affect some functionality
+- `high`: Issues that significantly affect functionality
+- `critical`: Issues that prevent the system from functioning
+
+**Recovery Actions:**
+- `retry`: Error can be resolved by retrying the operation
+- `fallback`: Use alternative data or method
+- `skip`: Skip the problematic item and continue
+- `abort`: Stop the operation entirely
+- `user-intervention`: Requires user action to resolve
+- `system-restart`: Requires system restart to resolve
+- `none`: No recovery action available
+
 **Common HTTP Status Codes:**
 - `200 OK`: Request successful
 - `400 Bad Request`: Invalid request parameters
+- `401 Unauthorized`: Authentication required
+- `403 Forbidden`: Access denied
 - `404 Not Found`: Resource not found
+- `422 Unprocessable Entity`: Validation error
+- `429 Too Many Requests`: Rate limit exceeded
 - `500 Internal Server Error`: Server error
+- `502 Bad Gateway`: Upstream server error
+- `503 Service Unavailable`: Service temporarily unavailable
+- `504 Gateway Timeout`: Upstream server timeout
 
 ## Rate Limiting
 

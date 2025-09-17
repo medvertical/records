@@ -350,7 +350,7 @@ export function ValidationEngineCard({ className }: ValidationEngineCardProps) {
             <Info className="h-4 w-4 text-yellow-500" />
             <div className="flex-1">
               <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                WebSocket disconnected. Real-time updates unavailable.
+                SSE disconnected. Real-time updates unavailable.
               </p>
             </div>
             <Button

@@ -64,7 +64,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
 
   // Listen for settings changes to invalidate dashboard cache
   useEffect(() => {
-    const handleWebSocketMessage = (event: MessageEvent) => {
+    const handleSSEMessage = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
@@ -83,11 +83,11 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
       }
     };
 
-    // Add event listener for WebSocket messages
-    const ws = (window as any).validationWebSocket;
-    if (ws) {
-      ws.addEventListener('message', handleWebSocketMessage);
-      return () => ws.removeEventListener('message', handleWebSocketMessage);
+    // Add event listener for SSE messages
+    const sse = (window as any).validationSSE;
+    if (sse) {
+      sse.addEventListener('message', handleSSEMessage);
+      return () => sse.removeEventListener('message', handleSSEMessage);
     }
   }, [queryClient]);
 
@@ -101,6 +101,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     queryKey: ['/api/dashboard/fhir-server-stats'],
     refetchInterval: enableRealTimeUpdates ? refetchInterval : false,
     staleTime: enableCaching ? 30 * 60 * 1000 : 0, // 30 minutes (extended for better performance)
+    keepPreviousData: true, // Prevent flashing during refetch
     onSuccess: () => {
       setLastUpdated(new Date());
       setIsStale(false);
@@ -120,6 +121,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     queryKey: ['/api/dashboard/validation-stats'],
     refetchInterval: enableRealTimeUpdates ? refetchInterval : false,
     staleTime: enableCaching ? 2 * 60 * 1000 : 0, // 2 minutes (extended for better performance)
+    keepPreviousData: true, // Prevent flashing during refetch
     onSuccess: () => {
       setLastUpdated(new Date());
       setIsStale(false);
@@ -139,6 +141,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     queryKey: ['/api/dashboard/combined'],
     refetchInterval: enableRealTimeUpdates ? refetchInterval : false,
     staleTime: enableCaching ? 2 * 60 * 1000 : 0, // 2 minutes (extended for better performance)
+    keepPreviousData: true, // Prevent flashing during refetch
     onSuccess: () => {
       setLastUpdated(new Date());
       setIsStale(false);
@@ -158,6 +161,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     queryKey: ['/api/dashboard/stats'],
     refetchInterval: enableRealTimeUpdates ? refetchInterval : false,
     staleTime: enableCaching ? 2 * 60 * 1000 : 0, // 2 minutes (extended for better performance)
+    keepPreviousData: true, // Prevent flashing during refetch
     onSuccess: () => {
       setLastUpdated(new Date());
       setIsStale(false);
@@ -229,7 +233,8 @@ export function useFhirServerStats() {
   return useQuery({
     queryKey: ['/api/dashboard/fhir-server-stats'],
     refetchInterval: 5 * 60 * 1000, // 5 minutes
-    staleTime: 5 * 60 * 1000
+    staleTime: 5 * 60 * 1000,
+    keepPreviousData: true // Prevent flashing during refetch
   });
 }
 
@@ -240,7 +245,8 @@ export function useValidationStats() {
   return useQuery({
     queryKey: ['/api/dashboard/validation-stats'],
     refetchInterval: 1 * 60 * 1000, // 1 minute
-    staleTime: 1 * 60 * 1000
+    staleTime: 1 * 60 * 1000,
+    keepPreviousData: true // Prevent flashing during refetch
   });
 }
 
@@ -251,7 +257,8 @@ export function useCombinedDashboardData() {
   return useQuery({
     queryKey: ['/api/dashboard/combined'],
     refetchInterval: 1 * 60 * 1000, // 1 minute
-    staleTime: 1 * 60 * 1000
+    staleTime: 1 * 60 * 1000,
+    keepPreviousData: true // Prevent flashing during refetch
   });
 }
 
@@ -262,6 +269,7 @@ export function useLegacyDashboardStats() {
   return useQuery({
     queryKey: ['/api/dashboard/stats'],
     refetchInterval: 1 * 60 * 1000, // 1 minute
-    staleTime: 1 * 60 * 1000
+    staleTime: 1 * 60 * 1000,
+    keepPreviousData: true // Prevent flashing during refetch
   });
 }

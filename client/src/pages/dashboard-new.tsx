@@ -101,10 +101,10 @@ export default function DashboardNew() {
   // Effects
   // ========================================================================
 
-  // WebSocket progress updates (real-time during validation)
+  // SSE progress updates (real-time during validation)
   useEffect(() => {
     if (progress) {
-      console.log('WebSocket progress received:', progress);
+      console.log('SSE progress received:', progress);
       setValidationProgress(progress);
       
       if (progress.status === 'running') {
@@ -120,7 +120,7 @@ export default function DashboardNew() {
     }
   }, [progress]);
 
-  // WebSocket status updates
+  // SSE status updates
   useEffect(() => {
     if (validationStatus === 'running') {
       setIsValidationInitializing(false);

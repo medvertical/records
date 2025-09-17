@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { useServerData } from "@/hooks/use-server-data";
 import { cn, formatCount } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState, useEffect } from "react";
@@ -13,7 +14,8 @@ import {
   Settings, 
   HospitalIcon,
   Package,
-  Server
+  Server,
+  RefreshCw
 } from "lucide-react";
 
 interface ServerStatus {
@@ -54,22 +56,45 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
     }
   }, [location]);
   
-  const { data: serverStatus } = useQuery<ServerStatus>({
-    queryKey: ["/api/fhir/connection/test"],
-    refetchInterval: 30000,
+  const { servers, serverStatus, activeServer, isLoading, refreshServerData } = useServerData();
+  
+  // Debug logging for server status changes
+  console.log('[Sidebar] Server data:', { 
+    serversCount: servers?.length, 
+    activeServer: activeServer?.name, 
+    serverStatus: serverStatus?.connected,
+    isLoading 
   });
-
-  const { data: servers } = useQuery({
-    queryKey: ["/api/fhir/servers"],
-    refetchInterval: 60000, // Refresh every minute
-  });
+  
+  // Log when active server changes
+  useEffect(() => {
+    if (activeServer) {
+      console.log('[Sidebar] Active server changed:', {
+        name: activeServer.name,
+        url: activeServer.url,
+        isActive: activeServer.isActive,
+        id: activeServer.id
+      });
+    } else {
+      console.log('[Sidebar] No active server');
+    }
+  }, [activeServer]);
+  
+  // Log when servers list changes
+  useEffect(() => {
+    console.log('[Sidebar] Servers list changed:', servers?.map(s => ({
+      id: s.id,
+      name: s.name,
+      isActive: s.isActive
+    })));
+  }, [servers]);
 
   const { data: resourceCounts } = useQuery<Record<string, number>>({
     queryKey: ["/api/fhir/resource-counts"],
+    // Keep previous data during refetch to prevent flashing
+    keepPreviousData: true,
+    staleTime: 0,
   });
-
-  // Find the active server
-  const activeServer = servers?.find((server: any) => server.isActive);
 
   if (isMobile) {
     return (
@@ -177,34 +202,107 @@ function SidebarContent({
           <span className="text-sm font-medium text-gray-700">Server Connection</span>
           <div className="flex items-center space-x-1">
             <div className={cn(
-              "w-2 h-2 rounded-full",
-              serverStatus?.connected ? "bg-fhir-success" : "bg-fhir-error"
+              "w-2 h-2 rounded-full transition-colors duration-200",
+              activeServer && serverStatus?.connected 
+                ? "bg-fhir-success" 
+                : activeServer 
+                  ? "bg-yellow-500" 
+                  : "bg-fhir-error"
             )} />
             <span className={cn(
-              "text-xs",
-              serverStatus?.connected ? "text-fhir-success" : "text-fhir-error"
+              "text-xs transition-colors duration-200 font-medium",
+              activeServer && serverStatus?.connected 
+                ? "text-fhir-success" 
+                : activeServer 
+                  ? "text-yellow-600" 
+                  : "text-fhir-error"
             )}>
-              {serverStatus?.connected ? "Connected" : "Disconnected"}
+              {isLoading ? "Checking..." : 
+               activeServer && serverStatus?.connected ? "Connected" : 
+               activeServer ? "Configured" : "No Server"}
             </span>
           </div>
         </div>
-        <div className="flex items-center justify-between bg-gray-50 p-2 rounded">
+        <div className={cn(
+          "flex items-center justify-between bg-gray-50 p-2 rounded transition-all duration-200",
+          isLoading && "bg-blue-50 border border-blue-200"
+        )}>
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium text-gray-700 truncate">
-              {activeServer?.name || "No Server"}
+            <div className="text-xs font-medium text-gray-700 truncate flex items-center gap-1">
+              {isLoading && !activeServer ? (
+                <span className="text-gray-500">Switching servers...</span>
+              ) : (
+                <>
+                  {activeServer?.name || "No Server"}
+                  {activeServer && (
+                    <span className="text-xs text-gray-400 font-normal">
+                      (ID: {activeServer.id})
+                    </span>
+                  )}
+                </>
+              )}
+              {isLoading && activeServer && (
+                <div className="w-2 h-2 border border-gray-300 border-t-transparent rounded-full animate-spin"></div>
+              )}
             </div>
             <div className="text-xs text-gray-500 truncate">
-              {activeServer?.url || "Not connected"}
+              {isLoading && !activeServer ? (
+                <span className="text-gray-400">Updating connection...</span>
+              ) : (
+                <>
+                  {activeServer?.url || "Not connected"}
+                  {servers && servers.length > 1 && (
+                    <span className="ml-1 text-gray-400">
+                      ({servers.length} servers)
+                    </span>
+                  )}
+                </>
+              )}
             </div>
+            {isLoading && !activeServer ? (
+              <div className="flex items-center gap-2 mt-1">
+                <div className="text-xs px-2 py-1 rounded-full font-medium bg-blue-100 text-blue-700">
+                  🔄 Switching...
+                </div>
+              </div>
+            ) : activeServer && serverStatus ? (
+              <div className="flex items-center gap-2 mt-1">
+                <div className={cn(
+                  "text-xs px-2 py-1 rounded-full font-medium",
+                  serverStatus.connected 
+                    ? "bg-green-100 text-green-700" 
+                    : "bg-red-100 text-red-700"
+                )}>
+                  {serverStatus.connected ? "✓ Connected" : "✗ Failed"}
+                </div>
+                {serverStatus.version && (
+                  <span className="text-xs text-gray-500">
+                    FHIR {serverStatus.version}
+                  </span>
+                )}
+              </div>
+            ) : null}
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={onChangeServer}
-            className="h-auto p-1 text-gray-500 hover:text-fhir-blue hover:bg-gray-100 ml-2 flex-shrink-0"
-          >
-            <Server className="h-3 w-3" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={refreshServerData}
+              className="h-auto p-1 text-gray-500 hover:text-fhir-blue hover:bg-gray-100"
+              title="Refresh connection status"
+            >
+              <RefreshCw className="h-3 w-3" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={onChangeServer}
+              className="h-auto p-1 text-gray-500 hover:text-fhir-blue hover:bg-gray-100"
+              title="Change server connection"
+            >
+              <Server className="h-3 w-3" />
+            </Button>
+          </div>
         </div>
       </div>
 

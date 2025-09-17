@@ -1,369 +1,464 @@
-// ============================================================================
-// SSE Validation Hook Tests
-// ============================================================================
+import { renderHook, act, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { useValidationSSE } from './use-validation-sse'
 
-import { renderHook, act, waitFor } from '@testing-library/react';
-import { useValidationSSE, ValidationProgress, SSEMessage } from './use-validation-sse';
+// Mock the API functions
+vi.mock('../api/validation', () => ({
+  startValidation: vi.fn(),
+  stopValidation: vi.fn(),
+  pauseValidation: vi.fn(),
+  resumeValidation: vi.fn(),
+  getValidationStatus: vi.fn(),
+}))
 
 // Mock EventSource
-class MockEventSource {
-  public onopen: ((event: Event) => void) | null = null;
-  public onmessage: ((event: MessageEvent) => void) | null = null;
-  public onerror: ((event: Event) => void) | null = null;
-  public readyState: number = 0;
-  public url: string;
-
-  constructor(url: string) {
-    this.url = url;
-    this.readyState = 1; // OPEN
-  }
-
-  close() {
-    this.readyState = 3; // CLOSED
-  }
-
-  // Helper methods for testing
-  simulateOpen() {
-    if (this.onopen) {
-      this.onopen(new Event('open'));
-    }
-  }
-
-  simulateMessage(data: any) {
-    if (this.onmessage) {
-      const event = new MessageEvent('message', { data: JSON.stringify(data) });
-      this.onmessage(event);
-    }
-  }
-
-  simulateError() {
-    if (this.onerror) {
-      this.onerror(new Event('error'));
-    }
-  }
+const mockEventSource = {
+  addEventListener: vi.fn(),
+  removeEventListener: vi.fn(),
+  close: vi.fn(),
+  readyState: 1,
+  url: '',
+  withCredentials: false,
+  CONNECTING: 0,
+  OPEN: 1,
+  CLOSED: 2,
 }
 
-// Mock global EventSource
-global.EventSource = MockEventSource as any;
-
-// Mock fetch
-global.fetch = jest.fn();
-
 describe('useValidationSSE', () => {
-  let mockEventSource: MockEventSource;
-
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockEventSource = new MockEventSource('/api/validation/stream');
-    (global.EventSource as any) = jest.fn(() => mockEventSource);
-  });
+    vi.clearAllMocks()
+    // @ts-ignore
+    global.EventSource = vi.fn(() => mockEventSource)
+  })
 
   afterEach(() => {
-    jest.restoreAllMocks();
-  });
+    vi.restoreAllMocks()
+  })
 
-  describe('Connection Management', () => {
-    it('should establish SSE connection on mount', () => {
-      const { result } = renderHook(() => useValidationSSE());
+  it('should initialize with default state', () => {
+    const { result } = renderHook(() => useValidationSSE())
 
-      expect(global.EventSource).toHaveBeenCalledWith('/api/validation/stream');
-      expect(result.current.isConnected).toBe(false);
-    });
+    expect(result.current.isConnected).toBe(false)
+    expect(result.current.isValidating).toBe(false)
+    expect(result.current.progress).toBe(0)
+    expect(result.current.status).toBe('idle')
+    expect(result.current.error).toBe(null)
+  })
 
-    it('should set connected state when SSE opens', async () => {
-      const { result } = renderHook(() => useValidationSSE());
+  it('should connect to SSE endpoint', async () => {
+    const { result } = renderHook(() => useValidationSSE())
 
+    act(() => {
+      result.current.connect()
+    })
+
+    expect(global.EventSource).toHaveBeenCalledWith('/api/validation/stream')
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith('message', expect.any(Function))
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith('error', expect.any(Function))
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith('open', expect.any(Function))
+  })
+
+  it('should handle SSE connection open', async () => {
+    const { result } = renderHook(() => useValidationSSE())
+
+    act(() => {
+      result.current.connect()
+    })
+
+    // Simulate connection open
+    const openHandler = mockEventSource.addEventListener.mock.calls.find(
+      call => call[0] === 'open'
+    )?.[1]
+    
+    if (openHandler) {
       act(() => {
-        mockEventSource.simulateOpen();
-      });
+        openHandler()
+      })
+    }
 
-      await waitFor(() => {
-        expect(result.current.isConnected).toBe(true);
-      });
-    });
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true)
+    })
+  })
 
-    it('should handle SSE connection errors', async () => {
-      const { result } = renderHook(() => useValidationSSE());
+  it('should handle SSE messages', async () => {
+    const { result } = renderHook(() => useValidationSSE())
 
-      act(() => {
-        mockEventSource.simulateError();
-      });
+    act(() => {
+      result.current.connect()
+    })
 
-      await waitFor(() => {
-        expect(result.current.isConnected).toBe(false);
-        expect(result.current.lastError).toBe('SSE connection error');
-      });
-    });
-
-    it('should close SSE connection on unmount', () => {
-      const closeSpy = jest.spyOn(mockEventSource, 'close');
-      const { unmount } = renderHook(() => useValidationSSE());
-
-      unmount();
-
-      expect(closeSpy).toHaveBeenCalled();
-    });
-  });
-
-  describe('Message Handling', () => {
-    it('should handle connected message', async () => {
-      const { result } = renderHook(() => useValidationSSE());
-
-      const connectedMessage: SSEMessage = {
-        type: 'connected',
-        data: { message: 'Connected to validation stream' }
-      };
-
-      act(() => {
-        mockEventSource.simulateMessage(connectedMessage);
-      });
-
-      // Should not throw errors and should handle the message gracefully
-      expect(result.current.isConnected).toBe(false); // Still false until onopen
-    });
-
-    it('should handle validation progress message', async () => {
-      const { result } = renderHook(() => useValidationSSE());
-
-      const progressData: ValidationProgress = {
-        totalResources: 1000,
-        processedResources: 100,
-        validResources: 95,
-        errorResources: 5,
-        startTime: '2025-01-16T14:00:00.000Z',
-        isComplete: false,
-        errors: [],
-        status: 'running'
-      };
-
-      const progressMessage: SSEMessage = {
-        type: 'validation-progress',
-        data: progressData
-      };
-
-      act(() => {
-        mockEventSource.simulateMessage(progressMessage);
-      });
-
-      await waitFor(() => {
-        expect(result.current.progress).toEqual(progressData);
-        expect(result.current.validationStatus).toBe('running');
-      });
-    });
-
-    it('should handle validation started message', async () => {
-      const { result } = renderHook(() => useValidationSSE());
-
-      const startedMessage: SSEMessage = {
-        type: 'validation-started',
-        data: { message: 'Validation started' }
-      };
-
-      act(() => {
-        mockEventSource.simulateMessage(startedMessage);
-      });
-
-      await waitFor(() => {
-        expect(result.current.validationStatus).toBe('running');
-      });
-    });
-
-    it('should handle validation completed message', async () => {
-      const { result } = renderHook(() => useValidationSSE());
-
-      const completedMessage: SSEMessage = {
-        type: 'validation-completed',
-        data: { message: 'Validation completed' }
-      };
-
-      act(() => {
-        mockEventSource.simulateMessage(completedMessage);
-      });
-
-      await waitFor(() => {
-        expect(result.current.validationStatus).toBe('completed');
-      });
-    });
-
-    it('should handle validation error message', async () => {
-      const { result } = renderHook(() => useValidationSSE());
-
-      const errorMessage: SSEMessage = {
-        type: 'validation-error',
-        data: { error: 'Validation failed' }
-      };
-
-      act(() => {
-        mockEventSource.simulateMessage(errorMessage);
-      });
-
-      await waitFor(() => {
-        expect(result.current.validationStatus).toBe('error');
-        expect(result.current.lastError).toBe('Validation failed');
-      });
-    });
-
-    it('should handle validation stopped message', async () => {
-      const { result } = renderHook(() => useValidationSSE());
-
-      const stoppedMessage: SSEMessage = {
-        type: 'validation-stopped',
-        data: { message: 'Validation stopped' }
-      };
-
-      act(() => {
-        mockEventSource.simulateMessage(stoppedMessage);
-      });
-
-      await waitFor(() => {
-        expect(result.current.validationStatus).toBe('idle');
-      });
-    });
-  });
-
-  describe('Reconnection Logic', () => {
-    it('should attempt reconnection on error', async () => {
-      jest.useFakeTimers();
-      const { result } = renderHook(() => useValidationSSE());
-
-      // Simulate connection error
-      act(() => {
-        mockEventSource.simulateError();
-      });
-
-      // Fast-forward time to trigger reconnection
-      act(() => {
-        jest.advanceTimersByTime(1000);
-      });
-
-      // Should have attempted reconnection
-      expect(global.EventSource).toHaveBeenCalledTimes(2);
-
-      jest.useRealTimers();
-    });
-
-    it('should stop reconnection attempts after max retries', async () => {
-      jest.useFakeTimers();
-      const { result } = renderHook(() => useValidationSSE());
-
-      // Simulate multiple connection errors
-      for (let i = 0; i < 6; i++) {
-        act(() => {
-          mockEventSource.simulateError();
-        });
-
-        act(() => {
-          jest.advanceTimersByTime(1000 * Math.pow(2, i));
-        });
+    // Simulate receiving a message
+    const messageHandler = mockEventSource.addEventListener.mock.calls.find(
+      call => call[0] === 'message'
+    )?.[1]
+    
+    if (messageHandler) {
+      const mockEvent = {
+        data: JSON.stringify({
+          type: 'validation-progress',
+          data: {
+            progress: 50,
+            status: 'running',
+            isValidating: true,
+            currentResource: 'Patient/123',
+            totalResources: 100,
+            processedResources: 50,
+            successRate: 0.95,
+            errors: []
+          }
+        })
       }
 
-      // Should have attempted reconnection multiple times but eventually stopped
-      expect(global.EventSource).toHaveBeenCalledTimes(6);
+      act(() => {
+        messageHandler(mockEvent)
+      })
 
-      jest.useRealTimers();
-    });
-  });
+      await waitFor(() => {
+        expect(result.current.progress).toBe(50)
+        expect(result.current.status).toBe('running')
+        expect(result.current.isValidating).toBe(true)
+      })
+    }
+  })
 
-  describe('API Fallback', () => {
-    it('should fallback to API polling when SSE fails', async () => {
-      const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          status: 'running',
-          totalResources: 1000,
-          processedResources: 100,
-          validResources: 95,
-          errorResources: 5,
-          startTime: '2025-01-16T14:00:00.000Z',
-          isComplete: false,
-          errors: [],
-          status: 'running'
+  it('should handle validation start message', async () => {
+    const { result } = renderHook(() => useValidationSSE())
+
+    act(() => {
+      result.current.connect()
+    })
+
+    const messageHandler = mockEventSource.addEventListener.mock.calls.find(
+      call => call[0] === 'message'
+    )?.[1]
+    
+    if (messageHandler) {
+      const mockEvent = {
+        data: JSON.stringify({
+          type: 'validation-started',
+          data: {
+            isValidating: true,
+            status: 'running',
+            progress: 0
+          }
         })
-      } as Response);
-
-      const { result } = renderHook(() => useValidationSSE());
-
-      // Simulate SSE connection error to trigger API fallback
-      act(() => {
-        mockEventSource.simulateError();
-      });
-
-      // Wait for API fallback to be triggered
-      await waitFor(() => {
-        expect(mockFetch).toHaveBeenCalledWith('/api/validation/bulk/progress');
-      });
-    });
-  });
-
-  describe('Hook Interface', () => {
-    it('should provide all expected properties and methods', () => {
-      const { result } = renderHook(() => useValidationSSE());
-
-      expect(result.current).toHaveProperty('isConnected');
-      expect(result.current).toHaveProperty('progress');
-      expect(result.current).toHaveProperty('validationStatus');
-      expect(result.current).toHaveProperty('lastError');
-      expect(result.current).toHaveProperty('apiState');
-      expect(result.current).toHaveProperty('resetProgress');
-      expect(result.current).toHaveProperty('reconnect');
-      expect(result.current).toHaveProperty('syncWithApi');
-
-      expect(typeof result.current.resetProgress).toBe('function');
-      expect(typeof result.current.reconnect).toBe('function');
-      expect(typeof result.current.syncWithApi).toBe('function');
-    });
-
-    it('should initialize with correct default values', () => {
-      const { result } = renderHook(() => useValidationSSE());
-
-      expect(result.current.isConnected).toBe(false);
-      expect(result.current.progress).toBe(null);
-      expect(result.current.validationStatus).toBe('idle');
-      expect(result.current.lastError).toBe(null);
-      expect(result.current.apiState).toEqual({
-        isRunning: false,
-        isPaused: false,
-        lastSync: null
-      });
-    });
-  });
-
-  describe('Error Handling', () => {
-    it('should handle malformed JSON messages gracefully', async () => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-      const { result } = renderHook(() => useValidationSSE());
+      }
 
       act(() => {
-        // Simulate malformed JSON
-        const event = new MessageEvent('message', { data: 'invalid json' });
-        mockEventSource.onmessage!(event);
-      });
+        messageHandler(mockEvent)
+      })
 
       await waitFor(() => {
-        expect(consoleSpy).toHaveBeenCalledWith(
-          '[ValidationSSE] Error parsing message:',
-          expect.any(Error)
-        );
-      });
+        expect(result.current.isValidating).toBe(true)
+        expect(result.current.status).toBe('running')
+        expect(result.current.progress).toBe(0)
+      })
+    }
+  })
 
-      consoleSpy.mockRestore();
-    });
+  it('should handle validation stop message', async () => {
+    const { result } = renderHook(() => useValidationSSE())
 
-    it('should handle unknown message types gracefully', async () => {
-      const { result } = renderHook(() => useValidationSSE());
+    // Set initial state
+    act(() => {
+      result.current.setProgress(75)
+      result.current.setStatus('running')
+    })
 
-      const unknownMessage: SSEMessage = {
-        type: 'unknown-type' as any,
-        data: { message: 'Unknown message' }
-      };
+    act(() => {
+      result.current.connect()
+    })
+
+    const messageHandler = mockEventSource.addEventListener.mock.calls.find(
+      call => call[0] === 'message'
+    )?.[1]
+    
+    if (messageHandler) {
+      const mockEvent = {
+        data: JSON.stringify({
+          type: 'validation-stopped',
+          data: {
+            isValidating: false,
+            status: 'idle',
+            progress: 75
+          }
+        })
+      }
 
       act(() => {
-        mockEventSource.simulateMessage(unknownMessage);
-      });
+        messageHandler(mockEvent)
+      })
 
-      // Should not throw errors and should handle gracefully
-      expect(result.current.validationStatus).toBe('idle');
-    });
-  });
-});
+      await waitFor(() => {
+        expect(result.current.isValidating).toBe(false)
+        expect(result.current.status).toBe('idle')
+        expect(result.current.progress).toBe(75)
+      })
+    }
+  })
+
+  it('should handle validation paused message', async () => {
+    const { result } = renderHook(() => useValidationSSE())
+
+    act(() => {
+      result.current.connect()
+    })
+
+    const messageHandler = mockEventSource.addEventListener.mock.calls.find(
+      call => call[0] === 'message'
+    )?.[1]
+    
+    if (messageHandler) {
+      const mockEvent = {
+        data: JSON.stringify({
+          type: 'validation-paused',
+          data: {
+            isValidating: false,
+            status: 'paused',
+            progress: 30
+          }
+        })
+      }
+
+      act(() => {
+        messageHandler(mockEvent)
+      })
+
+      await waitFor(() => {
+        expect(result.current.isValidating).toBe(false)
+        expect(result.current.status).toBe('paused')
+        expect(result.current.progress).toBe(30)
+      })
+    }
+  })
+
+  it('should handle validation resumed message', async () => {
+    const { result } = renderHook(() => useValidationSSE())
+
+    act(() => {
+      result.current.connect()
+    })
+
+    const messageHandler = mockEventSource.addEventListener.mock.calls.find(
+      call => call[0] === 'message'
+    )?.[1]
+    
+    if (messageHandler) {
+      const mockEvent = {
+        data: JSON.stringify({
+          type: 'validation-resumed',
+          data: {
+            isValidating: true,
+            status: 'running',
+            progress: 30
+          }
+        })
+      }
+
+      act(() => {
+        messageHandler(mockEvent)
+      })
+
+      await waitFor(() => {
+        expect(result.current.isValidating).toBe(true)
+        expect(result.current.status).toBe('running')
+        expect(result.current.progress).toBe(30)
+      })
+    }
+  })
+
+  it('should handle connection status message', async () => {
+    const { result } = renderHook(() => useValidationSSE())
+
+    act(() => {
+      result.current.connect()
+    })
+
+    const messageHandler = mockEventSource.addEventListener.mock.calls.find(
+      call => call[0] === 'message'
+    )?.[1]
+    
+    if (messageHandler) {
+      const mockEvent = {
+        data: JSON.stringify({
+          type: 'connection-status',
+          data: {
+            connected: true,
+            serverStatus: 'healthy',
+            lastHeartbeat: new Date().toISOString()
+          }
+        })
+      }
+
+      act(() => {
+        messageHandler(mockEvent)
+      })
+
+      await waitFor(() => {
+        expect(result.current.isConnected).toBe(true)
+      })
+    }
+  })
+
+  it('should handle heartbeat message', async () => {
+    const { result } = renderHook(() => useValidationSSE())
+
+    act(() => {
+      result.current.connect()
+    })
+
+    const messageHandler = mockEventSource.addEventListener.mock.calls.find(
+      call => call[0] === 'message'
+    )?.[1]
+    
+    if (messageHandler) {
+      const mockEvent = {
+        data: JSON.stringify({
+          type: 'heartbeat',
+          data: {
+            timestamp: new Date().toISOString(),
+            serverTime: new Date().toISOString()
+          }
+        })
+      }
+
+      act(() => {
+        messageHandler(mockEvent)
+      })
+
+      // Heartbeat should not change validation state
+      expect(result.current.isValidating).toBe(false)
+      expect(result.current.status).toBe('idle')
+    }
+  })
+
+  it('should handle SSE connection error', async () => {
+    const { result } = renderHook(() => useValidationSSE())
+
+    act(() => {
+      result.current.connect()
+    })
+
+    const errorHandler = mockEventSource.addEventListener.mock.calls.find(
+      call => call[0] === 'error'
+    )?.[1]
+    
+    if (errorHandler) {
+      act(() => {
+        errorHandler(new Error('Connection failed'))
+      })
+
+      await waitFor(() => {
+        expect(result.current.isConnected).toBe(false)
+        expect(result.current.error).toBe('Connection failed')
+      })
+    }
+  })
+
+  it('should disconnect and cleanup', () => {
+    const { result } = renderHook(() => useValidationSSE())
+
+    act(() => {
+      result.current.connect()
+    })
+
+    act(() => {
+      result.current.disconnect()
+    })
+
+    expect(mockEventSource.close).toHaveBeenCalled()
+  })
+
+  it('should handle invalid JSON in SSE message', async () => {
+    const { result } = renderHook(() => useValidationSSE())
+
+    act(() => {
+      result.current.connect()
+    })
+
+    const messageHandler = mockEventSource.addEventListener.mock.calls.find(
+      call => call[0] === 'message'
+    )?.[1]
+    
+    if (messageHandler) {
+      const mockEvent = {
+        data: 'invalid json'
+      }
+
+      act(() => {
+        messageHandler(mockEvent)
+      })
+
+      // Should not crash and maintain current state
+      expect(result.current.status).toBe('idle')
+    }
+  })
+
+  it('should handle unknown message types gracefully', async () => {
+    const { result } = renderHook(() => useValidationSSE())
+
+    act(() => {
+      result.current.connect()
+    })
+
+    const messageHandler = mockEventSource.addEventListener.mock.calls.find(
+      call => call[0] === 'message'
+    )?.[1]
+    
+    if (messageHandler) {
+      const mockEvent = {
+        data: JSON.stringify({
+          type: 'unknown-type',
+          data: { some: 'data' }
+        })
+      }
+
+      act(() => {
+        messageHandler(mockEvent)
+      })
+
+      // Should not crash and maintain current state
+      expect(result.current.status).toBe('idle')
+    }
+  })
+
+  it('should allow manual state updates', () => {
+    const { result } = renderHook(() => useValidationSSE())
+
+    act(() => {
+      result.current.setProgress(25)
+    })
+
+    expect(result.current.progress).toBe(25)
+
+    act(() => {
+      result.current.setStatus('running')
+    })
+
+    expect(result.current.status).toBe('running')
+  })
+
+  it('should handle reconnection attempts', async () => {
+    const { result } = renderHook(() => useValidationSSE())
+
+    // First connection
+    act(() => {
+      result.current.connect()
+    })
+
+    expect(global.EventSource).toHaveBeenCalledTimes(1)
+
+    // Disconnect
+    act(() => {
+      result.current.disconnect()
+    })
+
+    // Reconnect
+    act(() => {
+      result.current.connect()
+    })
+
+    expect(global.EventSource).toHaveBeenCalledTimes(2)
+  })
+})

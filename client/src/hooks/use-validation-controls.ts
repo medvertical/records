@@ -15,7 +15,7 @@ import {
   ValidationStatus,
   ValidationAction,
   StartValidationOptions,
-  ValidationWebSocketMessage,
+  ValidationSSEMessage,
   ValidationProgressMessage,
   ValidationCompletedMessage,
   ValidationErrorMessage,
@@ -66,16 +66,16 @@ const DEFAULT_VALIDATION_CONFIG: ValidationConfiguration = {
 export function useValidationControls(config: ValidationControlsConfig = {}): ValidationControlsHook {
   const finalConfig = { ...DEFAULT_CONFIG, ...config };
   
-  // Integrate with existing WebSocket hook
+  // Integrate with existing SSE hook
   const {
-    isConnected: wsConnected,
-    progress: wsProgress,
-    validationStatus: wsStatus,
-    lastError: wsError,
-    apiState: wsApiState,
-    resetProgress: wsResetProgress,
-    reconnect: wsReconnect,
-    syncWithApi: wsSyncWithApi
+    isConnected: sseConnected,
+    progress: sseProgress,
+    validationStatus: sseStatus,
+    lastError: sseError,
+    apiState: sseApiState,
+    resetProgress: sseResetProgress,
+    reconnect: sseReconnect,
+    syncWithApi: sseSyncWithApi
   } = useValidationSSE();
   
   // State management
@@ -131,29 +131,29 @@ export function useValidationControls(config: ValidationControlsConfig = {}): Va
   const retryCountRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Sync WebSocket state with validation controls state
+  // Sync SSE state with validation controls state
   useEffect(() => {
-    if (wsProgress) {
+    if (sseProgress) {
       setState(prev => ({
         ...prev,
-        progress: wsProgress,
+        progress: sseProgress,
         error: null
       }));
     }
-  }, [wsProgress]);
+  }, [sseProgress]);
 
   useEffect(() => {
-    if (wsError) {
+    if (sseError) {
       setState(prev => ({
         ...prev,
-        error: wsError
+        error: sseError
       }));
     }
-  }, [wsError]);
+  }, [sseError]);
 
   useEffect(() => {
-    // Map WebSocket status to validation controls state
-    switch (wsStatus) {
+    // Map SSE status to validation controls state
+    switch (sseStatus) {
       case 'running':
         setState(prev => ({
           ...prev,
@@ -187,7 +187,7 @@ export function useValidationControls(config: ValidationControlsConfig = {}): Va
         }));
         break;
     }
-  }, [wsStatus]);
+  }, [sseStatus]);
 
   // Persist state to localStorage
   useEffect(() => {
@@ -208,133 +208,8 @@ export function useValidationControls(config: ValidationControlsConfig = {}): Va
     }
   }, [state.batchSize, finalConfig.enablePersistence]);
 
-  // WebSocket connection for real-time updates
-  useEffect(() => {
-    let ws: WebSocket | null = null;
-    let reconnectTimeout: NodeJS.Timeout | null = null;
-
-    const connectWebSocket = () => {
-      try {
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws/validation`;
-        
-        ws = new WebSocket(wsUrl);
-        
-        ws.onopen = () => {
-          console.log('[ValidationControls] WebSocket connected');
-          retryCountRef.current = 0;
-        };
-        
-        ws.onmessage = (event) => {
-          try {
-            const message: ValidationWebSocketMessage = JSON.parse(event.data);
-            
-            switch (message.type) {
-              case 'validation-progress':
-                const progressMsg = message as ValidationProgressMessage;
-                setState(prev => ({
-                  ...prev,
-                  progress: progressMsg.data,
-                  error: null
-                }));
-                break;
-                
-              case 'validation-completed':
-                const completedMsg = message as ValidationCompletedMessage;
-                setState(prev => ({
-                  ...prev,
-                  isRunning: false,
-                  isPaused: false,
-                  isStopping: false,
-                  progress: completedMsg.data.progress,
-                  lastAction: null,
-                  history: [...prev.history, {
-                    id: `run_${Date.now()}`,
-                    startTime: completedMsg.data.progress.startTime as Date,
-                    endTime: new Date(),
-                    status: 'completed',
-                    totalResources: completedMsg.data.progress.totalResources,
-                    processedResources: completedMsg.data.progress.processedResources,
-                    validResources: completedMsg.data.progress.validResources,
-                    errorResources: completedMsg.data.progress.errorResources,
-                    batchSize: prev.batchSize,
-                    duration: completedMsg.data.summary.duration,
-                    configuration: prev.configuration
-                  }]
-                }));
-                break;
-                
-              case 'validation-error':
-                const errorMsg = message as ValidationErrorMessage;
-                setState(prev => ({
-                  ...prev,
-                  isRunning: false,
-                  isPaused: false,
-                  isStopping: false,
-                  error: errorMsg.data.error,
-                  lastAction: null
-                }));
-                break;
-                
-              case 'validation-paused':
-                setState(prev => ({
-                  ...prev,
-                  isRunning: false,
-                  isPaused: true,
-                  isStopping: false
-                }));
-                break;
-                
-              case 'validation-resumed':
-                setState(prev => ({
-                  ...prev,
-                  isRunning: true,
-                  isPaused: false,
-                  isStopping: false
-                }));
-                break;
-            }
-          } catch (error) {
-            console.warn('[ValidationControls] Failed to parse WebSocket message:', error);
-          }
-        };
-        
-        ws.onclose = () => {
-          console.log('[ValidationControls] WebSocket disconnected');
-          
-          // Attempt to reconnect if validation is running
-          if (state.isRunning && retryCountRef.current < finalConfig.retryAttempts) {
-            retryCountRef.current++;
-            reconnectTimeout = setTimeout(() => {
-              console.log(`[ValidationControls] Attempting to reconnect (${retryCountRef.current}/${finalConfig.retryAttempts})`);
-              connectWebSocket();
-            }, finalConfig.retryDelay * retryCountRef.current);
-          }
-        };
-        
-        ws.onerror = (error) => {
-          console.error('[ValidationControls] WebSocket error:', error);
-        };
-        
-      } catch (error) {
-        console.error('[ValidationControls] Failed to connect WebSocket:', error);
-      }
-    };
-
-    // Only connect if validation is running
-    if (state.isRunning) {
-      connectWebSocket();
-    }
-
-    return () => {
-      if (ws) {
-        ws.close();
-      }
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-      }
-    };
-  }, [state.isRunning, finalConfig.retryAttempts, finalConfig.retryDelay]);
+  // Note: SSE connection handled by useValidationSSE hook
+  // Real-time updates are managed through SSE events
 
   // API call helper with enhanced retry logic
   const apiCall = useCallback(async (
@@ -623,27 +498,27 @@ export function useValidationControls(config: ValidationControlsConfig = {}): Va
   const reconcileState = useCallback(() => {
     // Check for conflicts between local state and API state
     const hasConflict = 
-      (state.isRunning !== wsApiState.isRunning) ||
-      (state.isPaused !== wsApiState.isPaused);
+      (state.isRunning !== sseApiState.isRunning) ||
+      (state.isPaused !== sseApiState.isPaused);
     
     if (hasConflict) {
       console.warn('[ValidationControls] State conflict detected, reconciling...', {
         local: { isRunning: state.isRunning, isPaused: state.isPaused },
-        api: { isRunning: wsApiState.isRunning, isPaused: wsApiState.isPaused }
+        api: { isRunning: sseApiState.isRunning, isPaused: sseApiState.isPaused }
       });
       
       // Conflict resolution strategy: prioritize API state for running/paused status
       // but preserve local error state and progress
       setState(prev => ({
         ...prev,
-        isRunning: wsApiState.isRunning,
-        isPaused: wsApiState.isPaused,
+        isRunning: sseApiState.isRunning,
+        isPaused: sseApiState.isPaused,
         isStopping: false, // Reset stopping state on reconciliation
         // Preserve error state unless API indicates success
-        error: wsApiState.isRunning && !wsApiState.isPaused ? null : prev.error
+        error: sseApiState.isRunning && !sseApiState.isPaused ? null : prev.error
       }));
     }
-  }, [state.isRunning, state.isPaused, wsApiState.isRunning, wsApiState.isPaused]);
+  }, [state.isRunning, state.isPaused, sseApiState.isRunning, sseApiState.isPaused]);
 
   // Conflict resolution for specific scenarios
   const resolveConflict = useCallback((conflictType: 'running' | 'paused' | 'stopped', apiState: boolean) => {
@@ -720,10 +595,10 @@ export function useValidationControls(config: ValidationControlsConfig = {}): Va
 
   // Auto-reconcile when API state changes
   useEffect(() => {
-    if (wsApiState.lastSync) {
+    if (sseApiState.lastSync) {
       reconcileState();
     }
-  }, [wsApiState.lastSync, reconcileState]);
+  }, [sseApiState.lastSync, reconcileState]);
 
   // Validate state on changes
   useEffect(() => {
@@ -806,8 +681,8 @@ export function useValidationControls(config: ValidationControlsConfig = {}): Va
   };
 
   // Calculate derived state values
-  const isConnected = wsConnected && (state.isRunning || state.isPaused);
-  const canStart = !state.isRunning && !state.isPaused && !state.isStopping && wsConnected;
+  const isConnected = sseConnected && (state.isRunning || state.isPaused);
+  const canStart = !state.isRunning && !state.isPaused && !state.isStopping && sseConnected;
   const canPause = state.isRunning && !state.isPaused && !state.isStopping;
   const canResume = state.isPaused && !state.isRunning && !state.isStopping;
   const canStop = (state.isRunning || state.isPaused) && !state.isStopping;

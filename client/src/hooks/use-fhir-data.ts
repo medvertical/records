@@ -24,6 +24,7 @@ export function useConnectionStatus() {
     refetchInterval: 30000, // Check every 30 seconds
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+    keepPreviousData: true, // Prevent flashing during refetch
   });
 }
 
@@ -33,6 +34,7 @@ export function useResourceTypes() {
     queryKey: [QUERY_KEYS.resourceTypes],
     queryFn: () => fhirClient.getResourceTypes(),
     staleTime: 5 * 60 * 1000, // 5 minutes
+    keepPreviousData: true, // Prevent flashing during refetch
   });
 }
 
@@ -42,6 +44,7 @@ export function useResourceCounts() {
     queryKey: [QUERY_KEYS.resourceCounts],
     queryFn: () => fhirClient.getResourceCounts(),
     staleTime: 2 * 60 * 1000, // 2 minutes
+    keepPreviousData: true, // Prevent flashing during refetch
   });
 }
 
@@ -52,6 +55,7 @@ export function useResources(params: ResourceSearchParams = {}) {
     queryFn: () => fhirClient.searchResources(params),
     enabled: true,
     staleTime: 1 * 60 * 1000, // 1 minute
+    keepPreviousData: true, // Prevent flashing during refetch
   });
 }
 
@@ -61,6 +65,7 @@ export function useResource(id: string | undefined) {
     queryKey: [QUERY_KEYS.resources, id],
     queryFn: () => fhirClient.getResource(id!),
     enabled: !!id,
+    keepPreviousData: true, // Prevent flashing during refetch
   });
 }
 

@@ -22,6 +22,9 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gt, sql, getTableColumns } from "drizzle-orm";
+import { queryOptimizer } from "./utils/query-optimizer.js";
+import { logger } from "./utils/logger.js";
+import { cacheManager, CACHE_TAGS } from "./utils/cache-manager.js";
 
 export interface IStorage {
   // FHIR Servers
@@ -29,7 +32,7 @@ export interface IStorage {
   getActiveFhirServer(): Promise<FhirServer | undefined>;
   createFhirServer(server: InsertFhirServer): Promise<FhirServer>;
   updateFhirServerStatus(id: number, isActive: boolean): Promise<void>;
-  updateFhirServer(id: number, updates: Partial<Pick<FhirServer, 'name' | 'url' | 'authConfig'>>): Promise<FhirServer>;
+  updateFhirServer(id: number, updates: Partial<Pick<FhirServer, 'name' | 'url' | 'authConfig' | 'isActive'>>): Promise<FhirServer>;
   deleteFhirServer(id: number): Promise<void>;
 
   // FHIR Resources
@@ -121,13 +124,23 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  private clearServerCaches(options?: { includeResourceCaches?: boolean }) {
+    cacheManager.clearByTag(CACHE_TAGS.FHIR_SERVER);
+
+    if (options?.includeResourceCaches) {
+      cacheManager.clearByTag(CACHE_TAGS.FHIR_RESOURCES);
+      cacheManager.clearByTag(CACHE_TAGS.RESOURCE_COUNTS);
+      cacheManager.clearByTag(CACHE_TAGS.VALIDATION);
+      cacheManager.clearByTag(CACHE_TAGS.VALIDATION_RESULTS);
+    }
+  }
+
   async getFhirServers(): Promise<FhirServer[]> {
-    return await db.select().from(fhirServers);
+    return await queryOptimizer.getFhirServers();
   }
 
   async getActiveFhirServer(): Promise<FhirServer | undefined> {
-    const [server] = await db.select().from(fhirServers).where(eq(fhirServers.isActive, true));
-    return server || undefined;
+    return await queryOptimizer.getActiveFhirServer();
   }
 
   async createFhirServer(server: InsertFhirServer): Promise<FhirServer> {
@@ -135,18 +148,23 @@ export class DatabaseStorage implements IStorage {
       .insert(fhirServers)
       .values(server)
       .returning();
+    this.clearServerCaches();
     return newServer;
   }
 
   async updateFhirServerStatus(id: number, isActive: boolean): Promise<void> {
-    // Deactivate all other servers if this one is being activated
-    if (isActive) {
-      await db.update(fhirServers).set({ isActive: false });
-    }
-    await db.update(fhirServers).set({ isActive }).where(eq(fhirServers.id, id));
+    // Use a transaction to ensure atomicity and prevent race conditions
+    await db.transaction(async (tx) => {
+      // Deactivate all other servers if this one is being activated
+      if (isActive) {
+        await tx.update(fhirServers).set({ isActive: false });
+      }
+      await tx.update(fhirServers).set({ isActive }).where(eq(fhirServers.id, id));
+    });
+    this.clearServerCaches({ includeResourceCaches: true });
   }
 
-  async updateFhirServer(id: number, updates: Partial<Pick<FhirServer, 'name' | 'url' | 'authConfig'>>): Promise<FhirServer> {
+  async updateFhirServer(id: number, updates: Partial<Pick<FhirServer, 'name' | 'url' | 'authConfig' | 'isActive'>>): Promise<FhirServer> {
     const [updatedServer] = await db.update(fhirServers)
       .set(updates)
       .where(eq(fhirServers.id, id))
@@ -155,12 +173,13 @@ export class DatabaseStorage implements IStorage {
     if (!updatedServer) {
       throw new Error('Server not found');
     }
-    
+    this.clearServerCaches();
     return updatedServer;
   }
 
   async deleteFhirServer(id: number): Promise<void> {
     await db.delete(fhirServers).where(eq(fhirServers.id, id));
+    this.clearServerCaches({ includeResourceCaches: true });
   }
 
   async getFhirResources(serverId?: number, resourceType?: string, limit = 50, offset = 0): Promise<FhirResource[]> {
@@ -243,15 +262,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getValidationProfiles(resourceType?: string): Promise<ValidationProfile[]> {
-    const conditions = [eq(validationProfiles.isActive, true)];
-    
-    if (resourceType) {
-      conditions.push(eq(validationProfiles.resourceType, resourceType));
-    }
-    
-    return await db.select()
-      .from(validationProfiles)
-      .where(and(...conditions));
+    return await queryOptimizer.getValidationProfiles(resourceType);
   }
 
   async createValidationProfile(profile: InsertValidationProfile): Promise<ValidationProfile> {
@@ -279,7 +290,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getValidationResultsByResourceId(resourceId: number): Promise<ValidationResult[]> {
-    return await db.select().from(validationResults).where(eq(validationResults.resourceId, resourceId));
+    return await queryOptimizer.getValidationResults(resourceId);
   }
 
   async clearAllValidationResults(): Promise<void> {
@@ -296,87 +307,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getRecentValidationErrors(limit = 10, serverId?: number): Promise<ValidationResult[]> {
-    // Get active server if none specified
-    const targetServerId = serverId || (await this.getActiveFhirServer())?.id;
-    
-    // Get all validation results first
-    const query = db.select({
-      id: validationResults.id,
-      resourceId: validationResults.resourceId,
-      profileId: validationResults.profileId,
-      isValid: validationResults.isValid,
-      errors: validationResults.errors,
-      warnings: validationResults.warnings,
-      issues: validationResults.issues,
-      profileUrl: validationResults.profileUrl,
-      errorCount: validationResults.errorCount,
-      warningCount: validationResults.warningCount,
-      validationScore: validationResults.validationScore,
-      validatedAt: validationResults.validatedAt,
-      resourceType: fhirResources.resourceType,
-      fhirResourceId: fhirResources.resourceId,
-    })
-      .from(validationResults)
-      .leftJoin(fhirResources, eq(validationResults.resourceId, fhirResources.id))
-      .where(
-        targetServerId 
-          ? and(
-              eq(fhirResources.serverId, targetServerId)
-            )
-          : undefined
-      )
-      .orderBy(desc(validationResults.validatedAt))
-      .limit(limit * 3); // Get more results to filter
-
-    const allResults = await query;
-    
-    // Get current validation settings for filtering
-    const validationSettingsData = await this.getValidationSettings();
-    const settings = validationSettingsData?.settings || {
-      structural: { enabled: true, severity: 'error' as const },
-      profile: { enabled: true, severity: 'warning' as const },
-      terminology: { enabled: true, severity: 'warning' as const },
-      reference: { enabled: true, severity: 'error' as const },
-      businessRule: { enabled: true, severity: 'warning' as const },
-      metadata: { enabled: true, severity: 'information' as const }
-    };
-    
-    // Filter results based on current settings and re-evaluate
-    const filteredResults: ValidationResult[] = [];
-    
-    for (const result of allResults) {
-      // Re-evaluate validation result based on current settings
-      const reEvaluatedResult = this.reEvaluateValidationResult(result, settings);
-      
-      // Only include results that have errors after filtering
-      if (!reEvaluatedResult.isValid && reEvaluatedResult.errorCount > 0) {
-        // Update the result with filtered data
-        const filteredResult = {
-          ...result,
-          isValid: reEvaluatedResult.isValid,
-          errorCount: reEvaluatedResult.errorCount,
-          warningCount: reEvaluatedResult.warningCount,
-          issues: reEvaluatedResult.filteredIssues,
-          validationScore: reEvaluatedResult.validationScore
-        };
-        
-        filteredResults.push(filteredResult);
-        
-        // Stop when we have enough results
-        if (filteredResults.length >= limit) {
-          break;
-        }
-      }
-    }
-    
-    return filteredResults;
+    return await queryOptimizer.getRecentValidationErrors(limit, serverId);
   }
 
   async getDashboardCards(): Promise<DashboardCard[]> {
-    return await db.select()
-      .from(dashboardCards)
-      .where(eq(dashboardCards.isVisible, true))
-      .orderBy(dashboardCards.position);
+    return await queryOptimizer.getDashboardCards();
   }
 
   async createDashboardCard(card: InsertDashboardCard): Promise<DashboardCard> {
@@ -394,62 +329,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getResourceStats(serverId?: number): Promise<ResourceStats> {
-    // Get active server if none specified
-    const targetServerId = serverId || (await this.getActiveFhirServer())?.id;
-    
-    // Get resources for specific server
-    const resources = await db.select().from(fhirResources)
-      .where(targetServerId ? eq(fhirResources.serverId, targetServerId) : undefined);
-    
-    // Get validation results for resources on this server
-    const allValidationResults = await db.select({
-      ...getTableColumns(validationResults),
-      resourceType: fhirResources.resourceType,
-    })
-      .from(validationResults)
-      .innerJoin(fhirResources, eq(validationResults.resourceId, fhirResources.id))
-      .where(targetServerId ? eq(fhirResources.serverId, targetServerId) : undefined);
-    
-    const activeProfiles = await db.select().from(validationProfiles).where(eq(validationProfiles.isActive, true));
-    
-    const totalResources = resources.length;
-    const validResources = allValidationResults.filter(r => r.isValid).length;
-    const errorResources = allValidationResults.filter(r => !r.isValid).length;
-    
-    const resourceBreakdown: Record<string, { total: number; valid: number; validPercent: number }> = {};
-    
-    // Group by resource type
-    resources.forEach(resource => {
-      if (!resourceBreakdown[resource.resourceType]) {
-        resourceBreakdown[resource.resourceType] = { total: 0, valid: 0, validPercent: 0 };
-      }
-      resourceBreakdown[resource.resourceType].total++;
-    });
-    
-    // Calculate validation stats per resource type
-    allValidationResults.forEach(result => {
-      const type = result.resourceType;
-      if (resourceBreakdown[type]) {
-        if (result.isValid) {
-          resourceBreakdown[type].valid++;
-        }
-      }
-    });
-    
-    // Calculate percentages
-    Object.keys(resourceBreakdown).forEach(type => {
-      const breakdown = resourceBreakdown[type];
-      breakdown.validPercent = breakdown.total > 0 ? (breakdown.valid / breakdown.total) * 100 : 0;
-    });
-    
-    return {
-      totalResources,
-      validResources,
-      errorResources,
-      warningResources: 0, // TODO: implement warning count logic
-      activeProfiles: activeProfiles.length,
-      resourceBreakdown,
-    };
+    return await queryOptimizer.getResourceStats(serverId);
   }
 
   async getResourceStatsWithSettings(serverId?: number): Promise<ResourceStats> {
@@ -620,13 +500,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getValidationSettings(): Promise<ValidationSettings | undefined> {
-    const [settings] = await db
-      .select()
-      .from(validationSettings)
-      .where(eq(validationSettings.isActive, true))
-      .orderBy(desc(validationSettings.updatedAt))
-      .limit(1);
-    return settings || undefined;
+    return await queryOptimizer.getValidationSettings();
   }
 
   async createOrUpdateValidationSettings(settings: InsertValidationSettings): Promise<ValidationSettings> {

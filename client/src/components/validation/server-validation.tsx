@@ -53,25 +53,25 @@ export default function ServerValidation() {
   const [isStarting, setIsStarting] = useState(false);
   const queryClient = useQueryClient();
 
-  // Use WebSocket for real-time validation updates
+  // Use SSE for real-time validation updates
   const { 
-    isConnected: wsConnected, 
-    progress: wsProgress, 
+    isConnected: sseConnected, 
+    progress: sseProgress, 
     validationStatus, 
-    lastError: wsError,
+    lastError: sseError,
     resetProgress 
   } = useValidationSSE();
 
-  // Fallback to polling if WebSocket is not connected
+  // Fallback to polling if SSE is not connected
   const { data: fallbackProgress, isLoading: progressLoading } = useQuery<BulkValidationProgress>({
     queryKey: ["/api/validation/bulk/progress"],
-    refetchInterval: wsConnected ? false : 2000, // Only poll if WebSocket is not connected
+    refetchInterval: sseConnected ? false : 2000, // Only poll if SSE is not connected
     refetchIntervalInBackground: false,
-    enabled: !wsConnected, // Only enabled when WebSocket is not connected
+    enabled: !sseConnected, // Only enabled when SSE is not connected
   });
 
-  // Use WebSocket progress if available, otherwise use fallback
-  const progress = wsConnected ? wsProgress : fallbackProgress;
+  // Use SSE progress if available, otherwise use fallback
+  const progress = sseConnected ? sseProgress : fallbackProgress;
 
   // Query validation summary from backend
   const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery<ValidationSummary>({
@@ -131,7 +131,7 @@ export default function ServerValidation() {
         batchSize: 100,
         skipUnchanged: true
       });
-      // Keep loading state until WebSocket confirms validation is running or calculation starts
+      // Keep loading state until SSE confirms validation is running or calculation starts
     } catch (error) {
       console.error('Failed to start validation:', error);
       setIsStarting(false);
@@ -199,15 +199,15 @@ export default function ServerValidation() {
             Server-Wide Validation
           </CardTitle>
           <div className="flex items-center gap-2">
-            {/* WebSocket Connection Indicator */}
+            {/* SSE Connection Indicator */}
             <div className="flex items-center gap-1">
-              {wsConnected ? (
+              {sseConnected ? (
                 <Wifi className="h-3 w-3 text-green-600" />
               ) : (
                 <WifiOff className="h-3 w-3 text-red-600" />
               )}
               <span className="text-xs text-gray-500">
-                {wsConnected ? 'Live' : 'Polling'}
+                {sseConnected ? 'Live' : 'Polling'}
               </span>
             </div>
             <Badge variant={getStatusColor() as any} className="ml-2">
@@ -307,7 +307,7 @@ export default function ServerValidation() {
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-blue-600" />
               <span className="text-sm font-medium text-gray-700">
-                Validation in Progress {wsConnected && '(Live Updates)'}
+                Validation in Progress {sseConnected && '(Live Updates)'}
               </span>
             </div>
             
@@ -356,15 +356,15 @@ export default function ServerValidation() {
 
 
         {/* Errors (if any) */}
-        {(wsError || (progress?.errors && progress.errors.length > 0)) && (
+        {(sseError || (progress?.errors && progress.errors.length > 0)) && (
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               <div className="text-sm">
-                {wsError && (
+                {sseError && (
                   <div className="mb-2">
                     <strong>Validation Error:</strong>
-                    <p className="text-xs text-gray-600">{wsError}</p>
+                    <p className="text-xs text-gray-600">{sseError}</p>
                   </div>
                 )}
                 {progress?.errors && progress.errors.length > 0 && (
