@@ -13,7 +13,7 @@ import Dashboard from "@/pages/dashboard";
 import ResourceBrowser from "@/pages/resource-browser";
 import ResourceDetail from "@/pages/resource-detail";
 import { ProfileManagement } from "@/pages/profile-management";
-import SettingsPage from "@/pages/settings-modal-style";
+import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
