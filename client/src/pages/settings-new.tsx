@@ -81,15 +81,7 @@ export default function SettingsNew() {
     memoryLimitMB: 512
   });
 
-  const [servers, setServers] = useState<ServerSettings[]>([
-    {
-      id: '1',
-      name: 'Local FHIR Server',
-      url: 'http://localhost:8080/fhir',
-      isActive: true,
-      authType: 'none'
-    }
-  ]);
+  const [servers, setServers] = useState<ServerSettings[]>([]);
 
   const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings>({
     autoRefresh: true,
@@ -123,21 +115,46 @@ export default function SettingsNew() {
     setLoading(true);
     try {
       // Load validation settings
-      const validationResponse = await fetch('/api/validation/settings');
-      if (validationResponse.ok) {
-        const validationData = await validationResponse.json();
-        if (validationData.settings) {
-          setValidationSettings(validationData.settings);
+      try {
+        const validationResponse = await fetch('/api/validation/settings');
+        if (validationResponse.ok) {
+          const validationData = await validationResponse.json();
+          if (validationData.settings) {
+            setValidationSettings(validationData.settings);
+          }
+        } else {
+          console.warn('Failed to load validation settings, using defaults');
         }
+      } catch (error) {
+        console.warn('Error loading validation settings, using defaults:', error);
       }
 
       // Load server settings
-      const serversResponse = await fetch('/api/servers');
-      if (serversResponse.ok) {
-        const serversData = await serversResponse.json();
-        if (serversData.servers) {
-          setServers(serversData.servers);
+      try {
+        const serversResponse = await fetch('/api/fhir/servers');
+        if (serversResponse.ok) {
+          const serversData = await serversResponse.json();
+          console.log('[Settings] Loaded servers from API:', serversData);
+          if (Array.isArray(serversData)) {
+            // Transform the server data to match our interface
+            const transformedServers = serversData.map((server: any) => ({
+              id: server.id.toString(),
+              name: server.name || 'Unnamed Server',
+              url: server.url || '',
+              isActive: server.isActive || false,
+              authType: server.authConfig?.type || 'none',
+              username: server.authConfig?.username || '',
+              password: server.authConfig?.password || '',
+              token: server.authConfig?.token || ''
+            }));
+            console.log('[Settings] Transformed servers:', transformedServers);
+            setServers(transformedServers);
+          }
+        } else {
+          console.error('[Settings] Failed to load servers:', serversResponse.status, serversResponse.statusText);
         }
+      } catch (error) {
+        console.error('[Settings] Error loading servers:', error);
       }
 
       // Load dashboard and system settings from localStorage for now
@@ -166,25 +183,41 @@ export default function SettingsNew() {
     setLoading(true);
     try {
       // Save validation settings
-      const validationResponse = await fetch('/api/validation/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(validationSettings)
-      });
+      try {
+        const validationResponse = await fetch('/api/validation/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(validationSettings)
+        });
 
-      if (!validationResponse.ok) {
-        throw new Error('Failed to save validation settings');
+        if (!validationResponse.ok) {
+          console.warn('Failed to save validation settings, continuing with other settings');
+        }
+      } catch (error) {
+        console.warn('Error saving validation settings:', error);
       }
 
-      // Save server settings
-      const serversResponse = await fetch('/api/servers', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ servers })
-      });
+      // Save server settings (update each server individually, excluding isActive)
+      for (const server of servers) {
+        const serverResponse = await fetch(`/api/fhir/servers/${server.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: server.name,
+            url: server.url,
+            // Note: isActive is handled separately through activate/deactivate endpoints
+            authConfig: server.authType !== 'none' ? {
+              type: server.authType,
+              username: server.username,
+              password: server.password,
+              token: server.token
+            } : null
+          })
+        });
 
-      if (!serversResponse.ok) {
-        throw new Error('Failed to save server settings');
+        if (!serverResponse.ok) {
+          throw new Error(`Failed to save server ${server.name}`);
+        }
       }
 
       // Save dashboard and system settings to localStorage
@@ -234,51 +267,175 @@ export default function SettingsNew() {
     setHasChanges(true);
   };
 
-  const addServer = () => {
-    const newServer: ServerSettings = {
-      id: Date.now().toString(),
-      name: 'New Server',
-      url: '',
-      isActive: false,
-      authType: 'none'
-    };
-    setServers(prev => [...prev, newServer]);
-    setHasChanges(true);
+  const addServer = async () => {
+    try {
+      const response = await fetch('/api/fhir/servers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'New Server',
+          url: '',
+          isActive: false,
+          authConfig: null
+        })
+      });
+
+      if (response.ok) {
+        const newServerData = await response.json();
+        const newServer: ServerSettings = {
+          id: newServerData.id.toString(),
+          name: newServerData.name || 'New Server',
+          url: newServerData.url || '',
+          isActive: newServerData.isActive || false,
+          authType: newServerData.authConfig?.type || 'none',
+          username: newServerData.authConfig?.username || '',
+          password: newServerData.authConfig?.password || '',
+          token: newServerData.authConfig?.token || ''
+        };
+        setServers(prev => [...prev, newServer]);
+        setHasChanges(true);
+      } else {
+        throw new Error('Failed to create new server');
+      }
+    } catch (error) {
+      console.error('Failed to add server:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add new server. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const updateServer = (id: string, updates: Partial<ServerSettings>) => {
-    setServers(prev => prev.map(server => 
-      server.id === id ? { ...server, ...updates } : server
-    ));
-    setHasChanges(true);
+  const updateServer = async (id: string, updates: Partial<ServerSettings>) => {
+    // Handle server activation/deactivation separately
+    if (updates.isActive !== undefined) {
+      try {
+        if (updates.isActive) {
+          // Radio button behavior: activate this server and deactivate all others
+          const otherServers = servers.filter(server => server.id !== id && server.isActive);
+          
+          // Deactivate all other active servers first
+          for (const server of otherServers) {
+            const deactivateResponse = await fetch(`/api/fhir/servers/${server.id}/deactivate`, {
+              method: 'POST'
+            });
+            if (!deactivateResponse.ok) {
+              console.warn(`Failed to deactivate server ${server.name}`);
+            }
+          }
+          
+          // Then activate the selected server
+          const activateResponse = await fetch(`/api/fhir/servers/${id}/activate`, {
+            method: 'POST'
+          });
+
+          if (activateResponse.ok) {
+            // Update local state: deactivate all others, activate the selected one (radio button behavior)
+            setServers(prev => prev.map(server => ({
+              ...server,
+              isActive: server.id === id
+            })));
+            setHasChanges(true);
+            toast({
+              title: "Server Activated",
+              description: `Server has been activated successfully.`,
+              variant: "default",
+            });
+          } else {
+            throw new Error('Failed to activate server');
+          }
+        } else {
+          // Deactivating a server (just turn off this one)
+          const deactivateResponse = await fetch(`/api/fhir/servers/${id}/deactivate`, {
+            method: 'POST'
+          });
+
+          if (deactivateResponse.ok) {
+            setServers(prev => prev.map(server => 
+              server.id === id ? { ...server, isActive: false } : server
+            ));
+            setHasChanges(true);
+            toast({
+              title: "Server Deactivated",
+              description: `Server has been deactivated successfully.`,
+              variant: "default",
+            });
+          } else {
+            throw new Error('Failed to deactivate server');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to update server status:', error);
+        toast({
+          title: "Error",
+          description: `Failed to ${updates.isActive ? 'activate' : 'deactivate'} server. Please try again.`,
+          variant: "destructive",
+        });
+      }
+    } else {
+      // For other updates, just update the local state
+      setServers(prev => prev.map(server => 
+        server.id === id ? { ...server, ...updates } : server
+      ));
+      setHasChanges(true);
+    }
   };
 
-  const removeServer = (id: string) => {
-    setServers(prev => prev.filter(server => server.id !== id));
-    setHasChanges(true);
+  const removeServer = async (id: string) => {
+    try {
+      const response = await fetch(`/api/fhir/servers/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        setServers(prev => prev.filter(server => server.id !== id));
+        setHasChanges(true);
+        toast({
+          title: "Server Removed",
+          description: "Server has been successfully removed.",
+          variant: "default",
+        });
+      } else {
+        throw new Error('Failed to remove server');
+      }
+    } catch (error) {
+      console.error('Failed to remove server:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove server. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Helper function to get active server count
+  const getActiveServerCount = () => {
+    return servers.filter(server => server.isActive).length;
   };
 
   const testServerConnection = async (server: ServerSettings) => {
     try {
-      const response = await fetch('/api/servers/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(server)
-      });
+      const response = await fetch(`/api/fhir/connection/test-custom?url=${encodeURIComponent(server.url)}`);
 
       if (response.ok) {
-        toast({
-          title: "Connection Successful",
-          description: `Successfully connected to ${server.name}`,
-          variant: "default",
-        });
+        const result = await response.json();
+        if (result.connected) {
+          toast({
+            title: "Connection Successful",
+            description: `Successfully connected to ${server.name}`,
+            variant: "default",
+          });
+        } else {
+          throw new Error(result.error || 'Connection failed');
+        }
       } else {
         throw new Error('Connection failed');
       }
     } catch (error) {
       toast({
         title: "Connection Failed",
-        description: `Failed to connect to ${server.name}`,
+        description: `Failed to connect to ${server.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive",
       });
     }
@@ -468,13 +625,31 @@ export default function SettingsNew() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold">Configured Servers</h3>
+                <div>
+                  <h3 className="text-lg font-semibold">Configured Servers</h3>
+                  <p className="text-sm text-muted-foreground">Select one server to activate (others will be deactivated automatically)</p>
+                </div>
                 <Button onClick={addServer} size="sm">
                   Add Server
                 </Button>
               </div>
 
-              {servers.map((server, index) => (
+              {getActiveServerCount() > 1 && (
+                <Alert>
+                  <AlertDescription>
+                    Warning: Multiple servers are active. The switches should behave like radio buttons - 
+                    selecting one should automatically deselect all others.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {servers.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>No servers configured yet.</p>
+                  <p className="text-sm">Click "Add Server" to get started.</p>
+                </div>
+              ) : (
+                servers.map((server, index) => (
                 <Card key={server.id} className="p-4">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -583,7 +758,8 @@ export default function SettingsNew() {
                     )}
                   </div>
                 </Card>
-              ))}
+                ))
+              )}
             </CardContent>
           </Card>
         </TabsContent>

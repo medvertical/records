@@ -50,6 +50,11 @@ app.use((req, res, next) => {
   // Serve static files from dist/public in development
   app.use(express.static('dist/public'));
 
+  // Fall through to index.html for client-side routing (SPA)
+  app.use("*", (_req, res) => {
+    res.sendFile('dist/public/index.html', { root: process.cwd() });
+  });
+
   // Serve the app on port 3000 for local development
   const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
   server.listen({

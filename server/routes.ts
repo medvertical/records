@@ -1924,28 +1924,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Validate response structure
-      if (!settings.id || !settings.settings) {
-        console.error('[ValidationSettings] Invalid settings structure:', settings);
-        return res.status(500).json({
-          success: false,
-          message: "Invalid settings structure returned from service",
-          error: "INVALID_SETTINGS_STRUCTURE",
-          timestamp: new Date().toISOString()
-        });
-      }
-      
-      // Include additional data if requested
+      // The service returns ValidationSettings directly, not a record with id/settings
+      // So we need to wrap it in the expected format
       const response: any = {
         success: true,
-        data: settings,
+        settings: settings,
         timestamp: new Date().toISOString()
       };
       
       if (includeHistory === 'true') {
         try {
-          const history = await settingsRepository.getHistory(settings.id);
-          response.history = history;
+          // Get the active record to access the id for history
+          const activeRecord = await settingsRepository.getActive();
+          if (activeRecord) {
+            const history = await settingsRepository.getHistory(activeRecord.id);
+            response.history = history;
+          }
         } catch (historyError) {
           console.warn('[ValidationSettings] Failed to load history:', historyError);
           response.historyError = "Failed to load settings history";
