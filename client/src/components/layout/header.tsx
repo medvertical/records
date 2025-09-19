@@ -7,12 +7,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import AppIcon from "@/components/ui/app-icon";
 import { ValidationAspectsDropdown } from "@/components/ui/validation-aspects-dropdown";
-
-interface ConnectionStatus {
-  connected: boolean;
-  version?: string;
-  error?: string;
-}
+import type { ServerStatus as ConnectionStatus } from "@/hooks/use-server-data";
 
 interface HeaderProps {
   title: string;
@@ -27,10 +22,21 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
 
   const handleRefresh = async () => {
     try {
-      await queryClient.invalidateQueries();
+      // First, call the backend to clear resource count caches
+      await fetch('/api/dashboard/force-refresh', { method: 'POST' });
+      
+      // Then invalidate frontend queries to trigger refetch
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/fhir/resource-counts"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/fhir/resource-types"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/fhir-server-stats"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/validation-stats"] }),
+      ]);
+      
       toast({
         title: "Data Refreshed",
-        description: "All data has been refreshed from the FHIR server.",
+        description: "Resource counts and dashboard data have been refreshed.",
       });
     } catch (error) {
       toast({

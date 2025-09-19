@@ -77,8 +77,8 @@ export function useValidationControls(config: ValidationControlsConfig = {}): Va
     reconnect: pollingReconnect,
     syncWithApi: pollingSyncWithApi
   } = useValidationPolling({
-    enabled: true,
-    pollInterval: 2000, // Poll every 2 seconds
+    enabled: false, // Disable automatic polling - only refresh manually
+    pollInterval: 10000, // 10 seconds when enabled
     hasActiveServer: true
   });
   

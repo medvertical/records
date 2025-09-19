@@ -21,7 +21,7 @@ export function useConnectionStatus() {
   return useQuery({
     queryKey: [QUERY_KEYS.connection],
     queryFn: () => fhirClient.testConnection(),
-    refetchInterval: 300000, // Check every 5 minutes
+    refetchInterval: false, // Disable automatic polling - only check on manual refresh
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     keepPreviousData: true, // Prevent flashing during refetch
@@ -43,7 +43,10 @@ export function useResourceCounts() {
   return useQuery({
     queryKey: [QUERY_KEYS.resourceCounts],
     queryFn: () => fhirClient.getResourceCounts(),
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 10 * 60 * 1000, // 10 minutes - cache for much longer
+    refetchInterval: false, // Disable automatic refetching
+    refetchOnWindowFocus: false, // Don't refetch when window gains focus
+    refetchOnMount: false, // Don't refetch on component mount if data exists
     keepPreviousData: true, // Prevent flashing during refetch
   });
 }

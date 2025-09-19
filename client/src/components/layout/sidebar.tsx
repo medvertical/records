@@ -48,21 +48,18 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
     }
   }, [location]);
   
-  const { servers, serverStatus, activeServer, isLoading, refreshServerData } = useServerData();
-  const isServerConnected = Boolean(activeServer && serverStatus?.connected);
-  
-  // Reduced logging to prevent console spam - only log significant changes
-  useEffect(() => {
-    if (activeServer) {
-      console.log('[Sidebar] Active server:', activeServer.name);
-    }
-  }, [activeServer?.id]); // Only log when server ID changes, not on every render
+  const { servers, serverStatus, activeServer, isLoading, isConnectionLoading, refreshServerData } = useServerData();
+  // Use actual connection status if available, otherwise fall back to isActive
+  const isServerConnected = serverStatus ? serverStatus.connected : Boolean(activeServer?.isActive);
 
   const { data: resourceCounts } = useQuery<Record<string, number>>({
     queryKey: ["/api/fhir/resource-counts"],
     // Keep previous data to prevent flickering during refetches
     keepPreviousData: true,
-    staleTime: 30000, // Consider data fresh for 30 seconds
+    staleTime: 10 * 60 * 1000, // Consider data fresh for 10 minutes
+    refetchInterval: false, // Disable automatic refetching
+    refetchOnWindowFocus: false, // Don't refetch when window gains focus
+    refetchOnMount: false, // Don't refetch on component mount if data exists
     // Only fetch resource counts when there's an active server
     enabled: isServerConnected,
   });
@@ -89,6 +86,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
           activeServer={activeServer}
           servers={servers}
           isLoading={isLoading}
+          isConnectionLoading={isConnectionLoading}
           refreshServerData={refreshServerData}
           location={location}
           isServerConnected={isServerConnected}
@@ -112,6 +110,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
           activeServer={activeServer}
           servers={servers}
           isLoading={isLoading}
+          isConnectionLoading={isConnectionLoading}
           refreshServerData={refreshServerData}
           location={location}
           isServerConnected={isServerConnected}
@@ -134,6 +133,7 @@ function SidebarContent({
   activeServer,
   servers,
   isLoading,
+  isConnectionLoading,
   refreshServerData,
   location, 
   isServerConnected,
@@ -145,6 +145,7 @@ function SidebarContent({
   activeServer?: any;
   servers?: any[];
   isLoading?: boolean;
+  isConnectionLoading?: boolean;
   refreshServerData?: () => void;
   location: string;
   isServerConnected: boolean;
@@ -152,28 +153,41 @@ function SidebarContent({
   onChangeServer?: () => void;
 }) {
   // Determine connection state for UI gating
-  const isCheckingConnection = Boolean(activeServer && serverStatus === undefined);
-  const connectionLabel = (isLoading || isCheckingConnection)
-    ? "Checking..."
+  // Show "Checking..." only during initial connection test, otherwise show actual status
+  const isCheckingConnection = Boolean(activeServer && isConnectionLoading && !serverStatus);
+  const connectionLabel = isCheckingConnection
+    ? "Connecting..."
     : isServerConnected
       ? "Connected"
       : activeServer
         ? "Disconnected"
         : "No Server";
-  const indicatorColor = (isLoading || isCheckingConnection)
-    ? "bg-yellow-500"
+  const indicatorColor = isCheckingConnection
+    ? "bg-blue-500"
     : isServerConnected
       ? "bg-fhir-success"
       : activeServer
         ? "bg-fhir-error"
         : "bg-fhir-error";
-  const connectionTextStyle = (isLoading || isCheckingConnection)
-    ? "text-yellow-600"
+  const connectionTextStyle = isCheckingConnection
+    ? "text-blue-600"
     : isServerConnected
       ? "text-fhir-success"
       : activeServer
         ? "text-fhir-error"
         : "text-fhir-error";
+
+  // Debug logging to see connection status changes
+  useEffect(() => {
+    console.log('[Sidebar] Connection status update:', {
+      activeServer: activeServer?.name,
+      isActive: activeServer?.isActive,
+      serverStatus,
+      isServerConnected,
+      isConnectionLoading,
+      isCheckingConnection
+    });
+  }, [activeServer?.id, serverStatus, isServerConnected, isConnectionLoading, isCheckingConnection]);
 
   // Get the current location to make the component reactive to URL changes
   const [currentLocation] = useLocation();

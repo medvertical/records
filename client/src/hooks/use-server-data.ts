@@ -33,7 +33,7 @@ export function useServerData() {
       }
       return response.json();
     },
-    refetchInterval: 300000, // Refresh every 5 minutes (reduced from 1 minute)
+    refetchInterval: false, // Disable automatic polling
     // Keep previous data to prevent undefined states during refetches
     keepPreviousData: true,
     // Consider data fresh for 2 minutes to reduce unnecessary refetches
@@ -48,7 +48,8 @@ export function useServerData() {
 
   const activeServer = useMemo(() => servers?.find(server => server.isActive), [servers]);
   
-  const { data: serverStatus } = useQuery<ServerStatus>({
+  // Connection test query - Auto-connect when there's an active server
+  const { data: serverStatus, isLoading: isConnectionLoading } = useQuery<ServerStatus | undefined>({
     queryKey: ["/api/fhir/connection/test", refreshTrigger, activeServer?.id],
     queryFn: async () => {
       try {
@@ -73,13 +74,14 @@ export function useServerData() {
         };
       }
     },
-    refetchInterval: 300000, // Refresh every 5 minutes (further reduced)
+    refetchInterval: false, // Disable automatic polling
+    refetchOnWindowFocus: false, // Don't refetch on window focus
     // Keep previous data to prevent undefined states during refetches
     keepPreviousData: true,
-    staleTime: 180000, // Consider data fresh for 3 minutes (further reduced polling)
-    // Only fetch server status when there's an active server
+    staleTime: 10 * 60 * 1000, // 10 minutes - only refresh manually
+    // Auto-connect when there's an active server
     enabled: !!activeServer,
-    retry: false
+    retry: 1 // Allow one retry for failed connections
   });
 
   const refreshServerData = useCallback(() => {
@@ -94,10 +96,10 @@ export function useServerData() {
         query.queryKey[0] === "/api/fhir/connection/test"
     });
     
-    // Invalidate server-dependent queries so they can be re-enabled/disabled based on new server state
+    // Only invalidate queries that need to be re-enabled/disabled based on server state
+    // Don't invalidate resource-counts as they are cached for 10 minutes
     queryClient.invalidateQueries({
       predicate: (query) => 
-        query.queryKey[0] === "/api/fhir/resource-counts" ||
         query.queryKey[0] === "/api/fhir/resources" ||
         query.queryKey[0] === "/api/fhir/resource-types" ||
         query.queryKey[0] === "/api/dashboard/stats" ||
@@ -110,10 +112,9 @@ export function useServerData() {
     if (servers) {
       const hasActiveServer = servers.some(server => server.isActive);
       if (!hasActiveServer) {
-        // Clear all cached data when no server is active
+        // Clear cached data when no server is active (but keep resource-counts cached)
         queryClient.invalidateQueries({
           predicate: (query) => 
-            query.queryKey[0] === "/api/fhir/resource-counts" ||
             query.queryKey[0] === "/api/dashboard/stats" ||
             query.queryKey[0] === "/api/validation/bulk/summary"
         });
@@ -143,6 +144,7 @@ export function useServerData() {
     serverStatus,
     activeServer,
     isLoading,
+    isConnectionLoading,
     error,
     refreshServerData
   };

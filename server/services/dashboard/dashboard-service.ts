@@ -278,17 +278,38 @@ export class DashboardService {
 
   /**
    * Get FHIR Resource Counts - Version-aware optimized method with smart batching and fallback
+   * Now with per-resource-type caching and manual refresh only
    */
   private async getFhirResourceCounts(): Promise<Record<string, number>> {
-    const cacheKey = 'fhir-resource-counts';
-    const cached = cacheManager.get<Record<string, number>>(cacheKey);
-    if (cached) {
-      logger.debug('Using cached FHIR resource counts', { service: 'dashboard-service', operation: 'getFhirResourceCounts' });
-      return cached;
+    // Check if we have cached counts for all resource types
+    const allResourceTypes = await this.fhirClient.getAllResourceTypes();
+    const cachedCounts: Record<string, number> = {};
+    let hasAllCached = true;
+    
+    // Check cache for each resource type individually
+    for (const resourceType of allResourceTypes) {
+      const cacheKey = `resource-count-${resourceType}`;
+      const cached = cacheManager.get<number>(cacheKey);
+      if (cached !== null) {
+        cachedCounts[resourceType] = cached;
+      } else {
+        hasAllCached = false;
+        break; // If any resource type is missing from cache, we need to fetch all
+      }
+    }
+    
+    // If we have all cached counts, return them
+    if (hasAllCached && Object.keys(cachedCounts).length > 0) {
+      logger.debug('Using cached FHIR resource counts for all types', { 
+        service: 'dashboard-service', 
+        operation: 'getFhirResourceCounts',
+        cachedTypes: Object.keys(cachedCounts).length
+      });
+      return cachedCounts;
     }
 
     try {
-      console.log('[DashboardService] Fetching FHIR resource counts with optimized approach...');
+      console.log('[DashboardService] Fetching FHIR resource counts with per-resource-type caching...');
       
       // Get version-aware resource types from FHIR client
       const resourceTypes = await this.fhirClient.getAllResourceTypes();
@@ -318,6 +339,12 @@ export class DashboardService {
       const priorityPromises = priorityBatch.map(async (type) => {
         try {
           const count = await this.fhirClient.getResourceCount(type);
+          // Cache each resource type individually with long TTL (1 hour)
+          const cacheKey = `resource-count-${type}`;
+          cacheManager.set(cacheKey, count, {
+            ttl: 60 * 60 * 1000, // 1 hour - only invalidated by manual refresh
+            tags: [CACHE_TAGS.FHIR_SERVER, CACHE_TAGS.RESOURCE_COUNTS]
+          });
           return { type, count };
         } catch (error) {
           console.warn(`[DashboardService] Failed to get count for priority type ${type}:`, error);
@@ -344,6 +371,12 @@ export class DashboardService {
         const countPromises = batch.map(async (type) => {
           try {
             const count = await this.fhirClient.getResourceCount(type);
+            // Cache each resource type individually with long TTL (1 hour)
+            const cacheKey = `resource-count-${type}`;
+            cacheManager.set(cacheKey, count, {
+              ttl: 60 * 60 * 1000, // 1 hour - only invalidated by manual refresh
+              tags: [CACHE_TAGS.FHIR_SERVER, CACHE_TAGS.RESOURCE_COUNTS]
+            });
             return { type, count };
           } catch (error) {
             console.warn(`[DashboardService] Failed to get count for ${type}:`, error);
@@ -364,12 +397,12 @@ export class DashboardService {
         }
       }
       
-      // Cache the results
-      cacheManager.set(cacheKey, counts, {
-        ttl: this.CACHE_TTL.FHIR_SERVER,
-        tags: [CACHE_TAGS.FHIR_SERVER, CACHE_TAGS.RESOURCE_COUNTS]
+      logger.info('FHIR resource counts fetched and cached per resource type', { 
+        service: 'dashboard-service', 
+        operation: 'getFhirResourceCounts', 
+        resourceTypes: Object.keys(counts).length, 
+        fhirVersion 
       });
-      logger.info('FHIR resource counts fetched', { service: 'dashboard-service', operation: 'getFhirResourceCounts', resourceTypes: Object.keys(counts).length, fhirVersion });
       
       return counts;
       
@@ -424,9 +457,33 @@ export class DashboardService {
    * Force refresh of FHIR server data (clears cache and refetches)
    */
   async forceRefreshFhirServerData(): Promise<FhirServerStats> {
-    cacheManager.delete('fhir-resource-counts');
+    // Clear all resource count caches per resource type
+    this.clearAllResourceCountCaches();
     cacheManager.delete('fhir-server-stats');
     return this.getFhirServerStats();
+  }
+
+  /**
+   * Clear all resource count caches - called when refresh button is clicked
+   */
+  clearAllResourceCountCaches(): void {
+    // Get all resource types and clear their individual caches
+    this.fhirClient.getAllResourceTypes().then(resourceTypes => {
+      resourceTypes.forEach(resourceType => {
+        const cacheKey = `resource-count-${resourceType}`;
+        cacheManager.delete(cacheKey);
+      });
+      logger.info('All resource count caches cleared', { 
+        service: 'dashboard-service', 
+        operation: 'clearAllResourceCountCaches',
+        resourceTypes: resourceTypes.length
+      });
+    }).catch(error => {
+      console.error('[DashboardService] Error clearing resource count caches:', error);
+    });
+    
+    // Also clear the old combined cache key for backward compatibility
+    cacheManager.delete('fhir-resource-counts');
   }
 
   /**

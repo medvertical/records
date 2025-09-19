@@ -18,27 +18,18 @@ import NotFound from "@/pages/not-found";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 
-interface ConnectionStatus {
-  connected: boolean;
-  version?: string;
-  error?: string;
-}
+// ConnectionStatus interface is now imported from use-server-data
+import type { ServerStatus as ConnectionStatus } from "@/hooks/use-server-data";
 
 function Router() {
   const isMobile = useIsMobile();
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const { activeServer } = useServerData();
+  const { activeServer, serverStatus, isConnectionLoading } = useServerData();
   
-  const { data: connectionStatus } = useQuery<ConnectionStatus>({
-    queryKey: ["/api/fhir/connection/test"],
-    refetchInterval: 300000, // 5 minutes instead of 30 seconds
-    staleTime: 180000, // 3 minutes stale time
-    refetchOnWindowFocus: false, // Don't refetch on window focus
-    // Only fetch connection status when there's an active server
-    enabled: !!activeServer,
-  });
+  // Use the centralized server status instead of separate query
+  const connectionStatus = serverStatus as ConnectionStatus | undefined;
 
   const toggleSidebar = () => {
     setSidebarOpen(prev => !prev);

@@ -2,7 +2,7 @@
 // Dashboard Data Hook - Centralized Data Management
 // ============================================================================
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useState, useEffect, useCallback } from 'react';
 import { 
   FhirServerStats, 
@@ -54,8 +54,8 @@ interface UseDashboardDataReturn {
 
 export function useDashboardData(options: UseDashboardDataOptions = {}): UseDashboardDataReturn {
   const {
-    enableRealTimeUpdates = true,
-    refetchInterval = 600000, // 10 minutes (reduced frequency for better performance)
+    enableRealTimeUpdates = false, // Disable real-time updates by default
+    refetchInterval = false, // Disable automatic polling
     enableCaching = true,
     enabled = true
   } = options;
@@ -128,7 +128,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     queryKey: ['/api/dashboard/fhir-server-stats'],
     refetchInterval: shouldRefetch ? refetchInterval : false,
     staleTime: enableCaching ? 30 * 60 * 1000 : 0, // 30 minutes (extended for better performance)
-    keepPreviousData: true, // Prevent flashing during refetch
+    placeholderData: keepPreviousData, // Prevent flashing during refetch
     enabled: isEnabled,
     onSuccess: () => {
       setLastUpdated(new Date());
@@ -151,7 +151,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     queryKey: ['/api/dashboard/validation-stats'],
     refetchInterval: shouldRefetch ? refetchInterval : false,
     staleTime: enableCaching ? 2 * 60 * 1000 : 0, // 2 minutes (extended for better performance)
-    keepPreviousData: true, // Prevent flashing during refetch
+    placeholderData: keepPreviousData, // Prevent flashing during refetch
     enabled: isEnabled,
     onSuccess: () => {
       setLastUpdated(new Date());
@@ -174,7 +174,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     queryKey: ['/api/dashboard/combined'],
     refetchInterval: shouldRefetch ? refetchInterval : false,
     staleTime: enableCaching ? 2 * 60 * 1000 : 0, // 2 minutes (extended for better performance)
-    keepPreviousData: true, // Prevent flashing during refetch
+    placeholderData: keepPreviousData, // Prevent flashing during refetch
     enabled: isEnabled,
     onSuccess: () => {
       setLastUpdated(new Date());
@@ -195,7 +195,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     queryKey: ['/api/dashboard/stats'],
     refetchInterval: shouldRefetch ? refetchInterval : false,
     staleTime: enableCaching ? 2 * 60 * 1000 : 0, // 2 minutes (extended for better performance)
-    keepPreviousData: true, // Prevent flashing during refetch
+    placeholderData: keepPreviousData, // Prevent flashing during refetch
     enabled: isEnabled,
     onSuccess: () => {
       setLastUpdated(new Date());
@@ -267,8 +267,8 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
 export function useFhirServerStats() {
   return useQuery({
     queryKey: ['/api/dashboard/fhir-server-stats'],
-    refetchInterval: 5 * 60 * 1000, // 5 minutes
-    staleTime: 5 * 60 * 1000,
+    refetchInterval: false, // Disable automatic polling - only refresh manually
+    staleTime: 30 * 60 * 1000, // 30 minutes - data is cached on backend
     placeholderData: keepPreviousData // Prevent flashing during refetch
   });
 }
@@ -279,8 +279,8 @@ export function useFhirServerStats() {
 export function useValidationStats() {
   return useQuery({
     queryKey: ['/api/dashboard/validation-stats'],
-    refetchInterval: 5 * 60 * 1000, // 5 minutes
-    staleTime: 3 * 60 * 1000, // 3 minutes
+    refetchInterval: false, // Disable automatic polling - only refresh manually
+    staleTime: 10 * 60 * 1000, // 10 minutes - data is cached on backend
     placeholderData: keepPreviousData // Prevent flashing during refetch
   });
 }
@@ -291,8 +291,8 @@ export function useValidationStats() {
 export function useCombinedDashboardData() {
   return useQuery({
     queryKey: ['/api/dashboard/combined'],
-    refetchInterval: 5 * 60 * 1000, // 5 minutes
-    staleTime: 3 * 60 * 1000, // 3 minutes
+    refetchInterval: false, // Disable automatic polling - only refresh manually
+    staleTime: 10 * 60 * 1000, // 10 minutes - data is cached on backend
     placeholderData: keepPreviousData // Prevent flashing during refetch
   });
 }
@@ -303,8 +303,8 @@ export function useCombinedDashboardData() {
 export function useLegacyDashboardStats() {
   return useQuery({
     queryKey: ['/api/dashboard/stats'],
-    refetchInterval: 5 * 60 * 1000, // 5 minutes
-    staleTime: 3 * 60 * 1000, // 3 minutes
+    refetchInterval: false, // Disable automatic polling - only refresh manually
+    staleTime: 10 * 60 * 1000, // 10 minutes - data is cached on backend
     placeholderData: keepPreviousData // Prevent flashing during refetch
   });
 }

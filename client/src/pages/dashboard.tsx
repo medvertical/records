@@ -75,10 +75,10 @@ export default function DashboardNew() {
     lastUpdated,
     isStale
   } = useDashboardData({
-    enableRealTimeUpdates: true,
-    refetchInterval: 300000, // 5 minutes (reduced for better performance)
+    enableRealTimeUpdates: false, // Disable real-time updates - only refresh manually
+    refetchInterval: false, // Disable automatic polling - only refresh manually
     enableCaching: true,
-    enabled: true // Always enabled since we removed the connecting block
+    enabled: false // Disable completely - only fetch manually when refresh button is clicked
   });
 
   // Debug logging in useEffect to avoid re-render issues - reduced dependencies
@@ -100,10 +100,10 @@ export default function DashboardNew() {
   const [pausedAt, setPausedAt] = useState<Date | null>(null);
   const [totalPausedTime, setTotalPausedTime] = useState<number>(0);
 
-  // Polling for validation updates (MVP mode)
+  // Polling for validation updates (MVP mode) - DISABLED for performance
   const { isConnected, progress, validationStatus, currentServer } = useValidationPolling({
-    enabled: true,
-    pollInterval: 2000, // Poll every 2 seconds
+    enabled: false, // Disable automatic polling - only refresh manually
+    pollInterval: 10000, // 10 seconds when enabled
     hasActiveServer: Boolean(activeServer)
   });
 
@@ -161,9 +161,9 @@ export default function DashboardNew() {
       }
     };
 
-    const interval = setInterval(fetchValidationProgress, 5000); // 5 seconds for processing blocks
-    fetchValidationProgress(); // Initial fetch
-    return () => clearInterval(interval);
+    // Only fetch once on mount - no automatic polling
+    fetchValidationProgress();
+    // No interval - only fetch manually when refresh button is clicked
   }, [isConnected, activeServer]);
 
   // Fetch recent errors
@@ -185,9 +185,9 @@ export default function DashboardNew() {
       }
     };
 
-    const interval = setInterval(fetchRecentErrors, 30000); // Reduced from 10s to 30s
-    fetchRecentErrors(); // Initial fetch
-    return () => clearInterval(interval);
+    // Only fetch once on mount - no automatic polling
+    fetchRecentErrors();
+    // No interval - only fetch manually when refresh button is clicked
   }, [activeServer]);
 
   // ========================================================================

@@ -65,9 +65,9 @@ export default function ServerValidation() {
   // Fallback to polling if SSE is not connected
   const { data: fallbackProgress, isLoading: progressLoading } = useQuery<BulkValidationProgress>({
     queryKey: ["/api/validation/bulk/progress"],
-    refetchInterval: sseConnected ? false : 2000, // Only poll if SSE is not connected
+    refetchInterval: false, // Disable automatic polling - only refresh manually
     refetchIntervalInBackground: false,
-    enabled: !sseConnected, // Only enabled when SSE is not connected
+    enabled: false, // Disable automatic fetching - only fetch manually
   });
 
   // Use SSE progress if available, otherwise use fallback
@@ -76,8 +76,8 @@ export default function ServerValidation() {
   // Query validation summary from backend
   const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery<ValidationSummary>({
     queryKey: ['/api/validation/bulk/summary'],
-    refetchInterval: 300000, // Refetch every 5 minutes
-    staleTime: 180000, // Consider data stale after 3 minutes
+    refetchInterval: false, // Disable automatic polling - only refresh manually
+    staleTime: 10 * 60 * 1000, // Consider data stale after 10 minutes
   });
 
   // Update summary data with real-time validation progress

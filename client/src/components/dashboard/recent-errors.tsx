@@ -36,6 +36,9 @@ export default function RecentErrors() {
   
   const { data: recentErrors, isLoading } = useQuery<ValidationResult[]>({
     queryKey: ["/api/validation/errors/recent"],
+    refetchInterval: false, // Disable automatic polling
+    refetchOnWindowFocus: false, // Don't refetch on window focus
+    staleTime: 10 * 60 * 1000, // 10 minutes - only refresh manually
   });
 
   return (

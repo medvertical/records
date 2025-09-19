@@ -345,8 +345,8 @@ export function useValidationSSE(hasActiveServer: boolean = true) {
 
   const connect = () => {
     if (!isSSEEnabled) {
-      console.log('[ValidationSSE] SSE disabled in system settings, using polling only');
-      startApiSync();
+      console.log('[ValidationSSE] SSE disabled in system settings, no polling for performance');
+      // startApiSync(); // Disabled for performance - only refresh manually
       return;
     }
     

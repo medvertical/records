@@ -103,22 +103,23 @@ export function ServerStatsCard({
     priorityResourceTypes: string[];
   } | null>(null);
 
-  // Fetch FHIR version information
-  useEffect(() => {
-    const fetchVersionInfo = async () => {
-      try {
-        const response = await fetch('/api/dashboard/fhir-version-info');
-        if (response.ok) {
-          const info = await response.json();
-          setFhirVersionInfo(info);
-        }
-      } catch (error) {
-        console.error('Failed to fetch FHIR version info:', error);
-      }
-    };
-
-    fetchVersionInfo();
-  }, []);
+  // Fetch FHIR version information - DISABLED for performance
+  // Only fetch when explicitly requested via refresh button
+  // useEffect(() => {
+  //   const fetchVersionInfo = async () => {
+  //     try {
+  //       const response = await fetch('/api/dashboard/fhir-version-info');
+  //       if (response.ok) {
+  //         const info = await response.json();
+  //         setFhirVersionInfo(info);
+  //       }
+  //     } catch (error) {
+  //       console.error('Failed to fetch FHIR version info:', error);
+  //     }
+  //   };
+  //
+  //   fetchVersionInfo();
+  // }, []);
 
   const formatNumber = (num: number) => num.toLocaleString();
   const formatPercentage = (num: number | undefined) => (num || 0).toFixed(1);

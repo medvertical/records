@@ -41,8 +41,8 @@ export interface UseValidationPollingOptions {
 
 export function useValidationPolling(options: UseValidationPollingOptions = {}): ValidationPollingState & ValidationPollingActions {
   const {
-    enabled = true,
-    pollInterval = 2000, // Poll every 2 seconds
+    enabled = false, // Default to disabled - only enable when validation is actually running
+    pollInterval = 10000, // Poll every 10 seconds (much less frequent)
     hasActiveServer = true
   } = options;
 
