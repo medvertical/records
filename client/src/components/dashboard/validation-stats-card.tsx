@@ -29,8 +29,9 @@ export function ValidationStatsCard({
   error = null, 
   lastUpdated 
 }: ValidationStatsCardProps) {
-  // Early return for loading state to prevent undefined access
-  const computedLoading = isLoading || (!data && !error);
+  // Only show loading state if we truly have no data and are actively loading
+  // Don't show loading during refetches when we have previous data
+  const computedLoading = isLoading && !data && !error;
   
   if (computedLoading) {
     return (

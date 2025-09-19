@@ -534,8 +534,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Resource endpoints
   app.get("/api/fhir/resources", async (req, res) => {
+    const startTime = Date.now();
     try {
-      console.log("=== NEW RESOURCES ENDPOINT CALLED ===");
+      console.log("=== NEW RESOURCES ENDPOINT CALLED ===", {
+        timestamp: new Date().toISOString(),
+        query: req.query
+      });
       const { resourceType, _count = '20', page = '0', search } = req.query;
       const count = parseInt(_count as string);
       const offset = parseInt(page as string) * count;
@@ -543,8 +547,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (search) {
         console.log("=== USING SEARCH BRANCH ===");
+        const searchStartTime = Date.now();
         // Perform search in local storage
         const results = await storage.searchFhirResources(search as string, resourceType as string);
+        const searchTime = Date.now() - searchStartTime;
+        const totalTime = Date.now() - startTime;
+        
+        console.log("=== SEARCH COMPLETED ===", {
+          searchTime: `${searchTime}ms`,
+          totalTime: `${totalTime}ms`,
+          resultCount: results.length,
+          returnedCount: results.slice(offset, offset + count).length,
+          timestamp: new Date().toISOString()
+        });
+        
         res.json({
           resources: results.slice(offset, offset + count),
           total: results.length,
@@ -555,16 +571,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`[Resources] Resource type: ${resourceType}, Count: ${count}, Page: ${page}`);
         
         try {
+          const cacheStartTime = Date.now();
           // Try to get cached resources first for immediate response
           const cachedResources = await storage.getFhirResources(undefined, resourceType as string, count, offset);
           
           // Get total count from cache for this resource type
           const allCachedForType = await storage.getFhirResources(undefined, resourceType as string, 10000, 0);
+          const cacheTime = Date.now() - cacheStartTime;
+          
+          console.log(`[Resources] Cache query completed in ${cacheTime}ms`, {
+            cachedResourcesCount: cachedResources.length,
+            totalCachedForType: allCachedForType.length,
+            timestamp: new Date().toISOString()
+          });
           
           if (cachedResources.length > 0) {
             console.log(`[Resources] Serving ${cachedResources.length} cached resources immediately (${allCachedForType.length} total in cache)`);
             
             // Get current validation settings for filtering using rock-solid service
+            const validationStartTime = Date.now();
             let validationSettings = null;
             try {
               const settingsService = getValidationSettingsService();
@@ -572,8 +597,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             } catch (error) {
               console.warn('[Routes] Failed to load validation settings for filtering:', error);
             }
+            const validationSettingsTime = Date.now() - validationStartTime;
+            
+            console.log(`[Resources] Validation settings loaded in ${validationSettingsTime}ms`);
             
             // Return resources immediately with cached validation data only
+            const validationProcessingStartTime = Date.now();
             const resourcesWithCachedValidation = await Promise.all(
               cachedResources.map(async (resource) => {
                 try {
@@ -656,6 +685,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 }
               })
             );
+            
+            const validationProcessingTime = Date.now() - validationProcessingStartTime;
+            const totalTime = Date.now() - startTime;
+            
+            console.log(`[Resources] Validation processing completed in ${validationProcessingTime}ms`, {
+              resourceCount: resourcesWithCachedValidation.length,
+              totalTime: `${totalTime}ms`,
+              timestamp: new Date().toISOString()
+            });
             
             // Send immediate response
             res.json({
@@ -803,14 +841,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/fhir/resource-types", async (req, res) => {
+    const startTime = Date.now();
     try {
+      console.log("[ResourceTypes] Starting resource types fetch:", {
+        timestamp: new Date().toISOString()
+      });
+      
       if (!fhirClient) {
+        console.log("[ResourceTypes] No FHIR client available");
         return res.status(400).json({ message: "No active FHIR server configured" });
       }
       
       const resourceTypes = await fhirClient.getAllResourceTypes();
+      const totalTime = Date.now() - startTime;
+      
+      console.log("[ResourceTypes] Resource types fetch completed:", {
+        resourceTypeCount: resourceTypes.length,
+        totalTime: `${totalTime}ms`,
+        timestamp: new Date().toISOString()
+      });
+      
       res.json(resourceTypes);
     } catch (error: any) {
+      const totalTime = Date.now() - startTime;
+      console.error("[ResourceTypes] Resource types fetch error:", {
+        error: error.message,
+        totalTime: `${totalTime}ms`,
+        timestamp: new Date().toISOString()
+      });
       res.status(500).json({ message: error.message });
     }
   });
@@ -3198,8 +3256,10 @@ app.post("/api/validation/backups/cleanup", async (req, res) => {
 // Server-Sent Events (SSE) for Real-time Settings Notifications
 // ========================================================================
 
-  // GET /api/validation/stream - SSE endpoint for real-time validation and settings updates
+  // GET /api/validation/stream - SSE endpoint for real-time validation updates
   app.get("/api/validation/stream", (req, res) => {
+    console.log('[SSE] New client connecting to validation stream');
+    
     // Set SSE headers
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -3212,12 +3272,85 @@ app.post("/api/validation/backups/cleanup", async (req, res) => {
     // Send initial connection message
     res.write(`data: ${JSON.stringify({
       type: 'connected',
-      data: { message: 'Connected to validation stream', timestamp: new Date().toISOString() }
+      data: { 
+        message: 'Connected to validation stream', 
+        timestamp: new Date().toISOString(),
+        clientId: Math.random().toString(36).substr(2, 9)
+      }
     })}\n\n`);
 
-    // Get validation settings service for event listening
-    const settingsService = getValidationSettingsService();
-    const pipeline = getValidationPipeline();
+    // Send heartbeat every 30 seconds to keep connection alive
+    const heartbeatInterval = setInterval(() => {
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'heartbeat',
+          data: { 
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime()
+          }
+        })}\n\n`);
+      } catch (error) {
+        console.error('[SSE] Error sending heartbeat:', error);
+        clearInterval(heartbeatInterval);
+      }
+    }, 30000);
+
+    // Handle client disconnect
+    req.on('close', () => {
+      console.log('[SSE] Client disconnected from validation stream');
+      clearInterval(heartbeatInterval);
+    });
+
+    req.on('error', (error) => {
+      console.error('[SSE] Client connection error:', error);
+      clearInterval(heartbeatInterval);
+    });
+
+    // Send a test message after 1 second to verify connection
+    setTimeout(() => {
+      try {
+        res.write(`data: ${JSON.stringify({
+          type: 'test',
+          data: { 
+            message: 'SSE connection test successful',
+            timestamp: new Date().toISOString()
+          }
+        })}\n\n`);
+      } catch (error) {
+        console.error('[SSE] Error sending test message:', error);
+      }
+    }, 1000);
+  });
+  
+  // ORIGINAL SSE IMPLEMENTATION (DISABLED)
+  app.get("/api/validation/stream-disabled", (req, res) => {
+    try {
+      // Set SSE headers
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Cache-Control'
+      });
+
+      // Send initial connection message
+      res.write(`data: ${JSON.stringify({
+        type: 'connected',
+        data: { message: 'Connected to validation stream', timestamp: new Date().toISOString() }
+      })}\n\n`);
+
+      // Get validation settings service for event listening
+      const settingsService = getValidationSettingsService();
+      
+      // Temporarily disable pipeline to prevent hanging
+      let pipeline;
+      try {
+        pipeline = getValidationPipeline();
+      } catch (error) {
+        console.warn('[SSE] Pipeline not available, using fallback mode:', error);
+        pipeline = null;
+      }
 
     // Send heartbeat every 30 seconds to keep connection alive
     const heartbeatInterval = setInterval(() => {
@@ -3371,10 +3504,13 @@ app.post("/api/validation/backups/cleanup", async (req, res) => {
       }
     };
 
-    pipeline.on('pipelineProgress', onPipelineProgress);
-    pipeline.on('pipelineCompleted', onPipelineCompleted);
-    pipeline.on('pipelineFailed', onPipelineFailed);
-    pipeline.on('pipelineCancelled', onPipelineCancelled);
+    // Only register pipeline listeners if pipeline is available
+    if (pipeline) {
+      pipeline.on('pipelineProgress', onPipelineProgress);
+      pipeline.on('pipelineCompleted', onPipelineCompleted);
+      pipeline.on('pipelineFailed', onPipelineFailed);
+      pipeline.on('pipelineCancelled', onPipelineCancelled);
+    }
 
     // Handle client disconnect
     req.on('close', () => {
@@ -3387,10 +3523,12 @@ app.post("/api/validation/backups/cleanup", async (req, res) => {
       settingsService.off('cacheInvalidated', onCacheInvalidated);
       settingsService.off('cacheWarmed', onCacheWarmed);
 
-      pipeline.off('pipelineProgress', onPipelineProgress);
-      pipeline.off('pipelineCompleted', onPipelineCompleted);
-      pipeline.off('pipelineFailed', onPipelineFailed);
-      pipeline.off('pipelineCancelled', onPipelineCancelled);
+      if (pipeline) {
+        pipeline.off('pipelineProgress', onPipelineProgress);
+        pipeline.off('pipelineCompleted', onPipelineCompleted);
+        pipeline.off('pipelineFailed', onPipelineFailed);
+        pipeline.off('pipelineCancelled', onPipelineCancelled);
+      }
     });
 
     req.on('error', (error) => {
@@ -3403,11 +3541,17 @@ app.post("/api/validation/backups/cleanup", async (req, res) => {
       settingsService.off('cacheInvalidated', onCacheInvalidated);
       settingsService.off('cacheWarmed', onCacheWarmed);
 
-      pipeline.off('pipelineProgress', onPipelineProgress);
-      pipeline.off('pipelineCompleted', onPipelineCompleted);
-      pipeline.off('pipelineFailed', onPipelineFailed);
-      pipeline.off('pipelineCancelled', onPipelineCancelled);
+      if (pipeline) {
+        pipeline.off('pipelineProgress', onPipelineProgress);
+        pipeline.off('pipelineCompleted', onPipelineCompleted);
+        pipeline.off('pipelineFailed', onPipelineFailed);
+        pipeline.off('pipelineCancelled', onPipelineCancelled);
+      }
     });
+    } catch (error) {
+      console.error('[SSE] Error in SSE endpoint:', error);
+      res.status(500).json({ error: 'SSE connection failed' });
+    }
   });
 
   const httpServer = createServer(app);

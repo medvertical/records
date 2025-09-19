@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 
 interface FhirServer {
   id: number;
@@ -33,11 +33,11 @@ export function useServerData() {
       }
       return response.json();
     },
-    refetchInterval: 60000, // Refresh every minute
+    refetchInterval: 300000, // Refresh every 5 minutes (reduced from 1 minute)
     // Keep previous data to prevent undefined states during refetches
     keepPreviousData: true,
-    // Consider data fresh for 30 seconds to reduce unnecessary refetches
-    staleTime: 30000,
+    // Consider data fresh for 2 minutes to reduce unnecessary refetches
+    staleTime: 120000,
     onSuccess: (data) => {
       console.log('Server data fetched:', data);
     },
@@ -46,7 +46,7 @@ export function useServerData() {
     }
   });
 
-  const activeServer = servers?.find(server => server.isActive);
+  const activeServer = useMemo(() => servers?.find(server => server.isActive), [servers]);
   
   const { data: serverStatus } = useQuery<ServerStatus>({
     queryKey: ["/api/fhir/connection/test", refreshTrigger, activeServer?.id],
@@ -73,10 +73,10 @@ export function useServerData() {
         };
       }
     },
-    refetchInterval: 30000,
+    refetchInterval: 300000, // Refresh every 5 minutes (further reduced)
     // Keep previous data to prevent undefined states during refetches
     keepPreviousData: true,
-    staleTime: 5000, // Consider data fresh for 5 seconds (reduced for faster updates)
+    staleTime: 180000, // Consider data fresh for 3 minutes (further reduced polling)
     // Only fetch server status when there's an active server
     enabled: !!activeServer,
     retry: false

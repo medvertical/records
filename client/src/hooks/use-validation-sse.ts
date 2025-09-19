@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useSystemSettings } from './use-system-settings';
 
 export interface ValidationProgress {
   totalResources: number;
@@ -23,6 +24,7 @@ export interface SSEMessage {
 }
 
 export function useValidationSSE(hasActiveServer: boolean = true) {
+  const { isSSEEnabled } = useSystemSettings();
   const [isConnected, setIsConnected] = useState(false);
   // Numeric progress for UI/tests, and full progress object for rich views
   const [progress, setProgress] = useState<number>(0);
@@ -272,7 +274,7 @@ export function useValidationSSE(hasActiveServer: boolean = true) {
         
         // Reset validation state when server changes
         // This ensures we don't show stale validation data from the previous server
-        setProgress(null);
+        setProgress(0);
         setValidationStatus('idle');
         setLastError(null);
         
@@ -342,6 +344,12 @@ export function useValidationSSE(hasActiveServer: boolean = true) {
   };
 
   const connect = () => {
+    if (!isSSEEnabled) {
+      console.log('[ValidationSSE] SSE disabled in system settings, using polling only');
+      startApiSync();
+      return;
+    }
+    
     // Use SSE for real-time updates
     console.log('[ValidationSSE] Using SSE for real-time updates');
     connectSSE();

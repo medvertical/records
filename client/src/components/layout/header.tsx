@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import AppIcon from "@/components/ui/app-icon";
+import { ValidationAspectsDropdown } from "@/components/ui/validation-aspects-dropdown";
 
 interface ConnectionStatus {
   connected: boolean;
@@ -62,13 +63,18 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
           )}
         </div>
         <div className="flex items-center space-x-4">
-          {/* Refresh Button */}
+          {/* Validation Aspects Dropdown */}
+          <ValidationAspectsDropdown />
+          
+          {/* Refresh Button - Keep for now but make it smaller */}
           <Button 
             onClick={handleRefresh}
-            className="flex items-center space-x-2 bg-fhir-blue text-white hover:bg-blue-700"
+            variant="outline"
+            size="sm"
+            className="flex items-center space-x-1"
           >
             <RefreshCw className="h-4 w-4" />
-            <span className="hidden sm:inline">Refresh</span>
+            <span className="hidden lg:inline">Refresh</span>
           </Button>
         </div>
       </div>

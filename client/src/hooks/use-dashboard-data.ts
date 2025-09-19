@@ -269,7 +269,7 @@ export function useFhirServerStats() {
     queryKey: ['/api/dashboard/fhir-server-stats'],
     refetchInterval: 5 * 60 * 1000, // 5 minutes
     staleTime: 5 * 60 * 1000,
-    keepPreviousData: true // Prevent flashing during refetch
+    placeholderData: keepPreviousData // Prevent flashing during refetch
   });
 }
 
@@ -279,9 +279,9 @@ export function useFhirServerStats() {
 export function useValidationStats() {
   return useQuery({
     queryKey: ['/api/dashboard/validation-stats'],
-    refetchInterval: 1 * 60 * 1000, // 1 minute
-    staleTime: 1 * 60 * 1000,
-    keepPreviousData: true // Prevent flashing during refetch
+    refetchInterval: 5 * 60 * 1000, // 5 minutes
+    staleTime: 3 * 60 * 1000, // 3 minutes
+    placeholderData: keepPreviousData // Prevent flashing during refetch
   });
 }
 
@@ -291,9 +291,9 @@ export function useValidationStats() {
 export function useCombinedDashboardData() {
   return useQuery({
     queryKey: ['/api/dashboard/combined'],
-    refetchInterval: 1 * 60 * 1000, // 1 minute
-    staleTime: 1 * 60 * 1000,
-    keepPreviousData: true // Prevent flashing during refetch
+    refetchInterval: 5 * 60 * 1000, // 5 minutes
+    staleTime: 3 * 60 * 1000, // 3 minutes
+    placeholderData: keepPreviousData // Prevent flashing during refetch
   });
 }
 
@@ -303,8 +303,8 @@ export function useCombinedDashboardData() {
 export function useLegacyDashboardStats() {
   return useQuery({
     queryKey: ['/api/dashboard/stats'],
-    refetchInterval: 1 * 60 * 1000, // 1 minute
-    staleTime: 1 * 60 * 1000,
-    keepPreviousData: true // Prevent flashing during refetch
+    refetchInterval: 5 * 60 * 1000, // 5 minutes
+    staleTime: 3 * 60 * 1000, // 3 minutes
+    placeholderData: keepPreviousData // Prevent flashing during refetch
   });
 }

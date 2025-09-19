@@ -177,9 +177,20 @@ function SidebarContent({
 
   // Get the current location to make the component reactive to URL changes
   const [currentLocation] = useLocation();
+  const [urlVersion, setUrlVersion] = useState(0);
   
-  // Simplified URL monitoring - only update when location actually changes
-  const currentUrl = window.location.href;
+  // Listen for URL changes to make the component reactive
+  useEffect(() => {
+    const handleUrlChange = () => {
+      setUrlVersion(prev => prev + 1);
+    };
+    
+    window.addEventListener('popstate', handleUrlChange);
+    return () => window.removeEventListener('popstate', handleUrlChange);
+  }, []);
+  
+  // Use the current location from wouter to ensure reactivity
+  const currentUrl = `${window.location.origin}${currentLocation}`;
   return (
     <div className="h-full flex flex-col">
       {/* Server Connection Status */}
@@ -326,22 +337,41 @@ function SidebarContent({
             <ul className="space-y-1">
               {quickAccessItems.map((item) => {
                 // Check if this resource type is currently selected
-                const url = new URL(currentUrl);
-                const selectedType = url.searchParams.get('type');
+                // Use window.location.search to match how resource-browser.tsx reads the URL
+                // Include urlVersion to ensure re-render when URL changes
+                const urlParams = new URLSearchParams(window.location.search);
+                const selectedType = urlParams.get('type');
                 const isSelected = selectedType === item.resourceType;
+                
+                // Force re-render by referencing urlVersion
+                const _ = urlVersion;
+                
+                // Debug logging
+                if (item.resourceType === 'Encounter' || item.resourceType === 'Patient' || item.resourceType === 'Observation') {
+                  console.log('[Sidebar] Quick access item:', {
+                    resourceType: item.resourceType,
+                    selectedType,
+                    isSelected,
+                    urlVersion,
+                    search: window.location.search
+                  });
+                }
                 
                 return (
                   <li key={item.href}>
-                    <Link href={item.href}>
-                      <div 
-                        className={cn(
-                          "flex items-center justify-between p-2 text-sm rounded transition-colors cursor-pointer",
-                          isSelected 
-                            ? "text-fhir-blue bg-blue-50 font-medium" 
-                            : "text-gray-600 hover:bg-gray-100"
-                        )}
-                        onClick={onItemClick}
-                      >
+                    <div 
+                      className={cn(
+                        "flex items-center justify-between p-2 text-sm rounded transition-colors cursor-pointer",
+                        isSelected 
+                          ? "text-fhir-blue bg-blue-50 font-medium" 
+                          : "text-gray-600 hover:bg-gray-100"
+                      )}
+                      onClick={() => {
+                        // Use the same navigation approach as resource browser
+                        window.history.pushState({}, '', item.href);
+                        window.dispatchEvent(new PopStateEvent('popstate'));
+                      }}
+                    >
                         <span>{item.label}</span>
                         {resourceCounts && resourceCounts[item.resourceType] ? (
                           <span className={cn(
@@ -356,7 +386,6 @@ function SidebarContent({
                           <div className="w-4 h-4 border border-gray-300 border-t-transparent rounded-full animate-spin"></div>
                         )}
                       </div>
-                    </Link>
                   </li>
                 );
               })}

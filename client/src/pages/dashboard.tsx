@@ -25,12 +25,12 @@ import {
   RefreshCw,
   Settings
 } from 'lucide-react';
-import { useValidationSSE, ValidationProgress as SSEValidationProgress } from '@/hooks/use-validation-sse';
+import { useValidationPolling, ValidationProgress as PollingValidationProgress } from '@/hooks/use-validation-polling';
 import { useDashboardData } from '@/hooks/use-dashboard-data';
 import { useServerData } from '@/hooks/use-server-data';
 import { ServerStatsCard } from '@/components/dashboard/server-stats-card';
 import { ValidationStatsCard } from '@/components/dashboard/validation-stats-card';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'wouter';
 
 // ============================================================================
@@ -58,7 +58,6 @@ interface ValidationProgress {
 export default function DashboardNew() {
   // Use our new centralized dashboard data hook
   const { activeServer, serverStatus } = useServerData();
-  const isServerConnected = Boolean(activeServer && serverStatus?.connected);
 
   const {
     fhirServerStats,
@@ -79,14 +78,20 @@ export default function DashboardNew() {
     enableRealTimeUpdates: true,
     refetchInterval: 300000, // 5 minutes (reduced for better performance)
     enableCaching: true,
-    enabled: isServerConnected
+    enabled: true // Always enabled since we removed the connecting block
   });
+
+  // Debug logging in useEffect to avoid re-render issues - reduced dependencies
+  useEffect(() => {
+    console.log('[Dashboard] Component mounted/updated');
+    console.log('[Dashboard] Server data:', { activeServer, serverStatus });
+  }, [activeServer?.id]); // Only log when server changes
 
   // Validation state management
   const [isValidationRunning, setIsValidationRunning] = useState(false);
   const [isValidationPaused, setIsValidationPaused] = useState(false);
   const [isValidationInitializing, setIsValidationInitializing] = useState(false);
-  const [validationProgress, setValidationProgress] = useState<SSEValidationProgress | null>(null);
+  const [validationProgress, setValidationProgress] = useState<PollingValidationProgress | null>(null);
   const [lastFetchUpdate, setLastFetchUpdate] = useState<number>(0);
   const [currentResourceType, setCurrentResourceType] = useState<string>('');
   const [nextResourceType, setNextResourceType] = useState<string>('');
@@ -95,28 +100,32 @@ export default function DashboardNew() {
   const [pausedAt, setPausedAt] = useState<Date | null>(null);
   const [totalPausedTime, setTotalPausedTime] = useState<number>(0);
 
-  // SSE for real-time validation updates
-  const { isConnected, progress, validationStatus, currentServer } = useValidationSSE(isServerConnected);
+  // Polling for validation updates (MVP mode)
+  const { isConnected, progress, validationStatus, currentServer } = useValidationPolling({
+    enabled: true,
+    pollInterval: 2000, // Poll every 2 seconds
+    hasActiveServer: Boolean(activeServer)
+  });
 
-  // Note: Settings change notifications are now handled via SSE through the useValidationSSE hook
-  // No need for separate event listeners - SSE handles everything
+  // Note: Validation updates are now handled via polling through the useValidationPolling hook
+  // No need for separate fetch logic - polling handles everything
 
   // Get current validation progress from server (using fetch for now)
   const [currentValidationProgress, setCurrentValidationProgress] = useState<ValidationProgress | null>(null);
   const [recentErrors, setRecentErrors] = useState([]);
 
   useEffect(() => {
-    if (!isServerConnected) {
+    if (!activeServer) {
       setValidationProgress(null);
       setIsValidationRunning(false);
       setIsValidationPaused(false);
       setIsValidationInitializing(false);
     }
-  }, [isServerConnected]);
+  }, [activeServer]);
 
-  // Fetch validation progress (fallback when SSE is not connected)
+  // Fetch validation progress (fallback when polling is not connected)
   useEffect(() => {
-    if (!isServerConnected) {
+    if (!activeServer) {
       setCurrentValidationProgress(null);
       setCurrentResourceType('');
       setNextResourceType('');
@@ -134,12 +143,12 @@ export default function DashboardNew() {
           }
           setCurrentValidationProgress(data);
           
-          // Always update processing blocks from fetch data (SSE doesn't provide this)
+          // Always update processing blocks from fetch data (polling doesn't provide this)
           setCurrentResourceType(data.currentResourceType || '');
           setNextResourceType(data.nextResourceType || '');
           
-          // Only sync frontend state if SSE is not connected
-          // This prevents fetch from overriding real-time SSE updates
+          // Only sync frontend state if polling is not connected
+          // This prevents fetch from overriding polling updates
           if (!isConnected) {
             setIsValidationRunning(data.status === 'running');
             setIsValidationPaused(data.status === 'paused');
@@ -155,11 +164,11 @@ export default function DashboardNew() {
     const interval = setInterval(fetchValidationProgress, 5000); // 5 seconds for processing blocks
     fetchValidationProgress(); // Initial fetch
     return () => clearInterval(interval);
-  }, [isConnected, isServerConnected]);
+  }, [isConnected, activeServer]);
 
   // Fetch recent errors
   useEffect(() => {
-    if (!isServerConnected) {
+    if (!activeServer) {
       setRecentErrors([]);
       return;
     }
@@ -179,21 +188,21 @@ export default function DashboardNew() {
     const interval = setInterval(fetchRecentErrors, 30000); // Reduced from 10s to 30s
     fetchRecentErrors(); // Initial fetch
     return () => clearInterval(interval);
-  }, [isServerConnected]);
+  }, [activeServer]);
 
   // ========================================================================
   // Effects
   // ========================================================================
 
-  // SSE progress updates (real-time during validation)
+  // Polling progress updates (near real-time during validation)
   useEffect(() => {
     if (progress) {
-      console.log('SSE progress received:', progress);
-      // Use SSE progress directly (startTime is already a string)
+      console.log('Polling progress received:', progress);
+      // Use polling progress directly (startTime is already a Date)
       setValidationProgress(progress);
       
-      // Always update status from SSE - it's real-time and more accurate than fetch
-      // SSE updates should take precedence over periodic fetch updates
+      // Always update status from polling - it's more accurate than fetch
+      // Polling updates should take precedence over periodic fetch updates
       if (progress.status === 'running') {
         setIsValidationRunning(true);
         setIsValidationPaused(false);
@@ -205,15 +214,15 @@ export default function DashboardNew() {
         setIsValidationPaused(false);
       }
       
-      // Update last fetch time to prevent fetch from overriding SSE updates
+      // Update last fetch time to prevent fetch from overriding polling updates
       setLastFetchUpdate(Date.now());
     }
   }, [progress, currentResourceType, nextResourceType]);
 
-  // SSE status updates
+  // Polling status updates
   useEffect(() => {
-    // Always process SSE status updates - they are real-time and more accurate
-    // SSE updates should take precedence over periodic fetch updates
+    // Always process polling status updates - they are more accurate than fetch
+    // Polling updates should take precedence over periodic fetch updates
     if (validationStatus === 'running') {
       setIsValidationInitializing(false);
       setIsValidationRunning(true);
@@ -228,7 +237,7 @@ export default function DashboardNew() {
       setIsValidationInitializing(false);
       setIsValidationRunning(false);
       setIsValidationPaused(true);
-      // Track when validation was paused via SSE
+      // Track when validation was paused via polling
       if (!pausedAt) {
         setPausedAt(new Date());
       }
@@ -248,7 +257,7 @@ export default function DashboardNew() {
       setTotalPausedTime(0);
     }
     
-    // Update last fetch time to prevent fetch from overriding SSE updates
+    // Update last fetch time to prevent fetch from overriding polling updates
     setLastFetchUpdate(Date.now());
   }, [validationStatus]);
 
@@ -504,45 +513,6 @@ export default function DashboardNew() {
   // Render
   // ========================================================================
 
-  if (!isServerConnected) {
-    return (
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Dashboard</h1>
-            <p className="text-muted-foreground">
-              FHIR server statistics and validation progress
-            </p>
-          </div>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => window.location.href = '/settings'}
-            className="gap-2"
-          >
-            <Server className="h-4 w-4" />
-            Configure Server
-          </Button>
-        </div>
-
-        <Card className="border-dashed border-2 border-gray-300">
-          <CardContent className="flex flex-col items-center justify-center py-16 text-center space-y-4">
-            <Server className="h-16 w-16 text-gray-300" />
-            <div>
-              <h2 className="text-xl font-semibold text-gray-700">No Active FHIR Server</h2>
-              <p className="text-sm text-gray-500 max-w-md">
-                Connect to a FHIR server to browse resources, manage packages, and monitor validation progress. Once a connection is established, dashboard metrics will populate automatically.
-              </p>
-            </div>
-            <Button onClick={() => window.location.href = '/settings'} className="gap-2">
-              <Settings className="h-4 w-4" />
-              Open Settings
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="p-6 space-y-6">
@@ -579,38 +549,9 @@ export default function DashboardNew() {
         </div>
       </div>
 
-      {/* Server Switching Indicator */}
-      {currentServer && currentServer.id && (
-        <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-          <div className="flex items-center gap-3">
-            <Server className="h-5 w-5 text-blue-500" />
-            <div className="flex-1">
-              <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                Connected to: {currentServer.name}
-              </div>
-              <div className="text-xs text-blue-600 dark:text-blue-400">
-                {currentServer.url}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {isConnected ? (
-                <>
-                  <Wifi className="h-4 w-4 text-green-500" />
-                  <span className="text-xs text-green-600 dark:text-green-400">SSE Connected</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="h-4 w-4 text-red-500" />
-                  <span className="text-xs text-red-600 dark:text-red-400">SSE Disconnected</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Real-time Validation Control Panel */}
-      {isServerConnected && (
+      {activeServer && (
         <Card className={`border-2 transition-colors duration-300 ${
           isValidationRunning 
             ? 'border-green-500 bg-green-50/50 dark:border-green-400 dark:bg-green-950/20' 
@@ -820,7 +761,7 @@ export default function DashboardNew() {
       )}
 
       {/* Separated Statistics Cards */}
-      {isServerConnected && (
+      {activeServer && (
         <div className="grid gap-6 lg:grid-cols-2">
           {/* FHIR Server Statistics */}
           <ServerStatsCard 
@@ -841,7 +782,7 @@ export default function DashboardNew() {
       )}
 
       {/* Recent Activity */}
-      {isServerConnected && recentErrors && recentErrors.length > 0 && (
+      {activeServer && recentErrors && recentErrors.length > 0 && (
         <Card className="transition-all duration-300">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

@@ -33,7 +33,9 @@ function Router() {
   
   const { data: connectionStatus } = useQuery<ConnectionStatus>({
     queryKey: ["/api/fhir/connection/test"],
-    refetchInterval: 30000,
+    refetchInterval: 300000, // 5 minutes instead of 30 seconds
+    staleTime: 180000, // 3 minutes stale time
+    refetchOnWindowFocus: false, // Don't refetch on window focus
     // Only fetch connection status when there's an active server
     enabled: !!activeServer,
   });

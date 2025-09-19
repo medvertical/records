@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerData } from "@/hooks/use-server-data";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -938,6 +938,9 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
             <Server className="h-5 w-5" />
             Configure FHIR Server Connection
           </DialogTitle>
+          <DialogDescription>
+            Manage your FHIR server connections and test connectivity.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="w-full">

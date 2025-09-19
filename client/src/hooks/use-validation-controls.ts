@@ -21,7 +21,7 @@ import {
   ValidationErrorMessage,
   ValidationError
 } from '@shared/types/validation';
-import { useValidationSSE } from './use-validation-sse';
+import { useValidationPolling } from './use-validation-polling';
 
 // Types are now imported from @shared/types/validation
 
@@ -66,17 +66,21 @@ const DEFAULT_VALIDATION_CONFIG: ValidationConfiguration = {
 export function useValidationControls(config: ValidationControlsConfig = {}): ValidationControlsHook {
   const finalConfig = { ...DEFAULT_CONFIG, ...config };
   
-  // Integrate with existing SSE hook
+  // Integrate with polling hook for MVP
   const {
-    isConnected: sseConnected,
-    progress: sseProgress,
-    validationStatus: sseStatus,
-    lastError: sseError,
-    apiState: sseApiState,
-    resetProgress: sseResetProgress,
-    reconnect: sseReconnect,
-    syncWithApi: sseSyncWithApi
-  } = useValidationSSE();
+    isConnected: pollingConnected,
+    progress: pollingProgress,
+    validationStatus: pollingStatus,
+    lastError: pollingError,
+    currentServer: pollingCurrentServer,
+    resetProgress: pollingResetProgress,
+    reconnect: pollingReconnect,
+    syncWithApi: pollingSyncWithApi
+  } = useValidationPolling({
+    enabled: true,
+    pollInterval: 2000, // Poll every 2 seconds
+    hasActiveServer: true
+  });
   
   // State management
   const [state, setState] = useState<ValidationControlsState>(() => {
@@ -131,34 +135,42 @@ export function useValidationControls(config: ValidationControlsConfig = {}): Va
   const retryCountRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Sync SSE state with validation controls state
+  // Sync polling state with validation controls state
   useEffect(() => {
-    if (sseProgress) {
+    if (pollingProgress) {
       setState(prev => ({
         ...prev,
-        progress: sseProgress,
+        progress: pollingProgress,
         error: null
       }));
     }
-  }, [sseProgress]);
+  }, [pollingProgress]);
 
   useEffect(() => {
-    if (sseError) {
+    if (pollingError) {
       setState(prev => ({
         ...prev,
-        error: sseError
+        error: pollingError
       }));
     }
-  }, [sseError]);
+  }, [pollingError]);
 
   useEffect(() => {
-    // Map SSE status to validation controls state
-    switch (sseStatus) {
+    // Map polling status to validation controls state
+    switch (pollingStatus) {
       case 'running':
         setState(prev => ({
           ...prev,
           isRunning: true,
           isPaused: false,
+          isStopping: false
+        }));
+        break;
+      case 'paused':
+        setState(prev => ({
+          ...prev,
+          isRunning: false,
+          isPaused: true,
           isStopping: false
         }));
         break;
@@ -187,7 +199,7 @@ export function useValidationControls(config: ValidationControlsConfig = {}): Va
         }));
         break;
     }
-  }, [sseStatus]);
+  }, [pollingStatus]);
 
   // Persist state to localStorage
   useEffect(() => {
@@ -496,29 +508,10 @@ export function useValidationControls(config: ValidationControlsConfig = {}): Va
 
   // State reconciliation logic with conflict resolution
   const reconcileState = useCallback(() => {
-    // Check for conflicts between local state and API state
-    const hasConflict = 
-      (state.isRunning !== sseApiState.isRunning) ||
-      (state.isPaused !== sseApiState.isPaused);
-    
-    if (hasConflict) {
-      console.warn('[ValidationControls] State conflict detected, reconciling...', {
-        local: { isRunning: state.isRunning, isPaused: state.isPaused },
-        api: { isRunning: sseApiState.isRunning, isPaused: sseApiState.isPaused }
-      });
-      
-      // Conflict resolution strategy: prioritize API state for running/paused status
-      // but preserve local error state and progress
-      setState(prev => ({
-        ...prev,
-        isRunning: sseApiState.isRunning,
-        isPaused: sseApiState.isPaused,
-        isStopping: false, // Reset stopping state on reconciliation
-        // Preserve error state unless API indicates success
-        error: sseApiState.isRunning && !sseApiState.isPaused ? null : prev.error
-      }));
-    }
-  }, [state.isRunning, state.isPaused, sseApiState.isRunning, sseApiState.isPaused]);
+    // For polling-based validation, we rely on the polling hook to provide accurate state
+    // No complex reconciliation needed since polling provides the source of truth
+    console.log('[ValidationControls] State reconciliation - polling provides source of truth');
+  }, []);
 
   // Conflict resolution for specific scenarios
   const resolveConflict = useCallback((conflictType: 'running' | 'paused' | 'stopped', apiState: boolean) => {
@@ -593,12 +586,11 @@ export function useValidationControls(config: ValidationControlsConfig = {}): Va
     return true;
   }, [state, finalConfig.minBatchSize, finalConfig.maxBatchSize]);
 
-  // Auto-reconcile when API state changes
+  // Auto-reconcile when polling state changes
   useEffect(() => {
-    if (sseApiState.lastSync) {
-      reconcileState();
-    }
-  }, [sseApiState.lastSync, reconcileState]);
+    // For polling-based validation, reconciliation happens automatically through state updates
+    reconcileState();
+  }, [pollingStatus, reconcileState]);
 
   // Validate state on changes
   useEffect(() => {
@@ -681,8 +673,8 @@ export function useValidationControls(config: ValidationControlsConfig = {}): Va
   };
 
   // Calculate derived state values
-  const isConnected = sseConnected && (state.isRunning || state.isPaused);
-  const canStart = !state.isRunning && !state.isPaused && !state.isStopping && sseConnected;
+  const isConnected = pollingConnected;
+  const canStart = !state.isRunning && !state.isPaused && !state.isStopping && pollingConnected;
   const canPause = state.isRunning && !state.isPaused && !state.isStopping;
   const canResume = state.isPaused && !state.isRunning && !state.isStopping;
   const canStop = (state.isRunning || state.isPaused) && !state.isStopping;

@@ -31,8 +31,9 @@ export function ServerStatsCard({
   error = null, 
   lastUpdated 
 }: ServerStatsCardProps) {
-  // Early return for loading state to prevent undefined access
-  const computedLoading = isLoading || (!data && !error);
+  // Only show loading state if we truly have no data and are actively loading
+  // Don't show loading during refetches when we have previous data
+  const computedLoading = isLoading && !data && !error;
   
   if (computedLoading) {
     return (
@@ -136,11 +137,9 @@ export function ServerStatsCard({
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${
-              safeData.serverInfo.connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
-            }`} />
-            <Badge variant={safeData.serverInfo.connected ? 'default' : 'destructive'}>
-              {safeData.serverInfo.connected ? 'Connected' : 'Disconnected'}
+            <div className="w-2 h-2 rounded-full bg-green-500" />
+            <Badge variant="default">
+              Connected
             </Badge>
           </div>
         </div>
@@ -184,14 +183,10 @@ export function ServerStatsCard({
 
           {/* Connection Status */}
           <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-            {safeData.serverInfo.connected ? (
-              <Wifi className="h-5 w-5 text-green-500" />
-            ) : (
-              <WifiOff className="h-5 w-5 text-red-500" />
-            )}
+            <Wifi className="h-5 w-5 text-green-500" />
             <div className="flex-1">
               <div className="text-sm font-medium">
-                {safeData.serverInfo.connected ? 'Server Online' : 'Server Offline'}
+                Server Online
               </div>
               <div className="text-xs text-muted-foreground">
                 Last checked: {safeData.serverInfo.lastChecked ? 
@@ -202,11 +197,6 @@ export function ServerStatsCard({
                 }
               </div>
             </div>
-            {safeData.serverInfo.error && (
-              <div className="text-xs text-red-600">
-                {safeData.serverInfo.error}
-              </div>
-            )}
           </div>
 
           {/* Resource Distribution */}

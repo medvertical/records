@@ -21,7 +21,7 @@ export function useConnectionStatus() {
   return useQuery({
     queryKey: [QUERY_KEYS.connection],
     queryFn: () => fhirClient.testConnection(),
-    refetchInterval: 30000, // Check every 30 seconds
+    refetchInterval: 300000, // Check every 5 minutes
     retry: 3,
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     keepPreviousData: true, // Prevent flashing during refetch

@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
+import { useSystemSettings } from '@/hooks/use-system-settings';
 import { 
   Settings, 
   Server, 
@@ -75,6 +76,7 @@ interface SystemSettings {
   logLevel: 'debug' | 'info' | 'warn' | 'error';
   enableAnalytics: boolean;
   enableCrashReporting: boolean;
+  enableSSE: boolean;
   dataRetentionDays: number;
   maxLogFileSize: number;
   enableAutoUpdates: boolean;
@@ -82,6 +84,7 @@ interface SystemSettings {
 
 export default function SettingsPage() {
   const { toast } = useToast();
+  const { systemSettings, updateSystemSettings } = useSystemSettings();
   
   // State management
   const [validationSettings, setValidationSettings] = useState<ValidationSettings>({
@@ -109,14 +112,6 @@ export default function SettingsPage() {
     theme: 'system',
   });
 
-  const [systemSettings, setSystemSettings] = useState<SystemSettings>({
-    logLevel: 'info',
-    enableAnalytics: true,
-    enableCrashReporting: true,
-    dataRetentionDays: 30,
-    maxLogFileSize: 100,
-    enableAutoUpdates: true,
-  });
 
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('validation');
@@ -291,8 +286,8 @@ export default function SettingsPage() {
       if (response.ok) {
         const data = await response.json();
         setServers(prev => [...prev, { ...newServer, id: data.id.toString() }]);
-        toast({
-          title: "Server Added",
+    toast({
+      title: "Server Added",
           description: "New server has been added successfully.",
         });
       }
@@ -342,7 +337,7 @@ export default function SettingsPage() {
         });
       }
     } catch (error) {
-      toast({
+    toast({
         title: "Connection Error",
         description: "Failed to test server connection",
         variant: "destructive",
@@ -366,7 +361,7 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-6 max-w-6xl">
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold flex items-center gap-2">
                 <Settings className="h-8 w-8" />
@@ -375,7 +370,7 @@ export default function SettingsPage() {
               <p className="text-muted-foreground mt-2">
                 Configure your FHIR Records Management Platform
               </p>
-            </div>
+          </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={loadSettings} disabled={isLoading}>
               <RefreshCw className="h-4 w-4 mr-2" />
@@ -487,9 +482,9 @@ export default function SettingsPage() {
                             metadata: { ...validationSettings.metadata, enabled: checked }
                           })}
                         />
-                      </div>
-                    </div>
-                  </div>
+          </div>
+        </div>
+      </div>
 
                   <div className="space-y-4">
                     <h3 className="text-lg font-medium">Performance Settings</h3>
@@ -562,30 +557,30 @@ export default function SettingsPage() {
                     <Server className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                     <p>No FHIR servers configured</p>
                     <p className="text-sm">Add your first server to get started</p>
-                  </div>
+              </div>
                 ) : (
                   servers.map((server) => (
                     <Card key={server.id} className="relative">
                       <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
                             <div className={`w-3 h-3 rounded-full ${server.isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
-                            <div>
+        <div>
                               <h4 className="font-medium flex items-center gap-2">
                                 {server.name}
                               </h4>
                               <p className="text-sm text-gray-600">{server.url}</p>
                             </div>
-                          </div>
+        </div>
                           <div className="flex items-center gap-2">
                             {server.isActive && (
                               <Badge variant="default">
                                 <CheckCircle className="h-3 w-3 mr-1" />
                                 Active
-                              </Badge>
-                            )}
-                            <Button
-                              variant="outline"
+            </Badge>
+          )}
+          <Button
+            variant="outline"
                               size="sm"
                               onClick={() => testServerConnection(server)}
                             >
@@ -630,26 +625,26 @@ export default function SettingsPage() {
                             >
                               <Trash2 className="h-3 w-3" />
                               Delete
-                            </Button>
-                          </div>
-                        </div>
+          </Button>
+        </div>
+      </div>
                       </CardContent>
                     </Card>
                   ))
                 )}
               </div>
             </div>
-          </TabsContent>
+        </TabsContent>
 
           {/* Dashboard Tab */}
-          <TabsContent value="dashboard" className="space-y-6">
-            <Card>
-              <CardHeader>
+        <TabsContent value="dashboard" className="space-y-6">
+    <Card>
+      <CardHeader>
                 <CardTitle>Dashboard Settings</CardTitle>
-              </CardHeader>
+      </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-4">
+        <div className="space-y-4">
                     <h3 className="text-lg font-medium">Display Options</h3>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
@@ -698,7 +693,7 @@ export default function SettingsPage() {
                             <SelectItem value="list">List</SelectItem>
                           </SelectContent>
                         </Select>
-                      </div>
+                </div>
                       <div>
                         <Label htmlFor="theme">Theme</Label>
                         <Select
@@ -716,20 +711,20 @@ export default function SettingsPage() {
                             <SelectItem value="system">System</SelectItem>
                           </SelectContent>
                         </Select>
-                      </div>
-                    </div>
-                  </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
+        </div>
+      </CardContent>
+    </Card>
           </TabsContent>
 
           {/* System Tab */}
           <TabsContent value="system" className="space-y-6">
-            <Card>
-              <CardHeader>
+    <Card>
+      <CardHeader>
                 <CardTitle>System Settings</CardTitle>
-              </CardHeader>
+      </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-4">
@@ -740,7 +735,7 @@ export default function SettingsPage() {
                         <Select
                           value={systemSettings.logLevel}
                           onValueChange={(value: 'debug' | 'info' | 'warn' | 'error') => 
-                            setSystemSettings(prev => ({ ...prev, logLevel: value }))
+                            updateSystemSettings({ logLevel: value })
                           }
                         >
                           <SelectTrigger>
@@ -759,7 +754,7 @@ export default function SettingsPage() {
                         <Switch
                           id="enableAnalytics"
                           checked={systemSettings.enableAnalytics}
-                          onCheckedChange={(checked) => setSystemSettings(prev => ({ ...prev, enableAnalytics: checked }))}
+                          onCheckedChange={(checked) => updateSystemSettings({ enableAnalytics: checked })}
                         />
                       </div>
                       <div className="flex items-center justify-between">
@@ -767,9 +762,36 @@ export default function SettingsPage() {
                         <Switch
                           id="enableCrashReporting"
                           checked={systemSettings.enableCrashReporting}
-                          onCheckedChange={(checked) => setSystemSettings(prev => ({ ...prev, enableCrashReporting: checked }))}
+                          onCheckedChange={(checked) => updateSystemSettings({ enableCrashReporting: checked })}
                         />
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Real-time Updates</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Label htmlFor="enableSSE">Enable Server-Sent Events (SSE)</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Use real-time updates instead of polling for better performance
+                          </p>
+                        </div>
+                        <Switch
+                          id="enableSSE"
+                          checked={systemSettings.enableSSE}
+                          onCheckedChange={(checked) => updateSystemSettings({ enableSSE: checked })}
+                        />
+                      </div>
+                      {!systemSettings.enableSSE && (
+                        <Alert>
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            SSE is disabled. The application will use polling for updates, which may use more resources.
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
                   </div>
 
@@ -782,7 +804,7 @@ export default function SettingsPage() {
                           id="dataRetention"
                           type="number"
                           value={systemSettings.dataRetentionDays}
-                          onChange={(e) => setSystemSettings(prev => ({ ...prev, dataRetentionDays: parseInt(e.target.value) || 30 }))}
+                          onChange={(e) => updateSystemSettings({ dataRetentionDays: parseInt(e.target.value) || 30 })}
                           min="1"
                           max="365"
                         />
@@ -793,7 +815,7 @@ export default function SettingsPage() {
                           id="maxLogFileSize"
                           type="number"
                           value={systemSettings.maxLogFileSize}
-                          onChange={(e) => setSystemSettings(prev => ({ ...prev, maxLogFileSize: parseInt(e.target.value) || 100 }))}
+                          onChange={(e) => updateSystemSettings({ maxLogFileSize: parseInt(e.target.value) || 100 })}
                           min="10"
                           max="1000"
                         />
@@ -803,14 +825,14 @@ export default function SettingsPage() {
                         <Switch
                           id="enableAutoUpdates"
                           checked={systemSettings.enableAutoUpdates}
-                          onCheckedChange={(checked) => setSystemSettings(prev => ({ ...prev, enableAutoUpdates: checked }))}
+                          onCheckedChange={(checked) => updateSystemSettings({ enableAutoUpdates: checked })}
                         />
                       </div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+        </div>
+      </CardContent>
+    </Card>
           </TabsContent>
         </Tabs>
         </div>

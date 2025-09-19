@@ -76,8 +76,8 @@ export default function ServerValidation() {
   // Query validation summary from backend
   const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery<ValidationSummary>({
     queryKey: ['/api/validation/bulk/summary'],
-    refetchInterval: 30000, // Refetch every 30 seconds
-    staleTime: 10000, // Consider data stale after 10 seconds
+    refetchInterval: 300000, // Refetch every 5 minutes
+    staleTime: 180000, // Consider data stale after 3 minutes
   });
 
   // Update summary data with real-time validation progress
