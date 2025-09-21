@@ -4684,6 +4684,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         console.log(`[ValidateByIds] Validation completed for ${validationResults.length} resources`);
+        
+        // CRITICAL FIX: Invalidate caches after storing validation results
+        // This ensures the list view sees updated validation status
+        console.log(`[ValidateByIds] Invalidating caches after validation completion`);
+        try {
+          const { CacheManager } = await import('./utils/cache-manager.js');
+          await CacheManager.clearByTag('FHIR_RESOURCES');
+          await CacheManager.clearByTag('VALIDATION_RESULTS');
+          console.log(`[ValidateByIds] Cache invalidation completed`);
+        } catch (cacheError) {
+          console.warn(`[ValidateByIds] Cache invalidation failed:`, cacheError);
+        }
       }
 
       // Combine cached and newly validated results
