@@ -37,13 +37,12 @@ export default function ResourceBrowser() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [page, setPage] = useState(0);
   const [isValidating, setIsValidating] = useState(false);
-  const [autoValidationEnabled, setAutoValidationEnabled] = useState(true);
   const [validatingResourceIds, setValidatingResourceIds] = useState<Set<number>>(new Set());
   const [validationProgress, setValidationProgress] = useState<Map<number, any>>(new Map());
   const queryClient = useQueryClient();
 
   // Use validation settings polling to detect changes and refresh resource list
-  const { lastFetchedSettings, isPolling, error: pollingError } = useValidationSettingsPolling({
+  const { lastChange, isPolling, error: pollingError } = useValidationSettingsPolling({
     pollingInterval: 5000, // Poll every 5 seconds
     enabled: true,
     showNotifications: false, // Don't show toast notifications in resource browser
@@ -52,12 +51,12 @@ export default function ResourceBrowser() {
 
   // Listen for validation settings changes and refresh resource list
   useEffect(() => {
-    if (lastFetchedSettings) {
+    if (lastChange) {
       console.log('[ResourceBrowser] Validation settings changed, refreshing resource list');
       // Invalidate resource queries to refresh with new validation settings
       queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
     }
-  }, [lastFetchedSettings, queryClient]);
+  }, [lastChange, queryClient]);
 
 
 
@@ -254,18 +253,6 @@ export default function ResourceBrowser() {
         });
         throw error;
       }
-    },
-    onSuccess: (data) => {
-      console.log('[ResourceBrowser] Resource types query success:', {
-        resourceTypeCount: data?.length || 0,
-        timestamp: new Date().toISOString()
-      });
-    },
-    onError: (error) => {
-      console.error('[ResourceBrowser] Resource types query error:', {
-        error: error instanceof Error ? error.message : String(error),
-        timestamp: new Date().toISOString()
-      });
     }
   });
 
@@ -347,19 +334,6 @@ export default function ResourceBrowser() {
         });
         throw error;
       }
-    },
-    onSuccess: (data) => {
-      console.log('[ResourceBrowser] Query success:', {
-        resourceCount: data.resources?.length || 0,
-        totalResources: data.total || 0,
-        timestamp: new Date().toISOString()
-      });
-    },
-    onError: (error) => {
-      console.error('[ResourceBrowser] Query error:', {
-        error: error instanceof Error ? error.message : String(error),
-        timestamp: new Date().toISOString()
-      });
     }
   });
 
@@ -490,7 +464,7 @@ export default function ResourceBrowser() {
 
   // Function to check if resources need validation and validate them automatically
   const validateUnvalidatedResources = useCallback(async () => {
-    if (!resourcesData?.resources || resourcesData.resources.length === 0 || !autoValidationEnabled) {
+    if (!resourcesData?.resources || resourcesData.resources.length === 0) {
       return;
     }
 
@@ -551,11 +525,11 @@ export default function ResourceBrowser() {
     } finally {
       setValidatingResourceIds(new Set()); // Clear validating state
     }
-  }, [resourcesData, autoValidationEnabled, queryClient, simulateValidationProgress]);
+  }, [resourcesData, queryClient, simulateValidationProgress]);
 
-  // Auto-validate resources when they're loaded and auto-validation is enabled
+  // Auto-validate resources when they're loaded (controlled from Settings page)
   useEffect(() => {
-    if (resourcesData?.resources && resourcesData.resources.length > 0 && autoValidationEnabled) {
+    if (resourcesData?.resources && resourcesData.resources.length > 0) {
       // Add a small delay to avoid interfering with the initial page load
       const timeoutId = setTimeout(() => {
         validateUnvalidatedResources();
@@ -563,7 +537,7 @@ export default function ResourceBrowser() {
 
       return () => clearTimeout(timeoutId);
     }
-  }, [resourcesData?.resources, autoValidationEnabled, validateUnvalidatedResources]);
+  }, [resourcesData?.resources, validateUnvalidatedResources]);
 
   return (
     <div className="p-6 h-full overflow-y-auto">
@@ -579,31 +553,6 @@ export default function ResourceBrowser() {
           {/* Validation Controls */}
           {resourcesData?.resources && resourcesData.resources.length > 0 && (
             <div className="flex items-center space-x-4 ml-4">
-              {/* Validation Settings Status */}
-              <div className="flex items-center space-x-2">
-                <div className="flex items-center space-x-1">
-                  {isPolling ? (
-                    <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
-                  ) : (
-                    <div className="h-3 w-3 rounded-full bg-green-500" />
-                  )}
-                  <span className="text-xs text-gray-500">
-                    Settings {isPolling ? 'syncing...' : 'synced'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Auto-validation Toggle */}
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="auto-validation"
-                  checked={autoValidationEnabled}
-                  onCheckedChange={setAutoValidationEnabled}
-                />
-                <Label htmlFor="auto-validation" className="text-sm">
-                  Auto-validate
-                </Label>
-              </div>
 
               {/* Validation Status Indicator */}
               {(() => {
@@ -614,12 +563,7 @@ export default function ResourceBrowser() {
                 
                 return (
                   <div className="flex items-center space-x-1 text-sm text-gray-600">
-                    {unvalidatedCount === 0 ? (
-                      <>
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                        <span>All validated</span>
-                      </>
-                    ) : (
+                    {unvalidatedCount > 0 && (
                       <>
                         <XCircle className="h-4 w-4 text-orange-500" />
                         <span>{validatedCount}/{resourcesData.resources.length} validated</span>
@@ -644,7 +588,7 @@ export default function ResourceBrowser() {
                 ) : (
                   <>
                     <Play className="h-4 w-4 mr-2" />
-                    Validate Now
+                    Revalidate
                   </>
                 )}
               </Button>

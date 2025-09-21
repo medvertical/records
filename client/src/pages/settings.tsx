@@ -75,6 +75,7 @@ interface DashboardSettings {
   showPerformanceMetrics: boolean;
   cardLayout: 'grid' | 'list';
   theme: 'light' | 'dark' | 'system';
+  autoValidateEnabled: boolean;
 }
 
 interface SystemSettings {
@@ -115,6 +116,7 @@ export default function SettingsPage() {
     showPerformanceMetrics: false,
     cardLayout: 'grid',
     theme: 'system',
+    autoValidateEnabled: true,
   });
 
 
@@ -922,6 +924,14 @@ export default function SettingsPage() {
                           id="showValidationProgress"
                           checked={dashboardSettings.showValidationProgress}
                           onCheckedChange={(checked) => setDashboardSettings(prev => ({ ...prev, showValidationProgress: checked }))}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="autoValidateEnabled">Auto-validate Resources</Label>
+                        <Switch
+                          id="autoValidateEnabled"
+                          checked={dashboardSettings.autoValidateEnabled}
+                          onCheckedChange={(checked) => setDashboardSettings(prev => ({ ...prev, autoValidateEnabled: checked }))}
                         />
                       </div>
                     </div>
