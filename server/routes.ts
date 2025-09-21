@@ -4582,12 +4582,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const currentSettings = await settingsService.getActiveSettings();
       const settingsHash = ValidationCacheManager.generateSettingsHash(currentSettings);
 
-      // Fetch resources from database by their IDs
+      // Fetch resources from database by their IDs (handle both database IDs and FHIR resource IDs)
       const resources = await Promise.all(
-        resourceIds.map(async (id: number) => {
-          const resource = await storage.getFhirResourceById(id);
+        resourceIds.map(async (id: string | number) => {
+          let resource;
+          
+          // Check if the ID is numeric (database ID) or string (FHIR resource ID)
+          const idStr = String(id);
+          const isNumeric = /^\d+$/.test(idStr);
+          
+          if (isNumeric) {
+            // Database ID - use existing method
+            const dbId = parseInt(idStr);
+            console.log(`[ValidateByIds] Searching by database ID: ${dbId}`);
+            resource = await storage.getFhirResourceById(dbId);
+          } else {
+            // FHIR resource ID - lookup by resource ID across all types
+            console.log(`[ValidateByIds] Searching by FHIR resource ID: ${idStr}`);
+            resource = await storage.getFhirResourceByTypeAndId("", idStr);
+            if (resource) {
+              // Get full resource with validation results using database ID
+              console.log(`[ValidateByIds] Getting full resource with validation for DB ID: ${resource.id}`);
+              resource = await storage.getFhirResourceById(resource.id);
+            }
+          }
+          
+          // If resource not found in database, try to fetch from FHIR server
+          if (!resource && !isNumeric) {
+            console.log(`[ValidateByIds] Resource ${idStr} not in database, attempting FHIR server fetch`);
+            try {
+              // Try common resource types since we don't know the exact type
+              const commonTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'Procedure', 'MedicationRequest', 'DiagnosticReport', 'AllergyIntolerance'];
+              
+              for (const resourceType of commonTypes) {
+                try {
+                  console.log(`[ValidateByIds] Trying ${resourceType}/${idStr} from FHIR server`);
+                  const fhirResource = await fhirClient.getResource(resourceType, idStr);
+                  
+                  if (fhirResource && fhirResource.id === idStr) {
+                    console.log(`[ValidateByIds] Found ${resourceType}/${idStr} on FHIR server, storing in database`);
+                    
+                    // Get active server ID
+                    const activeServer = await storage.getActiveFhirServer();
+                    
+                    // Store the resource in database
+                    const storedResource = await storage.createFhirResource({
+                      serverId: activeServer?.id || 1,
+                      resourceType: resourceType,
+                      resourceId: fhirResource.id,
+                      versionId: fhirResource.meta?.versionId || null,
+                      data: fhirResource
+                    });
+                    
+                    // Get full resource with validation framework
+                    resource = await storage.getFhirResourceById(storedResource.id);
+                    console.log(`[ValidateByIds] Stored and retrieved ${resourceType}/${idStr} with DB ID: ${storedResource.id}`);
+                    break;
+                  }
+                } catch (typeError) {
+                  // Resource doesn't exist with this type, try next
+                  continue;
+                }
+              }
+              
+              if (!resource) {
+                console.warn(`[ValidateByIds] Resource ${idStr} not found on FHIR server with any common type`);
+              }
+            } catch (serverError) {
+              console.error(`[ValidateByIds] Failed to fetch resource ${idStr} from FHIR server:`, serverError);
+            }
+          }
+          
           if (!resource) {
-            console.warn(`[ValidateByIds] Resource with ID ${id} not found`);
+            console.warn(`[ValidateByIds] Resource with ID ${id} not found in database or FHIR server`);
             return null;
           }
           return resource;
