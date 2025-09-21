@@ -22,6 +22,18 @@ export interface FhirServerStats {
 }
 
 /**
+ * Validation Aspect Summary
+ */
+export interface ValidationAspectSummary {
+  enabled: boolean;
+  issueCount: number;
+  errorCount: number;
+  warningCount: number;
+  informationCount: number;
+  score: number; // 0-100 score for this aspect
+}
+
+/**
  * Validation Statistics - Data from local database validation results
  */
 export interface ValidationStats {
@@ -43,6 +55,7 @@ export interface ValidationStats {
     validationRate: number; // Percentage of this type that has been validated (0-100)
     successRate: number; // Percentage of validated resources that are valid (0-100)
   }>;
+  aspectBreakdown: Record<string, ValidationAspectSummary>;
 }
 
 /**

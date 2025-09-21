@@ -1,6 +1,7 @@
 import { useParams } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-polling";
 import ValidationErrors from "@/components/validation/validation-errors";
 import ResourceViewer from "@/components/resources/resource-viewer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,14 +9,44 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FhirResourceWithValidation } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, XCircle, ArrowLeft, AlertCircle, AlertTriangle, Info } from "lucide-react";
+import { CheckCircle, XCircle, ArrowLeft, AlertCircle, AlertTriangle, Info, Settings, Eye, EyeOff } from "lucide-react";
 import { Link } from "wouter";
 import { Progress } from "@/components/ui/progress";
 import { CircularProgress } from "@/components/ui/circular-progress";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function ResourceDetail() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  
+  // Use validation settings polling to detect changes and refresh resource detail
+  const { lastFetchedSettings } = useValidationSettingsPolling({
+    pollingInterval: 5000, // Poll every 5 seconds
+    enabled: true,
+    showNotifications: false, // Don't show toast notifications in resource detail
+    invalidateCache: true, // Invalidate cache when settings change
+  });
+
+  // Fetch current validation settings for display
+  const { data: validationSettingsData } = useQuery({
+    queryKey: ['/api/validation/settings'],
+    queryFn: async () => {
+      const response = await fetch('/api/validation/settings');
+      if (!response.ok) throw new Error('Failed to fetch validation settings');
+      return response.json();
+    },
+    staleTime: 30 * 1000, // 30 seconds
+    refetchInterval: false,
+  });
+
+  // Listen for validation settings changes from polling and refresh resource detail
+  useEffect(() => {
+    if (lastFetchedSettings) {
+      console.log('[ResourceDetail] Validation settings changed, refreshing resource detail');
+      // Invalidate resource queries to refresh with new validation settings
+      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources', id] });
+    }
+  }, [lastFetchedSettings, queryClient, id]);
   
   // Listen for validation settings changes to invalidate resource cache
   useEffect(() => {
@@ -95,6 +126,7 @@ export default function ResourceDetail() {
 
   const hasValidationResults = resource.validationResults && resource.validationResults.length > 0;
   const hasErrors = hasValidationResults && resource.validationResults?.some(r => !r.isValid);
+  const currentSettings = validationSettingsData?.settings;
   
   // Calculate validation summary from filtered validation results
   const validationSummary = hasValidationResults ? (() => {
@@ -113,26 +145,45 @@ export default function ResourceDetail() {
       issue.severity === 'information'
     ).length;
     
-    // Calculate score from filtered issues
-    let calculatedScore = 100;
+    // Calculate aspect-specific breakdowns
+    const aspectBreakdown = {
+      structural: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.structural?.enabled !== false },
+      profile: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.profile?.enabled !== false },
+      terminology: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.terminology?.enabled !== false },
+      reference: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.reference?.enabled !== false },
+      businessRule: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.businessRule?.enabled !== false },
+      metadata: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.metadata?.enabled !== false }
+    };
+    
+    // Count issues by aspect
     filteredIssues.forEach(issue => {
-      if (issue.severity === 'error' || issue.severity === 'fatal') {
-        calculatedScore -= 10;
-      } else if (issue.severity === 'warning') {
-        calculatedScore -= 2;
-      } else if (issue.severity === 'information') {
-        calculatedScore -= 0.5;
+      const aspect = issue.aspect || 'structural';
+      if (aspectBreakdown[aspect as keyof typeof aspectBreakdown]) {
+        const breakdown = aspectBreakdown[aspect as keyof typeof aspectBreakdown];
+        breakdown.issues++;
+        if (issue.severity === 'error' || issue.severity === 'fatal') {
+          breakdown.errors++;
+        } else if (issue.severity === 'warning') {
+          breakdown.warnings++;
+        } else if (issue.severity === 'information') {
+          breakdown.info++;
+        }
       }
     });
-    calculatedScore = Math.max(0, Math.round(calculatedScore));
+    
+    // Use the server-calculated validation score from the resource's _validationSummary
+    // instead of recalculating it client-side to ensure consistency
+    const serverCalculatedScore = resource._validationSummary?.validationScore || 0;
     
     return {
       totalIssues: filteredIssues.length,
       errorCount,
       warningCount,
       informationCount,
-      score: calculatedScore,
-      isValid: errorCount === 0
+      score: serverCalculatedScore, // Use server-calculated score
+      isValid: errorCount === 0,
+      aspectBreakdown,
+      lastValidated: latestResult.validatedAt
     };
   })() : null;
 
@@ -153,17 +204,159 @@ export default function ResourceDetail() {
                   {resource.resourceType} Resource
                 </h1>
                 <p className="text-gray-600">ID: {resource.resourceId}</p>
+                {validationSummary && (
+                  <div className="flex items-center space-x-4 mt-2">
+                    <div className="flex items-center space-x-2">
+                      {validationSummary.isValid ? (
+                        <Badge className="bg-green-50 text-green-600 border-green-200">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Valid
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-red-50 text-red-600 border-red-200">
+                          <XCircle className="h-3 w-3 mr-1" />
+                          {validationSummary.errorCount} Error{validationSummary.errorCount !== 1 ? 's' : ''}
+                        </Badge>
+                      )}
+                      {validationSummary.warningCount > 0 && (
+                        <Badge className="bg-orange-50 text-orange-600 border-orange-200">
+                          <AlertTriangle className="h-3 w-3 mr-1" />
+                          {validationSummary.warningCount} Warning{validationSummary.warningCount !== 1 ? 's' : ''}
+                        </Badge>
+                      )}
+                    </div>
+                    {validationSummary.lastValidated && (
+                      <span className="text-xs text-gray-500">
+                        Last validated: {new Date(validationSummary.lastValidated).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             {validationSummary && (
-              <CircularProgress 
-                value={validationSummary.score} 
-                size="lg"
-                showValue={true}
-              />
+              <div className="flex items-center space-x-4">
+                <CircularProgress 
+                  value={validationSummary.score} 
+                  size="lg"
+                  showValue={true}
+                />
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-900">Validation Score</p>
+                  <p className="text-xs text-gray-500">
+                    {validationSummary.totalIssues} issue{validationSummary.totalIssues !== 1 ? 's' : ''} found
+                  </p>
+                </div>
+              </div>
             )}
           </div>
         </div>
+
+        {/* Validation Details Section */}
+        {validationSummary && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Validation Aspect Breakdown */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Settings className="h-5 w-5 mr-2" />
+                  Validation Aspects
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {Object.entries(validationSummary.aspectBreakdown).map(([aspect, breakdown]) => (
+                    <div key={aspect} className="flex items-center justify-between p-3 rounded-lg border">
+                      <div className="flex items-center space-x-3">
+                        {breakdown.enabled ? (
+                          <Eye className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <EyeOff className="h-4 w-4 text-gray-400" />
+                        )}
+                        <div>
+                          <p className="font-medium capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}</p>
+                          <p className="text-xs text-gray-500">
+                            {breakdown.enabled ? 'Enabled' : 'Disabled'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {breakdown.issues > 0 ? (
+                          <div className="flex items-center space-x-1">
+                            {breakdown.errors > 0 && (
+                              <Badge variant="destructive" className="text-xs">
+                                {breakdown.errors}E
+                              </Badge>
+                            )}
+                            {breakdown.warnings > 0 && (
+                              <Badge className="bg-orange-50 text-orange-600 border-orange-200 text-xs">
+                                {breakdown.warnings}W
+                              </Badge>
+                            )}
+                            {breakdown.info > 0 && (
+                              <Badge className="bg-blue-50 text-blue-600 border-blue-200 text-xs">
+                                {breakdown.info}I
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <Badge className="bg-green-50 text-green-600 border-green-200 text-xs">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Pass
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Current Validation Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Settings className="h-5 w-5 mr-2" />
+                  Current Settings
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {currentSettings ? (
+                  <div className="space-y-3">
+                    {Object.entries(currentSettings).map(([aspect, config]: [string, any]) => (
+                      <div key={aspect} className="flex items-center justify-between p-3 rounded-lg border">
+                        <div>
+                          <p className="font-medium capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}</p>
+                          <p className="text-xs text-gray-500">
+                            Severity: {config.severity || 'error'}
+                          </p>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {config.enabled ? (
+                            <Badge className="bg-green-50 text-green-600 border-green-200">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Enabled
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-gray-50 text-gray-600 border-gray-200">
+                              <XCircle className="h-3 w-3 mr-1" />
+                              Disabled
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <AlertCircle className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">Loading validation settings...</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Main content - single column with integrated validation */}
         <div>

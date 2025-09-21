@@ -206,7 +206,8 @@ export class DashboardService {
         validationCoverage,
         validationProgress,
         lastValidationRun: new Date(), // TODO: Get actual last validation time
-        resourceTypeBreakdown
+        resourceTypeBreakdown,
+        aspectBreakdown: dbStats.aspectBreakdown || {}
       };
 
       // Sanitize and validate the statistics
@@ -443,6 +444,16 @@ export class DashboardService {
   clearCache(): void {
     cacheManager.clearByTag(CACHE_TAGS.DASHBOARD);
     logger.info('Dashboard cache cleared', { service: 'dashboard-service', operation: 'clearCache' });
+  }
+
+  /**
+   * Clear validation-related cache when settings change
+   */
+  clearValidationCache(): void {
+    cacheManager.delete('validation-stats');
+    cacheManager.delete('combined-dashboard-data');
+    cacheManager.clearByTag(CACHE_TAGS.VALIDATION);
+    logger.info('Validation cache cleared due to settings change', { service: 'dashboard-service', operation: 'clearValidationCache' });
   }
 
   /**

@@ -2,9 +2,14 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useServerData } from "@/hooks/use-server-data";
+import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-polling";
 import ResourceSearch from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Loader2, Play, Settings, CheckCircle, XCircle } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 interface ResourcesResponse {
   resources: any[];
@@ -31,7 +36,28 @@ export default function ResourceBrowser() {
   const [resourceType, setResourceType] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [page, setPage] = useState(0);
+  const [isValidating, setIsValidating] = useState(false);
+  const [autoValidationEnabled, setAutoValidationEnabled] = useState(true);
+  const [validatingResourceIds, setValidatingResourceIds] = useState<Set<number>>(new Set());
+  const [validationProgress, setValidationProgress] = useState<Map<number, any>>(new Map());
   const queryClient = useQueryClient();
+
+  // Use validation settings polling to detect changes and refresh resource list
+  const { lastFetchedSettings, isPolling, error: pollingError } = useValidationSettingsPolling({
+    pollingInterval: 5000, // Poll every 5 seconds
+    enabled: true,
+    showNotifications: false, // Don't show toast notifications in resource browser
+    invalidateCache: true, // Invalidate cache when settings change
+  });
+
+  // Listen for validation settings changes and refresh resource list
+  useEffect(() => {
+    if (lastFetchedSettings) {
+      console.log('[ResourceBrowser] Validation settings changed, refreshing resource list');
+      // Invalidate resource queries to refresh with new validation settings
+      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+    }
+  }, [lastFetchedSettings, queryClient]);
 
 
 
@@ -341,15 +367,290 @@ export default function ResourceBrowser() {
     setPage(newPage);
   };
 
+  // Function to simulate validation progress updates
+  const simulateValidationProgress = useCallback((resourceIds: number[]) => {
+    const aspects = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'];
+    const totalAspects = aspects.length;
+    
+    // Initialize progress for all resources
+    const initialProgress = new Map<number, any>();
+    resourceIds.forEach(id => {
+      initialProgress.set(id, {
+        resourceId: id,
+        progress: 0,
+        currentAspect: 'Starting validation...',
+        completedAspects: [],
+        totalAspects: totalAspects
+      });
+    });
+    setValidationProgress(initialProgress);
+
+    // Simulate progress updates
+    let currentAspectIndex = 0;
+    const updateInterval = setInterval(() => {
+      setValidationProgress(prev => {
+        const updated = new Map(prev);
+        let allComplete = true;
+
+        resourceIds.forEach(id => {
+          const current = updated.get(id);
+          if (current && currentAspectIndex < totalAspects) {
+            const progress = ((currentAspectIndex + 1) / totalAspects) * 100;
+            const completedAspects = aspects.slice(0, currentAspectIndex + 1);
+            
+            updated.set(id, {
+              ...current,
+              progress: Math.min(progress, 100),
+              currentAspect: currentAspectIndex < totalAspects ? `Validating ${aspects[currentAspectIndex]}...` : 'Completing...',
+              completedAspects: completedAspects
+            });
+
+            if (progress < 100) {
+              allComplete = false;
+            }
+          }
+        });
+
+        if (allComplete) {
+          clearInterval(updateInterval);
+          // Clear progress after a short delay
+          setTimeout(() => {
+            setValidationProgress(new Map());
+          }, 1000);
+        }
+
+        return updated;
+      });
+
+      currentAspectIndex++;
+    }, 500); // Update every 500ms
+
+    return updateInterval;
+  }, []);
+
+  // Function to validate resources on the current page
+  const validateCurrentPage = useCallback(async () => {
+    if (!resourcesData?.resources || resourcesData.resources.length === 0) {
+      console.log('[ResourceBrowser] No resources to validate');
+      return;
+    }
+
+    setIsValidating(true);
+    
+    // Track which resources are being validated
+    const resourceIds = resourcesData.resources.map((resource: any) => resource._dbId || resource.id);
+    setValidatingResourceIds(new Set(resourceIds));
+    
+    // Start progress simulation
+    const progressInterval = simulateValidationProgress(resourceIds);
+    
+    try {
+      console.log('[ResourceBrowser] Starting validation for current page resources:', {
+        resourceCount: resourcesData.resources.length,
+        resourceType,
+        page
+      });
+
+      // Use the validate-by-ids endpoint for more efficient validation
+      const response = await fetch('/api/validation/validate-by-ids', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          resourceIds: resourceIds
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Validation failed: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      console.log('[ResourceBrowser] Validation completed:', {
+        validatedCount: result.validatedCount,
+        requestedCount: result.requestedCount
+      });
+
+      // Invalidate the resource query to refresh with new validation results
+      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+
+    } catch (error) {
+      console.error('[ResourceBrowser] Validation error:', error);
+      // Clear progress on error
+      clearInterval(progressInterval);
+      setValidationProgress(new Map());
+      // You could add a toast notification here for user feedback
+    } finally {
+      setIsValidating(false);
+      setValidatingResourceIds(new Set()); // Clear validating state
+    }
+  }, [resourcesData, resourceType, page, queryClient, simulateValidationProgress]);
+
+  // Function to check if resources need validation and validate them automatically
+  const validateUnvalidatedResources = useCallback(async () => {
+    if (!resourcesData?.resources || resourcesData.resources.length === 0 || !autoValidationEnabled) {
+      return;
+    }
+
+    // Check if any resources need validation (lastValidated is null)
+    const unvalidatedResources = resourcesData.resources.filter((resource: any) => {
+      const validationSummary = resource._validationSummary;
+      return !validationSummary?.lastValidated;
+    });
+
+    if (unvalidatedResources.length === 0) {
+      console.log('[ResourceBrowser] All resources on current page are already validated');
+      return;
+    }
+
+    console.log(`[ResourceBrowser] Found ${unvalidatedResources.length} unvalidated resources, starting background validation`);
+
+    // Track which resources are being validated
+    const resourceIds = unvalidatedResources.map((resource: any) => resource._dbId || resource.id);
+    setValidatingResourceIds(new Set(resourceIds));
+
+    // Start progress simulation for background validation
+    const progressInterval = simulateValidationProgress(resourceIds);
+
+    // Use the new validate-by-ids endpoint for more efficient validation
+    try {
+      const response = await fetch('/api/validation/validate-by-ids', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          resourceIds: resourceIds
+        })
+      });
+
+      if (!response.ok) {
+        console.warn('[ResourceBrowser] Background validation failed:', response.status, response.statusText);
+        clearInterval(progressInterval);
+        setValidationProgress(new Map());
+        return;
+      }
+
+      const result = await response.json();
+      
+      console.log('[ResourceBrowser] Background validation completed:', {
+        validatedCount: result.validatedCount,
+        requestedCount: result.requestedCount
+      });
+
+      // Invalidate the resource query to refresh with new validation results
+      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+
+    } catch (error) {
+      console.warn('[ResourceBrowser] Background validation error:', error);
+      clearInterval(progressInterval);
+      setValidationProgress(new Map());
+      // Don't show error to user for background validation
+    } finally {
+      setValidatingResourceIds(new Set()); // Clear validating state
+    }
+  }, [resourcesData, autoValidationEnabled, queryClient, simulateValidationProgress]);
+
+  // Auto-validate resources when they're loaded and auto-validation is enabled
+  useEffect(() => {
+    if (resourcesData?.resources && resourcesData.resources.length > 0 && autoValidationEnabled) {
+      // Add a small delay to avoid interfering with the initial page load
+      const timeoutId = setTimeout(() => {
+        validateUnvalidatedResources();
+      }, 1000);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [resourcesData?.resources, autoValidationEnabled, validateUnvalidatedResources]);
+
   return (
     <div className="p-6 h-full overflow-y-auto">
       <div className="space-y-6">
-        <ResourceSearch 
-          resourceTypes={resourceTypes || []}
-          onSearch={handleSearch}
-          defaultResourceType={resourceType}
-          defaultQuery={searchQuery}
-        />
+        <div className="flex items-center justify-between">
+          <ResourceSearch 
+            resourceTypes={resourceTypes || []}
+            onSearch={handleSearch}
+            defaultResourceType={resourceType}
+            defaultQuery={searchQuery}
+          />
+          
+          {/* Validation Controls */}
+          {resourcesData?.resources && resourcesData.resources.length > 0 && (
+            <div className="flex items-center space-x-4 ml-4">
+              {/* Validation Settings Status */}
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1">
+                  {isPolling ? (
+                    <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                  ) : (
+                    <div className="h-3 w-3 rounded-full bg-green-500" />
+                  )}
+                  <span className="text-xs text-gray-500">
+                    Settings {isPolling ? 'syncing...' : 'synced'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Auto-validation Toggle */}
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="auto-validation"
+                  checked={autoValidationEnabled}
+                  onCheckedChange={setAutoValidationEnabled}
+                />
+                <Label htmlFor="auto-validation" className="text-sm">
+                  Auto-validate
+                </Label>
+              </div>
+
+              {/* Validation Status Indicator */}
+              {(() => {
+                const unvalidatedCount = resourcesData.resources.filter((resource: any) => 
+                  !resource._validationSummary?.lastValidated
+                ).length;
+                const validatedCount = resourcesData.resources.length - unvalidatedCount;
+                
+                return (
+                  <div className="flex items-center space-x-1 text-sm text-gray-600">
+                    {unvalidatedCount === 0 ? (
+                      <>
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                        <span>All validated</span>
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-4 w-4 text-orange-500" />
+                        <span>{validatedCount}/{resourcesData.resources.length} validated</span>
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Manual Validation Button */}
+              <Button
+                onClick={validateCurrentPage}
+                disabled={isValidating}
+                variant="outline"
+                size="sm"
+              >
+                {isValidating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Validating...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    Validate Now
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
+        </div>
 
         
         {isLoading ? (
@@ -364,6 +665,8 @@ export default function ResourceBrowser() {
             total={resourcesData?.total || 0}
             page={page}
             onPageChange={handlePageChange}
+            validatingResourceIds={validatingResourceIds}
+            validationProgress={validationProgress}
           />
         )}
       </div>

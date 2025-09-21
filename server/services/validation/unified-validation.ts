@@ -4,6 +4,7 @@ import { ValidationEngine } from './validation-engine.js';
 import { FhirClient } from '../fhir/fhir-client.js';
 import { getValidationSettingsService } from './validation-settings-service.js';
 import { getValidationPipeline } from './validation-pipeline.js';
+import ValidationCacheManager from '../../utils/validation-cache-manager.js';
 import type { FhirResource, InsertFhirResource, InsertValidationResult, ValidationResult } from '@shared/schema.js';
 import type { ValidationSettings } from '@shared/validation-settings.js';
 
@@ -490,8 +491,14 @@ export class UnifiedValidationService {
           }
         };
 
-        // Save validation result
-        await storage.createValidationResult(validationResult);
+        // Save validation result with enhanced caching fields
+        const enhancedValidationResult = ValidationCacheManager.prepareValidationResultForStorage(
+          enhancedResult,
+          currentSettings,
+          resource,
+          startTime
+        );
+        await storage.createValidationResult(enhancedValidationResult);
 
         // Get updated validation results
         const updatedValidationResults = await storage.getValidationResultsByResourceId(dbResource.id);
@@ -527,7 +534,20 @@ export class UnifiedValidationService {
           validatedAt: new Date()
         };
 
-        await storage.createValidationResult(errorResult);
+        // Create enhanced error validation result with caching fields
+        const enhancedErrorResult = {
+          ...errorResult,
+          settingsHash: ValidationCacheManager.generateSettingsHash(currentSettings),
+          settingsVersion: currentSettings.version || 1,
+          resourceHash: ValidationCacheManager.generateResourceHash(resource),
+          validationEngineVersion: ValidationCacheManager.VALIDATION_ENGINE_VERSION,
+          performanceMetrics: {},
+          aspectBreakdown: {},
+          validationDurationMs: Date.now() - startTime,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        await storage.createValidationResult(enhancedErrorResult);
         const updatedValidationResults = await storage.getValidationResultsByResourceId(dbResource.id);
         return {
           validationResults: updatedValidationResults,

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 
 interface CircularProgressProps {
@@ -9,13 +9,13 @@ interface CircularProgressProps {
   strokeWidth?: number;
 }
 
-export function CircularProgress({ 
+export const CircularProgress = forwardRef<HTMLDivElement, CircularProgressProps>(({ 
   value, 
   size = 'md', 
   showValue = true,
   className,
   strokeWidth
-}: CircularProgressProps) {
+}, ref) => {
   // Ensure value is between 0 and 100
   const percentage = Math.min(100, Math.max(0, value));
   
@@ -41,7 +41,7 @@ export function CircularProgress({
   const color = getColor(percentage);
   
   return (
-    <div className={cn("relative inline-flex items-center justify-center", className)}>
+    <div ref={ref} className={cn("relative inline-flex items-center justify-center", className)}>
       <svg
         width={config.diameter}
         height={config.diameter}
@@ -81,4 +81,4 @@ export function CircularProgress({
       )}
     </div>
   );
-}
+});

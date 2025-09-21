@@ -7,6 +7,7 @@ import {
   CheckCircle, 
   XCircle, 
   AlertTriangle,
+  AlertCircle,
   Eye,
   Loader2,
   Filter
@@ -15,6 +16,15 @@ import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { CircularProgress } from "@/components/ui/circular-progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useQuery } from "@tanstack/react-query";
+
+interface ValidationProgress {
+  resourceId: number;
+  progress: number; // 0-100
+  currentAspect?: string; // Current validation aspect being processed
+  completedAspects: string[]; // List of completed validation aspects
+  totalAspects: number; // Total number of validation aspects
+}
 
 interface ResourceListProps {
   resources: any[];
@@ -22,6 +32,8 @@ interface ResourceListProps {
   page: number;
   onPageChange: (page: number) => void;
   pageSize?: number;
+  validatingResourceIds?: Set<number>; // Track which resources are currently being validated
+  validationProgress?: Map<number, ValidationProgress>; // Track validation progress per resource
 }
 
 export default function ResourceList({
@@ -30,7 +42,21 @@ export default function ResourceList({
   page,
   onPageChange,
   pageSize = 20,
+  validatingResourceIds = new Set(),
+  validationProgress = new Map(),
 }: ResourceListProps) {
+  // Fetch current validation settings for UI filtering
+  const { data: validationSettingsData } = useQuery({
+    queryKey: ['/api/validation/settings'],
+    queryFn: async () => {
+      const response = await fetch('/api/validation/settings');
+      if (!response.ok) throw new Error('Failed to fetch validation settings');
+      return response.json();
+    },
+    staleTime: 30 * 1000, // 30 seconds
+    refetchInterval: false,
+  });
+
   // Ensure page is a valid number and at least 0
   const currentPage = Math.max(0, isNaN(page) ? 0 : page);
   const validTotal = Math.max(0, isNaN(total) ? 0 : total);
@@ -38,6 +64,73 @@ export default function ResourceList({
   const totalPages = Math.ceil(validTotal / pageSize);
   const startIndex = validTotal > 0 ? currentPage * pageSize + 1 : 0;
   const endIndex = validTotal > 0 ? Math.min((currentPage + 1) * pageSize, validTotal) : 0;
+
+  // Get current validation settings for filtering
+  const currentSettings = validationSettingsData?.settings;
+  
+  // Function to filter validation results based on enabled aspects
+  const getFilteredValidationSummary = (validationSummary: any) => {
+    if (!validationSummary || !currentSettings) {
+      return validationSummary;
+    }
+
+    // If we have aspect breakdown data, filter it based on enabled aspects
+    if (validationSummary.aspectBreakdown) {
+      const filteredBreakdown = { ...validationSummary.aspectBreakdown };
+      let filteredErrorCount = 0;
+      let filteredWarningCount = 0;
+      let filteredInfoCount = 0;
+      let filteredTotalIssues = 0;
+
+      // Filter each aspect based on enabled status
+      Object.keys(filteredBreakdown).forEach(aspect => {
+        // Use top-level settings (the correct ones), fallback to nested settings if needed
+        const aspectEnabled = currentSettings[aspect]?.enabled !== false || currentSettings.settings?.[aspect]?.enabled !== false;
+        
+        if (!aspectEnabled) {
+          // Reset counts for disabled aspects
+          filteredBreakdown[aspect] = {
+            ...filteredBreakdown[aspect],
+            issueCount: 0,
+            errorCount: 0,
+            warningCount: 0,
+            informationCount: 0,
+            validationScore: 100,
+            passed: true,
+            enabled: false
+          };
+        } else {
+          // Include counts from enabled aspects
+          filteredErrorCount += filteredBreakdown[aspect].errorCount || 0;
+          filteredWarningCount += filteredBreakdown[aspect].warningCount || 0;
+          filteredInfoCount += filteredBreakdown[aspect].informationCount || 0;
+          filteredTotalIssues += filteredBreakdown[aspect].issueCount || 0;
+        }
+      });
+
+      // Calculate filtered validation score
+      let filteredScore = 100;
+      filteredScore -= filteredErrorCount * 15;  // Error issues: -15 points each
+      filteredScore -= filteredWarningCount * 5; // Warning issues: -5 points each
+      filteredScore -= filteredInfoCount * 1;    // Information issues: -1 point each
+      filteredScore = Math.max(0, Math.round(filteredScore));
+
+      return {
+        ...validationSummary,
+        errorCount: filteredErrorCount,
+        warningCount: filteredWarningCount,
+        informationCount: filteredInfoCount,
+        totalIssues: filteredTotalIssues,
+        validationScore: filteredScore,
+        hasErrors: filteredErrorCount > 0,
+        hasWarnings: filteredWarningCount > 0,
+        isValid: filteredErrorCount === 0,
+        aspectBreakdown: filteredBreakdown
+      };
+    }
+
+    return validationSummary;
+  };
 
   const getResourceDisplayName = (resource: any) => {
     switch (resource.resourceType) {
@@ -84,15 +177,23 @@ export default function ResourceList({
       return 'not-validated';
     }
     
-    if (validationSummary.hasErrors) {
+    // Check if validation has actually been performed (lastValidated should not be null)
+    if (!validationSummary.lastValidated) {
+      return 'not-validated';
+    }
+    
+    // Apply UI filtering based on enabled aspects
+    const filteredSummary = getFilteredValidationSummary(validationSummary);
+    
+    if (filteredSummary.hasErrors) {
       return 'error';
     }
     
-    if (validationSummary.hasWarnings) {
+    if (filteredSummary.hasWarnings) {
       return 'warning';
     }
     
-    if (validationSummary.isValid) {
+    if (filteredSummary.isValid) {
       return 'valid';
     }
     
@@ -102,16 +203,62 @@ export default function ResourceList({
   const renderValidationBadge = (resource: any) => {
     const validationSummary = resource._validationSummary;
     const status = getValidationStatus(resource);
+    const resourceId = resource._dbId || resource.id;
+    const isValidating = validatingResourceIds.has(resourceId);
+    const progress = validationProgress.get(resourceId);
     
-    // Show loading indicator for resources that need validation (disabled for performance)
-    // if (validationSummary?.needsValidation) {
-    //   return (
-    //     <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50">
-    //       <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-    //       Validating...
-    //     </Badge>
-    //   );
-    // }
+    // Apply UI filtering to get the filtered validation summary
+    const filteredSummary = getFilteredValidationSummary(validationSummary);
+    
+    // Determine the validation score to display
+    const getValidationScore = () => {
+      if (status === 'not-validated') {
+        return 0; // Always show 0% for unvalidated resources
+      }
+      return filteredSummary?.validationScore || 0;
+    };
+    
+    const validationScore = getValidationScore();
+    
+    // Show detailed loading indicator for resources currently being validated
+    if (isValidating) {
+      const progressValue = progress?.progress || 0;
+      const currentAspect = progress?.currentAspect || 'Starting validation...';
+      const completedCount = progress?.completedAspects?.length || 0;
+      const totalAspects = progress?.totalAspects || 6;
+      
+      return (
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger>
+              <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50">
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                {progressValue > 0 ? `${Math.round(progressValue)}%` : 'Validating...'}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <div className="space-y-1">
+                <p className="font-medium">Validation Progress</p>
+                <p className="text-sm">{currentAspect}</p>
+                <p className="text-xs text-gray-500">
+                  {completedCount}/{totalAspects} aspects completed
+                </p>
+                {progress?.completedAspects && progress.completedAspects.length > 0 && (
+                  <div className="text-xs">
+                    <p className="text-gray-500">Completed:</p>
+                    <p className="text-green-600">{progress.completedAspects.join(', ')}</p>
+                  </div>
+                )}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+          <CircularProgress 
+            value={progressValue} 
+            size="sm"
+          />
+        </div>
+      );
+    }
     
     switch (status) {
       case 'valid':
@@ -121,10 +268,18 @@ export default function ResourceList({
               <CheckCircle className="h-3 w-3 mr-1" />
               Valid
             </Badge>
-            <CircularProgress 
-              value={validationSummary?.validationScore || 0} 
-              size="sm"
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <CircularProgress 
+                  value={validationScore} 
+                  size="sm"
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Validation Score: {validationScore}%</p>
+                <p>Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         );
       case 'error':
@@ -133,18 +288,26 @@ export default function ResourceList({
             <div className="flex flex-col items-end space-y-1">
               <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50">
                 <XCircle className="h-3 w-3 mr-1" />
-                {validationSummary?.errorCount || 0} Error{(validationSummary?.errorCount || 0) !== 1 ? 's' : ''}
+                {filteredSummary?.errorCount || 0} Error{(filteredSummary?.errorCount || 0) !== 1 ? 's' : ''}
               </Badge>
-              {validationSummary?.hasWarnings && (
+              {filteredSummary?.hasWarnings && (
                 <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
-                  {validationSummary.warningCount} Warning{validationSummary.warningCount !== 1 ? 's' : ''}
+                  {filteredSummary.warningCount} Warning{filteredSummary.warningCount !== 1 ? 's' : ''}
                 </Badge>
               )}
             </div>
-            <CircularProgress 
-              value={validationSummary?.validationScore || 0} 
-              size="sm"
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <CircularProgress 
+                  value={validationScore} 
+                  size="sm"
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Validation Score: {validationScore}%</p>
+                <p>Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         );
       case 'warning':
@@ -152,24 +315,41 @@ export default function ResourceList({
           <div className="flex items-center gap-2">
             <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50">
               <AlertTriangle className="h-3 w-3 mr-1" />
-              {validationSummary?.warningCount || 0} Warning{(validationSummary?.warningCount || 0) !== 1 ? 's' : ''}
+              {filteredSummary?.warningCount || 0} Warning{(filteredSummary?.warningCount || 0) !== 1 ? 's' : ''}
             </Badge>
-            <CircularProgress 
-              value={validationSummary?.validationScore || 0} 
-              size="sm"
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <CircularProgress 
+                  value={validationScore} 
+                  size="sm"
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Validation Score: {validationScore}%</p>
+                <p>Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         );
       default:
         return (
           <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs">
+            <Badge className="bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-50">
+              <AlertCircle className="h-3 w-3 mr-1" />
               Not Validated
             </Badge>
-            <CircularProgress 
-              value={validationSummary?.validationScore || 0} 
-              size="sm"
-            />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <CircularProgress 
+                  value={validationScore} 
+                  size="sm"
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Validation Score: {validationScore}% (Not validated)</p>
+                <p>Last validated: Never</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         );
     }
@@ -234,16 +414,19 @@ export default function ResourceList({
             return (
               <div key={resource.id || `${resource.resourceType}-${index}`} className="mb-4 last:mb-0">
                 <Link href={`/resources/${resource.id}`}>
-                  <Card className="hover:bg-gray-50 transition-colors cursor-pointer">
+                  <Card className={cn(
+                    "hover:bg-gray-50 transition-colors cursor-pointer",
+                    validationStatus === 'not-validated' && "border-dashed border-gray-300 bg-gray-50/50"
+                  )}>
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-4 flex-1 min-w-0">
                         <div className={cn(
-                          "w-3 h-3 rounded-full flex-shrink-0",
-                          validationStatus === 'valid' ? "bg-fhir-success" :
-                          validationStatus === 'error' ? "bg-fhir-error" :
-                          validationStatus === 'warning' ? "bg-fhir-warning" :
-                          "bg-gray-400"
+                          "rounded-full flex-shrink-0",
+                          validationStatus === 'valid' ? "w-3 h-3 bg-fhir-success" :
+                          validationStatus === 'error' ? "w-3 h-3 bg-fhir-error" :
+                          validationStatus === 'warning' ? "w-3 h-3 bg-fhir-warning" :
+                          "w-4 h-4 bg-gray-400 border-2 border-gray-300"
                         )} />
                         
                         <div className="flex-1 min-w-0">
@@ -251,9 +434,21 @@ export default function ResourceList({
                             <h3 className="text-sm font-semibold text-gray-900 truncate">
                               {resource.resourceType}/{resource.id}
                             </h3>
-                            <Badge variant="outline" className="text-xs">
-                              {resource.resourceType}
-                            </Badge>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant="outline" className="text-xs">
+                                {resource.resourceType}
+                              </Badge>
+                              {validationStatus === 'not-validated' && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <AlertCircle className="h-3 w-3 text-gray-400" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>This resource has not been validated</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
                           </div>
                           <p className="text-sm text-gray-600 truncate">
                             {getResourceDisplayName(resource)}

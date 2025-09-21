@@ -127,6 +127,29 @@ export interface ValidationIssue {
   context?: Record<string, any>;
 }
 
+export interface ValidationAspectSummary {
+  /** Number of issues found by this aspect */
+  issueCount: number;
+  
+  /** Number of errors found by this aspect */
+  errorCount: number;
+  
+  /** Number of warnings found by this aspect */
+  warningCount: number;
+  
+  /** Number of information messages found by this aspect */
+  informationCount: number;
+  
+  /** Validation score for this aspect (0-100) */
+  validationScore: number;
+  
+  /** Whether this aspect passed validation */
+  passed: boolean;
+  
+  /** Whether this aspect was enabled during validation */
+  enabled: boolean;
+}
+
 export interface ValidationSummary {
   /** Total number of issues */
   totalIssues: number;
@@ -146,8 +169,11 @@ export interface ValidationSummary {
   /** Whether validation passed */
   passed: boolean;
   
-  /** Issues by aspect */
+  /** Issues by aspect (legacy - total count only) */
   issuesByAspect: Record<ValidationAspect, number>;
+  
+  /** Detailed breakdown by aspect */
+  aspectBreakdown: Record<ValidationAspect, ValidationAspectSummary>;
 }
 
 export interface ValidationPerformance {
@@ -446,7 +472,7 @@ export class RockSolidValidationEngine extends EventEmitter {
         for (const url of declared) {
           const validUrl = typeof url === 'string' && /^(https?:\/\/).+/.test(url);
           issues.push({
-            severity: validUrl ? 'information' : 'warning',
+            severity: validUrl ? settings.profile.severity : settings.profile.severity,
             code: validUrl ? 'PROFILE_DETECTED' : 'PROFILE_URL_INVALID',
             message: validUrl ? `Profile declared: ${url}` : `Invalid profile URL: ${String(url)}`,
             location: ['meta', 'profile'],
@@ -459,7 +485,7 @@ export class RockSolidValidationEngine extends EventEmitter {
       // Warn if enabled without resolution servers
       if ((settings as any).profileResolutionServers?.length === 0) {
         issues.push({
-          severity: 'warning',
+          severity: settings.profile.severity,
           code: 'NO_PROFILE_SERVERS',
           message: 'No profile resolution servers configured',
           location: [],
@@ -514,7 +540,7 @@ export class RockSolidValidationEngine extends EventEmitter {
       
       if (settings.terminologyServers.length === 0) {
         issues.push({
-          severity: 'warning',
+          severity: settings.terminology.severity,
           code: 'NO_TERMINOLOGY_SERVERS',
           message: 'No terminology servers configured',
           location: [],
@@ -790,9 +816,12 @@ export class RockSolidValidationEngine extends EventEmitter {
   }
 
   private calculateSummary(issues: ValidationIssue[], settings: ValidationSettings): ValidationSummary {
-    const errorCount = issues.filter(i => i.severity === 'error').length;
-    const warningCount = issues.filter(i => i.severity === 'warning').length;
-    const informationCount = issues.filter(i => i.severity === 'information').length;
+    // Include all issues from all aspects (UI will filter based on enabled aspects)
+    const allIssues = issues;
+    
+    const errorCount = allIssues.filter(i => i.severity === 'error').length;
+    const warningCount = allIssues.filter(i => i.severity === 'warning').length;
+    const informationCount = allIssues.filter(i => i.severity === 'information').length;
     
     const issuesByAspect: Record<ValidationAspect, number> = {
       structural: 0,
@@ -803,11 +832,51 @@ export class RockSolidValidationEngine extends EventEmitter {
       metadata: 0
     };
 
-    for (const issue of issues) {
-      issuesByAspect[issue.aspect]++;
+    // Calculate detailed aspect breakdown
+    const aspectBreakdown: Record<ValidationAspect, ValidationAspectSummary> = {
+      structural: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings.structural?.enabled !== false },
+      profile: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings.profile?.enabled !== false },
+      terminology: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings.terminology?.enabled !== false },
+      reference: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings.reference?.enabled !== false },
+      businessRule: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings.businessRule?.enabled !== false },
+      metadata: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings.metadata?.enabled !== false }
+    };
+
+    // Process each issue and update aspect breakdowns
+    for (const issue of allIssues) {
+      const aspect = issue.aspect;
+      if (aspect && aspectBreakdown[aspect]) {
+        issuesByAspect[aspect]++;
+        
+        const breakdown = aspectBreakdown[aspect];
+        breakdown.issueCount++;
+        
+        if (issue.severity === 'error' || issue.severity === 'fatal') {
+          breakdown.errorCount++;
+        } else if (issue.severity === 'warning') {
+          breakdown.warningCount++;
+        } else if (issue.severity === 'information') {
+          breakdown.informationCount++;
+        }
+      }
     }
 
-    const totalIssues = issues.length;
+    // Calculate aspect-specific scores and pass/fail status for all aspects
+    for (const aspect of Object.keys(aspectBreakdown) as ValidationAspect[]) {
+      const breakdown = aspectBreakdown[aspect];
+      
+      // Always calculate score for this aspect (UI will filter based on enabled status)
+      let aspectScore = 100;
+      aspectScore -= breakdown.errorCount * 15;  // Error issues: -15 points each
+      aspectScore -= breakdown.warningCount * 5; // Warning issues: -5 points each
+      aspectScore -= breakdown.informationCount * 1; // Information issues: -1 point each
+      breakdown.validationScore = Math.max(0, Math.round(aspectScore));
+      
+      // Aspect passes if no errors (warnings and info are acceptable)
+      breakdown.passed = breakdown.errorCount === 0;
+    }
+
+    const totalIssues = allIssues.length;
     // Fatal severity not part of ValidationSeverity; treat non-modeled fatals as errors
     const fatalCount = 0;
     
@@ -829,7 +898,8 @@ export class RockSolidValidationEngine extends EventEmitter {
       informationCount,
       validationScore,
       passed,
-      issuesByAspect
+      issuesByAspect,
+      aspectBreakdown
     };
   }
 

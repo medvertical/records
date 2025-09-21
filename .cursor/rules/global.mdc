@@ -1,0 +1,93 @@
+# Cursor Development Rules & Project Guidelines
+
+## 📜 Core Philosophy
+- **Simplicity:** Prioritize simple, clear, and maintainable solutions. Avoid unnecessary complexity or over-engineering.
+- **Root Cause First:** Always try to fix problems at the cause, not just the symptom. Temporary workarounds require explicit approval.
+- **Iterate:** Prefer iterating on existing, working code rather than rewriting from scratch unless explicitly required.
+- **Focus:** Concentrate on the specific task. Avoid unrelated changes or scope creep.
+- **Quality:** Strive for a clean, well-tested, and secure codebase.
+- **Collaboration:** These rules guide both human developers and the AI assistant for effective teamwork.
+
+## 📚 Project Awareness
+1. **Documentation First:** Review relevant PRDs, `README.md`, `docs/architecture.md`, `docs/technical.md`, and `tasks/**` before coding. Clarify gaps or conflicts.
+2. **Architecture Adherence:** Respect module boundaries, data flow, and component dependencies. Propose compliant alternatives if a request breaks architecture.
+3. **Pattern & Stack Awareness:** Prefer existing patterns/technologies defined in docs. Reuse helper utilities and hooks before adding new ones.
+
+## 🧱 Project Structure & Organization
+- Split React components as they approach 250–300 lines; never exceed 500 lines. Treat 1,000 lines as unacceptable even temporarily.
+- Keep server/service files focused. If a file nears 400 lines or mixes concerns (routing, data access, helpers), extract logic into `shared/` or `server/services/**`.
+- Follow colocated feature folders (`feature/{components,hooks,api}`) or the existing `client/src/{components,hooks,pages}` and `server/services/*` layout.
+- Name per-server caches/selectors explicitly (e.g., `cacheKey-serverId`) to avoid cross-server bleed. Encapsulate fetch + cache logic inside hooks/services.
+- Ensure all new modules export typed interfaces. Share DTOs via `shared/` rather than duplicating types.
+- Keep configuration and docs in sync. Update `tasks/**` and `docs/**` when workflows or responsibilities change.
+
+### File Length & Structure
+- Break files when they approach 400 lines; never exceed 500 lines.
+- Organize code with folders and naming conventions to keep small files grouped logically.
+
+### Function & Class Size
+- Keep functions under 30–40 lines.
+- If a class surpasses ~200 lines, split it into smaller helper classes or modules.
+
+### OOP & SRP
+- Place functionality in dedicated classes, structs, or protocols—even for small logic.
+- Favor composition over inheritance while maintaining object-oriented thinking.
+- Enforce the single responsibility principle: each file/class/function handles one concern only.
+
+### Modular Design
+- Build interchangeable, testable, isolated modules—code should connect like Lego.
+- Ask, “Can this class be reused in another screen/project?” If not, refactor.
+- Minimize tight coupling. Favor dependency injection or protocols.
+
+### Manager / Coordinator Patterns
+- Separate concerns with ViewModel (UI logic), Manager (business logic), and Coordinator (navigation/state flow).
+- Never mix view code with business logic directly.
+
+### Naming & Readability
+- Use descriptive, intention-revealing names for classes, methods, and variables.
+- Avoid vague names like `data`, `info`, `helper`, or `temp`.
+
+### Scalability Mindset
+- Code as if another team will scale it later.
+- Provide extension points (e.g., DI, protocol conformance) from day one.
+
+### Avoid God Classes
+- Do not let one file/class control everything. Split responsibilities across UI, state, handlers, networking, etc.
+
+## 🧪 Development Workflow
+1. **Plan:** Break tasks into sub-steps. Confirm assumptions with docs or teammates when unsure.
+2. **Small Commits:** Make granular, well-described commits. Keep the working tree clean.
+3. **Edit, Don’t Copy:** Modify existing files; avoid ad-hoc duplicates (e.g., `component-v2.tsx`).
+4. **Verify Integrations:** After refactoring, ensure all callers/integration points still work. Run relevant tests.
+
+## ✅ Testing & Validation
+1. **TDD Mindset:** For new features, outline tests → write failing tests → implement → refactor. For bug fixes, reproduce with a test first.
+2. **Comprehensive Coverage:** Add unit/integration/e2e tests covering critical paths and edge cases when touching those areas.
+3. **Passing Tests:** All tests must pass before considering a task complete. Escalate if failures require deeper investigation.
+4. **No Mock Data Outside Tests:** Use mock data only in testing contexts. Dev/prod paths should rely on real or realistic data sources.
+5. **Manual Verification:** Complement automated tests with manual checks for UX changes.
+
+## 🐛 Debugging & Troubleshooting
+1. **Root Cause Fixes:** Focus on eliminating underlying issues, not masking errors.
+2. **Log Inspection:** Check browser/server logs after changes or when debugging; report relevant findings.
+3. **Targeted Logging:** Add temporary logs (or use the project logger) for stubborn bugs—remember to review output and clean up afterward.
+4. **Check `fixes/`:** Review prior documented fixes before deep dives on recurring issues.
+5. **Document Hard Fixes:** For complex bugs, add a concise note in `fixes/` describing the problem, investigation, and resolution.
+6. **Research:** When stuck, research best practices (docs, knowledge base) before guessing.
+
+## 🔒 Security Practices
+- Keep sensitive logic/validation/data manipulation on the server side.
+- Always sanitize and validate user input server-side.
+- Be cautious when adding/updating dependencies; consider security implications.
+- Never commit secrets/credentials. Use environment variables or secure secret management.
+
+## 🌳 Version Control & Environment
+- Follow good Git hygiene: atomic commits, no unrelated files, honor `.gitignore`.
+- Adhere to the project’s branching strategy; don’t create new branches unless necessary.
+- Never commit `.env`. Use `.env.example` for templates.
+- Ensure code works across environments (dev/test/prod) via configuration.
+- Stop running servers before starting new ones, and restart servers after relevant config/backend changes.
+
+## 📄 Documentation Maintenance
+- Update docs (`README.md`, `docs/architecture.md`, `docs/technical.md`, `tasks/**`, etc.) whenever changes affect architecture, patterns, or task status.
+- Periodically review and adjust this `.cursorrules` file to reflect new best practices.

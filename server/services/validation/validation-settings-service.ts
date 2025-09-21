@@ -37,6 +37,9 @@ import {
   withErrorRecovery,
   type ErrorRecoveryOptions
 } from './validation-settings-errors';
+import { db } from '../../db';
+import { validationSettingsAuditTrail } from '@shared/schema';
+import { sql } from 'drizzle-orm';
 
 // ============================================================================
 // Types and Interfaces
@@ -384,6 +387,21 @@ export class ValidationSettingsService extends EventEmitter {
       this.activeSettings = savedSettings;
     }
 
+    // Log to audit trail
+    await this.logToAuditTrail(
+      parseInt(savedSettings.id!),
+      savedSettings.version,
+      'updated',
+      update.updatedBy,
+      update.changeReason,
+      currentSettings,
+      savedSettings,
+      {
+        createNewVersion: update.createNewVersion,
+        timestamp: new Date().toISOString()
+      }
+    );
+
     // Emit change event
     this.emit('settingsChanged', {
       type: 'updated',
@@ -529,6 +547,22 @@ export class ValidationSettingsService extends EventEmitter {
       this.setCachedSettings(newSettings.id!.toString(), newSettings.settings, ['rollback']);
       this.activeSettings = newSettings.settings;
 
+      // Log to audit trail
+      await this.logToAuditTrail(
+        parseInt(newSettings.id!),
+        newSettings.version,
+        'rolled_back',
+        rolledBackBy || 'system-rollback',
+        `Rolled back to version ${rollbackToVersion}`,
+        currentSettings,
+        newSettings.settings,
+        {
+          rollbackToVersion,
+          originalSettingsId: currentSettings?.id,
+          timestamp: new Date().toISOString()
+        }
+      );
+
       // Emit rollback event
       this.emit('settingsRolledBack', {
         originalSettings: currentSettings,
@@ -617,6 +651,20 @@ export class ValidationSettingsService extends EventEmitter {
     // Update cache
     this.setCachedSettings(savedSettings.id!, savedSettings);
 
+    // Log to audit trail
+    await this.logToAuditTrail(
+      parseInt(savedSettings.id!),
+      savedSettings.version,
+      'created',
+      createdBy,
+      'Settings created',
+      undefined,
+      savedSettings,
+      {
+        timestamp: new Date().toISOString()
+      }
+    );
+
     // Emit change event
     this.emit('settingsChanged', {
       type: 'created',
@@ -656,6 +704,20 @@ export class ValidationSettingsService extends EventEmitter {
 
     this.activeSettings = activatedSettings;
 
+    // Log to audit trail
+    await this.logToAuditTrail(
+      parseInt(activatedSettings.id!),
+      activatedSettings.version,
+      'activated',
+      activatedBy,
+      'Settings activated',
+      settings,
+      activatedSettings,
+      {
+        timestamp: new Date().toISOString()
+      }
+    );
+
     // Emit change event
     this.emit('settingsChanged', {
       type: 'activated',
@@ -691,6 +753,20 @@ export class ValidationSettingsService extends EventEmitter {
       this.activeSettings = null;
     }
 
+    // Log to audit trail
+    await this.logToAuditTrail(
+      parseInt(deactivatedSettings.id!),
+      deactivatedSettings.version,
+      'deactivated',
+      deactivatedBy,
+      'Settings deactivated',
+      settings,
+      deactivatedSettings,
+      {
+        timestamp: new Date().toISOString()
+      }
+    );
+
     // Emit change event
     this.emit('settingsChanged', {
       type: 'deactivated',
@@ -720,6 +796,20 @@ export class ValidationSettingsService extends EventEmitter {
     if (settings.isActive) {
       throw new Error('Cannot delete active settings. Please activate another configuration first.');
     }
+
+    // Log to audit trail before deletion
+    await this.logToAuditTrail(
+      parseInt(settingsId),
+      settings.version,
+      'deleted',
+      deletedBy,
+      'Settings deleted',
+      settings,
+      undefined,
+      {
+        timestamp: new Date().toISOString()
+      }
+    );
 
     // Delete from database
     await this.deleteSettingsFromDatabase(settingsId);
@@ -1240,6 +1330,27 @@ export class ValidationSettingsService extends EventEmitter {
     this.errorLogger.clearHistory();
   }
 
+  /**
+   * Clear dashboard cache when validation settings change
+   */
+  private clearDashboardCache(): void {
+    try {
+      // Get the dashboard service instance from the global scope
+      // This is a bit of a hack, but it avoids circular dependencies
+      const globalScope = globalThis as any;
+      const dashboardService = globalScope.dashboardService;
+      
+      if (dashboardService && typeof dashboardService.clearValidationCache === 'function') {
+        dashboardService.clearValidationCache();
+        console.log('[ValidationSettingsService] Dashboard cache cleared due to settings change');
+      } else {
+        console.log('[ValidationSettingsService] Dashboard service not available for cache clearing');
+      }
+    } catch (error) {
+      console.warn('[ValidationSettingsService] Error clearing dashboard cache:', error);
+    }
+  }
+
   // ========================================================================
   // Private Methods
   // ========================================================================
@@ -1258,6 +1369,9 @@ export class ValidationSettingsService extends EventEmitter {
           this.invalidateByTag('active');
         }
       }
+      
+      // Clear dashboard cache when validation settings change
+      this.clearDashboardCache();
     });
     
     // Handle server configuration changes
@@ -2011,6 +2125,232 @@ export class ValidationSettingsService extends EventEmitter {
 
     return transformed;
   }
+
+  /**
+   * Log settings change to audit trail
+   */
+  private async logToAuditTrail(
+    settingsId: number,
+    version: number,
+    action: 'created' | 'updated' | 'activated' | 'deactivated' | 'deleted' | 'migrated' | 'rolled_back',
+    performedBy?: string,
+    changeReason?: string,
+    previousSettings?: ValidationSettings,
+    newSettings?: ValidationSettings,
+    metadata?: any
+  ): Promise<void> {
+    try {
+      // Calculate changes between previous and new settings
+      const changes = this.calculateSettingsChanges(previousSettings, newSettings);
+      
+      // Prepare audit trail entry
+      const auditEntry = {
+        settingsId,
+        version,
+        action,
+        performedBy: performedBy || 'system',
+        changeReason,
+        changes,
+        metadata: metadata || {},
+        ipAddress: null, // Could be added from request context
+        userAgent: null  // Could be added from request context
+      };
+
+      // Insert into audit trail table
+      await db.insert(validationSettingsAuditTrail).values(auditEntry);
+      
+      console.log(`[ValidationSettingsService] Audit trail entry created: ${action} for settings ${settingsId} v${version}`);
+      
+    } catch (error) {
+      console.error('[ValidationSettingsService] Failed to log to audit trail:', error);
+      // Don't throw error - audit trail failure shouldn't break the main operation
+    }
+  }
+
+  /**
+   * Calculate detailed changes between two settings objects
+   */
+  private calculateSettingsChanges(previousSettings?: ValidationSettings, newSettings?: ValidationSettings): any {
+    if (!previousSettings && !newSettings) {
+      return { type: 'unknown', changes: [] };
+    }
+
+    if (!previousSettings) {
+      return {
+        type: 'created',
+        changes: [{
+          field: 'all',
+          action: 'created',
+          newValue: newSettings
+        }]
+      };
+    }
+
+    if (!newSettings) {
+      return {
+        type: 'deleted',
+        changes: [{
+          field: 'all',
+          action: 'deleted',
+          previousValue: previousSettings
+        }]
+      };
+    }
+
+    const changes: any[] = [];
+
+    // Compare validation aspects
+    const aspects = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'];
+    for (const aspect of aspects) {
+      const prevAspect = (previousSettings as any)[aspect];
+      const newAspect = (newSettings as any)[aspect];
+      
+      if (JSON.stringify(prevAspect) !== JSON.stringify(newAspect)) {
+        changes.push({
+          field: `validationAspects.${aspect}`,
+          action: 'updated',
+          previousValue: prevAspect,
+          newValue: newAspect
+        });
+      }
+    }
+
+    // Compare server configurations
+    if (JSON.stringify(previousSettings.terminologyServers) !== JSON.stringify(newSettings.terminologyServers)) {
+      changes.push({
+        field: 'terminologyServers',
+        action: 'updated',
+        previousValue: previousSettings.terminologyServers,
+        newValue: newSettings.terminologyServers
+      });
+    }
+
+    if (JSON.stringify(previousSettings.profileResolutionServers) !== JSON.stringify(newSettings.profileResolutionServers)) {
+      changes.push({
+        field: 'profileResolutionServers',
+        action: 'updated',
+        previousValue: previousSettings.profileResolutionServers,
+        newValue: newSettings.profileResolutionServers
+      });
+    }
+
+    // Compare other settings
+    const otherFields = ['strictMode', 'fhirVersion', 'maxConcurrentValidations', 'timeoutSettings', 'cacheSettings'];
+    for (const field of otherFields) {
+      const prevValue = (previousSettings as any)[field];
+      const newValue = (newSettings as any)[field];
+      
+      if (JSON.stringify(prevValue) !== JSON.stringify(newValue)) {
+        changes.push({
+          field,
+          action: 'updated',
+          previousValue: prevValue,
+          newValue: newValue
+        });
+      }
+    }
+
+    return {
+      type: changes.length === 0 ? 'no_changes' : 'updated',
+      changes,
+      summary: {
+        totalChanges: changes.length,
+        aspectChanges: changes.filter(c => c.field.startsWith('validationAspects.')).length,
+        serverChanges: changes.filter(c => c.field.includes('Servers')).length,
+        otherChanges: changes.filter(c => !c.field.startsWith('validationAspects.') && !c.field.includes('Servers')).length
+      }
+    };
+  }
+
+  /**
+   * Get audit trail history for settings
+   */
+  async getAuditTrailHistory(settingsId?: number, limit: number = 50): Promise<any[]> {
+    try {
+      let query = db.select().from(validationSettingsAuditTrail);
+      
+      if (settingsId) {
+        query = query.where(sql`${validationSettingsAuditTrail.settingsId} = ${settingsId}`);
+      }
+      
+      const results = await query
+        .orderBy(sql`${validationSettingsAuditTrail.performedAt} DESC`)
+        .limit(limit);
+      
+      return results;
+    } catch (error) {
+      console.error('[ValidationSettingsService] Failed to get audit trail history:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get audit trail statistics
+   */
+  async getAuditTrailStatistics(): Promise<{
+    totalEntries: number;
+    entriesByAction: Record<string, number>;
+    entriesByUser: Record<string, number>;
+    recentActivity: any[];
+  }> {
+    try {
+      // Get total count
+      const totalResult = await db.execute(sql`
+        SELECT COUNT(*) as total FROM ${validationSettingsAuditTrail}
+      `);
+      const totalEntries = parseInt(totalResult.rows[0]?.total || '0');
+
+      // Get entries by action
+      const actionResult = await db.execute(sql`
+        SELECT action, COUNT(*) as count 
+        FROM ${validationSettingsAuditTrail} 
+        GROUP BY action 
+        ORDER BY count DESC
+      `);
+      const entriesByAction: Record<string, number> = {};
+      for (const row of actionResult.rows) {
+        entriesByAction[row.action] = parseInt(row.count);
+      }
+
+      // Get entries by user
+      const userResult = await db.execute(sql`
+        SELECT performed_by, COUNT(*) as count 
+        FROM ${validationSettingsAuditTrail} 
+        WHERE performed_by IS NOT NULL
+        GROUP BY performed_by 
+        ORDER BY count DESC 
+        LIMIT 10
+      `);
+      const entriesByUser: Record<string, number> = {};
+      for (const row of userResult.rows) {
+        entriesByUser[row.performed_by] = parseInt(row.count);
+      }
+
+      // Get recent activity
+      const recentResult = await db.execute(sql`
+        SELECT * FROM ${validationSettingsAuditTrail}
+        ORDER BY performed_at DESC
+        LIMIT 10
+      `);
+      const recentActivity = recentResult.rows;
+
+      return {
+        totalEntries,
+        entriesByAction,
+        entriesByUser,
+        recentActivity
+      };
+    } catch (error) {
+      console.error('[ValidationSettingsService] Failed to get audit trail statistics:', error);
+      return {
+        totalEntries: 0,
+        entriesByAction: {},
+        entriesByUser: {},
+        recentActivity: []
+      };
+    }
+  }
+
 }
 
 // ============================================================================

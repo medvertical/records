@@ -21,7 +21,7 @@ import {
   type ResourceStats,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, gt, sql, getTableColumns } from "drizzle-orm";
+import { eq, desc, and, gt, lt, sql, getTableColumns } from "drizzle-orm";
 import { queryOptimizer } from "./utils/query-optimizer.js";
 import { logger } from "./utils/logger.js";
 import { cacheManager, CACHE_TAGS } from "./utils/cache-manager.js";
@@ -55,6 +55,12 @@ export interface IStorage {
   getValidationResultsByResourceId(resourceId: number): Promise<ValidationResult[]>;
   createValidationResult(result: InsertValidationResult): Promise<ValidationResult>;
   getRecentValidationErrors(limit?: number, serverId?: number): Promise<ValidationResult[]>;
+  
+  // Enhanced Validation Result Caching
+  getLatestValidationResult(resourceId: number, settingsHash?: string): Promise<ValidationResult | undefined>;
+  getValidationResultByHash(resourceId: number, settingsHash: string, resourceHash: string): Promise<ValidationResult | undefined>;
+  invalidateValidationResults(resourceId?: number, settingsHash?: string): Promise<void>;
+  cleanupOldValidationResults(maxAgeHours?: number): Promise<number>;
 
   // Dashboard
   getDashboardCards(): Promise<DashboardCard[]>;
@@ -310,6 +316,77 @@ export class DatabaseStorage implements IStorage {
     return await queryOptimizer.getRecentValidationErrors(limit, serverId);
   }
 
+  async getLatestValidationResult(resourceId: number, settingsHash?: string): Promise<ValidationResult | undefined> {
+    const conditions = [eq(validationResults.resourceId, resourceId)];
+    
+    if (settingsHash) {
+      conditions.push(eq(validationResults.settingsHash, settingsHash));
+    }
+    
+    const [result] = await db.select()
+      .from(validationResults)
+      .where(and(...conditions))
+      .orderBy(desc(validationResults.validatedAt))
+      .limit(1);
+    
+    return result || undefined;
+  }
+
+  async getValidationResultByHash(resourceId: number, settingsHash: string, resourceHash: string): Promise<ValidationResult | undefined> {
+    const [result] = await db.select()
+      .from(validationResults)
+      .where(and(
+        eq(validationResults.resourceId, resourceId),
+        eq(validationResults.settingsHash, settingsHash),
+        eq(validationResults.resourceHash, resourceHash)
+      ))
+      .orderBy(desc(validationResults.validatedAt))
+      .limit(1);
+    
+    return result || undefined;
+  }
+
+  async invalidateValidationResults(resourceId?: number, settingsHash?: string): Promise<void> {
+    const conditions = [];
+    
+    if (resourceId) {
+      conditions.push(eq(validationResults.resourceId, resourceId));
+    }
+    
+    if (settingsHash) {
+      conditions.push(eq(validationResults.settingsHash, settingsHash));
+    }
+    
+    if (conditions.length === 0) {
+      // If no conditions, delete all validation results (use with caution)
+      await db.delete(validationResults);
+      logger.warn('[Storage] Deleted ALL validation results - this should only happen during maintenance');
+    } else {
+      await db.delete(validationResults).where(and(...conditions));
+      logger.info('[Storage] Invalidated validation results', { resourceId, settingsHash });
+    }
+    
+    // Clear related caches
+    cacheManager.clearByTag(CACHE_TAGS.VALIDATION_RESULTS);
+  }
+
+  async cleanupOldValidationResults(maxAgeHours = 168): Promise<number> { // Default 7 days
+    const cutoffDate = new Date(Date.now() - (maxAgeHours * 60 * 60 * 1000));
+    
+    const result = await db.delete(validationResults)
+      .where(lt(validationResults.validatedAt, cutoffDate))
+      .returning({ id: validationResults.id });
+    
+    const deletedCount = result.length;
+    logger.info('[Storage] Cleaned up old validation results', { 
+      deletedCount, 
+      maxAgeHours, 
+      cutoffDate: cutoffDate.toISOString() 
+    });
+    
+    return deletedCount;
+  }
+
   async getDashboardCards(): Promise<DashboardCard[]> {
     return await queryOptimizer.getDashboardCards();
   }
@@ -424,6 +501,59 @@ export class DatabaseStorage implements IStorage {
     
     const activeProfiles = await db.select().from(validationProfiles).where(eq(validationProfiles.isActive, true));
     
+    // Calculate aspect breakdown from validation results
+    const aspectBreakdown: Record<string, {
+      enabled: boolean;
+      issueCount: number;
+      errorCount: number;
+      warningCount: number;
+      informationCount: number;
+      score: number;
+    }> = {
+      structural: { enabled: settings.structural?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      profile: { enabled: settings.profile?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      terminology: { enabled: settings.terminology?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      reference: { enabled: settings.reference?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      businessRule: { enabled: settings.businessRule?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      metadata: { enabled: settings.metadata?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 }
+    };
+
+    // Aggregate issues by aspect from all validation results
+    allValidationResults.forEach(result => {
+      const issues = result.issues || [];
+      issues.forEach((issue: any) => {
+        const aspect = issue.aspect || issue.category || 'structural';
+        if (aspectBreakdown[aspect]) {
+          aspectBreakdown[aspect].issueCount++;
+          
+          // Count by severity
+          const severity = issue.severity || 'error';
+          switch (severity.toLowerCase()) {
+            case 'error':
+              aspectBreakdown[aspect].errorCount++;
+              break;
+            case 'warning':
+              aspectBreakdown[aspect].warningCount++;
+              break;
+            case 'information':
+            case 'info':
+              aspectBreakdown[aspect].informationCount++;
+              break;
+          }
+        }
+      });
+    });
+
+    // Calculate scores for each aspect (100 - penalties)
+    Object.keys(aspectBreakdown).forEach(aspect => {
+      const breakdown = aspectBreakdown[aspect];
+      let score = 100;
+      score -= breakdown.errorCount * 15;    // Error issues: -15 points each
+      score -= breakdown.warningCount * 5;   // Warning issues: -5 points each
+      score -= breakdown.informationCount * 1; // Information issues: -1 point each
+      breakdown.score = Math.max(0, Math.min(100, score));
+    });
+    
     return {
       totalResources: resources.length,
       validResources: validResourcesCount,
@@ -432,6 +562,7 @@ export class DatabaseStorage implements IStorage {
       unvalidatedResources: unvalidatedResourcesCount,
       activeProfiles: activeProfiles.length,
       resourceBreakdown,
+      aspectBreakdown,
     };
   }
 
@@ -459,10 +590,10 @@ export class DatabaseStorage implements IStorage {
     
     // Filter issues based on current settings
     const filteredIssues = issues.filter((issue: any) => {
-      const category = issue.category || 'structural';
+      const aspect = issue.aspect || issue.category || 'structural';
       
-      // Check if this category is enabled in settings
-      switch (category) {
+      // Check if this aspect is enabled in settings
+      switch (aspect) {
         case 'structural':
           return settings?.structural?.enabled === true;
         case 'profile':
@@ -477,7 +608,7 @@ export class DatabaseStorage implements IStorage {
         case 'metadata':
           return settings?.metadata?.enabled === true;
         default:
-          return true; // Include unknown categories
+          return true; // Include unknown aspects
       }
     });
 

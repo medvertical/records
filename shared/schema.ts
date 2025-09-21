@@ -52,6 +52,16 @@ export const validationResults = pgTable("validation_results", {
   warningCount: integer("warning_count").default(0),
   validationScore: integer("validation_score").default(0),
   validatedAt: timestamp("validated_at").defaultNow(),
+  // Enhanced caching and persistence fields
+  settingsHash: text("settings_hash"),
+  settingsVersion: integer("settings_version").default(1),
+  resourceHash: text("resource_hash"),
+  validationEngineVersion: text("validation_engine_version").default("1.0.0"),
+  performanceMetrics: jsonb("performance_metrics").default({}),
+  aspectBreakdown: jsonb("aspect_breakdown").default({}),
+  validationDurationMs: integer("validation_duration_ms").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const dashboardCards = pgTable("dashboard_cards", {
@@ -72,6 +82,20 @@ export const validationSettings = pgTable("validation_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
   createdBy: text("created_by"),
   updatedBy: text("updated_by"),
+});
+
+export const validationSettingsAuditTrail = pgTable("validation_settings_audit_trail", {
+  id: serial("id").primaryKey(),
+  settingsId: integer("settings_id").references(() => validationSettings.id),
+  version: integer("version").notNull(),
+  action: text("action").notNull(), // 'created', 'updated', 'activated', 'deactivated', 'deleted', 'migrated', 'rolled_back'
+  performedBy: text("performed_by"),
+  performedAt: timestamp("performed_at").defaultNow(),
+  changeReason: text("change_reason"),
+  changes: jsonb("changes").notNull(), // Detailed change information
+  metadata: jsonb("metadata"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
 });
 
 // Legacy validation settings table for migration
@@ -116,6 +140,11 @@ export const insertValidationSettingsSchema = createInsertSchema(validationSetti
   updatedAt: true,
 });
 
+export const insertValidationSettingsAuditTrailSchema = createInsertSchema(validationSettingsAuditTrail).omit({
+  id: true,
+  performedAt: true,
+});
+
 export const insertDashboardCardSchema = createInsertSchema(dashboardCards).omit({
   id: true,
 });
@@ -141,6 +170,9 @@ export type InsertDashboardCard = z.infer<typeof insertDashboardCardSchema>;
 export type ValidationSettings = typeof validationSettings.$inferSelect;
 export type InsertValidationSettings = z.infer<typeof insertValidationSettingsSchema>;
 
+export type ValidationSettingsAuditTrail = typeof validationSettingsAuditTrail.$inferSelect;
+export type InsertValidationSettingsAuditTrail = z.infer<typeof insertValidationSettingsAuditTrailSchema>;
+
 // Additional types for FHIR resources
 export interface FhirResourceWithValidation extends FhirResource {
   validationResults?: ValidationResult[];
@@ -165,5 +197,13 @@ export interface ResourceStats {
     total: number;
     valid: number;
     validPercent: number;
+  }>;
+  aspectBreakdown: Record<string, {
+    enabled: boolean;
+    issueCount: number;
+    errorCount: number;
+    warningCount: number;
+    informationCount: number;
+    score: number;
   }>;
 }

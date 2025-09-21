@@ -73,27 +73,45 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
-          console.log('[useDashboardData] Validation settings updated, invalidating cache');
-          // Invalidate all dashboard-related queries
-          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/fhir-server-stats'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/validation-stats'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/dashboard/combined'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/validation/bulk/progress'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/validation/errors/recent'] });
-          queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+          console.log('[useDashboardData] Validation settings updated via SSE, invalidating cache');
+          invalidateDashboardQueries();
         }
       } catch (error) {
         // Ignore non-JSON messages
       }
     };
 
-    // Add event listener for SSE messages
+    const handleSettingsChange = (event: CustomEvent) => {
+      console.log('[useDashboardData] Validation settings updated via polling, invalidating cache');
+      invalidateDashboardQueries();
+    };
+
+    const invalidateDashboardQueries = () => {
+      // Invalidate all dashboard-related queries
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/fhir-server-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/validation-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/combined'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/validation/bulk/progress'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/validation/errors/recent'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+    };
+
+    // Add event listener for SSE messages (if available)
     const sse = (window as any).validationSSE;
     if (sse) {
       sse.addEventListener('message', handleSSEMessage);
-      return () => sse.removeEventListener('message', handleSSEMessage);
     }
+
+    // Add event listener for polling-based settings changes
+    window.addEventListener('settingsChanged', handleSettingsChange as EventListener);
+
+    return () => {
+      if (sse) {
+        sse.removeEventListener('message', handleSSEMessage);
+      }
+      window.removeEventListener('settingsChanged', handleSettingsChange as EventListener);
+    };
   }, [queryClient]);
 
   // FHIR Server Stats Query
@@ -116,7 +134,8 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     unvalidatedResources: 0,
     validationCoverage: 0,
     validationProgress: 0,
-    resourceTypeBreakdown: {}
+    resourceTypeBreakdown: {},
+    aspectBreakdown: {}
   };
 
   const {
@@ -129,14 +148,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     refetchInterval: shouldRefetch ? refetchInterval : false,
     staleTime: enableCaching ? 30 * 60 * 1000 : 0, // 30 minutes (extended for better performance)
     placeholderData: keepPreviousData, // Prevent flashing during refetch
-    enabled: isEnabled,
-    onSuccess: () => {
-      setLastUpdated(new Date());
-      setIsStale(false);
-    },
-    onError: (error: any) => {
-      console.error('[useDashboardData] FHIR server stats error:', error);
-    }
+    enabled: isEnabled
   });
 
   const fhirServerStats = fhirServerStatsRaw ?? defaultFhirServerStats;
@@ -152,14 +164,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     refetchInterval: shouldRefetch ? refetchInterval : false,
     staleTime: enableCaching ? 2 * 60 * 1000 : 0, // 2 minutes (extended for better performance)
     placeholderData: keepPreviousData, // Prevent flashing during refetch
-    enabled: isEnabled,
-    onSuccess: () => {
-      setLastUpdated(new Date());
-      setIsStale(false);
-    },
-    onError: (error: any) => {
-      console.error('[useDashboardData] Validation stats error:', error);
-    }
+    enabled: isEnabled
   });
 
   const validationStats = validationStatsRaw ?? defaultValidationStats;
@@ -175,14 +180,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     refetchInterval: shouldRefetch ? refetchInterval : false,
     staleTime: enableCaching ? 2 * 60 * 1000 : 0, // 2 minutes (extended for better performance)
     placeholderData: keepPreviousData, // Prevent flashing during refetch
-    enabled: isEnabled,
-    onSuccess: () => {
-      setLastUpdated(new Date());
-      setIsStale(false);
-    },
-    onError: (error: any) => {
-      console.error('[useDashboardData] Combined data error:', error);
-    }
+    enabled: isEnabled
   });
 
   // Legacy Dashboard Stats Query (for backward compatibility)
@@ -196,14 +194,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
     refetchInterval: shouldRefetch ? refetchInterval : false,
     staleTime: enableCaching ? 2 * 60 * 1000 : 0, // 2 minutes (extended for better performance)
     placeholderData: keepPreviousData, // Prevent flashing during refetch
-    enabled: isEnabled,
-    onSuccess: () => {
-      setLastUpdated(new Date());
-      setIsStale(false);
-    },
-    onError: (error: any) => {
-      console.error('[useDashboardData] Legacy stats error:', error);
-    }
+    enabled: isEnabled
   });
 
   // Combined loading state
@@ -232,9 +223,9 @@ export function useDashboardData(options: UseDashboardDataOptions = {}): UseDash
 
   return {
     // Data
-    fhirServerStats,
-    validationStats,
-    combinedData,
+    fhirServerStats: fhirServerStats as FhirServerStats || defaultFhirServerStats,
+    validationStats: validationStats as ValidationStats || defaultValidationStats,
+    combinedData: combinedData as DashboardData | undefined || undefined,
     
     // Loading states
     isLoading,

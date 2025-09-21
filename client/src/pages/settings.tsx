@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useSystemSettings } from '@/hooks/use-system-settings';
 import { 
@@ -30,7 +31,11 @@ import {
   Save,
   RefreshCw,
   TestTube,
-  Shield
+  Shield,
+  Eye,
+  TrendingUp,
+  TrendingDown,
+  Info
 } from 'lucide-react';
 
 // ============================================================================
@@ -115,6 +120,13 @@ export default function SettingsPage() {
 
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('validation');
+  const [previewData, setPreviewData] = useState<any>(null);
+  
+  // State for confirmation dialog
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [pendingSettings, setPendingSettings] = useState<ValidationSettings | null>(null);
+  const [previousSettings, setPreviousSettings] = useState<ValidationSettings | null>(null);
+  const [showRollbackDialog, setShowRollbackDialog] = useState(false);
 
   // Load settings on component mount
   useEffect(() => {
@@ -161,15 +173,28 @@ export default function SettingsPage() {
     }
   };
 
-  const saveSettings = async () => {
+  // Show confirmation dialog before saving validation settings
+  const handleSaveValidationSettings = () => {
+    // Store current settings as previous settings for potential rollback
+    setPreviousSettings({ ...validationSettings });
+    setPendingSettings({ ...validationSettings });
+    setShowConfirmDialog(true);
+  };
+
+  // Confirm and save settings
+  const confirmSaveSettings = async () => {
+    if (!pendingSettings) return;
+    
     setIsLoading(true);
+    setShowConfirmDialog(false);
+    
     try {
       // Save validation settings
       try {
         const response = await fetch('/api/validation/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(validationSettings),
+          body: JSON.stringify(pendingSettings),
         });
         if (!response.ok) {
           console.warn('Failed to save validation settings, continuing with other settings');
@@ -178,6 +203,72 @@ export default function SettingsPage() {
         console.warn('Failed to save validation settings, continuing with other settings');
       }
 
+      // Save server settings
+      for (const server of servers) {
+        try {
+          const response = await fetch(`/api/fhir/servers/${server.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: server.name,
+              url: server.url,
+              authConfig: server.authType === 'none' ? null : {
+                type: server.authType,
+                username: server.username,
+                password: server.password,
+                token: server.token,
+              },
+            }),
+          });
+          if (!response.ok) {
+            console.warn(`Failed to save server ${server.name}`);
+          }
+        } catch (error) {
+          console.warn(`Failed to save server ${server.name}`);
+        }
+      }
+
+      toast({
+        title: "Settings Saved",
+        description: "Your validation settings have been saved successfully.",
+      });
+    } finally {
+      setIsLoading(false);
+      setPendingSettings(null);
+    }
+  };
+
+  // Cancel confirmation dialog
+  const cancelSaveSettings = () => {
+    setShowConfirmDialog(false);
+    setPendingSettings(null);
+  };
+
+  // Rollback to previous settings
+  const rollbackToPreviousSettings = () => {
+    if (previousSettings) {
+      setValidationSettings(previousSettings);
+      setShowRollbackDialog(false);
+      toast({
+        title: "Settings Rolled Back",
+        description: "Validation settings have been restored to their previous values.",
+      });
+    }
+  };
+
+  // Show rollback dialog
+  const showRollbackOptions = () => {
+    setShowRollbackDialog(true);
+  };
+
+  // Cancel rollback
+  const cancelRollback = () => {
+    setShowRollbackDialog(false);
+  };
+
+  const saveSettings = async () => {
+    setIsLoading(true);
+    try {
       // Save server settings
       for (const server of servers) {
         try {
@@ -215,6 +306,67 @@ export default function SettingsPage() {
   const updateValidationSettings = (updates: Partial<ValidationSettings>) => {
     setValidationSettings(prev => ({ ...prev, ...updates }));
   };
+
+  // Calculate preview impact when validation settings change
+  const calculatePreviewImpact = async (settings: ValidationSettings) => {
+    try {
+      // Fetch current validation statistics to show the impact
+      const response = await fetch('/api/fhir/resources?limit=100');
+      if (response.ok) {
+        const data = await response.json();
+        const resources = data.resources || [];
+        
+        // Calculate current vs. new validation results
+        let currentErrors = 0;
+        let currentWarnings = 0;
+        let currentInfo = 0;
+        let newErrors = 0;
+        let newWarnings = 0;
+        let newInfo = 0;
+        
+        resources.forEach((resource: any) => {
+          if (resource._validationSummary) {
+            const summary = resource._validationSummary;
+            
+            // Current counts (assuming all aspects are enabled)
+            currentErrors += summary.errorCount || 0;
+            currentWarnings += summary.warningCount || 0;
+            currentInfo += summary.informationCount || 0;
+            
+            // Calculate new counts based on enabled aspects
+            if (summary.aspectBreakdown) {
+              Object.entries(summary.aspectBreakdown).forEach(([aspect, breakdown]: [string, any]) => {
+                const aspectEnabled = settings[aspect as keyof ValidationSettings]?.enabled;
+                if (aspectEnabled) {
+                  newErrors += breakdown.errorCount || 0;
+                  newWarnings += breakdown.warningCount || 0;
+                  newInfo += breakdown.informationCount || 0;
+                }
+              });
+            }
+          }
+        });
+        
+        setPreviewData({
+          current: { errors: currentErrors, warnings: currentWarnings, info: currentInfo },
+          new: { errors: newErrors, warnings: newWarnings, info: newInfo },
+          enabledAspects: Object.entries(settings).filter(([key, value]) => 
+            key !== 'strictMode' && key !== 'maxConcurrentValidations' && key !== 'timeoutMs' && key !== 'memoryLimitMB' && value.enabled
+          ).length,
+          totalAspects: 6
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to calculate preview impact:', error);
+    }
+  };
+
+  // Update preview when validation settings change
+  useEffect(() => {
+    if (validationSettings) {
+      calculatePreviewImpact(validationSettings);
+    }
+  }, [validationSettings]);
 
   const updateServer = async (id: string, updates: Partial<ServerSettings>) => {
     const server = servers.find(s => s.id === id);
@@ -376,7 +528,7 @@ export default function SettingsPage() {
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
-            <Button onClick={saveSettings} disabled={isLoading}>
+            <Button onClick={activeTab === 'validation' ? handleSaveValidationSettings : saveSettings} disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -414,9 +566,110 @@ export default function SettingsPage() {
 
           {/* Validation Tab */}
           <TabsContent value="validation" className="space-y-6">
+            {/* Real-time Preview Card */}
+            {previewData && (
+              <Card className="border-blue-200 bg-blue-50/50">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-blue-900">
+                    <Eye className="h-5 w-5" />
+                    Real-time Preview
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <XCircle className="h-4 w-4 text-red-500" />
+                        <span className="font-medium">Errors</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Current:</span>
+                        <Badge variant="destructive">{previewData.current.errors}</Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">New:</span>
+                        <Badge variant={previewData.new.errors < previewData.current.errors ? "default" : "destructive"}>
+                          {previewData.new.errors}
+                        </Badge>
+                        {previewData.new.errors !== previewData.current.errors && (
+                          previewData.new.errors < previewData.current.errors ? 
+                            <TrendingDown className="h-4 w-4 text-green-500" /> :
+                            <TrendingUp className="h-4 w-4 text-red-500" />
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-orange-500" />
+                        <span className="font-medium">Warnings</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Current:</span>
+                        <Badge className="bg-orange-100 text-orange-800">{previewData.current.warnings}</Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">New:</span>
+                        <Badge className="bg-orange-100 text-orange-800">{previewData.new.warnings}</Badge>
+                        {previewData.new.warnings !== previewData.current.warnings && (
+                          previewData.new.warnings < previewData.current.warnings ? 
+                            <TrendingDown className="h-4 w-4 text-green-500" /> :
+                            <TrendingUp className="h-4 w-4 text-orange-500" />
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Info className="h-4 w-4 text-blue-500" />
+                        <span className="font-medium">Info</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">Current:</span>
+                        <Badge className="bg-blue-100 text-blue-800">{previewData.current.info}</Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">New:</span>
+                        <Badge className="bg-blue-100 text-blue-800">{previewData.new.info}</Badge>
+                        {previewData.new.info !== previewData.current.info && (
+                          previewData.new.info < previewData.current.info ? 
+                            <TrendingDown className="h-4 w-4 text-green-500" /> :
+                            <TrendingUp className="h-4 w-4 text-blue-500" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 pt-4 border-t border-blue-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-blue-800">
+                        {previewData.enabledAspects} of {previewData.totalAspects} validation aspects enabled
+                      </span>
+                      <Badge className="bg-blue-100 text-blue-800">
+                        {Math.round((previewData.enabledAspects / previewData.totalAspects) * 100)}% coverage
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
-                <CardTitle>Validation Engine Settings</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Validation Engine Settings</CardTitle>
+                  {previousSettings && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={showRollbackOptions}
+                      className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Rollback Changes
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-2 gap-6">
@@ -837,6 +1090,146 @@ export default function SettingsPage() {
         </Tabs>
         </div>
       </div>
+      
+      {/* Confirmation Dialog for Validation Settings */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-blue-500" />
+              Confirm Validation Settings
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to save these validation settings? This will affect how resources are validated and may change the validation status of existing resources.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {pendingSettings && previewData && (
+            <div className="space-y-3 py-4">
+              <div className="text-sm font-medium">Impact Preview:</div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Errors:</span>
+                  <div className="flex items-center gap-1">
+                    <span className={previewData.changeInErrors > 0 ? 'text-red-600' : previewData.changeInErrors < 0 ? 'text-green-600' : 'text-gray-600'}>
+                      {previewData.current.errors}
+                    </span>
+                    {previewData.changeInErrors !== 0 && (
+                      <>
+                        <span className="text-gray-400">→</span>
+                        <span className={previewData.changeInErrors > 0 ? 'text-red-600' : 'text-green-600'}>
+                          {previewData.newErrors}
+                        </span>
+                        {previewData.changeInErrors > 0 ? (
+                          <TrendingUp className="h-3 w-3 text-red-500" />
+                        ) : (
+                          <TrendingDown className="h-3 w-3 text-green-500" />
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Warnings:</span>
+                  <div className="flex items-center gap-1">
+                    <span className={previewData.changeInWarnings > 0 ? 'text-orange-600' : previewData.changeInWarnings < 0 ? 'text-green-600' : 'text-gray-600'}>
+                      {previewData.current.warnings}
+                    </span>
+                    {previewData.changeInWarnings !== 0 && (
+                      <>
+                        <span className="text-gray-400">→</span>
+                        <span className={previewData.changeInWarnings > 0 ? 'text-orange-600' : 'text-green-600'}>
+                          {previewData.newWarnings}
+                        </span>
+                        {previewData.changeInWarnings > 0 ? (
+                          <TrendingUp className="h-3 w-3 text-orange-500" />
+                        ) : (
+                          <TrendingDown className="h-3 w-3 text-green-500" />
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelSaveSettings}>
+              Cancel
+            </Button>
+            <Button onClick={confirmSaveSettings} disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Settings
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Rollback Dialog */}
+      <Dialog open={showRollbackDialog} onOpenChange={setShowRollbackDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-orange-500" />
+              Rollback Settings Changes
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to rollback your validation settings to the previous values? This will discard all current changes and restore the settings to how they were before.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {previousSettings && (
+            <div className="space-y-3 py-4">
+              <div className="text-sm font-medium">Previous Settings:</div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {Object.entries(previousSettings).map(([aspect, config]: [string, any]) => {
+                  if (typeof config === 'object' && config.enabled !== undefined) {
+                    return (
+                      <div key={aspect} className="flex items-center justify-between">
+                        <span className="text-gray-600 capitalize">{aspect}:</span>
+                        <div className="flex items-center gap-1">
+                          <Badge variant={config.enabled ? "default" : "secondary"} className="text-xs">
+                            {config.enabled ? 'Enabled' : 'Disabled'}
+                          </Badge>
+                          {config.severity && (
+                            <Badge variant="outline" className="text-xs">
+                              {config.severity}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelRollback}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={rollbackToPreviousSettings} 
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Rollback Settings
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

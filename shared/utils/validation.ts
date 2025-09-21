@@ -24,7 +24,7 @@ export function clampCount(value: number): number {
  * Calculate validation rate with bounds checking
  */
 export function calculateValidationRate(validated: number, total: number): number {
-  if (total <= 0) return 0;
+  if (total <= 0 || isNaN(total) || isNaN(validated)) return 0;
   return clampPercentage((validated / total) * 100);
 }
 
@@ -32,7 +32,7 @@ export function calculateValidationRate(validated: number, total: number): numbe
  * Calculate success rate with bounds checking
  */
 export function calculateSuccessRate(valid: number, validated: number): number {
-  if (validated <= 0) return 0;
+  if (validated <= 0 || isNaN(validated) || isNaN(valid)) return 0;
   return clampPercentage((valid / validated) * 100);
 }
 
@@ -125,6 +125,14 @@ export function getFallbackValidationStats(): any {
     validationCoverage: 0,
     validationProgress: 0,
     lastValidationRun: new Date(),
-    resourceTypeBreakdown: {}
+    resourceTypeBreakdown: {},
+    aspectBreakdown: {
+      structural: { enabled: true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      profile: { enabled: true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      terminology: { enabled: true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      reference: { enabled: true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      businessRule: { enabled: true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      metadata: { enabled: true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 }
+    }
   };
 }

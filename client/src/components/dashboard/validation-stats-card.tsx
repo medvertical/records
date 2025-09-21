@@ -15,6 +15,8 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { ValidationStats } from '@shared/types/dashboard';
+import { useQuery } from '@tanstack/react-query';
+import { ValidationAspectBreakdownChart } from './validation-aspect-breakdown-chart';
 
 interface ValidationStatsCardProps {
   data?: ValidationStats | null;
@@ -29,6 +31,17 @@ export function ValidationStatsCard({
   error = null, 
   lastUpdated 
 }: ValidationStatsCardProps) {
+  // Fetch current validation settings for aspect indicators
+  const { data: validationSettings } = useQuery({
+    queryKey: ['validation-settings'],
+    queryFn: async () => {
+      const response = await fetch('/api/validation/settings');
+      const data = await response.json();
+      return data.settings;
+    },
+    refetchInterval: 5000 // Refresh every 5 seconds to show real-time updates
+  });
+
   // Only show loading state if we truly have no data and are actively loading
   // Don't show loading during refetches when we have previous data
   const computedLoading = isLoading && !data && !error;
@@ -153,6 +166,34 @@ export function ValidationStatsCard({
             </div>
           </div>
 
+          {/* Active Validation Aspects */}
+          {validationSettings && (
+            <div>
+              <div className="text-sm font-medium mb-2">Active Validation Aspects</div>
+              <div className="flex flex-wrap gap-1">
+                {Object.entries(validationSettings).map(([aspect, config]: [string, any]) => {
+                  const isEnabled = config?.enabled === true;
+                  const aspectName = aspect.replace(/([A-Z])/g, ' $1').trim();
+                  return (
+                    <span
+                      key={aspect}
+                      className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        isEnabled 
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' 
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                      }`}
+                    >
+                      {aspectName}
+                    </span>
+                  );
+                })}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                Only enabled aspects are shown in validation results
+              </div>
+            </div>
+          )}
+
           {/* Resource Status Breakdown */}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
@@ -227,6 +268,18 @@ export function ValidationStatsCard({
                     </div>
                   ))}
               </div>
+            </div>
+          )}
+
+          {/* Validation Aspect Breakdown Chart */}
+          {safeData.aspectBreakdown && Object.keys(safeData.aspectBreakdown).length > 0 && (
+            <div>
+              <div className="text-sm font-medium mb-3">Validation by Aspect</div>
+              <ValidationAspectBreakdownChart 
+                aspectBreakdown={safeData.aspectBreakdown}
+                isLoading={false}
+                error={null}
+              />
             </div>
           )}
 

@@ -4,20 +4,31 @@ import { storage } from "./storage.js";
 import { FhirClient } from "./services/fhir/fhir-client";
 import { UnifiedValidationService } from "./services/validation/unified-validation";
 import { profileManager } from "./services/fhir/profile-manager";
-import { insertFhirServerSchema, insertFhirResourceSchema, insertValidationProfileSchema, type ValidationResult } from "@shared/schema.js";
+import { insertFhirServerSchema, insertFhirResourceSchema, insertValidationProfileSchema, type ValidationResult, validationResults } from "@shared/schema.js";
 import { z } from "zod";
+import { db } from "./db.js";
+import { lt, sql } from "drizzle-orm";
 
 // Rock Solid Validation Settings imports
 import { getValidationSettingsService } from "./services/validation/validation-settings-service";
 import { getValidationSettingsRepository } from "./repositories/validation-settings-repository";
 import { getValidationPipeline } from "./services/validation/validation-pipeline";
+import { getValidationQueueService, ValidationPriority } from "./services/validation/validation-queue-service";
+import { getIndividualResourceProgressService } from "./services/validation/individual-resource-progress-service";
+import { getValidationCancellationRetryService } from "./services/validation/validation-cancellation-retry-service";
 import { DashboardService } from "./services/dashboard/dashboard-service";
 import type { ValidationSettings, ValidationSettingsUpdate } from "@shared/validation-settings.js";
 import { BUILT_IN_PRESETS } from "@shared/validation-settings.js";
+import ValidationCacheManager from "./utils/validation-cache-manager.js";
 
 let fhirClient: FhirClient;
 let unifiedValidationService: UnifiedValidationService;
 let dashboardService: DashboardService;
+
+// Make dashboard service available globally for validation settings service
+declare global {
+  var dashboardService: DashboardService | undefined;
+}
 
 // Global validation state tracking
 let globalValidationState = {
@@ -125,66 +136,62 @@ async function getCachedResourceCounts() {
 function filterValidationIssues(validationResults: ValidationResult[], activeSettings: any): ValidationResult[] {
   if (!activeSettings) return validationResults;
   
+        // Use nested settings structure (the actual validation settings)
+        const settings = activeSettings.settings || activeSettings;
+  
   return validationResults.map(result => {
-    if (!result.issues || result.issues.length === 0) return result;
+    if (!result.issues || !Array.isArray(result.issues) || result.issues.length === 0) return result;
     
-    // Filter issues based on their category and active settings
+    // Filter issues based on their aspect and active settings
     const filteredIssues = result.issues.filter((issue: any) => {
-      // If issue has no category, try to infer it from the message
-      let category = issue.category;
+      // Use the aspect field from the new validation engine
+      const aspect = issue.aspect;
       
-      if (!category) {
-        // Try to infer category from issue message/code
+      if (!aspect) {
+        // Fallback: try to infer aspect from the message/code for legacy issues
         const message = (issue.message || '').toLowerCase();
         const code = (issue.code || '').toLowerCase();
         
         if (message.includes('cardinality') || message.includes('instance count') || 
             message.includes('declared type') || message.includes('incompatible') ||
             code.includes('structure')) {
-          category = 'structural';
+          return settings.structural?.enabled === true;
         } else if (message.includes('profile') || message.includes('constraint') ||
                    code.includes('profile')) {
-          category = 'profile';
+          return settings.profile?.enabled === true;
         } else if (message.includes('code') || message.includes('terminology') ||
                    message.includes('valueset') || code.includes('terminology')) {
-          category = 'terminology';
+          return settings.terminology?.enabled === true;
         } else if (message.includes('reference') || message.includes('target') ||
                    code.includes('reference')) {
-          category = 'reference';
+          return settings.reference?.enabled === true;
         } else if (message.includes('business') || message.includes('logic') ||
                    code.includes('business')) {
-          category = 'business-rule';
+          return settings.businessRule?.enabled === true;
         } else if (message.includes('metadata') || message.includes('security') ||
                    message.includes('narrative') || code.includes('metadata')) {
-          category = 'metadata';
-        } else if (message.includes('unable to resolve reference to profile') || 
-                   message.includes('unable to resolve profile') ||
-                   message.includes('profile resolution') ||
-                   message.includes('unresolved profile')) {
-          category = 'general';
+          return settings.metadata?.enabled === true;
         } else {
           // Default to structural for unknown issues
-          category = 'structural';
+          return settings.structural?.enabled === true;
         }
       }
       
-      switch (category) {
+      switch (aspect) {
         case 'structural':
-          return activeSettings.enableStructuralValidation !== false;
+          return settings.structural?.enabled === true;
         case 'profile':
-          return activeSettings.enableProfileValidation !== false;
+          return settings.profile?.enabled === true;
         case 'terminology':
-          return activeSettings.enableTerminologyValidation !== false;
+          return settings.terminology?.enabled === true;
         case 'reference':
-          return activeSettings.enableReferenceValidation !== false;
-        case 'business-rule':
-          return activeSettings.enableBusinessRuleValidation !== false;
+          return settings.reference?.enabled === true;
+        case 'businessRule':
+          return settings.businessRule?.enabled === true;
         case 'metadata':
-          return activeSettings.enableMetadataValidation !== false;
-        case 'general':
-          return true; // Always show general category issues
+          return settings.metadata?.enabled === true;
         default:
-          return true; // Show unknown categories by default
+          return true; // Show unknown aspects by default
       }
     });
     
@@ -193,13 +200,14 @@ function filterValidationIssues(validationResults: ValidationResult[], activeSet
     const warningCount = filteredIssues.filter((issue: any) => issue.severity === 'warning').length;
     
     console.log(`[FilterValidation] Original issues: ${result.issues?.length || 0}, Filtered issues: ${filteredIssues.length}`);
+    console.log(`[FilterValidation] Active settings object:`, JSON.stringify(activeSettings, null, 2));
     console.log(`[FilterValidation] Active settings:`, {
-      structural: activeSettings.enableStructuralValidation !== false,
-      profile: activeSettings.enableProfileValidation !== false,
-      terminology: activeSettings.enableTerminologyValidation !== false,
-      reference: activeSettings.enableReferenceValidation !== false,
-      businessRule: activeSettings.enableBusinessRuleValidation !== false,
-      metadata: activeSettings.enableMetadataValidation !== false
+      structural: settings.structural?.enabled === true,
+      profile: settings.profile?.enabled === true,
+      terminology: settings.terminology?.enabled === true,
+      reference: settings.reference?.enabled === true,
+      businessRule: settings.businessRule?.enabled === true,
+      metadata: settings.metadata?.enabled === true
     });
     
     return {
@@ -225,6 +233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     fhirClient = new FhirClient(activeServer.url);
     unifiedValidationService = new UnifiedValidationService(fhirClient, null as any);
     dashboardService = new DashboardService(fhirClient, storage);
+    globalThis.dashboardService = dashboardService;
     
     // Load and apply saved validation settings using rock-solid service
     try {
@@ -608,6 +617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 try {
                   // Get existing validation results from cache (no revalidation)
                   const validationResults = await storage.getValidationResultsByResourceId(resource.id);
+                  console.log(`[Resource ${resource.id}] Fetched ${validationResults.length} validation results`);
                   
                   // Filter validation results based on active settings
                   const filteredResults = filterValidationIssues(validationResults, validationSettings);
@@ -623,37 +633,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   let filteredWarningCount = 0;
                   let filteredInfoCount = 0;
                   
-                  if (latestValidation && latestValidation.issues) {
-                    latestValidation.issues.forEach(issue => {
-                      if (issue.severity === 'error' || issue.severity === 'fatal') {
-                        filteredErrorCount++;
-                      } else if (issue.severity === 'warning') {
-                        filteredWarningCount++;
-                      } else if (issue.severity === 'information') {
-                        filteredInfoCount++;
+                  // Initialize aspect-specific counts (only for enabled aspects)
+                  const issuesByAspect = {
+                    structural: 0,
+                    profile: 0,
+                    terminology: 0,
+                    reference: 0,
+                    businessRule: 0,
+                    metadata: 0
+                  };
+                  
+                  // Use existing aspect breakdown from validation results or initialize default
+                  // Use nested settings structure (the actual validation settings)
+                  const settings = (validationSettings as any)?.settings || validationSettings;
+                  let aspectBreakdown = latestValidation?.aspectBreakdown || {
+                    structural: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.structural?.enabled !== false },
+                    profile: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.profile?.enabled !== false },
+                    terminology: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.terminology?.enabled !== false },
+                    reference: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.reference?.enabled !== false },
+                    businessRule: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.businessRule?.enabled !== false },
+                    metadata: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.metadata?.enabled !== false }
+                  };
+                  
+                  if (latestValidation && latestValidation.aspectBreakdown) {
+                    // Update aspectBreakdown to reflect current settings
+                    for (const aspect of Object.keys(aspectBreakdown)) {
+                      const breakdown = (aspectBreakdown as any)[aspect];
+                      const storedBreakdown = (latestValidation.aspectBreakdown as any)[aspect];
+                      
+                      // Update enabled status based on current settings
+                      breakdown.enabled = settings && settings[aspect]?.enabled !== false;
+                      console.log(`[Resource ${resource.id}] Aspect ${aspect}: settings.enabled=${settings?.[aspect]?.enabled}, breakdown.enabled=${breakdown.enabled}`);
+                      
+                      // Use stored data but with current enabled status
+                      if (storedBreakdown) {
+                        breakdown.errorCount = storedBreakdown.errorCount || 0;
+                        breakdown.warningCount = storedBreakdown.warningCount || 0;
+                        breakdown.informationCount = storedBreakdown.informationCount || 0;
+                        breakdown.issueCount = storedBreakdown.issueCount || 0;
                       }
-                    });
+                      
+                      // Only count issues from enabled aspects
+                      if (breakdown.enabled) {
+                        filteredErrorCount += breakdown.errorCount || 0;
+                        filteredWarningCount += breakdown.warningCount || 0;
+                        filteredInfoCount += breakdown.informationCount || 0;
+                        
+                        // Count issues by aspect (only for enabled aspects)
+                        (issuesByAspect as any)[aspect] = breakdown.issueCount || 0;
+                      }
+                    }
                   }
                   
-                  // Calculate validation score based on filtered issues
-                  let filteredScore = 100;
-                  if (latestValidation && latestValidation.issues) {
-                    latestValidation.issues.forEach(issue => {
-                      if (issue.severity === 'error' || issue.severity === 'fatal') {
-                        filteredScore -= 10;
-                      } else if (issue.severity === 'warning') {
-                        filteredScore -= 2;
-                      } else if (issue.severity === 'information') {
-                        filteredScore -= 0.5;
+                  // Calculate validation score based on filtered issues (only enabled aspects)
+                  let filteredScore = 0; // Default to 0 if no validation has been performed
+                  if (latestValidation && latestValidation.aspectBreakdown) {
+                    filteredScore = 100; // Start with 100 if validation was performed
+                    // Calculate score from aspectBreakdown (filtered by enabled aspects)
+                    for (const aspect of Object.keys(aspectBreakdown)) {
+                      const breakdown = (aspectBreakdown as any)[aspect];
+                      
+            // Only consider issues from enabled aspects for scoring
+            const aspectEnabled = breakdown.enabled && settings && (settings as any)[aspect]?.enabled !== false;
+                      
+                      if (aspectEnabled) {
+                        filteredScore -= (breakdown.errorCount || 0) * 15;  // Error issues: -15 points each
+                        filteredScore -= (breakdown.warningCount || 0) * 5; // Warning issues: -5 points each
+                        filteredScore -= (breakdown.informationCount || 0) * 1; // Information issues: -1 point each
                       }
-                    });
-                    filteredScore = Math.max(0, filteredScore);
+                    }
+                    filteredScore = Math.max(0, Math.round(filteredScore));
+                  }
+                  
+                  // Calculate aspect-specific scores and pass/fail status
+                  for (const aspect of Object.keys(aspectBreakdown)) {
+                    const breakdown = (aspectBreakdown as any)[aspect];
+                    
+                    if (breakdown.enabled && settings && (settings as any)[aspect]?.enabled !== false) {
+                      // Calculate score for this aspect
+                      let aspectScore = 100;
+                      aspectScore -= breakdown.errorCount * 15;  // Error issues: -15 points each
+                      aspectScore -= breakdown.warningCount * 5; // Warning issues: -5 points each
+                      aspectScore -= breakdown.informationCount * 1; // Information issues: -1 point each
+                      breakdown.validationScore = Math.max(0, Math.round(aspectScore));
+                      
+                      // Aspect passes if no errors (warnings and info are acceptable)
+                      breakdown.passed = breakdown.errorCount === 0;
+                    } else {
+                      // Disabled aspects get neutral scores
+                      breakdown.validationScore = 100;
+                      breakdown.passed = true;
+                    }
                   }
                   
                   return {
                     ...resource.data,
                     _dbId: resource.id,
-                    _validationResults: filteredResults,
+                    validationResults: filteredResults,
                     _validationSummary: {
                       hasErrors: filteredErrorCount > 0,
                       hasWarnings: filteredWarningCount > 0,
@@ -661,8 +737,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       warningCount: filteredWarningCount,
                       isValid: filteredErrorCount === 0,
                       validationScore: filteredScore,
-                      lastValidated: latestValidation ? new Date(latestValidation.validatedAt) : null,
-                      needsValidation: false // Always use cached validation results for performance
+                      lastValidated: latestValidation?.validatedAt ? new Date(latestValidation.validatedAt) : null,
+                      needsValidation: false, // Always use cached validation results for performance
+                      issuesByAspect: issuesByAspect,
+                      aspectBreakdown: aspectBreakdown
                     }
                   };
                 } catch (error) {
@@ -670,7 +748,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   return {
                     ...resource.data,
                     _dbId: resource.id,
-                    _validationResults: [],
+                    validationResults: [],
                     _validationSummary: {
                       hasErrors: false,
                       hasWarnings: false,
@@ -679,7 +757,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       isValid: false,
                       validationScore: 0,
                       lastValidated: null,
-                      needsValidation: false
+                      needsValidation: false,
+                      issuesByAspect: {
+                        structural: 0,
+                        profile: 0,
+                        terminology: 0,
+                        reference: 0,
+                        businessRule: 0,
+                        metadata: 0
+                      },
+                      aspectBreakdown: {
+                        structural: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.structural?.enabled !== false },
+                        profile: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.profile?.enabled !== false },
+                        terminology: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.terminology?.enabled !== false },
+                        reference: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.reference?.enabled !== false },
+                        businessRule: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.businessRule?.enabled !== false },
+                        metadata: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.metadata?.enabled !== false }
+                      }
                     }
                   };
                 }
@@ -829,7 +923,178 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Filter the latest validation result based on active settings
         resource.validationResults = filterValidationIssues([latestResult], validationSettings);
-        console.log(`[Resource Detail] After filtering: ${resource.validationResults[0]?.issues?.length || 0} issues`);
+      console.log(`[Resource Detail] After filtering: ${(resource.validationResults as any)[0]?.issues?.length || 0} issues`);
+      
+      // Create _validationSummary for individual resource endpoint (same as resource list endpoint)
+      const latestValidation = resource.validationResults[0];
+      if (latestValidation && latestValidation.aspectBreakdown) {
+        // Initialize aspect-specific counts (only for enabled aspects)
+        const issuesByAspect = {
+          structural: 0,
+          profile: 0,
+          terminology: 0,
+          reference: 0,
+          businessRule: 0,
+          metadata: 0
+        };
+        
+        // Use existing aspect breakdown from validation results or initialize default
+        // Use nested settings structure (the actual validation settings)
+        const settings = (validationSettings as any)?.settings || validationSettings;
+        let aspectBreakdown = latestValidation?.aspectBreakdown || {
+          structural: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.structural?.enabled !== false },
+          profile: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.profile?.enabled !== false },
+          terminology: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.terminology?.enabled !== false },
+          reference: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.reference?.enabled !== false },
+          businessRule: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.businessRule?.enabled !== false },
+          metadata: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.metadata?.enabled !== false }
+        };
+        
+        let filteredErrorCount = 0;
+        let filteredWarningCount = 0;
+        let filteredInfoCount = 0;
+        
+        // Update aspectBreakdown to reflect current settings
+        for (const aspect of Object.keys(aspectBreakdown)) {
+          const breakdown = (aspectBreakdown as any)[aspect];
+          const storedBreakdown = (latestValidation.aspectBreakdown as any)[aspect];
+          
+          // Update enabled status based on current settings
+          breakdown.enabled = settings && (settings as any)[aspect]?.enabled !== false;
+          
+          // Use stored data but with current enabled status
+          if (storedBreakdown) {
+            breakdown.errorCount = storedBreakdown.errorCount || 0;
+            breakdown.warningCount = storedBreakdown.warningCount || 0;
+            breakdown.informationCount = storedBreakdown.informationCount || 0;
+            breakdown.issueCount = storedBreakdown.issueCount || 0;
+          }
+          
+          // Only count issues from enabled aspects
+          if (breakdown.enabled) {
+            filteredErrorCount += breakdown.errorCount || 0;
+            filteredWarningCount += breakdown.warningCount || 0;
+            filteredInfoCount += breakdown.informationCount || 0;
+            
+            // Count issues by aspect (only for enabled aspects)
+            (issuesByAspect as any)[aspect] = breakdown.issueCount || 0;
+          }
+        }
+        
+        // Calculate validation score based on filtered aspect breakdown (only enabled aspects)
+        let filteredScore = 0; // Default to 0 if no validation has been performed
+        if (latestValidation && latestValidation.aspectBreakdown) {
+          filteredScore = 100; // Start with 100 if validation was performed
+          for (const aspect of Object.keys(aspectBreakdown)) {
+            const breakdown = (aspectBreakdown as any)[aspect];
+            
+            // Only consider issues from enabled aspects for scoring
+            const aspectEnabled = breakdown.enabled && settings && (settings as any)[aspect]?.enabled !== false;
+            
+            if (aspectEnabled) {
+              filteredScore -= (breakdown.errorCount || 0) * 15;  // Error issues: -15 points each
+              filteredScore -= (breakdown.warningCount || 0) * 5; // Warning issues: -5 points each
+              filteredScore -= (breakdown.informationCount || 0) * 1; // Information issues: -1 point each
+            }
+          }
+          filteredScore = Math.max(0, Math.round(filteredScore));
+        }
+        
+        // Calculate aspect-specific scores and pass/fail status
+        for (const aspect of Object.keys(aspectBreakdown)) {
+          const breakdown = (aspectBreakdown as any)[aspect];
+          
+          if (breakdown.enabled && settings && (settings as any)[aspect]?.enabled !== false) {
+            // Calculate score for this aspect
+            let aspectScore = 100;
+            aspectScore -= breakdown.errorCount * 15;  // Error issues: -15 points each
+            aspectScore -= breakdown.warningCount * 5; // Warning issues: -5 points each
+            aspectScore -= breakdown.informationCount * 1; // Information issues: -1 point each
+            breakdown.validationScore = Math.max(0, Math.round(aspectScore));
+            
+            // Aspect passes if no errors (warnings and info are acceptable)
+            breakdown.passed = breakdown.errorCount === 0;
+          } else {
+            // Disabled aspects get neutral scores
+            breakdown.validationScore = 100;
+            breakdown.passed = true;
+          }
+        }
+        
+        // Add _validationSummary to the resource
+        (resource as any)._validationSummary = {
+          hasErrors: filteredErrorCount > 0,
+          hasWarnings: filteredWarningCount > 0,
+          errorCount: filteredErrorCount,
+          warningCount: filteredWarningCount,
+          informationCount: filteredInfoCount,
+          isValid: filteredErrorCount === 0,
+          validationScore: filteredScore,
+          lastValidated: latestValidation?.validatedAt ? new Date(latestValidation.validatedAt) : null,
+          needsValidation: false, // Always use cached validation results for performance
+          issuesByAspect: issuesByAspect,
+          aspectBreakdown: aspectBreakdown
+        };
+      } else {
+        // No validation results, create default summary
+        (resource as any)._validationSummary = {
+          hasErrors: false,
+          hasWarnings: false,
+          errorCount: 0,
+          warningCount: 0,
+          informationCount: 0,
+          isValid: false,
+          validationScore: 0,
+          lastValidated: null,
+          needsValidation: false,
+          issuesByAspect: {
+            structural: 0,
+            profile: 0,
+            terminology: 0,
+            reference: 0,
+            businessRule: 0,
+            metadata: 0
+          },
+          aspectBreakdown: {
+            structural: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.structural?.enabled !== false },
+            profile: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.profile?.enabled !== false },
+            terminology: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.terminology?.enabled !== false },
+            reference: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.reference?.enabled !== false },
+            businessRule: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.businessRule?.enabled !== false },
+            metadata: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.metadata?.enabled !== false }
+          }
+        };
+      }
+    } else {
+      // No validation results at all
+      const settings = (validationSettings as any)?.settings || validationSettings;
+      (resource as any)._validationSummary = {
+        hasErrors: false,
+        hasWarnings: false,
+        errorCount: 0,
+        warningCount: 0,
+        informationCount: 0,
+        isValid: false,
+        validationScore: 0,
+        lastValidated: null,
+        needsValidation: false,
+        issuesByAspect: {
+          structural: 0,
+          profile: 0,
+          terminology: 0,
+          reference: 0,
+          businessRule: 0,
+          metadata: 0
+        },
+        aspectBreakdown: {
+          structural: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.structural?.enabled !== false },
+          profile: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.profile?.enabled !== false },
+          terminology: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.terminology?.enabled !== false },
+          reference: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.reference?.enabled !== false },
+          businessRule: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.businessRule?.enabled !== false },
+          metadata: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.metadata?.enabled !== false }
+        }
+      };
       }
       
       console.log(`[Resource Detail] Returning resource:`, resource.resourceType, resource.resourceId);
@@ -1096,6 +1361,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const options = req.body || {};
+      const forceRevalidation = options.forceRevalidation || false;
 
       // RESET validation state for NEW start (always start at 0)
       globalValidationState.isRunning = true;
@@ -1104,15 +1370,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       globalValidationState.shouldStop = false;
       globalValidationState.isPaused = false;
       globalValidationState.resumeData = null;
-      console.log('NEW validation start - RESET to 0. Global state: isRunning=true, canPause=true');
+      
+      if (forceRevalidation) {
+        console.log('REVALIDATION start - Force revalidation of all resources. Global state: isRunning=true, canPause=true');
+      } else {
+        console.log('NEW validation start - RESET to 0. Global state: isRunning=true, canPause=true');
+      }
       
       // Clear all previous validation results to start fresh
       await storage.clearAllValidationResults();
 
       // Return immediately to provide fast UI response
       res.json({ 
-        message: "Validation starting...", 
-        status: "starting" 
+        message: forceRevalidation ? "Revalidation starting..." : "Validation starting...", 
+        status: "starting",
+        forceRevalidation: forceRevalidation
       });
 
       // Start validation asynchronously in background  
@@ -1738,6 +2010,999 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Queue-based bulk validation endpoint
+  app.post("/api/validation/bulk/start-queue", async (req, res) => {
+    try {
+      if (!unifiedValidationService || !fhirClient) {
+        return res.status(400).json({ message: "No FHIR server configured" });
+      }
+
+      const options = req.body || {};
+      const forceRevalidation = options.forceRevalidation || false;
+      const priority = options.priority || 'normal';
+      const batchSize = options.batchSize || 200;
+
+      console.log(`[QueueBulkValidation] Starting queue-based bulk validation (forceRevalidation: ${forceRevalidation}, priority: ${priority})`);
+
+      // Clear all previous validation results if force revalidation
+      if (forceRevalidation) {
+        await storage.clearAllValidationResults();
+        console.log('[QueueBulkValidation] Cleared all previous validation results for revalidation');
+      }
+
+      // Get all resource types from FHIR server
+      const resourceTypes = await fhirClient.getAllResourceTypes();
+      console.log(`[QueueBulkValidation] Found ${resourceTypes.length} resource types to validate`);
+
+      const queueService = getValidationQueueService();
+      const batchId = `bulk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Start queue processing if not already running
+      queueService.startProcessing();
+
+      let totalQueuedItems = 0;
+      const context = {
+        requestedBy: req.headers['x-user-id'] as string || 'anonymous',
+        requestId: batchId,
+        batchId,
+        metadata: {
+          type: 'bulk_validation',
+          forceRevalidation,
+          batchSize,
+          resourceTypes: resourceTypes.length
+        }
+      };
+
+      // Queue validation for each resource type
+      for (const resourceType of resourceTypes) {
+        try {
+          // Get resources for this type using searchResources (same as existing bulk validation)
+          const bundle = await fhirClient.searchResources(resourceType, { _offset: 0 }, batchSize);
+          
+          if (bundle.entry && bundle.entry.length > 0) {
+            // Create validation requests from bundle entries
+            const validationRequests = bundle.entry
+              .filter(e => e.resource)
+              .map((entry: any) => ({
+                resource: entry.resource,
+                resourceType: resourceType,
+                resourceId: entry.resource.id,
+                context: {
+                  ...context,
+                  resourceType
+                }
+              }));
+
+            // Queue batch validation
+            const itemIds = await queueService.queueBatchValidation(
+              validationRequests,
+              context,
+              ValidationPriority[priority.toUpperCase() as keyof typeof ValidationPriority] || ValidationPriority.NORMAL,
+              3 // max attempts
+            );
+
+            totalQueuedItems += itemIds.length;
+            console.log(`[QueueBulkValidation] Queued ${itemIds.length} items for ${resourceType}`);
+          }
+        } catch (error) {
+          console.error(`[QueueBulkValidation] Failed to queue validation for ${resourceType}:`, error);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Queue-based validation started with ${totalQueuedItems} items`,
+        data: {
+          batchId,
+          totalQueuedItems,
+          resourceTypes: resourceTypes.length,
+          priority,
+          forceRevalidation
+        },
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('[QueueBulkValidation] Failed to start queue-based bulk validation:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: 'Failed to start queue-based bulk validation',
+        error: 'QUEUE_BULK_START_FAILED',
+        details: error?.message || String(error),
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // Validation Queue Management endpoints
+  app.get("/api/validation/queue/stats", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      const stats = queueService.getStats();
+      
+      res.json({
+        success: true,
+        data: stats,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[ValidationQueue] Failed to get queue stats:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to get queue statistics",
+        error: "QUEUE_STATS_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.get("/api/validation/queue/items", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      const { status, limit = '50' } = req.query;
+      
+      const limitNum = parseInt(limit as string);
+      if (isNaN(limitNum) || limitNum < 1 || limitNum > 1000) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid limit - must be between 1 and 1000",
+          error: "INVALID_LIMIT",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      let items;
+      if (status) {
+        // Get items by specific status
+        items = queueService.getQueueItems(status as any);
+      } else {
+        // Get all queue items
+        items = queueService.getQueueItems();
+      }
+
+      // Limit results
+      items = items.slice(0, limitNum);
+      
+      res.json({
+        success: true,
+        data: items,
+        pagination: {
+          limit: limitNum,
+          total: items.length
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[ValidationQueue] Failed to get queue items:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to get queue items",
+        error: "QUEUE_ITEMS_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.get("/api/validation/queue/processing", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      const processingItems = queueService.getProcessingItems();
+      
+      res.json({
+        success: true,
+        data: processingItems,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[ValidationQueue] Failed to get processing items:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to get processing items",
+        error: "QUEUE_PROCESSING_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/queue/cancel", async (req, res) => {
+    try {
+      const { itemId, batchId } = req.body;
+      
+      if (!itemId && !batchId) {
+        return res.status(400).json({
+          success: false,
+          message: "Either itemId or batchId is required",
+          error: "MISSING_ID",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const queueService = getValidationQueueService();
+      let cancelledCount = 0;
+
+      if (itemId) {
+        const cancelled = queueService.cancelValidation(itemId);
+        cancelledCount = cancelled ? 1 : 0;
+      } else if (batchId) {
+        cancelledCount = queueService.cancelBatch(batchId);
+      }
+
+      res.json({
+        success: true,
+        data: {
+          cancelledCount,
+          itemId,
+          batchId
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[ValidationQueue] Failed to cancel validation:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to cancel validation",
+        error: "QUEUE_CANCEL_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/queue/clear", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      const clearedCount = queueService.clearCompletedItems();
+      
+      res.json({
+        success: true,
+        data: {
+          clearedCount
+        },
+        message: `Cleared ${clearedCount} completed/failed items from queue`,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[ValidationQueue] Failed to clear completed items:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to clear completed items",
+        error: "QUEUE_CLEAR_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/queue/start", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      queueService.startProcessing();
+      
+      res.json({
+        success: true,
+        message: "Queue processing started",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[ValidationQueue] Failed to start queue processing:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to start queue processing",
+        error: "QUEUE_START_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/queue/stop", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      queueService.stopProcessing();
+      
+      res.json({
+        success: true,
+        message: "Queue processing stopped",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[ValidationQueue] Failed to stop queue processing:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to stop queue processing",
+        error: "QUEUE_STOP_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // Individual Resource Progress Tracking endpoints
+  app.get("/api/validation/progress/individual/stats", async (req, res) => {
+    try {
+      const progressService = getIndividualResourceProgressService();
+      const stats = progressService.getProgressStats();
+      
+      res.json({
+        success: true,
+        data: stats,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[IndividualResourceProgress] Failed to get progress stats:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to get individual resource progress statistics",
+        error: "INDIVIDUAL_PROGRESS_STATS_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.get("/api/validation/progress/individual/active", async (req, res) => {
+    try {
+      const progressService = getIndividualResourceProgressService();
+      const activeProgress = progressService.getActiveProgress();
+      
+      res.json({
+        success: true,
+        data: activeProgress,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[IndividualResourceProgress] Failed to get active progress:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to get active resource progress",
+        error: "INDIVIDUAL_PROGRESS_ACTIVE_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.get("/api/validation/progress/individual/completed", async (req, res) => {
+    try {
+      const progressService = getIndividualResourceProgressService();
+      const { limit = '100' } = req.query;
+      
+      const limitNum = parseInt(limit as string);
+      if (isNaN(limitNum) || limitNum < 1 || limitNum > 1000) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid limit - must be between 1 and 1000",
+          error: "INVALID_LIMIT",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const completedProgress = progressService.getCompletedProgress(limitNum);
+      
+      res.json({
+        success: true,
+        data: completedProgress,
+        pagination: {
+          limit: limitNum,
+          total: completedProgress.length
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[IndividualResourceProgress] Failed to get completed progress:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to get completed resource progress",
+        error: "INDIVIDUAL_PROGRESS_COMPLETED_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.get("/api/validation/progress/individual/:resourceId", async (req, res) => {
+    try {
+      const { resourceId } = req.params;
+      const progressService = getIndividualResourceProgressService();
+      const progress = progressService.getResourceProgress(resourceId);
+      
+      if (!progress) {
+        return res.status(404).json({
+          success: false,
+          message: "Resource progress not found",
+          error: "RESOURCE_PROGRESS_NOT_FOUND",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      res.json({
+        success: true,
+        data: progress,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[IndividualResourceProgress] Failed to get resource progress:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to get resource progress",
+        error: "INDIVIDUAL_PROGRESS_RESOURCE_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/progress/individual/start", async (req, res) => {
+    try {
+      const { resourceId, resourceType, context, resourceUrl, metadata } = req.body;
+      
+      if (!resourceId || !resourceType || !context) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required fields: resourceId, resourceType, context",
+          error: "MISSING_REQUIRED_FIELDS",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const progressService = getIndividualResourceProgressService();
+      const progress = progressService.startResourceProgress(
+        resourceId,
+        resourceType,
+        context,
+        resourceUrl,
+        metadata
+      );
+      
+      res.json({
+        success: true,
+        data: progress,
+        message: "Started tracking individual resource progress",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[IndividualResourceProgress] Failed to start resource progress:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to start resource progress tracking",
+        error: "INDIVIDUAL_PROGRESS_START_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/progress/individual/update", async (req, res) => {
+    try {
+      const update = req.body;
+      
+      if (!update.resourceId) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required field: resourceId",
+          error: "MISSING_RESOURCE_ID",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const progressService = getIndividualResourceProgressService();
+      const updatedProgress = progressService.updateResourceProgress(update);
+      
+      if (!updatedProgress) {
+        return res.status(404).json({
+          success: false,
+          message: "Resource progress not found",
+          error: "RESOURCE_PROGRESS_NOT_FOUND",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      res.json({
+        success: true,
+        data: updatedProgress,
+        message: "Updated resource progress",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[IndividualResourceProgress] Failed to update resource progress:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to update resource progress",
+        error: "INDIVIDUAL_PROGRESS_UPDATE_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/progress/individual/complete", async (req, res) => {
+    try {
+      const { resourceId, finalStatus, finalResults } = req.body;
+      
+      if (!resourceId || !finalStatus) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required fields: resourceId, finalStatus",
+          error: "MISSING_REQUIRED_FIELDS",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const progressService = getIndividualResourceProgressService();
+      const completedProgress = progressService.completeResourceProgress(
+        resourceId,
+        finalStatus,
+        finalResults
+      );
+      
+      if (!completedProgress) {
+        return res.status(404).json({
+          success: false,
+          message: "Resource progress not found",
+          error: "RESOURCE_PROGRESS_NOT_FOUND",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      res.json({
+        success: true,
+        data: completedProgress,
+        message: "Completed resource progress tracking",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[IndividualResourceProgress] Failed to complete resource progress:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to complete resource progress tracking",
+        error: "INDIVIDUAL_PROGRESS_COMPLETE_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/progress/individual/cancel", async (req, res) => {
+    try {
+      const { resourceId } = req.body;
+      
+      if (!resourceId) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required field: resourceId",
+          error: "MISSING_RESOURCE_ID",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const progressService = getIndividualResourceProgressService();
+      const cancelled = progressService.cancelResourceProgress(resourceId);
+      
+      if (!cancelled) {
+        return res.status(404).json({
+          success: false,
+          message: "Resource progress not found or already completed",
+          error: "RESOURCE_PROGRESS_NOT_FOUND",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      res.json({
+        success: true,
+        message: "Cancelled resource progress tracking",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[IndividualResourceProgress] Failed to cancel resource progress:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to cancel resource progress tracking",
+        error: "INDIVIDUAL_PROGRESS_CANCEL_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/progress/individual/clear", async (req, res) => {
+    try {
+      const progressService = getIndividualResourceProgressService();
+      progressService.clearAllProgress();
+      
+      res.json({
+        success: true,
+        message: "Cleared all individual resource progress data",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[IndividualResourceProgress] Failed to clear progress data:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to clear progress data",
+        error: "INDIVIDUAL_PROGRESS_CLEAR_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // Enhanced Cancellation and Retry Management endpoints
+  app.get("/api/validation/cancellation-retry/stats", async (req, res) => {
+    try {
+      const service = getValidationCancellationRetryService();
+      const stats = service.getStats();
+      
+      res.json({
+        success: true,
+        data: stats,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[CancellationRetry] Failed to get stats:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to get cancellation and retry statistics",
+        error: "CANCELLATION_RETRY_STATS_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.get("/api/validation/cancellation-retry/active", async (req, res) => {
+    try {
+      const service = getValidationCancellationRetryService();
+      const activeCancellations = service.getActiveCancellations();
+      const activeRetries = service.getActiveRetries();
+      
+      res.json({
+        success: true,
+        data: {
+          cancellations: activeCancellations,
+          retries: activeRetries
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[CancellationRetry] Failed to get active operations:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to get active cancellation and retry operations",
+        error: "CANCELLATION_RETRY_ACTIVE_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/cancellation-retry/cancel", async (req, res) => {
+    try {
+      const { type, targetId, reason, requestedBy } = req.body;
+      
+      if (!type || !targetId || !requestedBy) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required fields: type, targetId, requestedBy",
+          error: "MISSING_REQUIRED_FIELDS",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const service = getValidationCancellationRetryService();
+      const request = await service.cancelOperation(
+        type,
+        targetId,
+        reason || 'Cancelled by user',
+        requestedBy
+      );
+      
+      res.json({
+        success: true,
+        data: request,
+        message: "Cancellation request submitted successfully",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[CancellationRetry] Failed to cancel operation:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to cancel operation",
+        error: "CANCELLATION_RETRY_CANCEL_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/cancellation-retry/cancel-all", async (req, res) => {
+    try {
+      const { type, reason, requestedBy } = req.body;
+      
+      if (!type || !requestedBy) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required fields: type, requestedBy",
+          error: "MISSING_REQUIRED_FIELDS",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const service = getValidationCancellationRetryService();
+      const requests = await service.cancelAllOperations(
+        type,
+        reason || 'Cancelled by user',
+        requestedBy
+      );
+      
+      res.json({
+        success: true,
+        data: requests,
+        message: `Cancelled all ${type} operations (${requests.length} operations)`,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[CancellationRetry] Failed to cancel all operations:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to cancel all operations",
+        error: "CANCELLATION_RETRY_CANCEL_ALL_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/cancellation-retry/emergency-stop", async (req, res) => {
+    try {
+      const { reason, requestedBy } = req.body;
+      
+      if (!requestedBy) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required field: requestedBy",
+          error: "MISSING_REQUESTED_BY",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const service = getValidationCancellationRetryService();
+      // Set global validation state reference
+      service.setGlobalValidationState(globalValidationState);
+      
+      const requests = await service.emergencyStop(
+        reason || 'Emergency stop requested',
+        requestedBy
+      );
+      
+      res.json({
+        success: true,
+        data: requests,
+        message: `Emergency stop completed - cancelled ${requests.length} operations`,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[CancellationRetry] Failed to perform emergency stop:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to perform emergency stop",
+        error: "CANCELLATION_RETRY_EMERGENCY_STOP_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/cancellation-retry/retry", async (req, res) => {
+    try {
+      const { type, targetId, reason, requestedBy, retryPolicy } = req.body;
+      
+      if (!type || !targetId || !requestedBy) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required fields: type, targetId, requestedBy",
+          error: "MISSING_REQUIRED_FIELDS",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const service = getValidationCancellationRetryService();
+      const request = await service.retryOperation(
+        type,
+        targetId,
+        reason || 'Retry requested by user',
+        requestedBy,
+        retryPolicy
+      );
+      
+      res.json({
+        success: true,
+        data: request,
+        message: "Retry request submitted successfully",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[CancellationRetry] Failed to retry operation:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to retry operation",
+        error: "CANCELLATION_RETRY_RETRY_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/cancellation-retry/retry-all-failed", async (req, res) => {
+    try {
+      const { type, reason, requestedBy, retryPolicy } = req.body;
+      
+      if (!type || !requestedBy) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required fields: type, requestedBy",
+          error: "MISSING_REQUIRED_FIELDS",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const service = getValidationCancellationRetryService();
+      const requests = await service.retryAllFailedOperations(
+        type,
+        reason || 'Retry all failed requested by user',
+        requestedBy,
+        retryPolicy
+      );
+      
+      res.json({
+        success: true,
+        data: requests,
+        message: `Retrying all failed ${type} operations (${requests.length} operations)`,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[CancellationRetry] Failed to retry all failed operations:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to retry all failed operations",
+        error: "CANCELLATION_RETRY_RETRY_ALL_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/cancellation-retry/cancel-retry", async (req, res) => {
+    try {
+      const { retryId } = req.body;
+      
+      if (!retryId) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required field: retryId",
+          error: "MISSING_RETRY_ID",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const service = getValidationCancellationRetryService();
+      const cancelled = service.cancelRetry(retryId);
+      
+      if (!cancelled) {
+        return res.status(404).json({
+          success: false,
+          message: "Retry request not found or already completed",
+          error: "RETRY_NOT_FOUND",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      res.json({
+        success: true,
+        message: "Retry request cancelled successfully",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[CancellationRetry] Failed to cancel retry:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to cancel retry request",
+        error: "CANCELLATION_RETRY_CANCEL_RETRY_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/cancellation-retry/clear-old", async (req, res) => {
+    try {
+      const { olderThanHours = 24 } = req.body;
+      
+      const service = getValidationCancellationRetryService();
+      const clearedCount = service.clearOldRequests(olderThanHours);
+      
+      res.json({
+        success: true,
+        data: {
+          clearedCount
+        },
+        message: `Cleared ${clearedCount} old cancellation and retry requests`,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[CancellationRetry] Failed to clear old requests:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to clear old requests",
+        error: "CANCELLATION_RETRY_CLEAR_OLD_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  app.post("/api/validation/cancellation-retry/update-policy", async (req, res) => {
+    try {
+      const { type, policy } = req.body;
+      
+      if (!type || !policy) {
+        return res.status(400).json({
+          success: false,
+          message: "Missing required fields: type, policy",
+          error: "MISSING_REQUIRED_FIELDS",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const service = getValidationCancellationRetryService();
+      service.updateRetryPolicy(type, policy);
+      
+      res.json({
+        success: true,
+        message: "Retry policy updated successfully",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[CancellationRetry] Failed to update retry policy:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to update retry policy",
+        error: "CANCELLATION_RETRY_UPDATE_POLICY_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   // Dashboard endpoints
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
@@ -2128,6 +3393,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Don't fail the request if cache clearing fails
       }
       
+  // Clear dashboard cache to ensure statistics reflect new validation settings
+  try {
+    if (dashboardService) {
+      dashboardService.clearCache();
+      console.log('[ValidationSettings] Cleared dashboard cache after settings update');
+    }
+  } catch (dashboardCacheError) {
+    console.warn('[ValidationSettings] Failed to clear dashboard cache:', dashboardCacheError);
+    // Don't fail the request if dashboard cache clearing fails
+  }
+
+  // Log settings change for polling-based detection
+  console.log('[ValidationSettings] Settings updated - polling will detect changes automatically');
+      
       res.json({
         success: true,
         data: updatedSettings,
@@ -2452,6 +3731,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Don't fail the request if cache clearing fails
       }
       
+      // Clear dashboard cache to ensure statistics reflect new validation settings
+      try {
+        if (dashboardService) {
+          dashboardService.clearCache();
+          console.log('[ValidationSettings] Cleared dashboard cache after settings reset');
+        }
+      } catch (dashboardCacheError) {
+        console.warn('[ValidationSettings] Failed to clear dashboard cache after reset:', dashboardCacheError);
+        // Don't fail the request if dashboard cache clearing fails
+      }
+
+      // Log settings reset for polling-based detection
+      console.log('[ValidationSettings] Settings reset - polling will detect changes automatically');
+      
       res.json({
         success: true,
         data: activatedSettings,
@@ -2563,6 +3856,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // POST /api/validation/settings/notify-change - Trigger polling-based notification for settings change
+  app.post("/api/validation/settings/notify-change", async (req, res) => {
+    try {
+      const { changeType = 'polling_detected', settingsId, previousVersion, newVersion } = req.body;
+      
+      // Log the polling-detected change for debugging
+      console.log('[ValidationSettings] Polling detected settings change:', {
+        changeType,
+        settingsId: settingsId || 'current',
+        timestamp: new Date().toISOString()
+      });
+      
+      // For MVP, we rely on polling to detect changes
+      // The polling system will automatically invalidate caches and refresh UI
+      // No need for complex SSE broadcasting - polling handles this efficiently
+      
+      res.json({
+        success: true,
+        message: "Polling-based notification logged successfully",
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[ValidationSettings] Error logging polling notification:', error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to log polling notification",
+        error: error?.message || String(error),
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+
   // POST /api/validation/settings/presets/apply - Apply preset
   app.post("/api/validation/settings/presets/apply", async (req, res) => {
     try {
@@ -2619,6 +3945,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.warn('[ValidationSettings] Failed to clear validation service cache after preset application:', cacheError);
         // Don't fail the request if cache clearing fails
       }
+      
+      // Clear dashboard cache to ensure statistics reflect new validation settings
+      try {
+        if (dashboardService) {
+          dashboardService.clearCache();
+          console.log('[ValidationSettings] Cleared dashboard cache after preset application');
+        }
+      } catch (dashboardCacheError) {
+        console.warn('[ValidationSettings] Failed to clear dashboard cache after preset application:', dashboardCacheError);
+        // Don't fail the request if dashboard cache clearing fails
+      }
+
+      // Log preset application for polling-based detection
+      console.log('[ValidationSettings] Preset applied - polling will detect changes automatically');
       
       res.json({
         success: true,
@@ -2859,6 +4199,204 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // POST /api/validation/cleanup - Clean up old validation results
+  app.post("/api/validation/cleanup", async (req, res) => {
+    try {
+      const { 
+        maxAgeHours = 168, // Default 7 days
+        dryRun = false,
+        confirmCleanup = false 
+      } = req.body;
+      
+      // Validate parameters
+      if (typeof maxAgeHours !== 'number' || maxAgeHours < 1) {
+        return res.status(400).json({
+          success: false,
+          message: "maxAgeHours must be a positive number (hours)",
+          error: "INVALID_MAX_AGE_HOURS",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      if (!confirmCleanup && !dryRun) {
+        return res.status(400).json({
+          success: false,
+          message: "Cleanup confirmation required - set confirmCleanup to true or dryRun to true",
+          error: "CLEANUP_CONFIRMATION_REQUIRED",
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      console.log('[ValidationCleanup] Starting cleanup process', {
+        maxAgeHours,
+        dryRun,
+        confirmCleanup
+      });
+      
+      if (dryRun) {
+        // Dry run - just count how many records would be deleted
+        const cutoffDate = new Date(Date.now() - (maxAgeHours * 60 * 60 * 1000));
+        
+        // Count records that would be deleted
+        const countResult = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(validationResults)
+          .where(lt(validationResults.validatedAt, cutoffDate));
+        
+        const count = countResult[0]?.count || 0;
+        
+        res.json({
+          success: true,
+          message: "Dry run completed - no records were deleted",
+          dryRun: true,
+          wouldDeleteCount: count,
+          maxAgeHours,
+          cutoffDate: cutoffDate.toISOString(),
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        // Actual cleanup
+        const deletedCount = await storage.cleanupOldValidationResults(maxAgeHours);
+        
+        console.log('[ValidationCleanup] Cleanup completed', {
+          deletedCount,
+          maxAgeHours
+        });
+        
+        res.json({
+          success: true,
+          message: "Validation results cleanup completed successfully",
+          deletedCount,
+          maxAgeHours,
+          cutoffDate: new Date(Date.now() - (maxAgeHours * 60 * 60 * 1000)).toISOString(),
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (error: any) {
+      console.error('[ValidationCleanup] Error during cleanup:', error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to cleanup validation results",
+        error: error?.message || String(error),
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // Debug endpoint to check validation results for a specific resource
+  app.get('/api/debug/validation-results/:resourceId', async (req, res) => {
+    try {
+      const resourceId = parseInt(req.params.resourceId);
+      const validationResults = await storage.getValidationResultsByResourceId(resourceId);
+      res.json({
+        resourceId,
+        validationResultsCount: validationResults.length,
+        validationResults: validationResults
+      });
+    } catch (error) {
+      console.error('[Debug] Error fetching validation results:', error);
+      res.status(500).json({ error: 'Failed to fetch validation results' });
+    }
+  });
+
+  // GET /api/validation/cleanup/statistics - Get validation results cleanup statistics
+  app.get("/api/validation/cleanup/statistics", async (req, res) => {
+    try {
+      const { timeRange = '30d' } = req.query;
+      
+      // Calculate time ranges
+      const now = new Date();
+      const timeRanges = {
+        '1d': 24,
+        '7d': 24 * 7,
+        '30d': 24 * 30,
+        '90d': 24 * 90,
+        '1y': 24 * 365,
+        'all': 0
+      };
+      
+      const hours = timeRanges[timeRange as keyof typeof timeRanges];
+      if (hours === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid time range",
+          error: "INVALID_TIME_RANGE",
+          validRanges: Object.keys(timeRanges),
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      // Get total validation results count
+      const totalCountResult = await db
+        .select({ totalCount: sql<number>`count(*)` })
+        .from(validationResults);
+      
+      const totalCount = totalCountResult[0]?.totalCount || 0;
+      
+      // Get count by age ranges
+      const ageRanges = [
+        { name: 'last_24h', hours: 24 },
+        { name: 'last_7d', hours: 24 * 7 },
+        { name: 'last_30d', hours: 24 * 30 },
+        { name: 'last_90d', hours: 24 * 90 },
+        { name: 'older_than_90d', hours: 24 * 90 }
+      ];
+      
+      const ageStats = await Promise.all(
+        ageRanges.map(async (range) => {
+          const cutoffDate = new Date(now.getTime() - (range.hours * 60 * 60 * 1000));
+          let query = db.select({ count: sql<number>`count(*)` }).from(validationResults);
+          
+          if (range.name === 'older_than_90d') {
+            query = query.where(lt(validationResults.validatedAt, cutoffDate));
+          } else {
+            const startDate = range.name === 'last_24h' ? cutoffDate : new Date(now.getTime() - ((range.hours + 24) * 60 * 60 * 1000));
+            query = query.where(sql`${validationResults.validatedAt} >= ${startDate} AND ${validationResults.validatedAt} < ${cutoffDate}`);
+          }
+          
+          const result = await query;
+          return {
+            range: range.name,
+            count: result[0]?.count || 0
+          };
+        })
+      );
+      
+      // Get oldest and newest validation results
+      const oldestResult = await db
+        .select({ oldest: sql<string>`min(${validationResults.validatedAt})` })
+        .from(validationResults);
+      
+      const newestResult = await db
+        .select({ newest: sql<string>`max(${validationResults.validatedAt})` })
+        .from(validationResults);
+      
+      const oldest = oldestResult[0]?.oldest;
+      const newest = newestResult[0]?.newest;
+      
+      res.json({
+        success: true,
+        data: {
+          totalValidationResults: totalCount,
+          ageDistribution: ageStats,
+          oldestValidation: oldest ? new Date(oldest).toISOString() : null,
+          newestValidation: newest ? new Date(newest).toISOString() : null,
+          timeRange,
+          generatedAt: new Date().toISOString()
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[ValidationCleanupStats] Error getting cleanup statistics:', error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to get cleanup statistics",
+        error: error?.message || String(error),
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
   // GET /api/validation/settings/statistics - Get settings statistics
   app.get("/api/validation/settings/statistics", async (req, res) => {
     try {
@@ -3015,6 +4553,158 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // POST /api/validation/validate-by-ids - Validate specific resources by their IDs
+  app.post("/api/validation/validate-by-ids", async (req, res) => {
+    try {
+      const { resourceIds, forceRevalidation = false } = req.body;
+      
+      if (!resourceIds || !Array.isArray(resourceIds)) {
+        return res.status(400).json({ 
+          message: "Resource IDs array is required" 
+        });
+      }
+
+      console.log(`[ValidateByIds] Starting validation for ${resourceIds.length} resources (forceRevalidation: ${forceRevalidation})`);
+
+      // Get current validation settings for cache key generation
+      const settingsService = getValidationSettingsService();
+      const currentSettings = await settingsService.getActiveSettings();
+      const settingsHash = ValidationCacheManager.generateSettingsHash(currentSettings);
+
+      // Fetch resources from database by their IDs
+      const resources = await Promise.all(
+        resourceIds.map(async (id: number) => {
+          const resource = await storage.getFhirResourceById(id);
+          if (!resource) {
+            console.warn(`[ValidateByIds] Resource with ID ${id} not found`);
+            return null;
+          }
+          return resource;
+        })
+      );
+
+      // Filter out null resources (not found)
+      const validResources = resources.filter(resource => resource !== null);
+      
+      if (validResources.length === 0) {
+        return res.status(404).json({ 
+          message: "No valid resources found for the provided IDs" 
+        });
+      }
+
+      console.log(`[ValidateByIds] Found ${validResources.length} valid resources to validate`);
+
+      // Check for cached validation results first (unless force revalidation is requested)
+      const resourcesToValidate = [];
+      const cachedResults = [];
+      
+      for (const resource of validResources) {
+        if (!forceRevalidation) {
+          // Check if we have a valid cached result
+          const resourceHash = ValidationCacheManager.generateResourceHash(resource.data);
+          const cachedResult = await storage.getValidationResultByHash(
+            resource.id, 
+            settingsHash, 
+            resourceHash
+          );
+          
+          if (cachedResult && ValidationCacheManager.isValidationResultValid(
+            cachedResult, 
+            settingsHash, 
+            resourceHash
+          )) {
+            console.log(`[ValidateByIds] Using cached result for resource ${resource.id}`);
+            cachedResults.push({
+              resourceId: resource.id,
+              resourceType: resource.resourceType,
+              resourceData: resource.data,
+              validationResult: cachedResult,
+              fromCache: true
+            });
+            continue;
+          }
+        }
+        
+        // Resource needs validation
+        resourcesToValidate.push(resource);
+      }
+
+      console.log(`[ValidateByIds] ${cachedResults.length} cached results, ${resourcesToValidate.length} resources need validation`);
+
+      let validationResults: any[] = [];
+      
+      // Validate resources that don't have valid cached results
+      if (resourcesToValidate.length > 0) {
+        const validationRequests = resourcesToValidate.map((resource: any) => ({
+          resource: resource.data,
+          resourceType: resource.resourceType,
+          resourceId: resource.resourceId,
+          context: {
+            source: 'validate-by-ids',
+            requestedBy: req.headers['x-user-id'] as string || 'anonymous',
+            requestId: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: new Date().toISOString()
+          }
+        }));
+
+        const pipelineReq = {
+          resources: validationRequests,
+          context: { requestedBy: req.headers['x-user-id'] as string || 'anonymous' }
+        } as const;
+        
+        const result = await validationPipeline.executePipeline(pipelineReq);
+        validationResults = result.results || [];
+        
+        // Store validation results with enhanced caching fields
+        console.log(`[ValidateByIds] Attempting to store ${validationResults.length} validation results`);
+        for (const validationResult of validationResults) {
+          try {
+            console.log(`[ValidateByIds] Processing validation result for resourceId: ${validationResult.resourceId}`);
+            const resource = resourcesToValidate.find(r => r.resourceId === validationResult.resourceId);
+            console.log(`[ValidateByIds] Found resource:`, resource ? `ID: ${resource.id}, Type: ${resource.resourceType}` : 'NOT FOUND');
+            if (resource) {
+              console.log(`[ValidateByIds] Preparing enhanced result for storage...`);
+              const enhancedResult = ValidationCacheManager.prepareValidationResultForStorage(
+                validationResult,
+                currentSettings,
+                resource.data,
+                Date.now() // Start time approximation
+              );
+              // Set the database resource ID
+              enhancedResult.resourceId = resource.id;
+              console.log(`[ValidateByIds] Storing validation result with resourceId: ${enhancedResult.resourceId}`);
+              await storage.createValidationResult(enhancedResult);
+              console.log(`[ValidateByIds] Successfully stored validation result for resource ${resource.id} (${resource.resourceType}/${resource.resourceId})`);
+            } else {
+              console.warn(`[ValidateByIds] Resource not found for validationResult.resourceId: ${validationResult.resourceId}`);
+            }
+          } catch (error) {
+            console.error(`[ValidateByIds] Failed to store validation result for resource ${validationResult.resourceId}:`, error);
+          }
+        }
+        
+        console.log(`[ValidateByIds] Validation completed for ${validationResults.length} resources`);
+      }
+
+      // Combine cached and newly validated results
+      const allResults = [...cachedResults, ...validationResults];
+      
+      console.log(`[ValidateByIds] Final response: cachedResults=${cachedResults.length}, validationResults=${validationResults.length}, allResults=${allResults.length}`);
+      
+      res.json({
+        success: true,
+        validatedCount: allResults.length,
+        requestedCount: resourceIds.length,
+        cachedCount: cachedResults.length,
+        newlyValidatedCount: validationResults.length,
+        results: allResults
+      });
+    } catch (error: any) {
+      console.error('[ValidateByIds] Error:', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // POST /api/validation/pipeline - Execute validation pipeline
   app.post("/api/validation/pipeline", async (req, res) => {
     try {
@@ -3048,6 +4738,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         message: "Pipeline execution failed",
         error: error.message 
+      });
+    }
+  });
+
+  // GET /api/validation/settings/audit-trail - Get audit trail history
+  app.get("/api/validation/settings/audit-trail", async (req, res) => {
+    try {
+      const { settingsId, limit = '50' } = req.query;
+      
+      // Validate parameters
+      const limitNum = parseInt(limit as string);
+      if (isNaN(limitNum) || limitNum < 1 || limitNum > 1000) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid limit - must be between 1 and 1000",
+          error: "INVALID_LIMIT",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const settingsService = getValidationSettingsService();
+      const settingsIdNum = settingsId ? parseInt(settingsId as string) : undefined;
+      
+      if (settingsIdNum && isNaN(settingsIdNum)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid settings ID - must be a positive integer",
+          error: "INVALID_SETTINGS_ID",
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      const auditHistory = await settingsService.getAuditTrailHistory(settingsIdNum, limitNum);
+      
+      res.json({
+        success: true,
+        data: auditHistory,
+        pagination: {
+          limit: limitNum,
+          total: auditHistory.length
+        },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[ValidationSettings] Audit trail failed:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to load audit trail history",
+        error: "AUDIT_TRAIL_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // GET /api/validation/settings/audit-trail/statistics - Get audit trail statistics
+  app.get("/api/validation/settings/audit-trail/statistics", async (req, res) => {
+    try {
+      const settingsService = getValidationSettingsService();
+      const statistics = await settingsService.getAuditTrailStatistics();
+      
+      res.json({
+        success: true,
+        data: statistics,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('[ValidationSettings] Audit trail statistics failed:', error);
+      
+      res.status(500).json({
+        success: false,
+        message: "Failed to load audit trail statistics",
+        error: "AUDIT_TRAIL_STATISTICS_ERROR",
+        details: error.message,
+        timestamp: new Date().toISOString()
       });
     }
   });

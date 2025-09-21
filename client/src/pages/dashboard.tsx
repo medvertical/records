@@ -28,10 +28,16 @@ import {
 import { useValidationPolling, ValidationProgress as PollingValidationProgress } from '@/hooks/use-validation-polling';
 import { useDashboardData } from '@/hooks/use-dashboard-data';
 import { useServerData } from '@/hooks/use-server-data';
+import { useValidationSettingsPolling } from '@/hooks/use-validation-settings-polling';
 import { ServerStatsCard } from '@/components/dashboard/server-stats-card';
 import { ValidationStatsCard } from '@/components/dashboard/validation-stats-card';
+import { ValidationSettingsImpact } from '@/components/dashboard/validation-settings-impact';
+import ValidationQueueManagement from '@/components/validation/validation-queue-management';
+import IndividualResourceProgress from '@/components/validation/individual-resource-progress';
+import ValidationCancellationRetry from '@/components/validation/validation-cancellation-retry';
 import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 
 // ============================================================================
 // Types
@@ -59,6 +65,25 @@ export default function DashboardNew() {
   // Use our new centralized dashboard data hook
   const { activeServer, serverStatus } = useServerData();
 
+          // Enable validation settings polling for real-time updates
+          useValidationSettingsPolling({
+            enabled: true,
+            pollingInterval: 5000, // Poll every 5 seconds
+            invalidateCache: true, // Invalidate dashboard cache when settings change
+            showNotifications: false // Don't show notifications for automatic polling
+          });
+
+  // Fetch current validation settings for progress indicators
+  const { data: validationSettings } = useQuery({
+    queryKey: ['validation-settings'],
+    queryFn: async () => {
+      const response = await fetch('/api/validation/settings');
+      const data = await response.json();
+      return data.settings;
+    },
+    refetchInterval: 5000 // Refresh every 5 seconds to show real-time updates
+  });
+
   const {
     fhirServerStats,
     validationStats,
@@ -75,10 +100,10 @@ export default function DashboardNew() {
     lastUpdated,
     isStale
   } = useDashboardData({
-    enableRealTimeUpdates: false, // Disable real-time updates - only refresh manually
-    refetchInterval: false, // Disable automatic polling - only refresh manually
+    enableRealTimeUpdates: true, // Enable real-time updates for settings changes
+    refetchInterval: 10000, // Poll every 10 seconds for dashboard data updates
     enableCaching: true,
-    enabled: false // Disable completely - only fetch manually when refresh button is clicked
+    enabled: true // Enable dashboard data fetching
   });
 
   // Debug logging in useEffect to avoid re-render issues - reduced dependencies
@@ -402,6 +427,38 @@ export default function DashboardNew() {
     }
   };
 
+  const handleRevalidateAll = async () => {
+    setIsValidationInitializing(true);
+    setIsValidationRunning(false);
+    setIsValidationPaused(false);
+    setValidationProgress(null);
+    // Reset paused time tracking for new validation
+    setPausedAt(null);
+    setTotalPausedTime(0);
+    
+    try {
+      // Use the bulk start endpoint with force revalidation flag
+      const response = await fetch('/api/validation/bulk/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          batchSize: 200,
+          forceRevalidation: true // Force revalidation of all resources
+        })
+      });
+      
+      if (!response.ok) {
+        setIsValidationInitializing(false);
+        console.error('Failed to start revalidation');
+      } else {
+        console.log('Revalidation started successfully - all resources will be revalidated');
+      }
+    } catch (error) {
+      console.error('Failed to start revalidation:', error);
+      setIsValidationInitializing(false);
+    }
+  };
+
   // ========================================================================
   // Utility Functions
   // ========================================================================
@@ -591,10 +648,16 @@ export default function DashboardNew() {
             </div>
             <div className="flex gap-2">
               {!isValidationRunning && !isValidationPaused && !isValidationInitializing && (
-                <Button onClick={handleStartValidation} size="sm" className="gap-2">
-                  <Play className="h-4 w-4" />
-                  Start Validation
-                </Button>
+                <>
+                  <Button onClick={handleStartValidation} size="sm" className="gap-2">
+                    <Play className="h-4 w-4" />
+                    Start Validation
+                  </Button>
+                  <Button onClick={handleRevalidateAll} size="sm" variant="outline" className="gap-2 border-blue-500 text-blue-600 hover:bg-blue-50">
+                    <RefreshCw className="h-4 w-4" />
+                    Revalidate All
+                  </Button>
+                </>
               )}
               
               {(isValidationRunning && !isValidationPaused) && (
@@ -688,6 +751,34 @@ export default function DashboardNew() {
                     <div className="text-xs text-muted-foreground">Processing Rate</div>
                   </div>
                 </div>
+                
+                {/* Validation Aspects Status */}
+                <div className="flex items-center gap-3 p-3 bg-indigo-50 dark:bg-indigo-950/30 rounded-lg">
+                  <Settings className="h-5 w-5 text-indigo-500" />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-indigo-700 dark:text-indigo-300 mb-1">
+                      Active Validation Aspects
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {validationSettings && Object.entries(validationSettings).map(([aspect, config]: [string, any]) => {
+                        const isEnabled = config?.enabled === true;
+                        const aspectName = aspect.replace(/([A-Z])/g, ' $1').trim();
+                        return (
+                          <span
+                            key={aspect}
+                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                              isEnabled 
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' 
+                                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                            }`}
+                          >
+                            {aspectName}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
                 <div className="space-y-2" style={{ 
                   contain: 'layout style paint',
                   transform: 'translateZ(0)',
@@ -778,6 +869,38 @@ export default function DashboardNew() {
             error={validationError}
             lastUpdated={lastUpdated || undefined}
           />
+        </div>
+      )}
+
+      {/* Validation Settings Impact Analysis */}
+      {activeServer && (
+        <div className="grid gap-6">
+          <ValidationSettingsImpact 
+            validationStats={validationStats}
+            isLoading={isValidationLoading}
+            error={validationError}
+          />
+        </div>
+      )}
+
+      {/* Validation Queue Management */}
+      {activeServer && (
+        <div className="grid gap-6">
+          <ValidationQueueManagement />
+        </div>
+      )}
+
+      {/* Individual Resource Progress Tracking */}
+      {activeServer && (
+        <div className="grid gap-6">
+          <IndividualResourceProgress />
+        </div>
+      )}
+
+      {/* Enhanced Cancellation and Retry Management */}
+      {activeServer && (
+        <div className="grid gap-6">
+          <ValidationCancellationRetry />
         </div>
       )}
 
