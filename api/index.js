@@ -201,6 +201,206 @@ app.post("/api/fhir/servers/disconnect", async (req, res) => {
   }
 });
 
+// Server activation/deactivation endpoints
+app.post("/api/fhir/servers/:serverId/activate", async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const server = mockFhirServers.find(s => s.id === parseInt(serverId));
+    
+    if (!server) {
+      return res.status(404).json({
+        error: "Server not found",
+        message: `Server with ID ${serverId} not found`
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: `Server "${server.name}" activated successfully`,
+      serverId: parseInt(serverId),
+      serverName: server.name,
+      activatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to activate server",
+      message: error.message
+    });
+  }
+});
+
+app.post("/api/fhir/servers/:serverId/deactivate", async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const server = mockFhirServers.find(s => s.id === parseInt(serverId));
+    
+    if (!server) {
+      return res.status(404).json({
+        error: "Server not found",
+        message: `Server with ID ${serverId} not found`
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: `Server "${server.name}" deactivated successfully`,
+      serverId: parseInt(serverId),
+      serverName: server.name,
+      deactivatedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to deactivate server",
+      message: error.message
+    });
+  }
+});
+
+// Get specific server details
+app.get("/api/fhir/servers/:serverId", async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const server = mockFhirServers.find(s => s.id === parseInt(serverId));
+    
+    if (!server) {
+      return res.status(404).json({
+        error: "Server not found",
+        message: `Server with ID ${serverId} not found`
+      });
+    }
+    
+    res.json({
+      id: server.id,
+      name: server.name,
+      url: server.url,
+      isActive: server.isActive,
+      hasAuth: false,
+      authType: 'none',
+      createdAt: new Date().toISOString(),
+      lastConnected: server.isActive ? new Date().toISOString() : null,
+      status: server.isActive ? 'connected' : 'disconnected'
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to get server details",
+      message: error.message
+    });
+  }
+});
+
+// Update server endpoint
+app.put("/api/fhir/servers/:serverId", async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const updates = req.body;
+    
+    const server = mockFhirServers.find(s => s.id === parseInt(serverId));
+    
+    if (!server) {
+      return res.status(404).json({
+        error: "Server not found",
+        message: `Server with ID ${serverId} not found`
+      });
+    }
+    
+    // Update server properties
+    if (updates.name) server.name = updates.name;
+    if (updates.url) server.url = updates.url;
+    if (updates.isActive !== undefined) server.isActive = updates.isActive;
+    
+    res.json({
+      success: true,
+      message: "Server updated successfully",
+      server: {
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        isActive: server.isActive,
+        hasAuth: false,
+        authType: 'none',
+        updatedAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to update server",
+      message: error.message
+    });
+  }
+});
+
+// Create new server endpoint
+app.post("/api/fhir/servers", async (req, res) => {
+  try {
+    const { name, url } = req.body;
+    
+    if (!name || !url) {
+      return res.status(400).json({
+        error: "Missing required fields",
+        message: "Name and URL are required"
+      });
+    }
+    
+    const newServer = {
+      id: mockFhirServers.length + 1,
+      name,
+      url,
+      isActive: false
+    };
+    
+    mockFhirServers.push(newServer);
+    
+    res.status(201).json({
+      success: true,
+      message: "Server created successfully",
+      server: {
+        id: newServer.id,
+        name: newServer.name,
+        url: newServer.url,
+        isActive: newServer.isActive,
+        hasAuth: false,
+        authType: 'none',
+        createdAt: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to create server",
+      message: error.message
+    });
+  }
+});
+
+// Delete server endpoint
+app.delete("/api/fhir/servers/:serverId", async (req, res) => {
+  try {
+    const { serverId } = req.params;
+    const serverIndex = mockFhirServers.findIndex(s => s.id === parseInt(serverId));
+    
+    if (serverIndex === -1) {
+      return res.status(404).json({
+        error: "Server not found",
+        message: `Server with ID ${serverId} not found`
+      });
+    }
+    
+    const server = mockFhirServers[serverIndex];
+    mockFhirServers.splice(serverIndex, 1);
+    
+    res.json({
+      success: true,
+      message: `Server "${server.name}" deleted successfully`,
+      serverId: parseInt(serverId),
+      deletedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to delete server",
+      message: error.message
+    });
+  }
+});
+
 // Dashboard specific endpoints
 app.get("/api/dashboard/fhir-server-stats", async (req, res) => {
   try {
