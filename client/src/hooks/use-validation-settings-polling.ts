@@ -178,25 +178,29 @@ export function useValidationSettingsPolling(options: ValidationSettingsPollingO
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error('[ValidationSettingsPolling] Poll failed:', errorMessage);
       
-      setState(prev => ({
-        ...prev,
-        failedPolls: prev.failedPolls + 1,
-        hasError: true,
-        error: errorMessage
-      }));
-
-      // Show error notification after multiple failures
-      if (showNotifications && state.failedPolls >= 3) {
-        toast({
-          title: "Settings Sync Error",
-          description: `Failed to sync settings: ${errorMessage}`,
-          variant: "destructive"
-        });
-      }
+      setState(prev => {
+        const newFailedPolls = prev.failedPolls + 1;
+        
+        // Show error notification after multiple failures
+        if (showNotifications && newFailedPolls >= 3) {
+          toast({
+            title: "Settings Sync Error",
+            description: `Failed to sync settings: ${errorMessage}`,
+            variant: "destructive"
+          });
+        }
+        
+        return {
+          ...prev,
+          failedPolls: newFailedPolls,
+          hasError: true,
+          error: errorMessage
+        };
+      });
     } finally {
       isPollingRef.current = false;
     }
-  }, [invalidateCache, showNotifications, queryClient, toast, state.failedPolls]);
+  }, [invalidateCache, showNotifications, queryClient, toast]);
 
   // Start polling
   const startPolling = useCallback(() => {
