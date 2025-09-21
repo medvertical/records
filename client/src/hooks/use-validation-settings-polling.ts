@@ -108,7 +108,11 @@ export function useValidationSettingsPolling(options: ValidationSettingsPollingO
 
         // Invalidate React Query cache if enabled
         if (invalidateCache) {
+          // Invalidate both query key formats for validation settings
           queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+          queryClient.invalidateQueries({ queryKey: ['/api/validation/settings'] });
+          
+          // Invalidate dashboard and resource queries to show updated counts
           queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
           queryClient.invalidateQueries({ queryKey: ['/api/dashboard/fhir-server-stats'] });
           queryClient.invalidateQueries({ queryKey: ['/api/dashboard/validation-stats'] });
