@@ -120,7 +120,7 @@ export class UnifiedValidationService {
         });
         
         // Notify the pipeline to refresh its configuration
-        await this.pipeline.forceReloadSettings();
+        this.pipeline.clearCache();
 
         console.log('[UnifiedValidation] Validation engine configuration updated successfully');
       }

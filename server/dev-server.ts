@@ -55,13 +55,13 @@ app.use((req, res, next) => {
     res.sendFile('dist/public/index.html', { root: process.cwd() });
   });
 
-  // Serve the app on port 3000 for local development
-  const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
+  // Serve the app on port 5000 for Replit compatibility
+  const port = process.env.PORT ? parseInt(process.env.PORT) : 5000;
   server.listen({
     port,
     host: "0.0.0.0",
     reusePort: true,
   }, () => {
-    console.log(`Development server serving on port ${port}`);
+    console.log(`Development server serving on port ${port} (Replit-compatible)`);
   });
 })();
