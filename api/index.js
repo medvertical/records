@@ -107,27 +107,62 @@ app.get("/api/dashboard/stats", async (req, res) => {
   }
 });
 
+// Store settings with a stable hash to prevent constant "changes"
+let currentSettings = {
+  id: 1,
+  name: "Default Settings",
+  isActive: true,
+  settings: {
+    structural: { enabled: true, severity: "error" },
+    profile: { enabled: true, severity: "error" },
+    terminology: { enabled: true, severity: "warning" },
+    reference: { enabled: true, severity: "error" },
+    businessRule: { enabled: true, severity: "warning" },
+    metadata: { enabled: true, severity: "info" }
+  },
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  settingsHash: "stable-hash-123" // Stable hash to prevent constant changes
+};
+
 // Validation settings endpoints
 app.get("/api/validation/settings", async (req, res) => {
   try {
-    res.json({
-      id: 1,
-      name: "Default Settings",
-      isActive: true,
-      settings: {
-        structural: { enabled: true, severity: "error" },
-        profile: { enabled: true, severity: "error" },
-        terminology: { enabled: true, severity: "warning" },
-        reference: { enabled: true, severity: "error" },
-        businessRule: { enabled: true, severity: "warning" },
-        metadata: { enabled: true, severity: "info" }
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
+    // Always return the same stable settings to prevent polling from detecting changes
+    res.json(currentSettings);
   } catch (error) {
     res.status(500).json({
       error: "Failed to get validation settings",
+      message: error.message
+    });
+  }
+});
+
+// Update validation settings
+app.put("/api/validation/settings", async (req, res) => {
+  try {
+    const updates = req.body;
+    
+    // Update the current settings
+    if (updates.settings) {
+      currentSettings.settings = { ...currentSettings.settings, ...updates.settings };
+    }
+    if (updates.name) {
+      currentSettings.name = updates.name;
+    }
+    
+    // Update timestamp and hash to indicate change
+    currentSettings.updatedAt = new Date().toISOString();
+    currentSettings.settingsHash = `updated-${Date.now()}`;
+    
+    res.json({
+      success: true,
+      message: "Validation settings updated successfully",
+      settings: currentSettings
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to update validation settings",
       message: error.message
     });
   }
@@ -701,6 +736,257 @@ app.get("/api/validation/cancellation-retry/active", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: "Failed to get active cancellation retry operations",
+      message: error.message
+    });
+  }
+});
+
+// Resource validation endpoints
+app.get("/api/resources", async (req, res) => {
+  try {
+    const { page = 1, limit = 20, resourceType, search } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Mock resource data with consistent validation summaries
+    const specificMockResources = [
+      {
+        id: "ce41f987-394a-482a-b2eb-26e11b9458b0",
+        resourceType: "OperationOutcome",
+        lastUpdated: new Date().toISOString()
+      },
+      {
+        id: "8289768c-e3ce-47a3-a998-37bb93cfe3de",
+        resourceType: "Patient",
+        lastUpdated: new Date().toISOString(),
+        name: [{ given: ["Bhushan"], family: "Kawale" }],
+        birthDate: "1999-09-10",
+        gender: "male"
+      },
+      {
+        id: "38257ff2-35c6-4f5c-a0a9-58375bcc9b35",
+        resourceType: "OperationOutcome",
+        lastUpdated: new Date().toISOString()
+      },
+      {
+        id: "c774849f-b725-460d-8b3e-e4e40714d7fa",
+        resourceType: "Binary",
+        lastUpdated: new Date().toISOString()
+      },
+      {
+        id: "1934234",
+        resourceType: "AllergyIntolerance",
+        lastUpdated: new Date().toISOString()
+      }
+    ];
+    
+    // Add validation summaries to specific mock resources
+    const mockResources = specificMockResources.map(resource => {
+      let validationSummary;
+      if (validationResults.has(resource.id)) {
+        validationSummary = validationResults.get(resource.id);
+      } else {
+        validationSummary = calculateValidationSummary(resource.id);
+        validationResults.set(resource.id, validationSummary);
+      }
+      
+      return {
+        ...resource,
+        _validationSummary: validationSummary
+      };
+    });
+    
+    // Generate more mock resources with consistent validation data
+    const allResources = [];
+    for (let i = 0; i < 10000; i++) {
+      const resourceTypes = ["Patient", "Observation", "Encounter", "Medication", "Condition", "Procedure"];
+      const resourceType = resourceTypes[i % resourceTypes.length];
+      const resourceId = `${resourceType.toLowerCase()}-${i + 1}`;
+      
+      // Get consistent validation summary for this resource
+      let validationSummary;
+      if (validationResults.has(resourceId)) {
+        validationSummary = validationResults.get(resourceId);
+      } else {
+        // Generate consistent validation summary based on resource ID
+        validationSummary = calculateValidationSummary(resourceId);
+        validationResults.set(resourceId, validationSummary);
+      }
+      
+      allResources.push({
+        id: resourceId,
+        resourceType,
+        lastUpdated: new Date(Date.now() - Math.random() * 86400000).toISOString(),
+        _validationSummary: validationSummary
+      });
+    }
+    
+    // Filter by resource type if specified
+    let filteredResources = allResources;
+    if (resourceType && resourceType !== "All Resource Types") {
+      filteredResources = allResources.filter(r => r.resourceType === resourceType);
+    }
+    
+    // Filter by search term if specified
+    if (search) {
+      filteredResources = filteredResources.filter(r => 
+        r.id.toLowerCase().includes(search.toLowerCase()) ||
+        r.resourceType.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+    
+    // Paginate
+    const totalCount = filteredResources.length;
+    const paginatedResources = filteredResources.slice(offset, offset + parseInt(limit));
+    
+    res.json({
+      resources: paginatedResources,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / parseInt(limit))
+      },
+      totalCount
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to get resources",
+      message: error.message
+    });
+  }
+});
+
+// Store validation results to ensure consistency between list and detail views
+const validationResults = new Map();
+
+// Helper function to calculate consistent validation summary
+function calculateValidationSummary(resourceId, baseScore = null) {
+  // Use base score if provided, otherwise generate consistent score based on resource ID
+  let score;
+  if (baseScore !== null) {
+    score = baseScore;
+  } else {
+    // Generate consistent score based on resource ID hash
+    const hash = resourceId.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
+    score = Math.abs(hash) % 40 + 60; // 60-100
+  }
+  
+  const errorCount = score < 80 ? Math.floor(Math.random() * 3) + 1 : 0;
+  const warningCount = score < 90 ? Math.floor(Math.random() * 5) + 1 : 0;
+  const infoCount = Math.floor(Math.random() * 8) + 1;
+  
+  const isValid = score >= 85 && errorCount === 0;
+  
+  return {
+    isValid,
+    validationScore: score,
+    errorCount,
+    warningCount,
+    infoCount,
+    validatedAt: new Date().toISOString(),
+    status: "completed"
+  };
+}
+
+// Validate specific resources
+app.post("/api/validation/validate-by-ids", async (req, res) => {
+  try {
+    const { resourceIds, forceRevalidation = false } = req.body;
+    
+    if (!resourceIds || !Array.isArray(resourceIds)) {
+      return res.status(400).json({
+        error: "Invalid request",
+        message: "resourceIds must be an array"
+      });
+    }
+    
+    // Generate consistent validation results and store them
+    const results = resourceIds.map(resourceId => {
+      const summary = calculateValidationSummary(resourceId);
+      validationResults.set(resourceId, summary);
+      
+      return {
+        resourceId,
+        ...summary
+      };
+    });
+    
+    res.json({
+      success: true,
+      message: `Validated ${resourceIds.length} resources`,
+      results,
+      totalProcessed: resourceIds.length,
+      completedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to validate resources",
+      message: error.message
+    });
+  }
+});
+
+// Get resource validation status
+app.get("/api/resources/:resourceId/validation", async (req, res) => {
+  try {
+    const { resourceId } = req.params;
+    
+    // Get stored validation result or generate consistent one
+    let validationResult;
+    if (validationResults.has(resourceId)) {
+      validationResult = validationResults.get(resourceId);
+    } else {
+      validationResult = calculateValidationSummary(resourceId);
+      validationResults.set(resourceId, validationResult);
+    }
+    
+    res.json({
+      resourceId,
+      ...validationResult,
+      issues: [] // Add empty issues array for detail view
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to get resource validation status",
+      message: error.message
+    });
+  }
+});
+
+// Validation settings sync endpoint
+app.post("/api/validation/settings/sync", async (req, res) => {
+  try {
+    // Quick sync - no delay needed for mock
+    res.json({
+      success: true,
+      message: "Settings synchronized successfully",
+      syncedAt: new Date().toISOString(),
+      settingsHash: currentSettings.settingsHash,
+      isSynced: true
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to sync validation settings",
+      message: error.message
+    });
+  }
+});
+
+// Check settings sync status
+app.get("/api/validation/settings/sync-status", async (req, res) => {
+  try {
+    res.json({
+      isSynced: true,
+      lastSyncAt: new Date().toISOString(),
+      settingsHash: currentSettings.settingsHash,
+      syncStatus: "completed"
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to get sync status",
       message: error.message
     });
   }
