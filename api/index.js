@@ -210,8 +210,19 @@ app.get("/api/dashboard/fhir-server-stats", async (req, res) => {
       activeServers: 1,
       totalCapacity: 1000,
       usedCapacity: 100,
+      averageResponseTime: 150.0,
+      uptime: 99.9,
+      lastConnected: new Date().toISOString(),
       serverBreakdown: [
-        { serverId: 1, name: "HAPI Test Server", resourceCount: 100, status: "connected" }
+        { 
+          serverId: 1, 
+          name: "HAPI Test Server", 
+          resourceCount: 100, 
+          status: "connected",
+          responseTime: 150.0,
+          uptime: 99.9,
+          lastConnected: new Date().toISOString()
+        }
       ]
     });
   } catch (error) {
@@ -233,14 +244,23 @@ app.get("/api/dashboard/validation-stats", async (req, res) => {
       validationCoverage: 75.0,
       validationProgress: 75.0,
       activeProfiles: 3,
+      successRate: 85.0,
+      averageValidationTime: 2.5,
+      lastValidationTime: new Date().toISOString(),
       aspectBreakdown: {
-        structural: { total: 100, errors: 5, warnings: 10, info: 15 },
-        profile: { total: 100, errors: 8, warnings: 12, info: 20 },
-        terminology: { total: 100, errors: 2, warnings: 8, info: 5 },
-        reference: { total: 100, errors: 0, warnings: 3, info: 2 },
-        businessRule: { total: 100, errors: 0, warnings: 2, info: 1 },
-        metadata: { total: 100, errors: 0, warnings: 1, info: 0 }
-      }
+        structural: { total: 100, errors: 5, warnings: 10, info: 15, score: 85.0 },
+        profile: { total: 100, errors: 8, warnings: 12, info: 20, score: 80.0 },
+        terminology: { total: 100, errors: 2, warnings: 8, info: 5, score: 95.0 },
+        reference: { total: 100, errors: 0, warnings: 3, info: 2, score: 97.0 },
+        businessRule: { total: 100, errors: 0, warnings: 2, info: 1, score: 98.0 },
+        metadata: { total: 100, errors: 0, warnings: 1, info: 0, score: 99.0 }
+      },
+      resourceBreakdown: [
+        { type: "Patient", count: 45, valid: 40, errors: 3, warnings: 2 },
+        { type: "Observation", count: 30, valid: 25, errors: 2, warnings: 3 },
+        { type: "Encounter", count: 15, valid: 12, errors: 1, warnings: 2 },
+        { type: "Medication", count: 10, valid: 8, errors: 1, warnings: 1 }
+      ]
     });
   } catch (error) {
     res.status(500).json({
@@ -258,7 +278,10 @@ app.get("/api/dashboard/combined", async (req, res) => {
         connectedServers: 1,
         activeServers: 1,
         totalCapacity: 1000,
-        usedCapacity: 100
+        usedCapacity: 100,
+        averageResponseTime: 150.0,
+        uptime: 99.9,
+        lastConnected: new Date().toISOString()
       },
       validationStats: {
         totalResources: 100,
@@ -268,7 +291,10 @@ app.get("/api/dashboard/combined", async (req, res) => {
         unvalidatedResources: 25,
         validationCoverage: 75.0,
         validationProgress: 75.0,
-        activeProfiles: 3
+        activeProfiles: 3,
+        successRate: 85.0,
+        averageValidationTime: 2.5,
+        lastValidationTime: new Date().toISOString()
       },
       timestamp: new Date().toISOString()
     });
