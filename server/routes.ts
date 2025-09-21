@@ -581,17 +581,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         try {
           const cacheStartTime = Date.now();
-          // Try to get cached resources first for immediate response
-          const cachedResources = await storage.getFhirResources(undefined, resourceType as string, count, offset);
           
-          // Get total count from cache for this resource type
+          // Get all cached resources for this resource type to enable smart pagination
           const allCachedForType = await storage.getFhirResources(undefined, resourceType as string, 10000, 0);
           const cacheTime = Date.now() - cacheStartTime;
           
           console.log(`[Resources] Cache query completed in ${cacheTime}ms`, {
-            cachedResourcesCount: cachedResources.length,
             totalCachedForType: allCachedForType.length,
+            requestedOffset: offset,
+            requestedCount: count,
             timestamp: new Date().toISOString()
+          });
+          
+          // Smart cache logic: serve from cache if we have enough resources
+          const hasEnoughCachedResources = allCachedForType.length >= offset + count;
+          const cachedResources = hasEnoughCachedResources 
+            ? allCachedForType.slice(offset, offset + count)
+            : [];
+          
+          console.log(`[Resources] Smart cache decision:`, {
+            hasEnoughCachedResources,
+            servedFromCache: cachedResources.length,
+            willFetchFresh: cachedResources.length === 0
           });
           
           if (cachedResources.length > 0) {
@@ -834,25 +845,176 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`Fetched ${resources.length} ${targetResourceType} resources (${realTotal} total) from FHIR server`);
               
               // Store resources locally for future use
+              const storedResources: any[] = [];
               for (const resource of resources) {
                 try {
                   const existing = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
                   if (!existing) {
-                    await storage.createFhirResource({
+                    const stored = await storage.createFhirResource({
                       serverId: (await storage.getActiveFhirServer())?.id || 1,
                       resourceType: resource.resourceType,
                       resourceId: resource.id,
                       versionId: resource.meta?.versionId,
                       data: resource,
                     });
+                    storedResources.push(stored);
+                  } else {
+                    storedResources.push(existing);
                   }
                 } catch (storageError) {
                   console.warn(`Failed to store resource ${resource.resourceType}/${resource.id}:`, storageError);
+                  // Add the original resource even if storage failed
+                  storedResources.push({ id: null, data: resource });
                 }
               }
 
+              // Attach validation summaries to fresh resources (same logic as cached resources)
+              const validationProcessingStartTime = Date.now();
+              const resourcesWithValidation = await Promise.all(
+                storedResources.map(async (storedResource) => {
+                  try {
+                    const resource = storedResource.data || storedResource;
+                    
+                    // Get existing validation results if resource was stored in database
+                    let validationResults = [];
+                    if (storedResource.id) {
+                      validationResults = await storage.getValidationResultsByResourceId(storedResource.id);
+                      console.log(`[Fresh Resource ${storedResource.id}] Fetched ${validationResults.length} validation results`);
+                    }
+                    
+                    // Filter validation results based on active settings
+                    const filteredResults = filterValidationIssues(validationResults, validationSettings);
+                    
+                    // Calculate validation summary based on latest FILTERED validation result
+                    const latestValidation = filteredResults.length > 0 ? 
+                      filteredResults.reduce((latest, current) => 
+                        new Date(current.validatedAt) > new Date(latest.validatedAt) ? current : latest
+                      ) : null;
+                    
+                    // Recalculate counts based on filtered issues
+                    let filteredErrorCount = 0;
+                    let filteredWarningCount = 0;
+                    let filteredInfoCount = 0;
+                    
+                    // Initialize aspect-specific counts (only for enabled aspects)
+                    const issuesByAspect = {
+                      structural: 0,
+                      profile: 0,
+                      terminology: 0,
+                      reference: 0,
+                      businessRule: 0,
+                      metadata: 0
+                    };
+                    
+                    // Use existing aspect breakdown from validation results or initialize default
+                    const settings = (validationSettings as any)?.settings || validationSettings;
+                    let aspectBreakdown = latestValidation?.aspectBreakdown || {
+                      structural: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.structural?.enabled !== false },
+                      profile: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.profile?.enabled !== false },
+                      terminology: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.terminology?.enabled !== false },
+                      reference: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.reference?.enabled !== false },
+                      businessRule: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.businessRule?.enabled !== false },
+                      metadata: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: settings?.metadata?.enabled !== false }
+                    };
+                    
+                    // Count issues per aspect and recalculate aspect scores based on current settings
+                    for (const aspect of Object.keys(aspectBreakdown)) {
+                      const breakdown = (aspectBreakdown as any)[aspect];
+                      const aspectEnabled = settings && (settings as any)[aspect]?.enabled !== false;
+                      
+                      breakdown.enabled = aspectEnabled;
+                      
+                      if (aspectEnabled) {
+                        // Include counts from enabled aspects
+                        filteredErrorCount += breakdown.errorCount || 0;
+                        filteredWarningCount += breakdown.warningCount || 0;
+                        filteredInfoCount += breakdown.informationCount || 0;
+                        issuesByAspect[aspect as keyof typeof issuesByAspect] = breakdown.issueCount || 0;
+                        
+                        // Recalculate aspect score based on current counts
+                        let aspectScore = 100;
+                        aspectScore -= breakdown.errorCount * 15;
+                        aspectScore -= breakdown.warningCount * 5;
+                        aspectScore -= breakdown.informationCount * 1;
+                        breakdown.validationScore = Math.max(0, Math.round(aspectScore));
+                        breakdown.passed = breakdown.errorCount === 0;
+                      } else {
+                        // Disabled aspects get neutral scores
+                        breakdown.validationScore = 100;
+                        breakdown.passed = true;
+                      }
+                    }
+                    
+                    // Calculate overall validation score based on enabled aspects only
+                    let filteredScore = 100;
+                    filteredScore -= filteredErrorCount * 15;  // Error issues: -15 points each
+                    filteredScore -= filteredWarningCount * 5; // Warning issues: -5 points each
+                    filteredScore -= filteredInfoCount * 1;    // Information issues: -1 point each
+                    filteredScore = Math.max(0, Math.round(filteredScore));
+                    
+                    return {
+                      ...resource,
+                      _dbId: storedResource.id,
+                      validationResults: filteredResults,
+                      _validationSummary: {
+                        hasErrors: filteredErrorCount > 0,
+                        hasWarnings: filteredWarningCount > 0,
+                        errorCount: filteredErrorCount,
+                        warningCount: filteredWarningCount,
+                        isValid: filteredErrorCount === 0,
+                        validationScore: filteredScore,
+                        lastValidated: latestValidation?.validatedAt ? new Date(latestValidation.validatedAt) : null,
+                        needsValidation: !latestValidation, // True if never validated
+                        issuesByAspect: issuesByAspect,
+                        aspectBreakdown: aspectBreakdown
+                      }
+                    };
+                  } catch (error) {
+                    console.warn(`Failed to get validation results for fresh resource ${storedResource.id}:`, error);
+                    const resource = storedResource.data || storedResource;
+                    return {
+                      ...resource,
+                      _dbId: storedResource.id,
+                      validationResults: [],
+                      _validationSummary: {
+                        hasErrors: false,
+                        hasWarnings: false,
+                        errorCount: 0,
+                        warningCount: 0,
+                        isValid: false,
+                        validationScore: 0,
+                        lastValidated: null,
+                        needsValidation: true,
+                        issuesByAspect: {
+                          structural: 0,
+                          profile: 0,
+                          terminology: 0,
+                          reference: 0,
+                          businessRule: 0,
+                          metadata: 0
+                        },
+                        aspectBreakdown: {
+                          structural: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.structural?.enabled !== false },
+                          profile: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.profile?.enabled !== false },
+                          terminology: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.terminology?.enabled !== false },
+                          reference: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.reference?.enabled !== false },
+                          businessRule: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.businessRule?.enabled !== false },
+                          metadata: { issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, validationScore: 100, passed: true, enabled: validationSettings?.metadata?.enabled !== false }
+                        }
+                      }
+                    };
+                  }
+                })
+              );
+              
+              const validationProcessingTime = Date.now() - validationProcessingStartTime;
+              console.log(`[Fresh Resources] Validation processing completed in ${validationProcessingTime}ms`, {
+                resourceCount: resourcesWithValidation.length,
+                timestamp: new Date().toISOString()
+              });
+
               res.json({
-                resources,
+                resources: resourcesWithValidation,
                 total: realTotal,
               });
             } else {
