@@ -597,6 +597,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (cachedResources.length > 0) {
             console.log(`[Resources] Serving ${cachedResources.length} cached resources immediately (${allCachedForType.length} total in cache)`);
             
+            // Get actual total count from FHIR server for correct pagination
+            let actualTotal = allCachedForType.length; // Fallback to cached count
+            if (fhirClient && resourceType) {
+              try {
+                actualTotal = await fhirClient.getResourceCount(resourceType as string);
+                console.log(`[Resources] Actual total from FHIR server for ${resourceType}: ${actualTotal}`);
+              } catch (error) {
+                console.warn(`[Resources] Failed to get total count from FHIR server, using cached count:`, error);
+              }
+            }
+            
             // Get current validation settings for filtering using rock-solid service
             const validationStartTime = Date.now();
             let validationSettings = null;
@@ -792,7 +803,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Send immediate response
             res.json({
               resources: resourcesWithCachedValidation,
-              total: allCachedForType.length,
+              total: actualTotal,
             });
             
             // DISABLED: Background validation in list view for performance
