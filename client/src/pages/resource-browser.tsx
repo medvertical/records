@@ -7,7 +7,7 @@ import ResourceSearch from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Loader2, Play, Settings, CheckCircle, XCircle } from "lucide-react";
+import { Loader2, Play, Settings } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
