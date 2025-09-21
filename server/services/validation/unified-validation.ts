@@ -305,7 +305,8 @@ export class UnifiedValidationService {
   async validateResource(
     resource: any, 
     skipUnchanged: boolean = true, 
-    forceRevalidation: boolean = false
+    forceRevalidation: boolean = false,
+    retryAttempt: number = 0
   ): Promise<{
     validationResults: ValidationResult[];
     wasRevalidated: boolean;
@@ -358,92 +359,157 @@ export class UnifiedValidationService {
       // console.log(`[UnifiedValidation] Performing validation for ${resource.resourceType}/${resource.id}`);
       wasRevalidated = true;
 
-      try {
-        // Load settings first to check if validation should be skipped
-        await this.loadValidationSettings();
-        
-        // Check if ALL validation aspects are disabled
-        const settings = this.cachedSettings?.settings || this.cachedSettings;
-        const allAspectsDisabled = 
-          settings?.structural?.enabled !== true &&
-          settings?.profile?.enabled !== true &&
-          settings?.terminology?.enabled !== true &&
-          settings?.reference?.enabled !== true &&
-          settings?.businessRule?.enabled !== true &&
-          settings?.metadata?.enabled !== true;
+      // Get retry configuration from settings
+      const settings = await this.getValidationSettings();
+      const maxRetryAttempts = settings?.batchProcessingSettings?.maxRetryAttempts || 1;
+      const retryDelayMs = settings?.batchProcessingSettings?.retryDelayMs || 2000;
+      const retryFailedBatches = settings?.batchProcessingSettings?.retryFailedBatches || false;
 
-        let enhancedResult: any;
-        if (allAspectsDisabled) {
-          // Skip validation entirely - return valid result
-          enhancedResult = {
-            isValid: true,
-            resourceType: resource.resourceType,
-            resourceId: resource.id,
-            issues: [],
-            validationAspects: {
-              structural: { passed: true, issues: [] },
-              profile: { passed: true, issues: [], profilesChecked: [] },
-              terminology: { passed: true, issues: [], codesChecked: 0 },
-              reference: { passed: true, issues: [], referencesChecked: 0 },
-              businessRule: { passed: true, issues: [], rulesChecked: 0 },
-              metadata: { passed: true, issues: [] }
-            },
-            validationScore: 100,
-            validatedAt: new Date()
-          };
-        } else {
-          // Always validate with all aspects - settings only affect result filtering
-          // Delegate to the default validation pipeline (single-resource execution)
-          const pipelineResult = await this.pipeline.executePipeline({
-            resources: [{
-              resource,
+      // Retry logic wrapper
+      let validationResult: any = null;
+      let lastError: any = null;
+      let retryAttempts: any[] = [];
+      let totalRetryDuration = 0;
+
+      for (let attempt = 0; attempt <= maxRetryAttempts; attempt++) {
+        const attemptStartTime = Date.now();
+        const isRetry = attempt > 0;
+        
+        try {
+          // Load settings first to check if validation should be skipped
+          await this.loadValidationSettings();
+        
+          // Check if ALL validation aspects are disabled
+          const currentSettings = this.cachedSettings?.settings || this.cachedSettings;
+          const allAspectsDisabled = 
+            currentSettings?.structural?.enabled !== true &&
+            currentSettings?.profile?.enabled !== true &&
+            currentSettings?.terminology?.enabled !== true &&
+            currentSettings?.reference?.enabled !== true &&
+            currentSettings?.businessRule?.enabled !== true &&
+            currentSettings?.metadata?.enabled !== true;
+
+          let enhancedResult: any;
+          if (allAspectsDisabled) {
+            // Skip validation entirely - return valid result
+            enhancedResult = {
+              isValid: true,
               resourceType: resource.resourceType,
               resourceId: resource.id,
-              profileUrl: undefined,
-              context: { requestedBy: 'unified-adapter' }
-            }]
+              issues: [],
+              validationAspects: {
+                structural: { passed: true, issues: [] },
+                profile: { passed: true, issues: [], profilesChecked: [] },
+                terminology: { passed: true, issues: [], codesChecked: 0 },
+                reference: { passed: true, issues: [], referencesChecked: 0 },
+                businessRule: { passed: true, issues: [], rulesChecked: 0 },
+                metadata: { passed: true, issues: [] }
+              },
+              validationScore: 100,
+              validatedAt: new Date()
+            };
+          } else {
+            // Always validate with all aspects - settings only affect result filtering
+            // Delegate to the default validation pipeline (single-resource execution)
+            const pipelineResult = await this.pipeline.executePipeline({
+              resources: [{
+                resource,
+                resourceType: resource.resourceType,
+                resourceId: resource.id,
+                profileUrl: undefined,
+                context: { requestedBy: 'unified-adapter' }
+              }]
+            });
+
+            const vr = pipelineResult.results[0];
+            const issues = (vr?.issues || []).map((issue: any) => ({
+              severity: issue.severity, // expected to align with 'error' | 'warning' | 'information' | 'fatal'
+              code: issue.code,
+              message: issue.message,
+              path: Array.isArray(issue.location) ? issue.location.join('.') : (issue.location || ''),
+              expression: issue.expression,
+              // Map aspect to legacy category naming
+              category: issue.aspect === 'businessRule' ? 'business-rule' : (issue.aspect || 'structural')
+            }));
+
+            const aspects: Array<'structural'|'profile'|'terminology'|'reference'|'business-rule'|'metadata'> = [
+              'structural','profile','terminology','reference','business-rule','metadata'
+            ];
+            const aspectGroups: Record<string, any[]> = Object.fromEntries(aspects.map(a => [a, []]));
+            issues.forEach((i: any) => { (aspectGroups[i.category] ||= []).push(i); });
+
+            enhancedResult = {
+              isValid: vr?.isValid ?? true,
+              resourceType: vr?.resourceType || resource.resourceType,
+              resourceId: vr?.resourceId || resource.id,
+              issues,
+              validationAspects: {
+                structural: { passed: (aspectGroups['structural']?.length ?? 0) === 0, issues: aspectGroups['structural'] || [] },
+                profile: { passed: (aspectGroups['profile']?.length ?? 0) === 0, issues: aspectGroups['profile'] || [], profilesChecked: vr?.profileUrl ? [vr.profileUrl] : [] },
+                terminology: { passed: (aspectGroups['terminology']?.length ?? 0) === 0, issues: aspectGroups['terminology'] || [], codesChecked: 0 },
+                reference: { passed: (aspectGroups['reference']?.length ?? 0) === 0, issues: aspectGroups['reference'] || [], referencesChecked: 0 },
+                businessRule: { passed: (aspectGroups['business-rule']?.length ?? 0) === 0, issues: aspectGroups['business-rule'] || [], rulesChecked: 0 },
+                metadata: { passed: (aspectGroups['metadata']?.length ?? 0) === 0, issues: aspectGroups['metadata'] || [] }
+              },
+              validationScore: vr?.summary?.validationScore ?? (vr?.summary?.score ?? 0),
+              validatedAt: vr?.validatedAt ? new Date(vr.validatedAt) : new Date()
+            };
+          }
+
+          // Record successful attempt
+          const attemptDuration = Date.now() - attemptStartTime;
+          retryAttempts.push({
+            attemptNumber: attempt + 1,
+            attemptedAt: new Date(attemptStartTime),
+            success: true,
+            durationMs: attemptDuration,
+            resultSummary: {
+              isValid: enhancedResult.isValid,
+              errorCount: enhancedResult.issues.filter((i: any) => i.severity === 'error' || i.severity === 'fatal').length,
+              warningCount: enhancedResult.issues.filter((i: any) => i.severity === 'warning').length,
+              validationScore: enhancedResult.validationScore
+            }
           });
 
-          const vr = pipelineResult.results[0];
-          const issues = (vr?.issues || []).map((issue: any) => ({
-            severity: issue.severity, // expected to align with 'error' | 'warning' | 'information' | 'fatal'
-            code: issue.code,
-            message: issue.message,
-            path: Array.isArray(issue.location) ? issue.location.join('.') : (issue.location || ''),
-            expression: issue.expression,
-            // Map aspect to legacy category naming
-            category: issue.aspect === 'businessRule' ? 'business-rule' : (issue.aspect || 'structural')
-          }));
+          // Success - break out of retry loop
+          validationResult = enhancedResult;
+          break;
 
-          const aspects: Array<'structural'|'profile'|'terminology'|'reference'|'business-rule'|'metadata'> = [
-            'structural','profile','terminology','reference','business-rule','metadata'
-          ];
-          const aspectGroups: Record<string, any[]> = Object.fromEntries(aspects.map(a => [a, []]));
-          issues.forEach((i: any) => { (aspectGroups[i.category] ||= []).push(i); });
+        } catch (error) {
+          lastError = error;
+          const attemptDuration = Date.now() - attemptStartTime;
+          totalRetryDuration += attemptDuration;
 
-          enhancedResult = {
-            isValid: vr?.isValid ?? true,
-            resourceType: vr?.resourceType || resource.resourceType,
-            resourceId: vr?.resourceId || resource.id,
-            issues,
-            validationAspects: {
-              structural: { passed: (aspectGroups['structural']?.length ?? 0) === 0, issues: aspectGroups['structural'] || [] },
-              profile: { passed: (aspectGroups['profile']?.length ?? 0) === 0, issues: aspectGroups['profile'] || [], profilesChecked: vr?.profileUrl ? [vr.profileUrl] : [] },
-              terminology: { passed: (aspectGroups['terminology']?.length ?? 0) === 0, issues: aspectGroups['terminology'] || [], codesChecked: 0 },
-              reference: { passed: (aspectGroups['reference']?.length ?? 0) === 0, issues: aspectGroups['reference'] || [], referencesChecked: 0 },
-              businessRule: { passed: (aspectGroups['business-rule']?.length ?? 0) === 0, issues: aspectGroups['business-rule'] || [], rulesChecked: 0 },
-              metadata: { passed: (aspectGroups['metadata']?.length ?? 0) === 0, issues: aspectGroups['metadata'] || [] }
-            },
-            validationScore: vr?.summary?.validationScore ?? (vr?.summary?.score ?? 0),
-            validatedAt: vr?.validatedAt ? new Date(vr.validatedAt) : new Date()
-          };
+          // Record failed attempt
+          retryAttempts.push({
+            attemptNumber: attempt + 1,
+            attemptedAt: new Date(attemptStartTime),
+            success: false,
+            durationMs: attemptDuration,
+            errorMessage: error instanceof Error ? error.message : String(error)
+          });
+
+          console.error(`[UnifiedValidation] Validation attempt ${attempt + 1} failed for ${resource.resourceType}/${resource.id}:`, error);
+
+          // Check if we should retry
+          if (attempt < maxRetryAttempts && retryFailedBatches) {
+            console.log(`[UnifiedValidation] Retrying validation for ${resource.resourceType}/${resource.id} in ${retryDelayMs}ms (attempt ${attempt + 2}/${maxRetryAttempts + 1})`);
+            await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+          } else {
+            // No more retries - break out of loop
+            break;
+          }
         }
-        
+      }
+
+      // Handle final result (success or failure after all retries)
+      if (validationResult) {
+        // Success case - process the validation result
         // Apply filtering based on current settings to determine what's considered "valid"
-        const { filteredIssues, isValid } = this.filterValidationIssues(enhancedResult.issues);
+        const { filteredIssues, isValid } = this.filterValidationIssues(validationResult.issues);
         
         // Convert enhanced validation result to our database format
-        const validationResult: InsertValidationResult = {
+        const validationResultData: InsertValidationResult = {
           resourceId: dbResource.id,
           profileId: null,
           isValid: isValid, // Use filtered validity (what UI considers valid)
@@ -488,7 +554,22 @@ export class UnifiedValidationService {
             // Store both filtered and unfiltered results for debugging
             filteredIssues: filteredIssues,
             allIssues: enhancedResult.issues
-          }
+          },
+          // Add retry information
+          retryAttemptCount: retryAttempts.length,
+          maxRetryAttempts: maxRetryAttempts,
+          isRetry: retryAttempts.length > 1,
+          retryInfo: {
+            attemptCount: retryAttempts.length,
+            maxAttempts: maxRetryAttempts,
+            isRetry: retryAttempts.length > 1,
+            previousAttempts: retryAttempts,
+            totalRetryDurationMs: totalRetryDuration,
+            canRetry: retryAttempts.length < maxRetryAttempts,
+            retryReason: retryAttempts.length > 1 ? 'Previous validation attempts failed' : undefined
+          },
+          canRetry: retryAttempts.length < maxRetryAttempts,
+          totalRetryDurationMs: totalRetryDuration
         };
 
         // Save validation result with enhanced caching fields
@@ -507,47 +588,53 @@ export class UnifiedValidationService {
           wasRevalidated: true
         };
 
-      } catch (error) {
-        console.error(`[UnifiedValidation] Validation failed for ${resource.resourceType}/${resource.id}:`, error);
+      } else {
+        // All retry attempts failed - create error validation result
+        console.error(`[UnifiedValidation] All validation attempts failed for ${resource.resourceType}/${resource.id} after ${retryAttempts.length} attempts`);
         
-        // Create error validation result
+        const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
         const errorResult: InsertValidationResult = {
           resourceId: dbResource.id,
           profileId: null,
           isValid: false,
           errors: [{
             severity: 'error' as const,
-            message: `Validation failed: ${error instanceof Error ? error.message : String(error)}`,
+            message: `Validation failed after ${retryAttempts.length} attempts: ${errorMessage}`,
             path: '',
-            code: 'validation-error'
+            code: 'validation-retry-exhausted'
           }],
           warnings: [],
           issues: [{
             severity: 'error' as const,
-            message: `Validation failed: ${error instanceof Error ? error.message : String(error)}`,
+            message: `Validation failed after ${retryAttempts.length} attempts: ${errorMessage}`,
             path: '',
-            code: 'validation-error'
+            code: 'validation-retry-exhausted'
           }],
           errorCount: 1,
           warningCount: 0,
           validationScore: 0,
-          validatedAt: new Date()
+          validatedAt: new Date(),
+          // Add retry information for failed attempts
+          retryAttemptCount: retryAttempts.length,
+          maxRetryAttempts: maxRetryAttempts,
+          isRetry: retryAttempts.length > 1,
+          retryInfo: {
+            attemptCount: retryAttempts.length,
+            maxAttempts: maxRetryAttempts,
+            isRetry: retryAttempts.length > 1,
+            previousAttempts: retryAttempts,
+            totalRetryDurationMs: totalRetryDuration,
+            canRetry: false, // All retries exhausted
+            retryReason: 'All retry attempts exhausted'
+          },
+          canRetry: false,
+          retryReason: 'All retry attempts exhausted',
+          totalRetryDurationMs: totalRetryDuration
         };
 
-        // Create enhanced error validation result with caching fields
-        const enhancedErrorResult = {
-          ...errorResult,
-          settingsHash: ValidationCacheManager.generateSettingsHash(currentSettings),
-          settingsVersion: currentSettings.version || 1,
-          resourceHash: ValidationCacheManager.generateResourceHash(resource),
-          validationEngineVersion: ValidationCacheManager.VALIDATION_ENGINE_VERSION,
-          performanceMetrics: {},
-          aspectBreakdown: {},
-          validationDurationMs: Date.now() - startTime,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
-        await storage.createValidationResult(enhancedErrorResult);
+        await storage.createValidationResult(errorResult);
+
+        // Get updated validation results
         const updatedValidationResults = await storage.getValidationResultsByResourceId(dbResource.id);
         return {
           validationResults: updatedValidationResults,

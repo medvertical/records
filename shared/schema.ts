@@ -60,6 +60,26 @@ export const validationResults = pgTable("validation_results", {
   performanceMetrics: jsonb("performance_metrics").default({}),
   aspectBreakdown: jsonb("aspect_breakdown").default({}),
   validationDurationMs: integer("validation_duration_ms").default(0),
+  // Retry tracking fields
+  retryAttemptCount: integer("retry_attempt_count").default(0),
+  maxRetryAttempts: integer("max_retry_attempts").default(1),
+  isRetry: boolean("is_retry").default(false),
+  retryInfo: jsonb("retry_info").default({}),
+  canRetry: boolean("can_retry").default(true),
+  retryReason: text("retry_reason"),
+  totalRetryDurationMs: integer("total_retry_duration_ms").default(0),
+  // Confidence scoring fields
+  confidenceScore: integer("confidence_score").default(0), // 0-100 confidence level
+  confidenceFactors: jsonb("confidence_factors").default({}), // Factors affecting confidence
+  confidenceLevel: text("confidence_level").default("unknown"), // low, medium, high, very_high
+  confidenceIssues: jsonb("confidence_issues").default([]), // Issues that reduce confidence
+  validationCertainty: integer("validation_certainty").default(0), // Certainty of validation result
+  // Validation completeness fields
+  completenessScore: integer("completeness_score").default(0), // Overall completeness score (0-100)
+  completenessFactors: jsonb("completeness_factors").default({}), // Individual completeness factors
+  coverageMetrics: jsonb("coverage_metrics").default({}), // Coverage metrics by aspect and field
+  missingValidationAreas: jsonb("missing_validation_areas").default([]), // Areas not validated
+  validationGaps: jsonb("validation_gaps").default([]), // Specific validation gaps identified
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

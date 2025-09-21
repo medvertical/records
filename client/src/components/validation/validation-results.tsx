@@ -39,6 +39,30 @@ interface ValidationSummary {
   score: number;
 }
 
+interface ValidationRetryInfo {
+  attemptCount: number;
+  maxAttempts: number;
+  isRetry: boolean;
+  previousAttempts: ValidationRetryAttempt[];
+  totalRetryDurationMs: number;
+  canRetry: boolean;
+  retryReason?: string;
+}
+
+interface ValidationRetryAttempt {
+  attemptNumber: number;
+  attemptedAt: Date;
+  success: boolean;
+  errorMessage?: string;
+  durationMs: number;
+  resultSummary?: {
+    isValid: boolean;
+    errorCount: number;
+    warningCount: number;
+    validationScore: number;
+  };
+}
+
 interface DetailedValidationResult {
   isValid: boolean;
   resourceType: string;
@@ -48,6 +72,7 @@ interface DetailedValidationResult {
   issues: ValidationIssue[];
   summary: ValidationSummary;
   validatedAt: Date;
+  retryInfo?: ValidationRetryInfo;
 }
 
 interface ValidationResultsProps {
@@ -183,6 +208,73 @@ export function ValidationResults({ result, onRetry }: ValidationResultsProps) {
                 <div className="text-sm text-muted-foreground">Total Issues</div>
               </div>
             </div>
+
+            {/* Retry Information */}
+            {result.retryInfo && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Clock className="h-4 w-4 text-gray-600" />
+                  <span className="font-medium text-gray-700">Validation Retry Information</span>
+                  {result.retryInfo.isRetry && (
+                    <Badge variant="secondary" className="ml-2">
+                      Retry #{result.retryInfo.attemptCount}
+                    </Badge>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Attempts:</span>
+                    <span className="ml-1 font-medium">{result.retryInfo.attemptCount}/{result.retryInfo.maxAttempts}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Duration:</span>
+                    <span className="ml-1 font-medium">{result.retryInfo.totalRetryDurationMs}ms</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Status:</span>
+                    <span className={`ml-1 font-medium ${result.retryInfo.canRetry ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {result.retryInfo.canRetry ? 'Can Retry' : 'Max Retries Reached'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Previous Attempts:</span>
+                    <span className="ml-1 font-medium">{result.retryInfo.previousAttempts.length}</span>
+                  </div>
+                </div>
+                {result.retryInfo.retryReason && (
+                  <div className="mt-2 text-sm text-gray-600">
+                    <span className="font-medium">Reason:</span> {result.retryInfo.retryReason}
+                  </div>
+                )}
+                {result.retryInfo.previousAttempts.length > 0 && (
+                  <details className="mt-3">
+                    <summary className="text-sm font-medium text-gray-700 cursor-pointer">Show Previous Attempts</summary>
+                    <div className="mt-2 space-y-2">
+                      {result.retryInfo.previousAttempts.map((attempt, index) => (
+                        <div key={index} className={`p-2 rounded border text-xs ${
+                          attempt.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                        }`}>
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">Attempt {attempt.attemptNumber}</span>
+                            <span className={`px-2 py-1 rounded text-xs ${
+                              attempt.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            }`}>
+                              {attempt.success ? 'Success' : 'Failed'}
+                            </span>
+                          </div>
+                          <div className="text-gray-600 mt-1">
+                            Duration: {attempt.durationMs}ms
+                            {attempt.errorMessage && (
+                              <div className="mt-1">Error: {attempt.errorMessage}</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
 
             {/* Validation Status */}
             {result.isValid ? (

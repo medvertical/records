@@ -55,8 +55,8 @@ app.use((req, res, next) => {
     res.sendFile('dist/public/index.html', { root: process.cwd() });
   });
 
-  // Serve the app on port 5000 for Replit compatibility
-  const port = process.env.PORT ? parseInt(process.env.PORT) : 5000;
+  // Default backend API to 3000 so Vite proxy and docs stay in sync
+  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
   server.listen({
     port,
     host: "0.0.0.0",

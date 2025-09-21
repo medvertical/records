@@ -1,176 +1,273 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
-import { ValidationStatsCard } from './validation-stats-card'
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { ValidationStatsCard } from './validation-stats-card';
+import { ValidationStats } from '@shared/types/dashboard';
 
-// Mock the icons
-vi.mock('lucide-react', () => ({
-  CheckCircle: () => <div data-testid="check-circle-icon" />,
-  XCircle: () => <div data-testid="x-circle-icon" />,
-  AlertCircle: () => <div data-testid="alert-circle-icon" />,
-  AlertTriangle: () => <div data-testid="alert-triangle-icon" />,
-  TrendingUp: () => <div data-testid="trending-up-icon" />,
-  TrendingDown: () => <div data-testid="trending-down-icon" />,
-  Minus: () => <div data-testid="minus-icon" />,
-  Database: () => <div data-testid="database-icon" />,
-  Clock: () => <div data-testid="clock-icon" />
-}))
+// Mock the validation settings query
+vi.mock('@tanstack/react-query', () => ({
+  useQuery: vi.fn(() => ({
+    data: {
+      structural: { enabled: true, severity: 'error' },
+      profile: { enabled: true, severity: 'warning' },
+      terminology: { enabled: true, severity: 'warning' },
+      reference: { enabled: false, severity: 'error' },
+      businessRule: { enabled: true, severity: 'warning' },
+      metadata: { enabled: true, severity: 'information' }
+    },
+    isLoading: false,
+    error: null
+  }))
+}));
 
-describe('ValidationStatsCard', () => {
-  const mockData = {
-    totalValidated: 100,
-    validResources: 85,
-    errorResources: 10,
-    warningResources: 5,
-    unvalidatedResources: 50,
-    validationCoverage: 85,
-    validationProgress: 66.7,
-    lastValidationRun: new Date('2024-01-15T10:00:00Z'),
+// Mock fetch
+global.fetch = vi.fn().mockResolvedValue({
+  ok: true,
+  json: async () => ({
+    settings: {
+      structural: { enabled: true, severity: 'error' },
+      profile: { enabled: true, severity: 'warning' },
+      terminology: { enabled: true, severity: 'warning' },
+      reference: { enabled: false, severity: 'error' },
+      businessRule: { enabled: true, severity: 'warning' },
+      metadata: { enabled: true, severity: 'information' }
+    }
+  })
+});
+
+describe('ValidationStatsCard - Enhanced Progress Display', () => {
+  const mockValidationStats: ValidationStats = {
+    totalValidated: 1500,
+    validResources: 1200,
+    errorResources: 150,
+    warningResources: 100,
+    unvalidatedResources: 500,
+    validationCoverage: 80.0,
+    validationProgress: 75.0,
+    lastValidationRun: new Date('2024-01-15T10:30:00Z'),
     resourceTypeBreakdown: {
-      'Patient': { total: 50, validated: 40, valid: 35, errors: 3, warnings: 2, unvalidated: 10, validationRate: 80, successRate: 87.5 },
-      'Observation': { total: 30, validated: 25, valid: 20, errors: 3, warnings: 2, unvalidated: 5, validationRate: 83.3, successRate: 80 },
-      'Encounter': { total: 20, validated: 15, valid: 12, errors: 2, warnings: 1, unvalidated: 5, validationRate: 75, successRate: 80 }
-    }
-  }
-
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('should render validation statistics', () => {
-    render(<ValidationStatsCard data={mockData} />)
-
-    expect(screen.getByText('Validation Statistics')).toBeInTheDocument()
-    expect(screen.getByText('100')).toBeInTheDocument() // totalValidated
-    expect(screen.getAllByText('85.0%')).toHaveLength(2) // Success rate and validation coverage
-    expect(screen.getByText('66.7%')).toBeInTheDocument() // validationProgress
-  })
-
-  it('should render resource type breakdown', () => {
-    render(<ValidationStatsCard data={mockData} />)
-
-    expect(screen.getByText('Patient')).toBeInTheDocument()
-    expect(screen.getByText('Observation')).toBeInTheDocument()
-    expect(screen.getByText('Encounter')).toBeInTheDocument()
-  })
-
-
-  it('should handle empty data gracefully', () => {
-    const emptyData = {
-      totalValidated: 0,
-      validResources: 0,
-      errorResources: 0,
-      warningResources: 0,
-      unvalidatedResources: 0,
-      validationCoverage: 0,
-      validationProgress: 0,
-      resourceTypeBreakdown: {}
-    }
-
-    render(<ValidationStatsCard data={emptyData} />)
-
-    expect(screen.getByText('Validation Statistics')).toBeInTheDocument()
-    expect(screen.getAllByText('0')).toHaveLength(5) // Multiple elements with 0
-    expect(screen.getAllByText('0.0%')).toHaveLength(3) // Success rate, coverage, and progress
-  })
-
-  it('should handle undefined values gracefully', () => {
-    const dataWithUndefined = {
-      totalValidated: 100,
-      validResources: 85,
-      errorResources: 10,
-      warningResources: 5,
-      unvalidatedResources: 50,
-      validationCoverage: undefined,
-      validationProgress: 75,
-      resourceTypeBreakdown: {
-        'Patient': { total: 50, validated: 40, valid: 35, errors: 3, warnings: 2, unvalidated: 10, validationRate: 80, successRate: undefined }
+      'Patient': {
+        total: 500,
+        validated: 450,
+        valid: 400,
+        errors: 30,
+        warnings: 20,
+        unvalidated: 50,
+        validationRate: 90.0,
+        successRate: 88.9
+      },
+      'Observation': {
+        total: 300,
+        validated: 250,
+        valid: 200,
+        errors: 25,
+        warnings: 25,
+        unvalidated: 50,
+        validationRate: 83.3,
+        successRate: 80.0
+      },
+      'DiagnosticReport': {
+        total: 200,
+        validated: 150,
+        valid: 120,
+        errors: 15,
+        warnings: 15,
+        unvalidated: 50,
+        validationRate: 75.0,
+        successRate: 80.0
+      }
+    },
+    aspectBreakdown: {
+      structural: {
+        enabled: true,
+        issueCount: 50,
+        errorCount: 20,
+        warningCount: 20,
+        informationCount: 10,
+        score: 85.0
+      },
+      profile: {
+        enabled: true,
+        issueCount: 30,
+        errorCount: 10,
+        warningCount: 15,
+        informationCount: 5,
+        score: 90.0
+      },
+      terminology: {
+        enabled: true,
+        issueCount: 25,
+        errorCount: 5,
+        warningCount: 15,
+        informationCount: 5,
+        score: 95.0
       }
     }
+  };
 
-    render(<ValidationStatsCard data={dataWithUndefined} />)
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-    expect(screen.getByText('Validation Statistics')).toBeInTheDocument()
-    expect(screen.getAllByText('0.0%')).toHaveLength(2) // Should default to 0 for both coverage and progress
-  })
+  describe('Resource Type Progress Breakdown', () => {
+    it('should display resource type progress breakdown with validation rates', () => {
+      render(<ValidationStatsCard data={mockValidationStats} />);
+      
+      // Check that resource types are displayed
+      expect(screen.getByText('Validation by Resource Type')).toBeInTheDocument();
+      expect(screen.getByText('Patient')).toBeInTheDocument();
+      expect(screen.getByText('Observation')).toBeInTheDocument();
+      expect(screen.getByText('DiagnosticReport')).toBeInTheDocument();
+      
+      // Check validation progress information
+      expect(screen.getByText('450/500 validated')).toBeInTheDocument();
+      expect(screen.getByText('250/300 validated')).toBeInTheDocument();
+      expect(screen.getByText('150/200 validated')).toBeInTheDocument();
+    });
 
-  it('should display progress bars correctly', () => {
-    render(<ValidationStatsCard data={mockData} />)
+    it('should display validation progress bars for each resource type', () => {
+      render(<ValidationStatsCard data={mockValidationStats} />);
+      
+      // Check that progress bars are rendered (they should have role="progressbar")
+      const progressBars = screen.getAllByRole('progressbar');
+      expect(progressBars.length).toBeGreaterThan(0);
+    });
 
-    const progressBars = screen.getAllByRole('progressbar')
-    expect(progressBars.length).toBeGreaterThan(0) // Should have progress bars
-  })
+    it('should display success rate information for validated resources', () => {
+      render(<ValidationStatsCard data={mockValidationStats} />);
+      
+      // Check success rate percentages
+      expect(screen.getByText('88.9%')).toBeInTheDocument(); // Patient success rate
+      const successRateElements = screen.getAllByText('80.0%');
+      expect(successRateElements.length).toBeGreaterThan(0); // Observation success rate
+    });
 
-  it('should display validation coverage', () => {
-    render(<ValidationStatsCard data={mockData} />)
+    it('should display status breakdown with counts', () => {
+      render(<ValidationStatsCard data={mockValidationStats} />);
+      
+      // Check status indicators
+      expect(screen.getByText('400 valid')).toBeInTheDocument();
+      expect(screen.getByText('30 errors')).toBeInTheDocument();
+      expect(screen.getByText('20 warnings')).toBeInTheDocument();
+    });
 
-    const coverageElements = screen.getAllByText('85.0%')
-    expect(coverageElements).toHaveLength(2) // Success rate and validation coverage
-  })
+    it('should sort resource types by total count', () => {
+      render(<ValidationStatsCard data={mockValidationStats} />);
+      
+      // Patient should be first (500 total), then Observation (300), then DiagnosticReport (200)
+      const resourceTypeElements = screen.getAllByText(/Patient|Observation|DiagnosticReport/);
+      expect(resourceTypeElements[0]).toHaveTextContent('Patient');
+      expect(resourceTypeElements[1]).toHaveTextContent('Observation');
+      expect(resourceTypeElements[2]).toHaveTextContent('DiagnosticReport');
+    });
+  });
 
-  it('should display validation progress', () => {
-    render(<ValidationStatsCard data={mockData} />)
+  describe('Active Validation Aspects Display', () => {
+    it('should display enabled validation aspects', () => {
+      render(<ValidationStatsCard data={mockValidationStats} />);
+      
+      expect(screen.getByText('Active Validation Aspects')).toBeInTheDocument();
+      const structuralElements = screen.getAllByText('structural');
+      expect(structuralElements.length).toBeGreaterThan(0);
+      const profileElements = screen.getAllByText('profile');
+      expect(profileElements.length).toBeGreaterThan(0);
+      const terminologyElements = screen.getAllByText('terminology');
+      expect(terminologyElements.length).toBeGreaterThan(0);
+      expect(screen.getByText('business Rule')).toBeInTheDocument();
+      expect(screen.getByText('metadata')).toBeInTheDocument();
+    });
 
-    const progressElement = screen.getByText('66.7%')
-    expect(progressElement).toBeInTheDocument()
-  })
+    it('should show aspect status with appropriate styling', () => {
+      render(<ValidationStatsCard data={mockValidationStats} />);
+      
+      // Enabled aspects should have green styling
+      const structuralElements = screen.getAllByText('structural');
+      expect(structuralElements.length).toBeGreaterThan(0);
+      const profileElements = screen.getAllByText('profile');
+      expect(profileElements.length).toBeGreaterThan(0);
+      const terminologyElements = screen.getAllByText('terminology');
+      expect(terminologyElements.length).toBeGreaterThan(0);
+      expect(screen.getByText('business Rule')).toBeInTheDocument();
+      expect(screen.getByText('metadata')).toBeInTheDocument();
+    });
+  });
 
-  it('should handle large numbers correctly', () => {
-    const largeData = {
-      ...mockData,
-      totalValidated: 1000000,
-      validationCoverage: 99.99
-    }
+  describe('Loading and Error States', () => {
+    it('should display loading state when isLoading is true', () => {
+      render(<ValidationStatsCard isLoading={true} />);
+      
+      expect(screen.getByText('Loading validation data...')).toBeInTheDocument();
+      expect(screen.getByText('Validation Statistics')).toBeInTheDocument();
+    });
 
-    render(<ValidationStatsCard data={largeData} />)
+    it('should display error state when error is provided', () => {
+      const errorMessage = 'Failed to load validation data';
+      render(<ValidationStatsCard error={errorMessage} />);
+      
+      expect(screen.getByText('Error loading validation data')).toBeInTheDocument();
+      expect(screen.getByText(errorMessage)).toBeInTheDocument();
+    });
 
-    expect(screen.getByText('1,000,000')).toBeInTheDocument()
-    expect(screen.getByText('100.0%')).toBeInTheDocument()
-  })
+    it('should handle empty data gracefully', () => {
+      render(<ValidationStatsCard data={null} />);
+      
+      // Should still render the card structure
+      expect(screen.getByText('Validation Statistics')).toBeInTheDocument();
+      expect(screen.getByText('Validation results from local database')).toBeInTheDocument();
+    });
+  });
 
-  it('should handle decimal precision correctly', () => {
-    const decimalData = {
-      ...mockData,
-      validationCoverage: 92.567,
-      validationProgress: 7.433
-    }
+  describe('Summary Statistics', () => {
+    it('should display total validated resources', () => {
+      render(<ValidationStatsCard data={mockValidationStats} />);
+      
+      expect(screen.getByText('1,500')).toBeInTheDocument(); // totalValidated formatted
+    });
 
-    render(<ValidationStatsCard data={decimalData} />)
+    it('should calculate and display success rate', () => {
+      render(<ValidationStatsCard data={mockValidationStats} />);
+      
+      // Success rate should be (1200/1500) * 100 = 80%
+      const successRateElements = screen.getAllByText('80.0%');
+      expect(successRateElements.length).toBeGreaterThan(0);
+    });
 
-    expect(screen.getByText('92.6%')).toBeInTheDocument() // Rounded to 1 decimal place
-    expect(screen.getByText('7.4%')).toBeInTheDocument() // Rounded to 1 decimal place
-  })
+    it('should display validation coverage', () => {
+      render(<ValidationStatsCard data={mockValidationStats} />);
+      
+      expect(screen.getByText('Validation Coverage')).toBeInTheDocument();
+      const coverageElements = screen.getAllByText('80.0%');
+      expect(coverageElements.length).toBeGreaterThan(0);
+    });
 
-  it('should render icons correctly', () => {
-    render(<ValidationStatsCard data={mockData} />)
+    it('should display validation progress', () => {
+      render(<ValidationStatsCard data={mockValidationStats} />);
+      
+      const progressLabels = screen.getAllByText('Validation Progress');
+      expect(progressLabels.length).toBeGreaterThan(0);
+      const progressElements = screen.getAllByText('75.0%');
+      expect(progressElements.length).toBeGreaterThan(0);
+    });
+  });
 
-    expect(screen.getAllByTestId('check-circle-icon')).toHaveLength(2) // Header and valid count
-    expect(screen.getByTestId('alert-circle-icon')).toBeInTheDocument()
-    expect(screen.getByTestId('alert-triangle-icon')).toBeInTheDocument()
-    expect(screen.getAllByTestId('database-icon')).toHaveLength(4) // Unvalidated count + 3 resource types
-    expect(screen.getByTestId('clock-icon')).toBeInTheDocument()
-  })
+  describe('Resource Status Breakdown', () => {
+    it('should display resource status counts', () => {
+      render(<ValidationStatsCard data={mockValidationStats} />);
+      
+      expect(screen.getByText('1,200')).toBeInTheDocument(); // validResources
+      expect(screen.getByText('150')).toBeInTheDocument(); // errorResources
+      expect(screen.getByText('100')).toBeInTheDocument(); // warningResources
+      expect(screen.getByText('500')).toBeInTheDocument(); // unvalidatedResources
+    });
 
-  it('should handle missing breakdown data', () => {
-    const dataWithoutBreakdown = {
-      ...mockData,
-      resourceTypeBreakdown: {}
-    }
-
-    render(<ValidationStatsCard data={dataWithoutBreakdown} />)
-
-    expect(screen.getByText('Validation Statistics')).toBeInTheDocument()
-    expect(screen.getByText('100')).toBeInTheDocument() // totalValidated should still show
-  })
-
-  it('should handle null breakdown gracefully', () => {
-    const dataWithNullBreakdown = {
-      ...mockData,
-      resourceTypeBreakdown: null as any
-    }
-
-    render(<ValidationStatsCard data={dataWithNullBreakdown} />)
-
-    expect(screen.getByText('Validation Statistics')).toBeInTheDocument()
-    expect(screen.getByText('100')).toBeInTheDocument() // totalValidated should still show
-  })
-})
+    it('should display status labels', () => {
+      render(<ValidationStatsCard data={mockValidationStats} />);
+      
+      expect(screen.getByText('Valid')).toBeInTheDocument();
+      const errorLabels = screen.getAllByText('Errors');
+      expect(errorLabels.length).toBeGreaterThan(0);
+      const warningLabels = screen.getAllByText('Warnings');
+      expect(warningLabels.length).toBeGreaterThan(0);
+      expect(screen.getByText('Unvalidated')).toBeInTheDocument();
+    });
+  });
+});

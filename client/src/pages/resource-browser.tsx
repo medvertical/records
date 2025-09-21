@@ -540,17 +540,19 @@ export default function ResourceBrowser() {
   return (
     <div className="p-6 h-full overflow-y-auto">
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <ResourceSearch 
-            resourceTypes={resourceTypes || []}
-            onSearch={handleSearch}
-            defaultResourceType={resourceType}
-            defaultQuery={searchQuery}
-          />
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex-1">
+            <ResourceSearch 
+              resourceTypes={resourceTypes || []}
+              onSearch={handleSearch}
+              defaultResourceType={resourceType}
+              defaultQuery={searchQuery}
+            />
+          </div>
           
           {/* Validation Controls */}
           {resourcesData?.resources && resourcesData.resources.length > 0 && (
-            <div className="flex items-center space-x-4 ml-4">
+            <div className="flex items-center space-x-4 lg:ml-4">
 
 
               {/* Manual Validation Button */}

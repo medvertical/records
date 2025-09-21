@@ -151,11 +151,19 @@ export function ValidationAspectBreakdownChart({
 
                   {/* Progress Bar */}
                   <div className="space-y-1">
-                    <Progress 
-                      value={breakdown.score} 
-                      className="w-full h-2"
-                      // Custom progress color would need to be implemented
-                    />
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Validation Score</span>
+                      <span className={`font-medium ${scoreColor}`}>{breakdown.score.toFixed(1)}%</span>
+                    </div>
+                    <div className="relative w-full bg-muted rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full transition-all duration-1000 ease-out ${progressColor}`}
+                        style={{ width: `${breakdown.score}%` }}
+                      />
+                      {breakdown.enabled && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-pulse" />
+                      )}
+                    </div>
                   </div>
 
                   {/* Issue Counts */}

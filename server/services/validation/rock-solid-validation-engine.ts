@@ -96,6 +96,52 @@ export interface ValidationResult {
   
   /** Request context */
   context?: ValidationContext;
+  
+  /** Retry tracking information */
+  retryInfo?: ValidationRetryInfo;
+}
+
+export interface ValidationRetryInfo {
+  /** Number of retry attempts made */
+  attemptCount: number;
+  
+  /** Maximum number of retry attempts allowed */
+  maxAttempts: number;
+  
+  /** Whether this validation was a retry */
+  isRetry: boolean;
+  
+  /** Previous validation attempt results */
+  previousAttempts: ValidationRetryAttempt[];
+  
+  /** Total retry duration in milliseconds */
+  totalRetryDurationMs: number;
+  
+  /** Whether retry is still possible */
+  canRetry: boolean;
+  
+  /** Reason for retry (if applicable) */
+  retryReason?: string;
+}
+
+export interface ValidationRetryAttempt {
+  /** Attempt number (1-based) */
+  attemptNumber: number;
+  
+  /** Timestamp of the attempt */
+  attemptedAt: Date;
+  
+  /** Whether the attempt was successful */
+  success: boolean;
+  
+  /** Error message if the attempt failed */
+  errorMessage?: string;
+  
+  /** Duration of this attempt in milliseconds */
+  durationMs: number;
+  
+  /** Validation result of this attempt */
+  result?: Partial<ValidationResult>;
 }
 
 export interface ValidationIssue {
@@ -520,7 +566,7 @@ export class RockSolidValidationEngine extends EventEmitter {
   }
 
   /**
-   * Perform terminology validation
+   * Perform comprehensive terminology validation
    */
   private async performTerminologyValidation(
     resource: any,
@@ -535,9 +581,7 @@ export class RockSolidValidationEngine extends EventEmitter {
     }
 
     try {
-      // Terminology validation logic would go here
-      // This would integrate with the terminology servers
-      
+      // Check if terminology servers are configured
       if (settings.terminologyServers.length === 0) {
         issues.push({
           severity: settings.terminology.severity,
@@ -547,6 +591,30 @@ export class RockSolidValidationEngine extends EventEmitter {
           humanReadable: 'Terminology validation is enabled but no servers are configured',
           aspect: 'terminology'
         });
+        return issues;
+      }
+
+      // Extract all codable concepts from the resource
+      const codableConcepts = this.extractCodableConcepts(resource);
+      
+      // Validate each codable concept comprehensively
+      for (const concept of codableConcepts) {
+        const conceptIssues = await this.validateCodableConcept(concept, settings, context);
+        issues.push(...conceptIssues);
+      }
+
+      // Validate code systems and value sets
+      const codeSystems = this.extractCodeSystems(resource);
+      for (const codeSystem of codeSystems) {
+        const systemIssues = await this.validateCodeSystem(codeSystem, settings, context);
+        issues.push(...systemIssues);
+      }
+
+      // Validate value sets
+      const valueSets = this.extractValueSets(resource);
+      for (const valueSet of valueSets) {
+        const valueSetIssues = await this.validateValueSet(valueSet, settings, context);
+        issues.push(...valueSetIssues);
       }
 
     } catch (error) {
@@ -571,7 +639,7 @@ export class RockSolidValidationEngine extends EventEmitter {
   }
 
   /**
-   * Perform reference validation
+   * Perform comprehensive reference validation
    */
   private async performReferenceValidation(
     resource: any,
@@ -586,23 +654,21 @@ export class RockSolidValidationEngine extends EventEmitter {
     }
 
     try {
-      // Reference validation logic would go here
-      // This would check if referenced resources exist and are of the correct type
-      
+      // Extract all references from the resource
       const references = this.extractReferences(resource);
+      
       for (const reference of references) {
-        // Validate reference format
-        if (!this.isValidReference(reference)) {
-          issues.push({
-            severity: settings.reference.severity,
-            code: 'INVALID_REFERENCE_FORMAT',
-            message: `Invalid reference format: ${reference}`,
-            location: this.getReferenceLocation(resource, reference),
-            humanReadable: `The reference '${reference}' is not in a valid format`,
-            aspect: 'reference'
-          });
-        }
+        const referenceIssues = await this.validateReference(reference, settings, context);
+        issues.push(...referenceIssues);
       }
+
+      // Validate reference integrity (circular references, broken chains)
+      const integrityIssues = await this.validateReferenceIntegrity(resource, settings, context);
+      issues.push(...integrityIssues);
+
+      // Validate reference cardinality and constraints
+      const cardinalityIssues = this.validateReferenceCardinality(resource, settings);
+      issues.push(...cardinalityIssues);
 
     } catch (error) {
       issues.push({
@@ -641,14 +707,29 @@ export class RockSolidValidationEngine extends EventEmitter {
     }
 
     try {
-      // Apply custom rules from settings if present
+      // Apply built-in FHIR business rules
+      const builtInRuleIssues = await this.applyBuiltInBusinessRules(resource, settings);
+      issues.push(...builtInRuleIssues);
+
+      // Apply custom rules from settings
       for (const rule of (settings as any).customRules || []) {
         if (rule.enabled) {
-          // Apply custom rule
           const ruleIssues = await this.applyCustomRule(resource, rule, settings);
           issues.push(...ruleIssues);
         }
       }
+
+      // Apply resource-specific business rules
+      const resourceSpecificIssues = await this.applyResourceSpecificRules(resource, settings);
+      issues.push(...resourceSpecificIssues);
+
+      // Apply cross-field validation rules
+      const crossFieldIssues = this.applyCrossFieldValidation(resource, settings);
+      issues.push(...crossFieldIssues);
+
+      // Apply temporal validation rules
+      const temporalIssues = this.applyTemporalValidation(resource, settings);
+      issues.push(...temporalIssues);
 
     } catch (error) {
       issues.push({
@@ -1035,6 +1116,707 @@ export class RockSolidValidationEngine extends EventEmitter {
   private getValueByPath(obj: any, path: string): any {
     if (!path) return obj;
     return path.split('.').reduce((acc: any, key: string) => (acc == null ? undefined : acc[key]), obj);
+  }
+
+  // ========================================================================
+  // Comprehensive Validation Helper Methods
+  // ========================================================================
+
+  /**
+   * Extract all codable concepts from a resource
+   */
+  private extractCodableConcepts(resource: any): Array<{concept: any, location: string[]}> {
+    const concepts: Array<{concept: any, location: string[]}> = [];
+    
+    const traverse = (obj: any, path: string[] = []) => {
+      if (!obj || typeof obj !== 'object') return;
+      
+      for (const [key, value] of Object.entries(obj)) {
+        const currentPath = [...path, key];
+        
+        if (value && typeof value === 'object') {
+          // Check if this is a CodableConcept
+          if (value.coding || value.text) {
+            concepts.push({ concept: value, location: currentPath });
+          }
+          // Recursively traverse nested objects
+          traverse(value, currentPath);
+        }
+      }
+    };
+    
+    traverse(resource);
+    return concepts;
+  }
+
+  /**
+   * Extract all code systems from a resource
+   */
+  private extractCodeSystems(resource: any): Array<{system: string, location: string[]}> {
+    const systems: Array<{system: string, location: string[]}> = [];
+    
+    const traverse = (obj: any, path: string[] = []) => {
+      if (!obj || typeof obj !== 'object') return;
+      
+      for (const [key, value] of Object.entries(obj)) {
+        const currentPath = [...path, key];
+        
+        if (value && typeof value === 'object') {
+          // Check if this is a Coding with a system
+          if (value.system && value.code) {
+            systems.push({ system: value.system, location: currentPath });
+          }
+          // Recursively traverse nested objects
+          traverse(value, currentPath);
+        }
+      }
+    };
+    
+    traverse(resource);
+    return systems;
+  }
+
+  /**
+   * Extract all value sets from a resource
+   */
+  private extractValueSets(resource: any): Array<{valueSet: string, location: string[]}> {
+    const valueSets: Array<{valueSet: string, location: string[]}> = [];
+    
+    const traverse = (obj: any, path: string[] = []) => {
+      if (!obj || typeof obj !== 'object') return;
+      
+      for (const [key, value] of Object.entries(obj)) {
+        const currentPath = [...path, key];
+        
+        if (value && typeof value === 'object') {
+          // Check for value set references in various formats
+          if (value.valueSet || value.valueSetUri) {
+            valueSets.push({ 
+              valueSet: value.valueSet || value.valueSetUri, 
+              location: currentPath 
+            });
+          }
+          // Recursively traverse nested objects
+          traverse(value, currentPath);
+        }
+      }
+    };
+    
+    traverse(resource);
+    return valueSets;
+  }
+
+  /**
+   * Validate a codable concept comprehensively
+   */
+  private async validateCodableConcept(
+    concept: {concept: any, location: string[]},
+    settings: ValidationSettings,
+    context: ValidationContext
+  ): Promise<ValidationIssue[]> {
+    const issues: ValidationIssue[] = [];
+    const { concept: codableConcept, location } = concept;
+
+    try {
+      // Validate that either coding or text is present
+      if (!codableConcept.coding && !codableConcept.text) {
+        issues.push({
+          severity: settings.terminology.severity,
+          code: 'CODABLE_CONCEPT_INCOMPLETE',
+          message: 'CodableConcept must have either coding or text',
+          location,
+          humanReadable: 'A codable concept must specify either coding or text',
+          aspect: 'terminology'
+        });
+      }
+
+      // Validate codings if present
+      if (codableConcept.coding && Array.isArray(codableConcept.coding)) {
+        for (let i = 0; i < codableConcept.coding.length; i++) {
+          const coding = codableConcept.coding[i];
+          const codingLocation = [...location, 'coding', i.toString()];
+          
+          if (!coding.system) {
+            issues.push({
+              severity: settings.terminology.severity,
+              code: 'CODING_MISSING_SYSTEM',
+              message: 'Coding must have a system',
+              location: codingLocation,
+              humanReadable: 'Each coding must specify a code system',
+              aspect: 'terminology'
+            });
+          }
+          
+          if (!coding.code) {
+            issues.push({
+              severity: settings.terminology.severity,
+              code: 'CODING_MISSING_CODE',
+              message: 'Coding must have a code',
+              location: codingLocation,
+              humanReadable: 'Each coding must specify a code',
+              aspect: 'terminology'
+            });
+          }
+        }
+      }
+
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'CODABLE_CONCEPT_VALIDATION_ERROR',
+        message: `CodableConcept validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location,
+        humanReadable: 'An error occurred while validating a codable concept',
+        aspect: 'terminology'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Validate a code system
+   */
+  private async validateCodeSystem(
+    codeSystem: {system: string, location: string[]},
+    settings: ValidationSettings,
+    context: ValidationContext
+  ): Promise<ValidationIssue[]> {
+    const issues: ValidationIssue[] = [];
+    const { system, location } = codeSystem;
+
+    try {
+      // Validate code system URL format
+      if (!this.isValidUrl(system)) {
+        issues.push({
+          severity: settings.terminology.severity,
+          code: 'INVALID_CODE_SYSTEM_URL',
+          message: `Invalid code system URL: ${system}`,
+          location,
+          humanReadable: `The code system URL '${system}' is not valid`,
+          aspect: 'terminology'
+        });
+      }
+
+      // TODO: Add actual terminology server validation
+      // This would check if the code system is recognized by configured terminology servers
+
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'CODE_SYSTEM_VALIDATION_ERROR',
+        message: `Code system validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location,
+        humanReadable: 'An error occurred while validating a code system',
+        aspect: 'terminology'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Validate a value set
+   */
+  private async validateValueSet(
+    valueSet: {valueSet: string, location: string[]},
+    settings: ValidationSettings,
+    context: ValidationContext
+  ): Promise<ValidationIssue[]> {
+    const issues: ValidationIssue[] = [];
+    const { valueSet: vs, location } = valueSet;
+
+    try {
+      // Validate value set URL format
+      if (!this.isValidUrl(vs)) {
+        issues.push({
+          severity: settings.terminology.severity,
+          code: 'INVALID_VALUE_SET_URL',
+          message: `Invalid value set URL: ${vs}`,
+          location,
+          humanReadable: `The value set URL '${vs}' is not valid`,
+          aspect: 'terminology'
+        });
+      }
+
+      // TODO: Add actual terminology server validation
+      // This would check if the value set is recognized by configured terminology servers
+
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'VALUE_SET_VALIDATION_ERROR',
+        message: `Value set validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location,
+        humanReadable: 'An error occurred while validating a value set',
+        aspect: 'terminology'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Validate a reference comprehensively
+   */
+  private async validateReference(
+    reference: {reference: string, location: string[]},
+    settings: ValidationSettings,
+    context: ValidationContext
+  ): Promise<ValidationIssue[]> {
+    const issues: ValidationIssue[] = [];
+    const { reference: ref, location } = reference;
+
+    try {
+      // Validate reference format
+      if (!this.isValidReference(ref)) {
+        issues.push({
+          severity: settings.reference.severity,
+          code: 'INVALID_REFERENCE_FORMAT',
+          message: `Invalid reference format: ${ref}`,
+          location,
+          humanReadable: `The reference '${ref}' is not in a valid format`,
+          aspect: 'reference'
+        });
+        return issues;
+      }
+
+      // Parse reference components
+      const refComponents = this.parseReference(ref);
+      
+      // Validate resource type if specified
+      if (refComponents.resourceType && !this.isValidResourceType(refComponents.resourceType)) {
+        issues.push({
+          severity: settings.reference.severity,
+          code: 'INVALID_REFERENCE_RESOURCE_TYPE',
+          message: `Invalid resource type in reference: ${refComponents.resourceType}`,
+          location,
+          humanReadable: `The resource type '${refComponents.resourceType}' in the reference is not valid`,
+          aspect: 'reference'
+        });
+      }
+
+      // TODO: Add actual reference resolution validation
+      // This would check if the referenced resource exists and is accessible
+
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'REFERENCE_VALIDATION_ERROR',
+        message: `Reference validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location,
+        humanReadable: 'An error occurred while validating a reference',
+        aspect: 'reference'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Validate reference integrity (circular references, broken chains)
+   */
+  private async validateReferenceIntegrity(
+    resource: any,
+    settings: ValidationSettings,
+    context: ValidationContext
+  ): Promise<ValidationIssue[]> {
+    const issues: ValidationIssue[] = [];
+
+    try {
+      // TODO: Implement circular reference detection
+      // TODO: Implement reference chain validation
+      // This would track reference chains and detect circular dependencies
+
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'REFERENCE_INTEGRITY_VALIDATION_ERROR',
+        message: `Reference integrity validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location: [],
+        humanReadable: 'An error occurred while validating reference integrity',
+        aspect: 'reference'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Validate reference cardinality and constraints
+   */
+  private validateReferenceCardinality(
+    resource: any,
+    settings: ValidationSettings
+  ): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+
+    try {
+      // TODO: Implement reference cardinality validation
+      // This would check if references meet cardinality constraints defined in profiles
+
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'REFERENCE_CARDINALITY_VALIDATION_ERROR',
+        message: `Reference cardinality validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location: [],
+        humanReadable: 'An error occurred while validating reference cardinality',
+        aspect: 'reference'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Apply built-in FHIR business rules
+   */
+  private async applyBuiltInBusinessRules(
+    resource: any,
+    settings: ValidationSettings
+  ): Promise<ValidationIssue[]> {
+    const issues: ValidationIssue[] = [];
+
+    try {
+      // TODO: Implement comprehensive FHIR business rules
+      // This would include rules like:
+      // - Date consistency (effective date <= recorded date)
+      // - Quantity constraints (positive values for certain quantities)
+      // - Enumeration value validation
+      // - Required field combinations
+      // - Cardinality constraints
+
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'BUILT_IN_RULES_VALIDATION_ERROR',
+        message: `Built-in business rules validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location: [],
+        humanReadable: 'An error occurred while applying built-in business rules',
+        aspect: 'businessRule'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Apply resource-specific business rules
+   */
+  private async applyResourceSpecificRules(
+    resource: any,
+    settings: ValidationSettings
+  ): Promise<ValidationIssue[]> {
+    const issues: ValidationIssue[] = [];
+
+    try {
+      // Apply resource-specific validation rules
+      switch (resource.resourceType) {
+        case 'Patient':
+          issues.push(...this.validatePatientBusinessRules(resource, settings));
+          break;
+        case 'Observation':
+          issues.push(...this.validateObservationBusinessRules(resource, settings));
+          break;
+        case 'Encounter':
+          issues.push(...this.validateEncounterBusinessRules(resource, settings));
+          break;
+        // Add more resource types as needed
+      }
+
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'RESOURCE_SPECIFIC_RULES_VALIDATION_ERROR',
+        message: `Resource-specific business rules validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location: [],
+        humanReadable: 'An error occurred while applying resource-specific business rules',
+        aspect: 'businessRule'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Apply cross-field validation rules
+   */
+  private applyCrossFieldValidation(
+    resource: any,
+    settings: ValidationSettings
+  ): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+
+    try {
+      // TODO: Implement cross-field validation
+      // This would include rules like:
+      // - Related fields must have consistent values
+      // - Conditional fields based on other field values
+      // - Mutually exclusive fields
+
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'CROSS_FIELD_VALIDATION_ERROR',
+        message: `Cross-field validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location: [],
+        humanReadable: 'An error occurred while performing cross-field validation',
+        aspect: 'businessRule'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Apply temporal validation rules
+   */
+  private applyTemporalValidation(
+    resource: any,
+    settings: ValidationSettings
+  ): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+
+    try {
+      // TODO: Implement temporal validation
+      // This would include rules like:
+      // - Date ranges (start <= end)
+      // - Future date constraints
+      // - Historical date constraints
+      // - Duration consistency
+
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'TEMPORAL_VALIDATION_ERROR',
+        message: `Temporal validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location: [],
+        humanReadable: 'An error occurred while performing temporal validation',
+        aspect: 'businessRule'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Validate Patient-specific business rules
+   */
+  private validatePatientBusinessRules(
+    patient: any,
+    settings: ValidationSettings
+  ): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+
+    try {
+      // Birth date cannot be in the future
+      if (patient.birthDate) {
+        const birthDate = new Date(patient.birthDate);
+        if (birthDate > new Date()) {
+          issues.push({
+            severity: settings.businessRule.severity,
+            code: 'PATIENT_BIRTH_DATE_FUTURE',
+            message: 'Patient birth date cannot be in the future',
+            location: ['birthDate'],
+            humanReadable: 'A patient\'s birth date cannot be in the future',
+            aspect: 'businessRule'
+          });
+        }
+      }
+
+      // Death date must be after birth date
+      if (patient.birthDate && patient.deceasedDateTime) {
+        const birthDate = new Date(patient.birthDate);
+        const deathDate = new Date(patient.deceasedDateTime);
+        if (deathDate <= birthDate) {
+          issues.push({
+            severity: settings.businessRule.severity,
+            code: 'PATIENT_DEATH_BEFORE_BIRTH',
+            message: 'Patient death date must be after birth date',
+            location: ['deceasedDateTime'],
+            humanReadable: 'A patient\'s death date must be after their birth date',
+            aspect: 'businessRule'
+          });
+        }
+      }
+
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'PATIENT_BUSINESS_RULES_ERROR',
+        message: `Patient business rules validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location: [],
+        humanReadable: 'An error occurred while validating patient business rules',
+        aspect: 'businessRule'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Validate Observation-specific business rules
+   */
+  private validateObservationBusinessRules(
+    observation: any,
+    settings: ValidationSettings
+  ): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+
+    try {
+      // Effective date/time must be present
+      if (!observation.effectiveDateTime && !observation.effectivePeriod && !observation.effectiveInstant) {
+        issues.push({
+          severity: settings.businessRule.severity,
+          code: 'OBSERVATION_MISSING_EFFECTIVE_TIME',
+          message: 'Observation must have effective date/time',
+          location: [],
+          humanReadable: 'An observation must specify when it was taken or observed',
+          aspect: 'businessRule'
+        });
+      }
+
+      // Value and interpretation should be consistent
+      if (observation.valueQuantity && observation.interpretation) {
+        // TODO: Add logic to validate value against interpretation
+        // This would check if the numeric value aligns with the interpretation
+      }
+
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'OBSERVATION_BUSINESS_RULES_ERROR',
+        message: `Observation business rules validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location: [],
+        humanReadable: 'An error occurred while validating observation business rules',
+        aspect: 'businessRule'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Validate Encounter-specific business rules
+   */
+  private validateEncounterBusinessRules(
+    encounter: any,
+    settings: ValidationSettings
+  ): ValidationIssue[] {
+    const issues: ValidationIssue[] = [];
+
+    try {
+      // Period start must be before or equal to period end
+      if (encounter.period && encounter.period.start && encounter.period.end) {
+        const startDate = new Date(encounter.period.start);
+        const endDate = new Date(encounter.period.end);
+        if (startDate > endDate) {
+          issues.push({
+            severity: settings.businessRule.severity,
+            code: 'ENCOUNTER_PERIOD_INVALID',
+            message: 'Encounter period start must be before or equal to end',
+            location: ['period'],
+            humanReadable: 'An encounter\'s start time must be before or equal to its end time',
+            aspect: 'businessRule'
+          });
+        }
+      }
+
+    } catch (error) {
+      issues.push({
+        severity: 'error',
+        code: 'ENCOUNTER_BUSINESS_RULES_ERROR',
+        message: `Encounter business rules validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        location: [],
+        humanReadable: 'An error occurred while validating encounter business rules',
+        aspect: 'businessRule'
+      });
+    }
+
+    return issues;
+  }
+
+  /**
+   * Check if a URL is valid
+   */
+  private isValidUrl(url: string): boolean {
+    try {
+      new URL(url);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Check if a resource type is valid
+   */
+  private isValidResourceType(resourceType: string): boolean {
+    // List of valid FHIR R4 resource types
+    const validResourceTypes = [
+      'Account', 'ActivityDefinition', 'AdverseEvent', 'AllergyIntolerance',
+      'Appointment', 'AppointmentResponse', 'AuditEvent', 'Basic',
+      'Binary', 'BiologicallyDerivedProduct', 'BodyStructure', 'Bundle',
+      'CapabilityStatement', 'CarePlan', 'CareTeam', 'CatalogEntry',
+      'ChargeItem', 'ChargeItemDefinition', 'Claim', 'ClaimResponse',
+      'ClinicalImpression', 'CodeSystem', 'Communication', 'CommunicationRequest',
+      'CompartmentDefinition', 'Composition', 'ConceptMap', 'Condition',
+      'Consent', 'Contract', 'Coverage', 'CoverageEligibilityRequest',
+      'CoverageEligibilityResponse', 'DetectedIssue', 'Device', 'DeviceDefinition',
+      'DeviceMetric', 'DeviceRequest', 'DeviceUseStatement', 'DiagnosticReport',
+      'DocumentManifest', 'DocumentReference', 'EffectEvidenceSynthesis',
+      'Encounter', 'Endpoint', 'EnrollmentRequest', 'EnrollmentResponse',
+      'EpisodeOfCare', 'EventDefinition', 'Evidence', 'EvidenceVariable',
+      'ExampleScenario', 'ExplanationOfBenefit', 'FamilyMemberHistory',
+      'Flag', 'Goal', 'GraphDefinition', 'Group', 'GuidanceResponse',
+      'HealthcareService', 'ImagingStudy', 'Immunization', 'ImmunizationEvaluation',
+      'ImmunizationRecommendation', 'ImplementationGuide', 'InsurancePlan',
+      'Invoice', 'Library', 'Linkage', 'List', 'Location', 'Measure',
+      'MeasureReport', 'Media', 'Medication', 'MedicationAdministration',
+      'MedicationDispense', 'MedicationKnowledge', 'MedicationRequest',
+      'MedicationStatement', 'MedicinalProduct', 'MedicinalProductAuthorization',
+      'MedicinalProductContraindication', 'MedicinalProductIndication',
+      'MedicinalProductIngredient', 'MedicinalProductInteraction',
+      'MedicinalProductManufactured', 'MedicinalProductPackaged',
+      'MedicinalProductPharmaceutical', 'MedicinalProductUndesirableEffect',
+      'MessageDefinition', 'MessageHeader', 'MolecularSequence', 'NamingSystem',
+      'NutritionOrder', 'Observation', 'ObservationDefinition', 'OperationDefinition',
+      'OperationOutcome', 'Organization', 'OrganizationAffiliation', 'Parameters',
+      'Patient', 'PaymentNotice', 'PaymentReconciliation', 'Person',
+      'PlanDefinition', 'Practitioner', 'PractitionerRole', 'Procedure',
+      'Provenance', 'Questionnaire', 'QuestionnaireResponse', 'RelatedPerson',
+      'RequestGroup', 'ResearchDefinition', 'ResearchElementDefinition',
+      'ResearchStudy', 'ResearchSubject', 'RiskAssessment', 'RiskEvidenceSynthesis',
+      'Schedule', 'SearchParameter', 'ServiceRequest', 'Slot', 'Specimen',
+      'SpecimenDefinition', 'StructureDefinition', 'StructureMap',
+      'Subscription', 'Substance', 'SubstanceNucleicAcid', 'SubstancePolymer',
+      'SubstanceProtein', 'SubstanceReferenceInformation', 'SubstanceSourceMaterial',
+      'SubstanceSpecification', 'SupplyDelivery', 'SupplyRequest',
+      'Task', 'TerminologyCapabilities', 'TestReport', 'TestScript',
+      'ValueSet', 'VerificationResult', 'VisionPrescription'
+    ];
+    
+    return validResourceTypes.includes(resourceType);
+  }
+
+  /**
+   * Parse a reference into its components
+   */
+  private parseReference(reference: string): {resourceType?: string, id?: string, url?: string} {
+    // Handle different reference formats
+    if (reference.startsWith('http')) {
+      return { url: reference };
+    }
+    
+    if (reference.includes('/')) {
+      const parts = reference.split('/');
+      if (parts.length >= 2) {
+        return { resourceType: parts[parts.length - 2], id: parts[parts.length - 1] };
+      }
+    }
+    
+    return { id: reference };
   }
 
   // Expose health status

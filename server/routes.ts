@@ -43,6 +43,62 @@ let globalValidationState = {
   lastBroadcastTime: null as number | null
 };
 
+// Helper function to calculate retry statistics
+async function calculateRetryStatistics() {
+  try {
+    // Get retry statistics from validation results
+    const retryStats = await db.select({
+      retryAttemptCount: validationResults.retryAttemptCount,
+      maxRetryAttempts: validationResults.maxRetryAttempts,
+      isRetry: validationResults.isRetry,
+      canRetry: validationResults.canRetry,
+      totalRetryDurationMs: validationResults.totalRetryDurationMs,
+      isValid: validationResults.isValid
+    }).from(validationResults);
+
+    let totalRetryAttempts = 0;
+    let successfulRetries = 0;
+    let failedRetries = 0;
+    let resourcesWithRetries = 0;
+    let totalRetryDuration = 0;
+
+    retryStats.forEach(stat => {
+      totalRetryAttempts += stat.retryAttemptCount || 0;
+      totalRetryDuration += stat.totalRetryDurationMs || 0;
+      
+      if (stat.isRetry) {
+        resourcesWithRetries++;
+        if (stat.isValid) {
+          successfulRetries++;
+        } else {
+          failedRetries++;
+        }
+      }
+    });
+
+    const averageRetriesPerResource = resourcesWithRetries > 0 ? totalRetryAttempts / resourcesWithRetries : 0;
+
+    return {
+      totalRetryAttempts,
+      successfulRetries,
+      failedRetries,
+      resourcesWithRetries,
+      averageRetriesPerResource: Math.round(averageRetriesPerResource * 100) / 100,
+      totalRetryDurationMs: totalRetryDuration
+    };
+  } catch (error) {
+    console.error('[Routes] Error calculating retry statistics:', error);
+    return {
+      totalRetryAttempts: 0,
+      successfulRetries: 0,
+      failedRetries: 0,
+      resourcesWithRetries: 0,
+      averageRetriesPerResource: 0,
+      totalRetryDurationMs: 0
+    };
+  }
+}
+
 // Resource counts cache for dashboard performance
 const resourceCountsCache = {
   totalResources: 0,
@@ -1628,9 +1684,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // SSE progress broadcast handled by validation service
 
       // Process resource types with real FHIR server data (EXCLUDING types with >50k resources)
-      for (let i = 0; i < resourceTypes.length; i++) {
-        const resourceType = resourceTypes[i];
-        const nextResourceType = i + 1 < resourceTypes.length ? resourceTypes[i + 1] : null;
+      // Use filtered resource types if filtering is enabled
+      for (let i = 0; i < filteredResourceTypes.length; i++) {
+        const resourceType = filteredResourceTypes[i];
+        const nextResourceType = i + 1 < filteredResourceTypes.length ? filteredResourceTypes[i + 1] : null;
         
         // Update current and next resource type in global state
         globalValidationState.currentResourceType = resourceType;
@@ -1666,9 +1723,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`Validating ALL ${resourceType} resources from FHIR server...`);
           console.log(`Found ${totalCount} total ${resourceType} resources on server`);
           
-          // Process ALL resources in batches
-          let offset = 0;
-          const batchSize = options.batchSize || 20;
+      // Process ALL resources in batches
+      let offset = 0;
+      
+      // Get configured batch processing settings from validation settings
+      let batchSize = options.batchSize || 20; // Default fallback
+      let pauseBetweenBatches = false;
+      let pauseDurationMs = 100;
+      let useAdaptiveBatchSizing = false;
+      let retryFailedBatches = false;
+      let maxRetryAttempts = 1;
+      let retryDelayMs = 2000;
+      
+      try {
+        const settingsService = getValidationSettingsService();
+        const validationSettings = await settingsService.getActiveSettings();
+        const batchSettings = validationSettings.batchProcessingSettings;
+        
+        batchSize = batchSettings.defaultBatchSize;
+        pauseBetweenBatches = batchSettings.pauseBetweenBatches;
+        pauseDurationMs = batchSettings.pauseDurationMs;
+        useAdaptiveBatchSizing = batchSettings.useAdaptiveBatchSizing;
+        retryFailedBatches = batchSettings.retryFailedBatches;
+        maxRetryAttempts = batchSettings.maxRetryAttempts;
+        retryDelayMs = batchSettings.retryDelayMs;
+        
+        // Validate batch size is within configured limits
+        if (batchSize < batchSettings.minBatchSize) {
+          console.warn(`Batch size ${batchSize} is below minimum ${batchSettings.minBatchSize}, using minimum`);
+          batchSize = batchSettings.minBatchSize;
+        }
+        if (batchSize > batchSettings.maxBatchSize) {
+          console.warn(`Batch size ${batchSize} exceeds maximum ${batchSettings.maxBatchSize}, using maximum`);
+          batchSize = batchSettings.maxBatchSize;
+        }
+        
+        console.log(`Using configured batch settings:`, {
+          batchSize,
+          pauseBetweenBatches,
+          pauseDurationMs,
+          useAdaptiveBatchSizing,
+          retryFailedBatches,
+          maxRetryAttempts,
+          retryDelayMs
+        });
+      } catch (error) {
+        console.warn('Failed to get validation settings, using default batch settings:', error);
+        batchSize = options.batchSize || 20;
+      }
+      
+      // Apply resource type filtering if enabled
+      let filteredResourceTypes = resourceTypes;
+      let filteredResourceCounts: Record<string, number> = {};
+      let filteredTotalResources = realTotalResources;
+      
+      try {
+        const settingsService = getValidationSettingsService();
+        const validationSettings = await settingsService.getActiveSettings();
+        const filterSettings = validationSettings.resourceTypeFilterSettings;
+        
+        if (filterSettings && filterSettings.enabled) {
+          console.log('Resource type filtering is enabled:', {
+            mode: filterSettings.mode,
+            enabledTypes: filterSettings.resourceTypes,
+            validateUnknownTypes: filterSettings.validateUnknownTypes,
+            validateCustomTypes: filterSettings.validateCustomTypes
+          });
+          
+          if (filterSettings.mode === 'include') {
+            // Only validate the specified resource types
+            filteredResourceTypes = resourceTypes.filter(type => 
+              filterSettings.resourceTypes.includes(type)
+            );
+            console.log(`Filtering to include only ${filteredResourceTypes.length} resource types:`, filteredResourceTypes);
+          } else if (filterSettings.mode === 'exclude') {
+            // Skip the specified resource types
+            filteredResourceTypes = resourceTypes.filter(type => 
+              !filterSettings.resourceTypes.includes(type)
+            );
+            console.log(`Filtering to exclude ${filterSettings.resourceTypes.length} resource types, keeping ${filteredResourceTypes.length}:`, filteredResourceTypes);
+          }
+          
+          // Recalculate resource counts for filtered types
+          filteredResourceCounts = {};
+          filteredTotalResources = 0;
+          
+          for (const resourceType of filteredResourceTypes) {
+            if (resourceCounts[resourceType] !== undefined) {
+              filteredResourceCounts[resourceType] = resourceCounts[resourceType];
+              filteredTotalResources += resourceCounts[resourceType];
+            }
+          }
+          
+          console.log(`After filtering: ${filteredTotalResources} resources across ${filteredResourceTypes.length} resource types`);
+          console.log('Filtered resource counts:', Object.entries(filteredResourceCounts)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 10)
+            .map(([type, count]) => `${type}: ${count}`)
+            .join(', '));
+        } else {
+          console.log('Resource type filtering is disabled - validating all resource types');
+          filteredResourceTypes = resourceTypes;
+          filteredResourceCounts = resourceCounts;
+          filteredTotalResources = realTotalResources;
+        }
+      } catch (error) {
+        console.warn('Failed to get resource type filter settings, validating all resource types:', error);
+        filteredResourceTypes = resourceTypes;
+        filteredResourceCounts = resourceCounts;
+        filteredTotalResources = realTotalResources;
+      }
           
           while (offset < totalCount && globalValidationState.isRunning && !globalValidationState.shouldStop) {
             // Get batch of resources
@@ -1711,38 +1875,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 resourceId: (e as any).resource.id
               }));
 
-              try {
-                const pipeline = getValidationPipeline();
-                const pipelineResult: any = await pipeline.executePipeline({
-                  resources: resourcesForPipeline,
-                  context: {
-                    requestedBy: 'bulk_validation',
-                    requestId: `bulk_${resourceType}_${Date.now()}_${i}`
-                  }
-                });
+              // Process batch with retry logic if configured
+              let batchProcessed = false;
+              let retryAttempt = 0;
+              let lastError: any = null;
+              
+              while (!batchProcessed && retryAttempt <= maxRetryAttempts) {
+                try {
+                  const pipeline = getValidationPipeline();
+                  const pipelineResult: any = await pipeline.executePipeline({
+                    resources: resourcesForPipeline,
+                    context: {
+                      requestedBy: 'bulk_validation',
+                      requestId: `bulk_${resourceType}_${Date.now()}_${i}_${retryAttempt}`
+                    }
+                  });
 
-                const batchResults: any[] = Array.isArray(pipelineResult?.results) ? pipelineResult.results : [];
-                for (const r of batchResults) {
-                  processedResources++;
-                  const score = (r?.summary?.validationScore ?? 0) as number;
-                  const isValid = score >= 95;
-                  if (isValid) {
-                    validResources++;
-                  } else {
-                    errorResources++;
-                    const errCount = (r?.summary?.errorCount ?? 0) as number;
-                    const warnCount = (r?.summary?.warningCount ?? 0) as number;
-                    const rid = (r?.resourceId || r?.resource?.id || 'unknown') as string;
-                    errors.push(`${resourceType}/${rid}: Score ${score}% (${errCount} errors, ${warnCount} warnings)`);
+                  const batchResults: any[] = Array.isArray(pipelineResult?.results) ? pipelineResult.results : [];
+                  for (const r of batchResults) {
+                    processedResources++;
+                    const score = (r?.summary?.validationScore ?? 0) as number;
+                    const isValid = score >= 95;
+                    if (isValid) {
+                      validResources++;
+                    } else {
+                      errorResources++;
+                      const errCount = (r?.summary?.errorCount ?? 0) as number;
+                      const warnCount = (r?.summary?.warningCount ?? 0) as number;
+                      const rid = (r?.resourceId || r?.resource?.id || 'unknown') as string;
+                      errors.push(`${resourceType}/${rid}: Score ${score}% (${errCount} errors, ${warnCount} warnings)`);
+                    }
                   }
-                }
-              } catch (validationError: any) {
-                // If the batch fails, attribute errors to each resource in the batch
-                for (const e of parallelBatch) {
-                  processedResources++;
-                  errorResources++;
-                  const rid = (e as any).resource?.id || 'unknown';
-                  errors.push(`${resourceType}/${rid}: Validation failed - ${validationError?.message || String(validationError)}`);
+                  
+                  batchProcessed = true;
+                  
+                  if (retryAttempt > 0) {
+                    console.log(`Batch retry successful on attempt ${retryAttempt + 1}`);
+                  }
+                  
+                } catch (validationError: any) {
+                  lastError = validationError;
+                  retryAttempt++;
+                  
+                  if (retryAttempt <= maxRetryAttempts && retryFailedBatches) {
+                    console.log(`Batch validation failed, retrying in ${retryDelayMs}ms (attempt ${retryAttempt}/${maxRetryAttempts})`);
+                    await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+                  } else {
+                    // If retry failed or retry is disabled, attribute errors to each resource in the batch
+                    for (const e of parallelBatch) {
+                      processedResources++;
+                      errorResources++;
+                      const rid = (e as any).resource?.id || 'unknown';
+                      const errorMsg = retryAttempt > 1 
+                        ? `Validation failed after ${retryAttempt} attempts - ${validationError?.message || String(validationError)}`
+                        : `Validation failed - ${validationError?.message || String(validationError)}`;
+                      errors.push(`${resourceType}/${rid}: ${errorMsg}`);
+                    }
+                    batchProcessed = true;
+                  }
                 }
               }
 
@@ -1769,8 +1959,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
               break;
             }
             
-            // Small delay between batches to prevent overwhelming server
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Pause between batches if configured
+            if (pauseBetweenBatches) {
+              console.log(`Pausing for ${pauseDurationMs}ms between batches...`);
+              await new Promise(resolve => setTimeout(resolve, pauseDurationMs));
+            } else {
+              // Small delay between batches to prevent overwhelming server (fallback)
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
           }
           
           // If we broke out of the while loop due to pause, break out of the for loop too
@@ -1788,7 +1984,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!globalValidationState.isPaused && !globalValidationState.shouldStop) {
         console.log('Validation completed successfully - broadcasting completion');
         const finalProgress = {
-          totalResources: realTotalResources,
+          totalResources: filteredTotalResources,
           processedResources,
           validResources,
           errorResources,
@@ -1827,9 +2023,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Get the total resources from FHIR server for validation
-      // Use the actual total from FHIR server via dashboard service
+      // Use filtered resource counts if filtering is enabled
       const fhirServerStats = await dashboardService.getFhirServerStats();
-      const totalResources = fhirServerStats.totalResources;
+      let totalResources = fhirServerStats.totalResources;
+      
+      // Apply resource type filtering if enabled
+      try {
+        const settingsService = getValidationSettingsService();
+        const validationSettings = await settingsService.getActiveSettings();
+        const filterSettings = validationSettings.resourceTypeFilterSettings;
+        
+        if (filterSettings && filterSettings.enabled) {
+          // Calculate filtered total resources
+          const resourceTypes = await fhirClient.getAllResourceTypes();
+          let filteredTotal = 0;
+          
+          for (const resourceType of resourceTypes) {
+            const shouldInclude = filterSettings.mode === 'include' 
+              ? filterSettings.resourceTypes.includes(resourceType)
+              : !filterSettings.resourceTypes.includes(resourceType);
+            
+            if (shouldInclude) {
+              try {
+                const count = await fhirClient.getResourceCount(resourceType);
+                filteredTotal += count;
+              } catch (error) {
+                console.warn(`Failed to get count for ${resourceType}:`, error);
+              }
+            }
+          }
+          
+          totalResources = filteredTotal;
+        }
+      } catch (error) {
+        console.warn('Failed to get resource type filter settings for progress:', error);
+        // Use original total if filtering fails
+      }
       // Determine actual status based on validation state
       let status = 'not_running';
       if (globalValidationState.isRunning) {
@@ -1844,6 +2073,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Always use actual database counts for progress tracking
       // This ensures progress is shown correctly whether running, paused, or stopped
       const processedResources = summary.validResources + summary.errorResources;
+
+      // Calculate retry statistics from validation results
+      const retryStatistics = await calculateRetryStatistics();
       
       // Calculate estimated time remaining based on processing rate
       let estimatedTimeRemaining = undefined;
@@ -1888,7 +2120,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         errors: [],
         startTime: globalValidationState.startTime ? globalValidationState.startTime.toISOString() : new Date().toISOString(),
         estimatedTimeRemaining,
-        status: status as 'running' | 'paused' | 'not_running'
+        status: status as 'running' | 'paused' | 'not_running',
+        retryStatistics
       };
       
       res.json(progress);
@@ -2021,7 +2254,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               // Start from saved offset for current resource type, or 0 for new types
               let offset = (i === resumeIndex && resumeData.offset) ? resumeData.offset : 0;
-              const batchSize = 20;
+              
+              // Get configured batch size from validation settings
+              let batchSize = 20; // Default fallback
+              try {
+                const settingsService = getValidationSettingsService();
+                const validationSettings = await settingsService.getActiveSettings();
+                const batchSettings = validationSettings.batchProcessingSettings;
+                batchSize = batchSettings.defaultBatchSize;
+                
+                // Validate batch size is within configured limits
+                if (batchSize < batchSettings.minBatchSize) {
+                  console.warn(`Resume batch size ${batchSize} is below minimum ${batchSettings.minBatchSize}, using minimum`);
+                  batchSize = batchSettings.minBatchSize;
+                }
+                if (batchSize > batchSettings.maxBatchSize) {
+                  console.warn(`Resume batch size ${batchSize} exceeds maximum ${batchSettings.maxBatchSize}, using maximum`);
+                  batchSize = batchSettings.maxBatchSize;
+                }
+                
+                console.log(`Resume using configured batch size: ${batchSize}`);
+              } catch (error) {
+                console.warn('Failed to get validation settings for resume, using default batch size:', error);
+                batchSize = 20;
+              }
               
               while (offset < totalCount && globalValidationState.isRunning && !globalValidationState.shouldStop) {
                 // Get batch of resources
@@ -2193,7 +2449,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const options = req.body || {};
       const forceRevalidation = options.forceRevalidation || false;
       const priority = options.priority || 'normal';
-      const batchSize = options.batchSize || 200;
+      
+      // Get configured batch size from validation settings
+      let batchSize = options.batchSize || 200; // Default fallback
+      try {
+        const settingsService = getValidationSettingsService();
+        const validationSettings = await settingsService.getActiveSettings();
+        const batchSettings = validationSettings.batchProcessingSettings;
+        batchSize = batchSettings.defaultBatchSize;
+        
+        // Validate batch size is within configured limits
+        if (batchSize < batchSettings.minBatchSize) {
+          console.warn(`Queue batch size ${batchSize} is below minimum ${batchSettings.minBatchSize}, using minimum`);
+          batchSize = batchSettings.minBatchSize;
+        }
+        if (batchSize > batchSettings.maxBatchSize) {
+          console.warn(`Queue batch size ${batchSize} exceeds maximum ${batchSettings.maxBatchSize}, using maximum`);
+          batchSize = batchSettings.maxBatchSize;
+        }
+        
+        console.log(`Queue validation using configured batch size: ${batchSize}`);
+      } catch (error) {
+        console.warn('Failed to get validation settings for queue validation, using default batch size:', error);
+        batchSize = options.batchSize || 200;
+      }
 
       console.log(`[QueueBulkValidation] Starting queue-based bulk validation (forceRevalidation: ${forceRevalidation}, priority: ${priority})`);
 
@@ -2226,8 +2505,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       };
 
-      // Queue validation for each resource type
-      for (const resourceType of resourceTypes) {
+      // Queue validation for each resource type (using filtered types if filtering is enabled)
+      for (const resourceType of filteredResourceTypes) {
         try {
           // Get resources for this type using searchResources (same as existing bulk validation)
           const bundle = await fhirClient.searchResources(resourceType, { _offset: 0 }, batchSize);

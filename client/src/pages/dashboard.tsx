@@ -125,10 +125,19 @@ export default function DashboardNew() {
   const [pausedAt, setPausedAt] = useState<Date | null>(null);
   const [totalPausedTime, setTotalPausedTime] = useState<number>(0);
 
-  // Polling for validation updates (MVP mode) - DISABLED for performance
-  const { isConnected, progress, validationStatus, currentServer } = useValidationPolling({
-    enabled: false, // Disable automatic polling - only refresh manually
-    pollInterval: 10000, // 10 seconds when enabled
+  // Polling for validation updates (MVP mode) - AUTOMATIC with 3-second intervals
+  const { 
+    isConnected, 
+    connectionState, 
+    progress, 
+    validationStatus, 
+    currentServer,
+    connectionAttempts,
+    lastConnectedAt,
+    reconnect
+  } = useValidationPolling({
+    enabled: true, // Enable automatic polling for live updates
+    pollInterval: 3000, // 3 seconds for live updates
     hasActiveServer: Boolean(activeServer)
   });
 
@@ -606,6 +615,38 @@ export default function DashboardNew() {
         </div>
       </div>
 
+      {/* Connection Status Indicator */}
+      {activeServer && (
+        <div className="flex items-center gap-2 text-sm">
+          <div className={`w-2 h-2 rounded-full ${
+            connectionState === 'connected' ? 'bg-green-500' :
+            connectionState === 'connecting' ? 'bg-yellow-500 animate-pulse' :
+            connectionState === 'error' ? 'bg-red-500' :
+            'bg-gray-400'
+          }`} />
+          <span className="text-muted-foreground">
+            Polling: {connectionState === 'connected' ? 'Connected' :
+                     connectionState === 'connecting' ? 'Connecting...' :
+                     connectionState === 'error' ? `Error (${connectionAttempts} attempts)` :
+                     'Disconnected'}
+          </span>
+          {lastConnectedAt && connectionState === 'connected' && (
+            <span className="text-muted-foreground">
+              • Last update: {lastConnectedAt.toLocaleTimeString()}
+            </span>
+          )}
+          {connectionState === 'error' && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={reconnect}
+              className="ml-2 h-6 px-2 text-xs"
+            >
+              Retry
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Real-time Validation Control Panel */}
       {activeServer && (
@@ -688,7 +729,7 @@ export default function DashboardNew() {
             <div className="space-y-4">
               {/* Primary Progress Bar */}
               {currentValidationProgress && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">
                       Processing: {currentValidationProgress.processedResources?.toLocaleString() || 0} / {currentValidationProgress.totalResources?.toLocaleString() || 0}
@@ -697,6 +738,73 @@ export default function DashboardNew() {
                       {Math.min(100, (currentValidationProgress.processedResources / currentValidationProgress.totalResources) * 100).toFixed(1)}%
                     </span>
                   </div>
+                  
+                  {/* Current Resource Type Display */}
+                  {currentValidationProgress.currentResourceType && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <Database className="h-4 w-4 text-blue-600" />
+                        <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                          Currently processing: <span className="font-bold">{currentValidationProgress.currentResourceType}</span>
+                        </span>
+                        {currentValidationProgress.nextResourceType && currentValidationProgress.nextResourceType !== currentValidationProgress.currentResourceType && (
+                          <span className="text-xs text-blue-600 dark:text-blue-400">
+                            → Next: {currentValidationProgress.nextResourceType}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Validation Aspects Progress */}
+                      <div className="p-2 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">Validation Aspects</div>
+                        <div className="flex flex-wrap gap-2">
+                          {validationSettings && Object.entries(validationSettings).map(([aspect, config]: [string, any]) => {
+                            if (typeof config === 'object' && config.enabled !== undefined) {
+                              const aspectNames = {
+                                structural: 'Structural',
+                                profile: 'Profile',
+                                terminology: 'Terminology',
+                                reference: 'Reference',
+                                businessRule: 'Business Rules',
+                                metadata: 'Metadata'
+                              };
+                              const aspectName = aspectNames[aspect as keyof typeof aspectNames] || aspect;
+                              const isEnabled = config.enabled;
+                              const severity = config.severity || 'warning';
+                              
+                              return (
+                                <div
+                                  key={aspect}
+                                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
+                                    isEnabled 
+                                      ? severity === 'error' 
+                                        ? 'bg-red-100 text-red-800 dark:bg-red-950/30 dark:text-red-300' 
+                                        : severity === 'warning'
+                                        ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-300'
+                                        : 'bg-green-100 text-green-800 dark:bg-green-950/30 dark:text-green-300'
+                                      : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                                  }`}
+                                >
+                                  <div className={`w-2 h-2 rounded-full ${
+                                    isEnabled 
+                                      ? severity === 'error' 
+                                        ? 'bg-red-500 animate-pulse' 
+                                        : severity === 'warning'
+                                        ? 'bg-yellow-500 animate-pulse'
+                                        : 'bg-green-500 animate-pulse'
+                                      : 'bg-gray-400'
+                                  }`} />
+                                  {aspectName}
+                                </div>
+                              );
+                            }
+                            return null;
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   <Progress 
                     value={Math.min(100, (currentValidationProgress.processedResources / currentValidationProgress.totalResources) * 100)} 
                     className="w-full h-3" 
@@ -836,14 +944,252 @@ export default function DashboardNew() {
                       Validation Paused - {validationProgress?.validResources || 0} resources validated, {validationProgress?.errorResources || 0} errors
                     </span>
                   </div>
+                  {/* Retry Statistics */}
+                  {validationProgress?.retryStatistics && (
+                    <div className="mt-2 text-xs text-orange-600 dark:text-orange-400">
+                      Retry Stats: {validationProgress.retryStatistics.totalRetryAttempts} total attempts, 
+                      {validationProgress.retryStatistics.successfulRetries} successful, 
+                      {validationProgress.retryStatistics.resourcesWithRetries} resources retried
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           ) : (
-            <div className="text-center py-8">
-              <div className="text-muted-foreground mb-4">Validation engine is idle</div>
-              <div className="text-sm text-muted-foreground">
-                Click "Start Validation" to begin processing resources
+            <div className="space-y-6">
+              {/* Idle State Header */}
+              <div className="text-center py-4">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <div className="w-3 h-3 bg-gray-400 rounded-full" />
+                  <span className="text-lg font-medium text-gray-700 dark:text-gray-300">Validation Engine Idle</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Ready to validate FHIR resources on your connected server
+                </p>
+              </div>
+
+              {/* Quick Stats */}
+              {fhirServerStats && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {fhirServerStats.totalResources?.toLocaleString() || '0'}
+                    </div>
+                    <div className="text-xs text-blue-600 dark:text-blue-400">Total Resources</div>
+                  </div>
+                  <div className="bg-green-50 dark:bg-green-950/30 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                      {fhirServerStats.resourceTypes?.length || '0'}
+                    </div>
+                    <div className="text-xs text-green-600 dark:text-green-400">Resource Types</div>
+                  </div>
+                  <div className="bg-purple-50 dark:bg-purple-950/30 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                      {validationStats?.validResources || '0'}
+                    </div>
+                    <div className="text-xs text-purple-600 dark:text-purple-400">Valid Resources</div>
+                  </div>
+                  <div className="bg-orange-50 dark:bg-orange-950/30 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                      {validationStats?.errorResources || '0'}
+                    </div>
+                    <div className="text-xs text-orange-600 dark:text-orange-400">Error Resources</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Validation History & Last Run Statistics */}
+              {validationStats && (
+                <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Last Validation Run
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600 dark:text-gray-400">Total Processed:</span>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                        {((validationStats.validResources || 0) + (validationStats.errorResources || 0)).toLocaleString()}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-600 dark:text-gray-400">Success Rate:</span>
+                      <div className="font-medium text-green-600 dark:text-green-400">
+                        {validationStats.validResources && validationStats.errorResources 
+                          ? `${Math.round((validationStats.validResources / (validationStats.validResources + validationStats.errorResources)) * 100)}%`
+                          : '0%'
+                        }
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-600 dark:text-gray-400">Last Updated:</span>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                        {validationStats.lastValidated 
+                          ? new Date(validationStats.lastValidated).toLocaleDateString()
+                          : 'Never'
+                        }
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-600 dark:text-gray-400">Average Score:</span>
+                      <div className="font-medium text-blue-600 dark:text-blue-400">
+                        {validationStats.averageValidationScore 
+                          ? `${Math.round(validationStats.averageValidationScore)}%`
+                          : 'N/A'
+                        }
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Resource Type Breakdown */}
+                  {validationStats.resourceTypeBreakdown && Object.keys(validationStats.resourceTypeBreakdown).length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Resource Type Breakdown</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {Object.entries(validationStats.resourceTypeBreakdown)
+                          .sort(([,a], [,b]) => (b as any).count - (a as any).count)
+                          .slice(0, 6)
+                          .map(([resourceType, stats]: [string, any]) => (
+                          <div key={resourceType} className="bg-white dark:bg-gray-800 rounded p-2 text-xs">
+                            <div className="font-medium text-gray-900 dark:text-gray-100">{resourceType}</div>
+                            <div className="text-gray-600 dark:text-gray-400">
+                              {stats.count} resources
+                            </div>
+                            <div className="text-green-600 dark:text-green-400">
+                              {stats.successRate ? `${Math.round(stats.successRate)}%` : 'N/A'} success
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Current Settings Summary */}
+              {validationSettings && (
+                <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+                    <Settings className="h-4 w-4" />
+                    Current Validation Settings
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="text-gray-600 dark:text-gray-400">Active Aspects:</span>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                        {Object.entries(validationSettings)
+                          .filter(([key, value]) => 
+                            ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'].includes(key) && 
+                            value && typeof value === 'object' && (value as any).enabled
+                          ).length} of 6
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-600 dark:text-gray-400">Batch Size:</span>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                        {validationSettings.batchProcessingSettings?.defaultBatchSize || 200}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-gray-600 dark:text-gray-400">Resource Filtering:</span>
+                      <div className="font-medium text-gray-900 dark:text-gray-100">
+                        {validationSettings.resourceTypeFilterSettings?.enabled ? 'Enabled' : 'Disabled'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Resource Type Counts & Validation Readiness */}
+              {fhirServerStats && fhirServerStats.resourceTypeCounts && (
+                <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
+                    <Database className="h-4 w-4" />
+                    Resource Type Analysis
+                  </h3>
+                  
+                  {/* Top Resource Types */}
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Top Resource Types</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {Object.entries(fhirServerStats.resourceTypeCounts)
+                        .sort(([,a], [,b]) => (b as number) - (a as number))
+                        .slice(0, 6)
+                        .map(([resourceType, count]: [string, number]) => (
+                        <div key={resourceType} className="flex items-center justify-between bg-white dark:bg-gray-800 rounded p-2 text-sm">
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{resourceType}</span>
+                          <span className="text-gray-600 dark:text-gray-400">{count.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Validation Readiness Status */}
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Validation Readiness</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${activeServer ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {activeServer ? 'Server Connected' : 'No Server'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${validationSettings ? 'bg-green-500' : 'bg-yellow-500'}`} />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {validationSettings ? 'Settings Configured' : 'Default Settings'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${fhirServerStats.totalResources > 0 ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          {fhirServerStats.totalResources > 0 ? 'Resources Available' : 'No Resources'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Actions */}
+              <div className="space-y-3">
+                <h3 className="font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  <Zap className="h-4 w-4" />
+                  Quick Actions
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Button 
+                    onClick={handleStartValidation}
+                    disabled={isValidationInitializing}
+                    className="h-12 bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <Play className="h-4 w-4 mr-2" />
+                    Start Full Validation
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleRevalidateAll}
+                    disabled={isValidationInitializing}
+                    className="h-12"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Revalidate All Resources
+                  </Button>
+                </div>
+              </div>
+
+              {/* Next Steps */}
+              <div className="bg-blue-50 dark:bg-blue-950/30 rounded-lg p-4">
+                <h3 className="font-medium text-blue-900 dark:text-blue-100 mb-2 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" />
+                  Next Steps
+                </h3>
+                <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
+                  <li>• Configure validation aspects in the header dropdown</li>
+                  <li>• Set resource type filters to focus on specific types</li>
+                  <li>• Adjust batch processing settings for optimal performance</li>
+                  <li>• Monitor validation progress in real-time once started</li>
+                </ul>
               </div>
             </div>
           )}
@@ -870,6 +1216,63 @@ export default function DashboardNew() {
             lastUpdated={lastUpdated || undefined}
           />
         </div>
+      )}
+
+      {/* Retry Statistics */}
+      {activeServer && validationProgress?.retryStatistics && (
+        <Card className="transition-all duration-300">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              Retry Statistics
+            </CardTitle>
+            <CardDescription>
+              Validation retry performance and success metrics
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">
+                  {validationProgress.retryStatistics.totalRetryAttempts}
+                </div>
+                <div className="text-sm text-muted-foreground">Total Retry Attempts</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  {validationProgress.retryStatistics.successfulRetries}
+                </div>
+                <div className="text-sm text-muted-foreground">Successful Retries</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-600">
+                  {validationProgress.retryStatistics.failedRetries}
+                </div>
+                <div className="text-sm text-muted-foreground">Failed Retries</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-600">
+                  {validationProgress.retryStatistics.averageRetriesPerResource}
+                </div>
+                <div className="text-sm text-muted-foreground">Avg Retries/Resource</div>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              <div className="text-center">
+                <div className="text-lg font-semibold text-gray-700">
+                  {validationProgress.retryStatistics.resourcesWithRetries}
+                </div>
+                <div className="text-sm text-muted-foreground">Resources with Retries</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-semibold text-gray-700">
+                  {validationProgress.retryStatistics.totalRetryDurationMs}ms
+                </div>
+                <div className="text-sm text-muted-foreground">Total Retry Duration</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Validation Settings Impact Analysis */}

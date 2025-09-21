@@ -238,33 +238,79 @@ export function ValidationStatsCard({
           {safeData.resourceTypeBreakdown && Object.keys(safeData.resourceTypeBreakdown).length > 0 && (
             <div>
               <div className="text-sm font-medium mb-3">Validation by Resource Type</div>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {Object.entries(safeData.resourceTypeBreakdown)
                   .sort(([, a], [, b]) => b.total - a.total)
-                  .slice(0, 5)
+                  .slice(0, 8)
                   .map(([type, breakdown]) => (
-                    <div key={type} className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Database className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">{type}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="w-16 bg-muted rounded-full h-1.5">
-                          <div 
-                            className={`h-1.5 rounded-full transition-all duration-500 ${
-                              (breakdown.successRate || 0) > 80 ? 'bg-green-500' : 
-                              (breakdown.successRate || 0) > 60 ? 'bg-yellow-500' : 'bg-red-500'
-                            }`}
-                            style={{ width: `${breakdown.successRate || 0}%` }}
-                          />
+                    <div key={type} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Database className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">{type}</span>
                         </div>
-                        <div className="text-sm text-muted-foreground w-12 text-right">
-                          {formatPercentage(breakdown.successRate || 0)}%
-                        </div>
-                        <div className="text-xs text-muted-foreground w-16 text-right">
-                          {formatNumber(breakdown.validated)}/{formatNumber(breakdown.total)}
+                        <div className="text-xs text-muted-foreground">
+                          {formatNumber(breakdown.validated)}/{formatNumber(breakdown.total)} validated
                         </div>
                       </div>
+                      
+                      {/* Validation Progress Bar */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Validation Progress</span>
+                          <span className="font-medium">{formatPercentage(breakdown.validationRate || 0)}%</span>
+                        </div>
+                        <Progress 
+                          value={breakdown.validationRate || 0} 
+                          className="w-full h-1.5"
+                        />
+                      </div>
+                      
+                      {/* Success Rate Bar */}
+                      {breakdown.validated > 0 && (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">Success Rate</span>
+                            <span className={`font-medium ${
+                              (breakdown.successRate || 0) > 80 ? 'text-green-600' : 
+                              (breakdown.successRate || 0) > 60 ? 'text-yellow-600' : 'text-red-600'
+                            }`}>
+                              {formatPercentage(breakdown.successRate || 0)}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-muted rounded-full h-1.5">
+                            <div 
+                              className={`h-1.5 rounded-full transition-all duration-500 ${
+                                (breakdown.successRate || 0) > 80 ? 'bg-green-500' : 
+                                (breakdown.successRate || 0) > 60 ? 'bg-yellow-500' : 'bg-red-500'
+                              }`}
+                              style={{ width: `${breakdown.successRate || 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Status Breakdown */}
+                      {breakdown.validated > 0 && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span className="text-muted-foreground">{formatNumber(breakdown.valid)} valid</span>
+                          </div>
+                          {breakdown.errors > 0 && (
+                            <div className="flex items-center gap-1">
+                              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                              <span className="text-muted-foreground">{formatNumber(breakdown.errors)} errors</span>
+                            </div>
+                          )}
+                          {breakdown.warnings > 0 && (
+                            <div className="flex items-center gap-1">
+                              <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                              <span className="text-muted-foreground">{formatNumber(breakdown.warnings)} warnings</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
               </div>

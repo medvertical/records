@@ -286,10 +286,33 @@ export default function ResourceList({
         return (
           <div className="flex items-center gap-2">
             <div className="flex flex-col items-end space-y-1">
-              <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50">
-                <XCircle className="h-3 w-3 mr-1" />
-                {filteredSummary?.errorCount || 0} Error{(filteredSummary?.errorCount || 0) !== 1 ? 's' : ''}
-              </Badge>
+              <div className="flex items-center gap-1">
+                <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50">
+                  <XCircle className="h-3 w-3 mr-1" />
+                  {filteredSummary?.errorCount || 0} Error{(filteredSummary?.errorCount || 0) !== 1 ? 's' : ''}
+                </Badge>
+                {/* Retry indicator */}
+                {resource.retryInfo && (
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600 border-gray-200">
+                        🔄 {resource.retryInfo.attemptCount}/{resource.retryInfo.maxAttempts}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="space-y-1">
+                        <p className="font-medium">Retry Information</p>
+                        <p className="text-sm">Attempts: {resource.retryInfo.attemptCount}/{resource.retryInfo.maxAttempts}</p>
+                        <p className="text-sm">Duration: {resource.retryInfo.totalRetryDurationMs}ms</p>
+                        <p className="text-sm">Status: {resource.retryInfo.canRetry ? 'Can retry' : 'Max retries reached'}</p>
+                        {resource.retryInfo.retryReason && (
+                          <p className="text-xs text-gray-500">Reason: {resource.retryInfo.retryReason}</p>
+                        )}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
               {filteredSummary?.hasWarnings && (
                 <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
                   {filteredSummary.warningCount} Warning{filteredSummary.warningCount !== 1 ? 's' : ''}
@@ -359,29 +382,9 @@ export default function ResourceList({
     <div className="space-y-4">
       {/* Results Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <p className="text-sm text-gray-600">
-            Showing {startIndex} to {endIndex} of {validTotal} resources
-          </p>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="inline-block">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  disabled
-                >
-                  <Filter className="h-4 w-4" />
-                  Filters
-                </Button>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Not implemented yet</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+        <p className="text-sm text-gray-600">
+          Showing {startIndex} to {endIndex} of {validTotal} resources
+        </p>
         <div className="flex items-center space-x-2">
           <Button
             variant="outline"

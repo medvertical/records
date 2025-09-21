@@ -140,6 +140,66 @@ export interface OAuth2Config {
 }
 
 // ============================================================================
+// Resource Type Filtering Configuration
+// ============================================================================
+
+export interface ResourceTypeFilterConfig {
+  /** Whether resource type filtering is enabled */
+  enabled: boolean;
+  
+  /** Filtering mode: 'include' means only validate these types, 'exclude' means skip these types */
+  mode: 'include' | 'exclude';
+  
+  /** List of resource types to include/exclude */
+  resourceTypes: string[];
+  
+  /** Whether to validate unknown resource types (not in the list) */
+  validateUnknownTypes: boolean;
+  
+  /** Whether to show resource type counts in validation progress */
+  showResourceTypeCounts: boolean;
+  
+  /** Whether to validate resource types that are not FHIR standard types */
+  validateCustomTypes: boolean;
+}
+
+// ============================================================================
+// Batch Processing Configuration
+// ============================================================================
+
+export interface BatchProcessingConfig {
+  /** Default batch size for validation processing */
+  defaultBatchSize: number;
+  
+  /** Minimum allowed batch size */
+  minBatchSize: number;
+  
+  /** Maximum allowed batch size */
+  maxBatchSize: number;
+  
+  /** Whether to use adaptive batch sizing based on performance */
+  useAdaptiveBatchSizing: boolean;
+  
+  /** Target processing time per batch in milliseconds */
+  targetBatchProcessingTimeMs: number;
+  
+  /** Whether to pause between batches to prevent server overload */
+  pauseBetweenBatches: boolean;
+  
+  /** Pause duration between batches in milliseconds */
+  pauseDurationMs: number;
+  
+  /** Whether to retry failed batches */
+  retryFailedBatches: boolean;
+  
+  /** Maximum number of retry attempts for failed batches */
+  maxRetryAttempts: number;
+  
+  /** Retry delay in milliseconds (exponential backoff base) */
+  retryDelayMs: number;
+}
+
+// ============================================================================
 // Performance Configuration
 // ============================================================================
 
@@ -272,6 +332,12 @@ export interface ValidationSettings {
   
   /** Timeout configuration */
   timeoutSettings: TimeoutConfig;
+  
+  /** Batch processing configuration */
+  batchProcessingSettings: BatchProcessingConfig;
+  
+  /** Resource type filtering configuration */
+  resourceTypeFilterSettings: ResourceTypeFilterConfig;
   
   /** Maximum number of concurrent validations */
   maxConcurrentValidations: number;
@@ -443,6 +509,28 @@ export const DEFAULT_VALIDATION_SETTINGS: ValidationSettings = {
     metadataValidationTimeoutMs: 15000
   },
   
+  batchProcessingSettings: {
+    defaultBatchSize: 200,
+    minBatchSize: 50,
+    maxBatchSize: 1000,
+    useAdaptiveBatchSizing: false,
+    targetBatchProcessingTimeMs: 30000, // 30 seconds
+    pauseBetweenBatches: false,
+    pauseDurationMs: 1000, // 1 second
+    retryFailedBatches: true,
+    maxRetryAttempts: 1,
+    retryDelayMs: 2000 // 2 seconds
+  },
+  
+  resourceTypeFilterSettings: {
+    enabled: false,
+    mode: 'include',
+    resourceTypes: ['Patient', 'Observation', 'Encounter', 'Condition', 'Procedure', 'Medication', 'DiagnosticReport'],
+    validateUnknownTypes: true,
+    showResourceTypeCounts: true,
+    validateCustomTypes: true
+  },
+  
   maxConcurrentValidations: 10,
   useParallelValidation: true,
   
@@ -479,6 +567,47 @@ export interface ValidationSettingsPreset {
 
 export const BUILT_IN_PRESETS: ValidationSettingsPreset[] = [
   {
+    id: 'accuracy-first',
+    name: 'Accuracy-First Validation',
+    description: 'Optimized for maximum validation accuracy with all aspects enabled and comprehensive checks',
+    isBuiltIn: true,
+    tags: ['accuracy', 'comprehensive', 'production', 'recommended'],
+    settings: {
+      strictMode: false,
+      defaultSeverity: 'warning',
+      structural: { enabled: true, severity: 'error' },
+      profile: { enabled: true, severity: 'error' },
+      terminology: { enabled: true, severity: 'error' },
+      reference: { enabled: true, severity: 'error' },
+      businessRule: { enabled: true, severity: 'warning' },
+      metadata: { enabled: true, severity: 'warning' },
+      validateExternalReferences: true,
+      validateNonExistentReferences: true,
+      validateReferenceTypes: true,
+      batchProcessingSettings: {
+        defaultBatchSize: 150,
+        minBatchSize: 25,
+        maxBatchSize: 750,
+        useAdaptiveBatchSizing: true,
+        targetBatchProcessingTimeMs: 45000,
+        pauseBetweenBatches: true,
+        pauseDurationMs: 1500,
+        retryFailedBatches: true,
+        maxRetryAttempts: 2,
+        retryDelayMs: 2500
+      },
+      resourceTypeFilterSettings: {
+        enabled: false,
+        mode: 'include',
+        resourceTypes: [],
+        validateUnknownTypes: true,
+        showResourceTypeCounts: true,
+        validateCustomTypes: true
+      }
+    }
+  },
+  
+  {
     id: 'strict',
     name: 'Strict Validation',
     description: 'Maximum validation with all aspects enabled and strict error handling',
@@ -495,7 +624,27 @@ export const BUILT_IN_PRESETS: ValidationSettingsPreset[] = [
       metadata: { enabled: true, severity: 'error' },
       validateExternalReferences: true,
       validateNonExistentReferences: true,
-      validateReferenceTypes: true
+      validateReferenceTypes: true,
+      batchProcessingSettings: {
+        defaultBatchSize: 100,
+        minBatchSize: 25,
+        maxBatchSize: 500,
+        useAdaptiveBatchSizing: false,
+        targetBatchProcessingTimeMs: 45000,
+        pauseBetweenBatches: true,
+        pauseDurationMs: 2000,
+        retryFailedBatches: true,
+        maxRetryAttempts: 2,
+        retryDelayMs: 3000
+      },
+      resourceTypeFilterSettings: {
+        enabled: false,
+        mode: 'include',
+        resourceTypes: [],
+        validateUnknownTypes: true,
+        showResourceTypeCounts: true,
+        validateCustomTypes: true
+      }
     }
   },
   
@@ -516,7 +665,27 @@ export const BUILT_IN_PRESETS: ValidationSettingsPreset[] = [
       metadata: { enabled: false, severity: 'information' },
       validateExternalReferences: false,
       validateNonExistentReferences: false,
-      validateReferenceTypes: false
+      validateReferenceTypes: false,
+      batchProcessingSettings: {
+        defaultBatchSize: 500,
+        minBatchSize: 100,
+        maxBatchSize: 2000,
+        useAdaptiveBatchSizing: true,
+        targetBatchProcessingTimeMs: 15000,
+        pauseBetweenBatches: false,
+        pauseDurationMs: 500,
+        retryFailedBatches: false,
+        maxRetryAttempts: 0,
+        retryDelayMs: 1000
+      },
+      resourceTypeFilterSettings: {
+        enabled: true,
+        mode: 'include',
+        resourceTypes: ['Patient', 'Observation'],
+        validateUnknownTypes: false,
+        showResourceTypeCounts: false,
+        validateCustomTypes: false
+      }
     }
   },
   
@@ -537,7 +706,27 @@ export const BUILT_IN_PRESETS: ValidationSettingsPreset[] = [
       metadata: { enabled: true, severity: 'information' },
       validateExternalReferences: false,
       validateNonExistentReferences: true,
-      validateReferenceTypes: true
+      validateReferenceTypes: true,
+      batchProcessingSettings: {
+        defaultBatchSize: 200,
+        minBatchSize: 50,
+        maxBatchSize: 1000,
+        useAdaptiveBatchSizing: true,
+        targetBatchProcessingTimeMs: 30000,
+        pauseBetweenBatches: true,
+        pauseDurationMs: 1000,
+        retryFailedBatches: true,
+        maxRetryAttempts: 1,
+        retryDelayMs: 2000
+      },
+      resourceTypeFilterSettings: {
+        enabled: false,
+        mode: 'include',
+        resourceTypes: ['Patient', 'Observation', 'Encounter', 'Condition', 'Procedure'],
+        validateUnknownTypes: true,
+        showResourceTypeCounts: true,
+        validateCustomTypes: true
+      }
     }
   }
 ];
@@ -553,6 +742,8 @@ export type ValidationAspect = keyof Pick<ValidationSettings,
 export type ValidationSeverity = 'error' | 'warning' | 'information';
 
 export type FHIRVersion = 'R4' | 'R4B' | 'R5';
+
+export type ResourceTypeFilterMode = 'include' | 'exclude';
 
 // ============================================================================
 // Settings Update Types

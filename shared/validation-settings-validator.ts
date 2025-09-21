@@ -16,6 +16,8 @@ import type {
   OAuth2Config,
   CacheConfig,
   TimeoutConfig,
+  BatchProcessingConfig,
+  ResourceTypeFilterConfig,
   ValidationSettingsValidationResult,
   ValidationError,
   ValidationWarning,
@@ -129,6 +131,58 @@ const TimeoutConfigSchema = z.object({
   metadataValidationTimeoutMs: z.number().int().min(1000, 'Metadata validation timeout must be at least 1000ms').max(300000, 'Metadata validation timeout must not exceed 5 minutes')
 });
 
+const BatchProcessingConfigSchema = z.object({
+  defaultBatchSize: z.number().int().min(50, 'Default batch size must be at least 50').max(1000, 'Default batch size must not exceed 1000'),
+  minBatchSize: z.number().int().min(10, 'Minimum batch size must be at least 10').max(500, 'Minimum batch size must not exceed 500'),
+  maxBatchSize: z.number().int().min(100, 'Maximum batch size must be at least 100').max(2000, 'Maximum batch size must not exceed 2000'),
+  useAdaptiveBatchSizing: z.boolean(),
+  targetBatchProcessingTimeMs: z.number().int().min(5000, 'Target batch processing time must be at least 5 seconds').max(300000, 'Target batch processing time must not exceed 5 minutes'),
+  pauseBetweenBatches: z.boolean(),
+  pauseDurationMs: z.number().int().min(100, 'Pause duration must be at least 100ms').max(10000, 'Pause duration must not exceed 10 seconds'),
+  retryFailedBatches: z.boolean(),
+  maxRetryAttempts: z.number().int().min(0, 'Max retry attempts must be at least 0').max(5, 'Max retry attempts must not exceed 5'),
+  retryDelayMs: z.number().int().min(1000, 'Retry delay must be at least 1 second').max(60000, 'Retry delay must not exceed 1 minute')
+}).refine((data) => {
+  // Validate that default batch size is within min/max bounds
+  return data.defaultBatchSize >= data.minBatchSize && data.defaultBatchSize <= data.maxBatchSize;
+}, {
+  message: 'Default batch size must be between min and max batch size values',
+  path: ['defaultBatchSize']
+}).refine((data) => {
+  // Validate that min batch size is less than max batch size
+  return data.minBatchSize < data.maxBatchSize;
+}, {
+  message: 'Minimum batch size must be less than maximum batch size',
+  path: ['minBatchSize']
+});
+
+const ResourceTypeFilterConfigSchema = z.object({
+  enabled: z.boolean(),
+  mode: z.enum(['include', 'exclude'], {
+    errorMap: () => ({ message: 'Filter mode must be either "include" or "exclude"' })
+  }),
+  resourceTypes: z.array(z.string().min(1, 'Resource type name cannot be empty')).max(100, 'Cannot filter more than 100 resource types'),
+  validateUnknownTypes: z.boolean(),
+  showResourceTypeCounts: z.boolean(),
+  validateCustomTypes: z.boolean()
+}).refine((data) => {
+  // If filtering is enabled, resource types list cannot be empty
+  if (data.enabled && data.resourceTypes.length === 0) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Resource types list cannot be empty when filtering is enabled',
+  path: ['resourceTypes']
+}).refine((data) => {
+  // Resource type names should be valid FHIR resource type names (alphanumeric, PascalCase)
+  const validResourceTypePattern = /^[A-Z][a-zA-Z0-9]*$/;
+  return data.resourceTypes.every(type => validResourceTypePattern.test(type));
+}, {
+  message: 'All resource types must be valid FHIR resource type names (PascalCase, alphanumeric)',
+  path: ['resourceTypes']
+});
+
 // ============================================================================
 // Validation Aspect Configuration Schema
 // ============================================================================
@@ -176,6 +230,8 @@ const ValidationSettingsSchema = z.object({
   // Performance settings
   cacheSettings: CacheConfigSchema,
   timeoutSettings: TimeoutConfigSchema,
+  batchProcessingSettings: BatchProcessingConfigSchema,
+  resourceTypeFilterSettings: ResourceTypeFilterConfigSchema,
   maxConcurrentValidations: z.number().int().min(1, 'Max concurrent validations must be at least 1').max(100, 'Max concurrent validations must not exceed 100'),
   useParallelValidation: z.boolean(),
   
@@ -217,7 +273,7 @@ export function validateValidationSettings(settings: unknown): ValidationSetting
     }
 
     // Additional business logic validation
-    if (result.isValid) {
+    if (result.isValid && parseResult.data) {
       const businessValidation = validateBusinessLogic(parseResult.data);
       result.warnings.push(...businessValidation.warnings);
       result.suggestions.push(...businessValidation.suggestions);
@@ -262,7 +318,7 @@ export function validatePartialValidationSettings(settings: unknown): Validation
     }
 
     // Additional business logic validation for partial updates
-    if (result.isValid) {
+    if (result.isValid && parseResult.data) {
       const businessValidation = validatePartialBusinessLogic(parseResult.data);
       result.warnings.push(...businessValidation.warnings);
       result.suggestions.push(...businessValidation.suggestions);
@@ -309,11 +365,11 @@ function validateBusinessLogic(settings: ValidationSettings): {
     settings.reference.timeoutMs,
     settings.businessRule.timeoutMs,
     settings.metadata.timeoutMs
-  ].filter(Boolean);
+  ].filter((timeout): timeout is number => typeof timeout === 'number');
 
   if (aspectTimeouts.length > 0) {
     const maxTimeout = Math.max(...aspectTimeouts);
-    if (maxTimeout > settings.timeoutSettings.defaultTimeoutMs) {
+    if (maxTimeout > (settings.timeoutSettings.defaultTimeoutMs || 30000)) {
       warnings.push({
         code: 'TIMEOUT_INCONSISTENCY',
         message: 'Some validation aspects have timeouts longer than the default timeout',
@@ -364,6 +420,82 @@ function validateBusinessLogic(settings: ValidationSettings): {
     });
   }
 
+  // Check batch processing settings
+  if (settings.batchProcessingSettings.defaultBatchSize > 500) {
+    warnings.push({
+      code: 'LARGE_BATCH_SIZE',
+      message: 'Large batch size may cause memory issues or timeouts',
+      path: 'batchProcessingSettings.defaultBatchSize',
+      suggestion: 'Consider reducing batch size to 200-300 for better stability'
+    });
+  }
+
+  if (settings.batchProcessingSettings.useAdaptiveBatchSizing && settings.batchProcessingSettings.pauseBetweenBatches) {
+    suggestions.push({
+      code: 'ADAPTIVE_WITH_PAUSE',
+      message: 'Using adaptive batch sizing with pause between batches may reduce efficiency',
+      path: 'batchProcessingSettings.useAdaptiveBatchSizing',
+      suggestedValue: false
+    });
+  }
+
+  if (settings.batchProcessingSettings.retryFailedBatches && settings.batchProcessingSettings.maxRetryAttempts > 3) {
+    warnings.push({
+      code: 'HIGH_RETRY_COUNT',
+      message: 'High retry count may significantly increase processing time',
+      path: 'batchProcessingSettings.maxRetryAttempts',
+      suggestion: 'Consider reducing retry attempts to 1-2 for better performance'
+    });
+  }
+
+  // Check resource type filtering settings
+  if (settings.resourceTypeFilterSettings.enabled) {
+    const filterSettings = settings.resourceTypeFilterSettings;
+    
+    // Suggest common resource types if only a few are selected
+    const commonResourceTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'Procedure', 'MedicationRequest', 'DiagnosticReport'];
+    const selectedCommonTypes = filterSettings.resourceTypes.filter(type => commonResourceTypes.includes(type));
+    
+    if (filterSettings.mode === 'include' && selectedCommonTypes.length < 3 && filterSettings.resourceTypes.length < 5) {
+      suggestions.push({
+        code: 'suggest_common_resource_types',
+        message: 'Consider including more common FHIR resource types for comprehensive validation',
+        path: 'resourceTypeFilterSettings.resourceTypes',
+        suggestedValue: [...filterSettings.resourceTypes, ...commonResourceTypes.filter(type => !filterSettings.resourceTypes.includes(type)).slice(0, 3)]
+      });
+    }
+    
+    // Warn about excluding too many resource types
+    if (filterSettings.mode === 'exclude' && filterSettings.resourceTypes.length > 30) {
+      warnings.push({
+        code: 'exclude_too_many_types',
+        message: 'Excluding too many resource types may significantly reduce validation coverage',
+        path: 'resourceTypeFilterSettings.resourceTypes',
+        suggestion: 'Consider using include mode instead to specify only the types you want to validate'
+      });
+    }
+    
+    // Suggest enabling unknown types validation for comprehensive filtering
+    if (!filterSettings.validateUnknownTypes && filterSettings.mode === 'include') {
+      suggestions.push({
+        code: 'enable_unknown_types_validation',
+        message: 'Consider enabling validation of unknown resource types for comprehensive coverage',
+        path: 'resourceTypeFilterSettings.validateUnknownTypes',
+        suggestedValue: true
+      });
+    }
+    
+    // Suggest enabling custom types validation if filtering is restrictive
+    if (!filterSettings.validateCustomTypes && filterSettings.mode === 'include' && filterSettings.resourceTypes.length < 10) {
+      suggestions.push({
+        code: 'enable_custom_types_validation',
+        message: 'Consider enabling validation of custom resource types for comprehensive coverage',
+        path: 'resourceTypeFilterSettings.validateCustomTypes',
+        suggestedValue: true
+      });
+    }
+  }
+
   return { warnings, suggestions };
 }
 
@@ -393,7 +525,7 @@ function validatePartialBusinessLogic(settings: Partial<ValidationSettings>): {
 /**
  * Gets suggestion for validation error
  */
-function getSuggestionForError(error: z.ZodError): string | undefined {
+function getSuggestionForError(error: z.ZodIssue): string | undefined {
   switch (error.code) {
     case 'invalid_type':
       return `Expected ${error.expected}, received ${error.received}`;
@@ -464,6 +596,7 @@ export type {
   OAuth2Config,
   CacheConfig,
   TimeoutConfig,
+  BatchProcessingConfig,
   ValidationSettingsValidationResult,
   ValidationError,
   ValidationWarning,
