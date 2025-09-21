@@ -20,7 +20,7 @@ export default function ResourceDetail() {
   const queryClient = useQueryClient();
   
   // Use validation settings polling to detect changes and refresh resource detail
-  const { lastFetchedSettings } = useValidationSettingsPolling({
+  const { lastChange } = useValidationSettingsPolling({
     pollingInterval: 5000, // Poll every 5 seconds
     enabled: true,
     showNotifications: false, // Don't show toast notifications in resource detail
@@ -41,12 +41,12 @@ export default function ResourceDetail() {
 
   // Listen for validation settings changes from polling and refresh resource detail
   useEffect(() => {
-    if (lastFetchedSettings) {
+    if (lastChange) {
       console.log('[ResourceDetail] Validation settings changed, refreshing resource detail');
       // Invalidate resource queries to refresh with new validation settings
       queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources', id] });
     }
-  }, [lastFetchedSettings, queryClient, id]);
+  }, [lastChange, queryClient, id]);
   
   // Listen for validation settings changes to invalidate resource cache
   useEffect(() => {
@@ -124,24 +124,45 @@ export default function ResourceDetail() {
     );
   }
 
-  const hasValidationResults = resource.validationResults && resource.validationResults.length > 0;
+  const hasValidationResults = resource.validationResults && Array.isArray(resource.validationResults) && resource.validationResults.length > 0;
   const hasErrors = hasValidationResults && resource.validationResults?.some(r => !r.isValid);
   const currentSettings = validationSettingsData?.settings;
   
   // Calculate validation summary from filtered validation results
   const validationSummary = hasValidationResults ? (() => {
     // Use the filtered validation results from the server
-    const latestResult = resource.validationResults[0]; // Server already filters to latest result
-    const filteredIssues = latestResult.issues || [];
+    const latestResult = resource.validationResults![0]; // Server already filters to latest result
+    const allIssues = Array.isArray(latestResult.issues) ? latestResult.issues : [];
+    
+    // Filter issues based on enabled aspects
+    const filteredIssues = allIssues.filter((issue: any) => {
+      const aspect = issue.aspect || 'structural';
+      switch (aspect) {
+        case 'structural':
+          return currentSettings?.structural?.enabled !== false;
+        case 'profile':
+          return currentSettings?.profile?.enabled !== false;
+        case 'terminology':
+          return currentSettings?.terminology?.enabled !== false;
+        case 'reference':
+          return currentSettings?.reference?.enabled !== false;
+        case 'businessRule':
+          return currentSettings?.businessRule?.enabled !== false;
+        case 'metadata':
+          return currentSettings?.metadata?.enabled !== false;
+        default:
+          return currentSettings?.structural?.enabled !== false; // Default to structural
+      }
+    });
     
     // Calculate counts from filtered issues
-    const errorCount = filteredIssues.filter(issue => 
+    const errorCount = filteredIssues.filter((issue: any) => 
       issue.severity === 'error' || issue.severity === 'fatal'
     ).length;
-    const warningCount = filteredIssues.filter(issue => 
+    const warningCount = filteredIssues.filter((issue: any) => 
       issue.severity === 'warning'
     ).length;
-    const informationCount = filteredIssues.filter(issue => 
+    const informationCount = filteredIssues.filter((issue: any) => 
       issue.severity === 'information'
     ).length;
     
@@ -156,7 +177,7 @@ export default function ResourceDetail() {
     };
     
     // Count issues by aspect
-    filteredIssues.forEach(issue => {
+    filteredIssues.forEach((issue: any) => {
       const aspect = issue.aspect || 'structural';
       if (aspectBreakdown[aspect as keyof typeof aspectBreakdown]) {
         const breakdown = aspectBreakdown[aspect as keyof typeof aspectBreakdown];
@@ -171,16 +192,19 @@ export default function ResourceDetail() {
       }
     });
     
-    // Use the server-calculated validation score from the resource's _validationSummary
-    // instead of recalculating it client-side to ensure consistency
-    const serverCalculatedScore = resource._validationSummary?.validationScore || 0;
+    // Calculate filtered validation score based on enabled aspects
+    let filteredScore = 100;
+    filteredScore -= errorCount * 15;  // Error issues: -15 points each
+    filteredScore -= warningCount * 5; // Warning issues: -5 points each
+    filteredScore -= informationCount * 1; // Information issues: -1 point each
+    filteredScore = Math.max(0, Math.round(filteredScore));
     
     return {
       totalIssues: filteredIssues.length,
       errorCount,
       warningCount,
       informationCount,
-      score: serverCalculatedScore, // Use server-calculated score
+      score: filteredScore, // Use filtered score that reflects enabled aspects
       isValid: errorCount === 0,
       aspectBreakdown,
       lastValidated: latestResult.validatedAt
