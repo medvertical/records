@@ -554,24 +554,6 @@ export default function ResourceBrowser() {
           {resourcesData?.resources && resourcesData.resources.length > 0 && (
             <div className="flex items-center space-x-4 ml-4">
 
-              {/* Validation Status Indicator */}
-              {(() => {
-                const unvalidatedCount = resourcesData.resources.filter((resource: any) => 
-                  !resource._validationSummary?.lastValidated
-                ).length;
-                const validatedCount = resourcesData.resources.length - unvalidatedCount;
-                
-                return (
-                  <div className="flex items-center space-x-1 text-sm text-gray-600">
-                    {unvalidatedCount > 0 && (
-                      <>
-                        <XCircle className="h-4 w-4 text-orange-500" />
-                        <span>{validatedCount}/{resourcesData.resources.length} validated</span>
-                      </>
-                    )}
-                  </div>
-                );
-              })()}
 
               {/* Manual Validation Button */}
               <Button
