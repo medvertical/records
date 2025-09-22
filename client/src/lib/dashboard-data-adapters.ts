@@ -144,6 +144,10 @@ export class StatusDataAdapter {
     return {
       status: progress.status,
       progress: this.calculateProgressPercentage(progress),
+      totalResources: progress.totalResources,
+      processedResources: progress.processedResources,
+      validResources: progress.validResources,
+      errorResources: progress.errorResources,
       currentResourceType: progress.currentResourceType || undefined,
       nextResourceType: undefined, // Not available in current progress data
       processingRate: progress.processingRate || 0,
@@ -155,6 +159,10 @@ export class StatusDataAdapter {
     return {
       status: 'idle',
       progress: 0,
+      totalResources: 0,
+      processedResources: 0,
+      validResources: 0,
+      errorResources: 0,
       processingRate: 0,
     };
   }

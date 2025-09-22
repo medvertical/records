@@ -66,6 +66,10 @@ export interface OverviewMetrics {
 export interface ValidationStatus {
   status: 'idle' | 'running' | 'paused' | 'completed' | 'error';
   progress: number; // 0-100
+  totalResources?: number;
+  processedResources?: number;
+  validResources?: number;
+  errorResources?: number;
   currentResourceType?: string;
   nextResourceType?: string;
   processingRate: number; // resources per minute
