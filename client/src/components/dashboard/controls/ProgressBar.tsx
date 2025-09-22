@@ -87,6 +87,11 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
             getColorClasses(),
             getAnimationClasses()
           )}
+          aria-label={label || 'Progress'}
+          aria-valuenow={percentage}
+          aria-valuemin={0}
+          aria-valuemax={max}
+          role="progressbar"
         />
         
         {/* Animated indicator for running state */}

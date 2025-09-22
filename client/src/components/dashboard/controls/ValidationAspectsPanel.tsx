@@ -158,7 +158,10 @@ export const ValidationAspectsPanel: React.FC<ValidationAspectsPanelProps> = ({
                 <div className="font-medium capitalize">
                   {aspectId.replace(/([A-Z])/g, ' $1').trim()}
                 </div>
-                <div className="text-xs text-muted-foreground">
+                <div 
+                  id={`${aspectId}-description`}
+                  className="text-xs text-muted-foreground"
+                >
                   {getAspectDescription(aspectId)}
                 </div>
               </div>
@@ -172,6 +175,8 @@ export const ValidationAspectsPanel: React.FC<ValidationAspectsPanelProps> = ({
                 checked={aspect.enabled}
                 onCheckedChange={(enabled) => handleAspectToggle(aspectId, enabled)}
                 disabled={loading}
+                aria-label={`Toggle ${aspectId} validation aspect`}
+                aria-describedby={`${aspectId}-description`}
               />
             </div>
           </div>

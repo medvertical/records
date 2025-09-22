@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { MobileNavigationProps, QuickAccessItem, NavigationItem } from '@/shared/types/dashboard-new';
 import { X, Users, Activity, Calendar, Heart, Database } from 'lucide-react';
+import { getTouchButtonClasses } from '@/lib/touch-utils';
 
 /**
  * MobileNavigationDrawer Component - Single responsibility: Provide mobile navigation drawer
@@ -132,7 +133,7 @@ export const MobileNavigationDrawer: React.FC<MobileNavigationProps> = ({
       {/* Drawer */}
       <div
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 bg-card border-r transform transition-transform duration-300 ease-in-out lg:hidden',
+          'fixed inset-y-0 left-0 z-50 w-64 bg-card border-r transform transition-transform duration-300 ease-in-out lg:hidden touch-optimized',
           isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
         role="dialog"
@@ -147,7 +148,7 @@ export const MobileNavigationDrawer: React.FC<MobileNavigationProps> = ({
               variant="ghost"
               size="sm"
               onClick={onClose}
-              className="p-2"
+              className={getTouchButtonClasses("p-2")}
               aria-label="Close navigation menu"
             >
               <X className="h-4 w-4" />

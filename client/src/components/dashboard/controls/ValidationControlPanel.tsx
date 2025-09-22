@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { ValidationStatus } from '@/shared/types/dashboard-new';
 import { formatDistanceToNow, formatDuration, intervalToDuration } from 'date-fns';
+import { getTouchButtonClasses, getMobileButtonSize, getMobileTextSize } from '@/lib/touch-utils';
+import { dashboardNavigation, ariaUtils } from '@/lib/keyboard-navigation';
 
 /**
  * ValidationControlPanel Component - Single responsibility: Main validation engine control interface
@@ -254,7 +256,13 @@ export const ValidationControlPanel: React.FC<ValidationControlPanelProps> = ({
   }
 
   return (
-    <Card className={className}>
+    <Card 
+      className={className}
+      tabIndex={0}
+      onKeyDown={(e) => dashboardNavigation.validationControls(e as any)}
+      role="region"
+      aria-label="Validation Control Panel"
+    >
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

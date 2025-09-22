@@ -177,6 +177,30 @@
     @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
   }
 
+  /* Mobile Touch Optimization */
+  .touch-optimized {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .touch-optimized button,
+  .touch-optimized [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+    touch-action: manipulation;
+  }
+
+  .touch-optimized button:active,
+  .touch-optimized [role="button"]:active {
+    transform: scale(0.95);
+    transition: transform 150ms ease-in-out;
+  }
+
+  .touch-optimized .card:active {
+    transform: scale(0.98);
+    transition: transform 150ms ease-in-out;
+  }
+
   /* Loading States */
   .loading-pulse {
     @apply animate-pulse;
@@ -251,6 +275,32 @@
     
     .metric-value {
       @apply text-xl;
+    }
+    
+    /* Larger touch targets on mobile */
+    .touch-optimized button {
+      padding: 12px 16px;
+      font-size: 16px;
+    }
+    
+    .touch-optimized .card {
+      padding: 16px;
+    }
+    
+    /* Prevent zoom on input focus */
+    .touch-optimized input,
+    .touch-optimized textarea,
+    .touch-optimized select {
+      font-size: 16px;
+    }
+    
+    /* Mobile navigation improvements */
+    .nav-item {
+      @apply py-3 px-4 text-base;
+    }
+    
+    .quick-access-item {
+      @apply py-3 px-4 text-base;
     }
   }
 

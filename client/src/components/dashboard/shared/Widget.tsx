@@ -49,6 +49,9 @@ export const Widget: React.FC<WidgetComponentProps> = ({
         className
       )}
       data-testid={`widget-${id}`}
+      role="region"
+      aria-label={title}
+      aria-describedby={subtitle ? `${id}-subtitle` : undefined}
     >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <div className="flex flex-col space-y-1">
@@ -56,7 +59,10 @@ export const Widget: React.FC<WidgetComponentProps> = ({
             {title}
           </CardTitle>
           {subtitle && (
-            <CardDescription className="text-sm">
+            <CardDescription 
+              id={`${id}-subtitle`}
+              className="text-sm"
+            >
               {subtitle}
             </CardDescription>
           )}
