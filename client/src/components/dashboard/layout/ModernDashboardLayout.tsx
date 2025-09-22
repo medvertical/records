@@ -1,6 +1,5 @@
 import React from 'react';
 import { Card } from '@/components/ui/card';
-import { ModernDashboardHeader } from './ModernDashboardHeader';
 import { WiredValidationControlPanel } from '../controls/WiredValidationControlPanel';
 import { WiredModernValidationAspectsPanel } from '../controls/WiredModernValidationAspectsPanel';
 import { 
@@ -28,22 +27,8 @@ export const ModernDashboardLayout: React.FC<ModernDashboardLayoutProps> = ({
 
   return (
     <div className={`min-h-screen bg-background ${className}`}>
-      {/* Modern Header */}
-      <div className="mb-6">
-        <ModernDashboardHeader
-          serverName="Production FHIR Server"
-          serverVersion="R4"
-          isConnected={serverStatus?.isConnected}
-          totalResources={fhirServerStats?.totalResources}
-          lastUpdated={new Date()}
-          onRefresh={refreshAll}
-          onSettings={() => console.log('Settings clicked')}
-          onUserMenu={() => console.log('User menu clicked')}
-        />
-      </div>
-
       {/* Main Dashboard Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
         {/* Top Row - Four Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <WiredModernAlertCard />
