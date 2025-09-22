@@ -1,13 +1,13 @@
 import React from 'react';
 import { Card } from '@/components/ui/card';
-import { WiredValidationControlPanel } from '../controls/WiredValidationControlPanel';
-import { WiredModernValidationAspectsPanel } from '../controls/WiredModernValidationAspectsPanel';
+import { WiredWireframeValidationControlPanel } from '../controls/WiredWireframeValidationControlPanel';
+import { WiredWireframeValidationAspectsPanel } from '../controls/WiredWireframeValidationAspectsPanel';
 import { 
-  WiredModernAlertCard, 
-  WiredModernOverviewCard, 
-  WiredModernStatusCard, 
-  WiredModernTrendsCard, 
-  WiredModernResourceBreakdownCard 
+  WiredWireframeAlertCard, 
+  WiredWireframeOverviewCard, 
+  WiredWireframeStatusCard, 
+  WiredWireframeTrendsCard, 
+  WiredWireframeResourceBreakdownCard 
 } from '../widgets';
 import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
 
@@ -27,25 +27,25 @@ export const ModernDashboardLayout: React.FC<ModernDashboardLayoutProps> = ({
 
   return (
     <div className={`min-h-screen bg-background ${className}`}>
-      {/* Main Dashboard Content */}
+      {/* Main Dashboard Content - Wireframe-based Layout */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
-        {/* Top Row - Four Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          <WiredModernAlertCard />
-          <WiredModernOverviewCard />
-          <WiredModernStatusCard />
-          <WiredModernTrendsCard />
+        {/* Top Row - Four Cards (Desktop: 4-column, Tablet: 2-column, Mobile: 1-column) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-6">
+          <WiredWireframeAlertCard />
+          <WiredWireframeOverviewCard />
+          <WiredWireframeStatusCard />
+          <WiredWireframeTrendsCard />
         </div>
 
         {/* Validation Control Panel - Full Width */}
         <div className="mb-6">
-          <WiredValidationControlPanel />
+          <WiredWireframeValidationControlPanel />
         </div>
 
-        {/* Bottom Row - Two Cards */}
+        {/* Bottom Row - Two Cards (Desktop: 2-column, Mobile: 1-column) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <WiredModernResourceBreakdownCard />
-          <WiredModernValidationAspectsPanel />
+          <WiredWireframeResourceBreakdownCard />
+          <WiredWireframeValidationAspectsPanel />
         </div>
       </div>
     </div>

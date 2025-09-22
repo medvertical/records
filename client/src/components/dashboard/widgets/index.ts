@@ -21,3 +21,17 @@ export { WiredModernOverviewCard } from './WiredModernOverviewCard';
 export { WiredModernStatusCard } from './WiredModernStatusCard';
 export { WiredModernTrendsCard } from './WiredModernTrendsCard';
 export { WiredModernResourceBreakdownCard } from './WiredModernResourceBreakdownCard';
+
+// Wireframe-based widget components (exact wireframe implementation)
+export { WiredWireframeAlertCard } from './WiredWireframeAlertCard';
+export { WiredWireframeOverviewCard } from './WiredWireframeOverviewCard';
+export { WiredWireframeStatusCard } from './WiredWireframeStatusCard';
+export { WiredWireframeTrendsCard } from './WiredWireframeTrendsCard';
+export { WiredWireframeResourceBreakdownCard } from './WiredWireframeResourceBreakdownCard';
+
+// Base wireframe components
+export { WireframeAlertCard } from './WireframeAlertCard';
+export { WireframeOverviewCard } from './WireframeOverviewCard';
+export { WireframeStatusCard } from './WireframeStatusCard';
+export { WireframeTrendsCard } from './WireframeTrendsCard';
+export { WireframeResourceBreakdownCard } from './WireframeResourceBreakdownCard';
