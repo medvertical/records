@@ -141,8 +141,26 @@ export class StatusDataAdapter {
   static transformValidationProgress(progress: ValidationProgress | undefined): ValidationStatus | undefined {
     if (!progress) return undefined;
 
+    // Map API status values to component expected values
+    const mapStatus = (apiStatus: string): 'idle' | 'running' | 'paused' | 'completed' | 'error' => {
+      switch (apiStatus) {
+        case 'not_running':
+          return 'idle';
+        case 'running':
+          return 'running';
+        case 'paused':
+          return 'paused';
+        case 'completed':
+          return 'completed';
+        case 'error':
+          return 'error';
+        default:
+          return 'idle';
+      }
+    };
+
     return {
-      status: progress.status,
+      status: mapStatus(progress.status),
       progress: this.calculateProgressPercentage(progress),
       totalResources: progress.totalResources,
       processedResources: progress.processedResources,
