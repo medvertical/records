@@ -279,12 +279,12 @@ export const AlertCard: React.FC<AlertCardProps> = ({
 /**
  * Alert Summary Component - Standalone alert summary display
  */
-interface AlertSummaryProps {
+interface AlertSummaryDisplayProps {
   summary: AlertSummary;
   className?: string;
 }
 
-export const AlertSummary: React.FC<AlertSummaryProps> = ({
+export const AlertSummaryDisplay: React.FC<AlertSummaryDisplayProps> = ({
   summary,
   className,
 }) => {
