@@ -159,11 +159,14 @@ export const ValidationSettingsModal: React.FC<ValidationSettingsModalProps> = (
 
     // Send the complete settings object with all fields
     // Only modify the specific fields we want to change
-    // Ensure settings are activated after update
+    // Force activation and ensure we don't inherit inactive state
     const updatedSettings = {
       ...settingsData, // Start with the complete current settings
       ...localSettings, // Apply our local changes to validation aspects
-      isActive: true, // Ensure settings are activated
+      id: undefined, // Force creation of new settings record
+      isActive: true, // Force activation of updated settings
+      version: (settingsData.version || 0) + 1, // Increment version
+      updatedAt: new Date(), // Set current timestamp
       batchProcessingSettings: {
         ...settingsData.batchProcessingSettings,
         defaultBatchSize: batchSize,

@@ -72,10 +72,13 @@ export const WiredWireframeValidationAspectsPanel: React.FC<WiredWireframeValida
   const handleAspectToggle = async (aspectId: string, enabled: boolean) => {
     try {
       // Send the complete settings object with all fields
-      // Ensure settings are activated after update
+      // Force activation and ensure we don't inherit inactive state
       const updatedSettings = {
         ...settingsData,
-        isActive: true, // Ensure settings are activated
+        id: undefined, // Force creation of new settings record
+        isActive: true, // Force activation of updated settings
+        version: (settingsData.version || 0) + 1, // Increment version
+        updatedAt: new Date(), // Set current timestamp
         [aspectId]: {
           ...settingsData[aspectId],
           enabled: enabled
