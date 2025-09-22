@@ -1727,6 +1727,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               break;
             }
             
+            // Set current resource type being processed
+            const resourceTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'Medication', 'Procedure', 'DiagnosticReport', 'AllergyIntolerance', 'Immunization', 'Device'];
+            globalValidationState.currentResourceType = resourceTypes[i % resourceTypes.length];
+            
             // Update counters
             globalValidationState.processedResources += 1;
             
@@ -1800,6 +1804,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('=== PROGRESS ENDPOINT: Getting validation progress ===');
       
       // Get current progress from global state
+      const resourceTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'Medication', 'Procedure', 'DiagnosticReport', 'AllergyIntolerance', 'Immunization', 'Device'];
+      const currentIndex = resourceTypes.indexOf(globalValidationState.currentResourceType || '');
+      const nextResourceType = currentIndex >= 0 && currentIndex < resourceTypes.length - 1 ? resourceTypes[currentIndex + 1] : resourceTypes[0];
+      
       const progress = {
         totalResources: globalValidationState.totalResources || 0,
         processedResources: globalValidationState.processedResources || 0,
@@ -1808,6 +1816,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: globalValidationState.isRunning ? 'running' : 
                 globalValidationState.isPaused ? 'paused' : 'not_running',
         currentResourceType: globalValidationState.currentResourceType || null,
+        nextResourceType: globalValidationState.isRunning ? nextResourceType : null,
         isComplete: false,
         startTime: globalValidationState.startTime || null,
         endTime: globalValidationState.endTime || null,
@@ -1873,6 +1882,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
       globalValidationState.isPaused = false;
       globalValidationState.isRunning = true;
       globalValidationState.shouldStop = false;
+
+      // Restore state from resume data
+      globalValidationState.processedResources = globalValidationState.resumeData.processedResources;
+      globalValidationState.validResources = globalValidationState.resumeData.validResources;
+      globalValidationState.errorResources = globalValidationState.resumeData.errorResources;
+      globalValidationState.currentResourceType = globalValidationState.resumeData.resourceType;
+
+      // Continue processing in background from where we left off
+      setImmediate(async () => {
+        try {
+          const totalResourcesToProcess = 300;
+          const startIndex = globalValidationState.processedResources || 0;
+          
+          for (let i = startIndex; i < totalResourcesToProcess; i++) {
+            // Check if validation should stop
+            if (!globalValidationState.isRunning || globalValidationState.shouldStop) {
+              console.log('=== VALIDATION STOPPED: Breaking out of processing loop ===');
+              break;
+            }
+            
+            // Set current resource type being processed
+            const resourceTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'Medication', 'Procedure', 'DiagnosticReport', 'AllergyIntolerance', 'Immunization', 'Device'];
+            globalValidationState.currentResourceType = resourceTypes[i % resourceTypes.length];
+            
+            // Update counters
+            globalValidationState.processedResources += 1;
+            
+            // Simulate validation results (every 3rd resource is valid)
+            if (i % 3 === 0) {
+              globalValidationState.validResources += 1;
+            } else {
+              globalValidationState.errorResources += 1;
+            }
+            
+            // Log progress every 25 resources
+            if (globalValidationState.processedResources % 25 === 0) {
+              console.log(`=== Progress: ${globalValidationState.processedResources}/${totalResourcesToProcess} resources processed ===`);
+              console.log(`=== Counters: processed=${globalValidationState.processedResources}, valid=${globalValidationState.validResources}, errors=${globalValidationState.errorResources} ===`);
+            }
+            
+            // Add longer delay for better visibility
+            await new Promise(resolve => setTimeout(resolve, 200));
+          }
+          
+          // Mark validation as complete
+          globalValidationState.isRunning = false;
+          globalValidationState.currentResourceType = null;
+          
+          console.log('=== VALIDATION COMPLETE ===');
+          console.log('Final counters:', {
+            processed: globalValidationState.processedResources,
+            valid: globalValidationState.validResources,
+            errors: globalValidationState.errorResources
+          });
+          
+        } catch (error: any) {
+          console.error('=== CRITICAL ERROR: Background validation failed ===', error);
+          globalValidationState.isRunning = false;
+          globalValidationState.isPaused = false;
+          globalValidationState.shouldStop = false;
+          globalValidationState.currentResourceType = null;
+        }
+      });
 
       res.json({ 
         message: "Validation resumed", 
