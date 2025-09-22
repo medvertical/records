@@ -71,9 +71,12 @@ export const WiredWireframeValidationAspectsPanel: React.FC<WiredWireframeValida
 
   const handleAspectToggle = async (aspectId: string, enabled: boolean) => {
     try {
-      // Update the specific aspect in settings
+      // Remove metadata fields that might cause validation issues
+      const { createdAt, version, ...settingsWithoutMeta } = settingsData;
+      
+      // Update the specific aspect in settings while preserving all other fields
       const updatedSettings = {
-        ...settingsData,
+        ...settingsWithoutMeta,
         [aspectId]: {
           ...settingsData[aspectId],
           enabled: enabled
@@ -89,6 +92,9 @@ export const WiredWireframeValidationAspectsPanel: React.FC<WiredWireframeValida
       if (response.ok) {
         // Refresh the data
         window.location.reload(); // Simple refresh for now
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to update settings:', errorData);
       }
     } catch (error) {
       console.error('Failed to toggle aspect:', error);

@@ -155,17 +155,24 @@ export const ValidationSettingsModal: React.FC<ValidationSettingsModalProps> = (
   };
 
   const handleSave = async () => {
-    if (!localSettings) return;
+    if (!localSettings || !settingsData) return;
 
+    // Ensure we send the complete settings object with all required fields
+    // Remove fields that might cause validation issues
+    const { createdAt, version, ...settingsWithoutMeta } = settingsData;
+    
     const updatedSettings = {
-      ...localSettings,
+      ...settingsWithoutMeta, // Start with the complete current settings (without metadata)
+      ...localSettings, // Apply our local changes
       batchProcessingSettings: {
+        ...settingsData.batchProcessingSettings,
         ...localSettings.batchProcessingSettings,
         defaultBatchSize: batchSize,
         useAdaptiveBatchSizing: adaptiveSizing,
         pauseBetweenBatches: pauseBetweenBatches
       },
       resourceTypeFilterSettings: {
+        ...settingsData.resourceTypeFilterSettings,
         ...localSettings.resourceTypeFilterSettings,
         enabled: resourceFilterEnabled
       }
