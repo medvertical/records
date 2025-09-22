@@ -3,6 +3,7 @@
 // ============================================================================
 
 import React from 'react';
+import { WiredValidationControlPanel } from '@/components/dashboard/controls/WiredValidationControlPanel';
 
 /**
  * New Modular Dashboard Component - Single responsibility: Main dashboard page
@@ -51,28 +52,7 @@ export default function Dashboard() {
         </div>
         
         <div className="mt-8">
-          <div className="bg-card p-6 rounded-lg border shadow-lg">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold">🎯 Validation Control Panel</h2>
-              <button className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90">
-                🔄 Refresh All
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Current Resource</p>
-                <p className="font-medium">None</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Processing Rate</p>
-                <p className="font-medium">0/min</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Server Status</p>
-                <p className="font-medium">🟢 Connected</p>
-              </div>
-            </div>
-          </div>
+          <WiredValidationControlPanel />
         </div>
         
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -112,7 +92,7 @@ export default function Dashboard() {
         
         <div className="mt-8 text-center">
           <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
-            <strong>🎉 SUCCESS!</strong> You are now viewing the NEW MODULAR DASHBOARD v2.0 with proper app layout!
+            <strong>🎉 SUCCESS!</strong> You are now viewing the NEW MODULAR DASHBOARD v2.0 with REAL VALIDATION CONTROLS!
           </div>
         </div>
       </div>

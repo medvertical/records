@@ -104,7 +104,7 @@ export function useDashboardDataWiring(
     progress: validationProgress,
     isConnected: validationConnected,
     connectionState,
-    lastError: validationError,
+    lastError: pollingError,
     startPolling,
     stopPolling,
     syncWithApi,
@@ -192,15 +192,15 @@ export function useDashboardDataWiring(
   const resourceBreakdownLoading = isFhirServerLoading || isValidationLoading;
 
   // Error states
-  const alertsError = validationError || serverError;
+  const alertsError = pollingError || serverError;
   const overviewError = fhirServerError || validationError;
-  const statusError = validationError;
+  const statusError = pollingError;
   const trendsError = overviewError; // Trends depend on overview data
   const resourceBreakdownError = fhirServerError || validationError;
 
   // Global loading and error states
   const isLoading = dashboardLoading || statusLoading;
-  const hasErrors = !!(dashboardError || validationError || serverError);
+  const hasErrors = !!(dashboardError || pollingError || serverError);
   const lastUpdated = dashboardLastUpdated || new Date();
 
   // Throttled refresh functions to prevent rapid API calls
