@@ -136,7 +136,7 @@ export const WireframeValidationControlPanel: React.FC<WireframeValidationContro
   }
 
   return (
-    <Card className={`${className}`}>
+    <Card className={`bg-blue-50 border-blue-200 ${className}`}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center space-x-2">
