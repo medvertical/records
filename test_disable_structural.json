@@ -5,6 +5,7 @@
     "severity": "warning",
     "timeoutMs": 45000
   },
+  "version": 1,
   "isActive": false,
   "metadata": {
     "enabled": true,
@@ -12,6 +13,7 @@
     "severity": "information",
     "timeoutMs": 15000
   },
+  "createdAt": "2025-09-21T20:19:11.010Z",
   "createdBy": "system",
   "reference": {
     "enabled": true,
@@ -156,6 +158,5 @@
     "showResourceTypeCounts": true
   },
   "validateExternalReferences": false,
-  "validateNonExistentReferences": true,
-  "updatedAt": "2025-09-22T18:50:00.000Z"
+  "validateNonExistentReferences": true
 }
