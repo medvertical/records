@@ -2,7 +2,7 @@
 // Follows global rules: Simple exports, no custom logic, single responsibility
 
 // Base widget components
-export { AlertCard, AlertSummary } from './AlertCard';
+export { AlertCard, AlertSummaryDisplay } from './AlertCard';
 export { OverviewCard, CompactOverview } from './OverviewCard';
 export { StatusCard, CompactStatus } from './StatusCard';
 export { TrendsCard, CompactTrends } from './TrendsCard';
