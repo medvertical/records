@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { WireframeValidationControlPanel } from './WireframeValidationControlPanel';
 import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
+import { ValidationSettingsModal } from '../modals/ValidationSettingsModal';
 
 interface WiredWireframeValidationControlPanelProps {
   className?: string;
@@ -12,6 +13,8 @@ interface WiredWireframeValidationControlPanelProps {
 export const WiredWireframeValidationControlPanel: React.FC<WiredWireframeValidationControlPanelProps> = ({
   className,
 }) => {
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  
   const {
     validationStatus,
     statusLoading,
@@ -65,24 +68,31 @@ export const WiredWireframeValidationControlPanel: React.FC<WiredWireframeValida
   };
 
   return (
-    <WireframeValidationControlPanel
-      status={validationStatus?.status}
-      progress={validationStatus?.progress}
-      totalResources={validationStatus?.totalResources}
-      processedResources={validationStatus?.processedResources}
-      currentResourceType={validationStatus?.currentResourceType}
-      nextResourceType={validationStatus?.nextResourceType}
-      processingRate={validationStatus?.processingRate}
-      estimatedTimeRemaining={validationStatus?.estimatedTimeRemaining}
-      onStart={handleStart}
-      onPause={handlePause}
-      onResume={handleResume}
-      onStop={handleStop}
-      onSettings={() => console.log('Settings clicked')}
-      onViewDetails={() => console.log('View details clicked')}
-      isLoading={statusLoading}
-      error={statusError}
-      className={className}
-    />
+    <>
+      <WireframeValidationControlPanel
+        status={validationStatus?.status}
+        progress={validationStatus?.progress}
+        totalResources={validationStatus?.totalResources}
+        processedResources={validationStatus?.processedResources}
+        currentResourceType={validationStatus?.currentResourceType}
+        nextResourceType={validationStatus?.nextResourceType}
+        processingRate={validationStatus?.processingRate}
+        estimatedTimeRemaining={validationStatus?.estimatedTimeRemaining}
+        onStart={handleStart}
+        onPause={handlePause}
+        onResume={handleResume}
+        onStop={handleStop}
+        onSettings={() => setIsSettingsModalOpen(true)}
+        onViewDetails={() => console.log('View details clicked')}
+        isLoading={statusLoading}
+        error={statusError}
+        className={className}
+      />
+      
+      <ValidationSettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+      />
+    </>
   );
 };
