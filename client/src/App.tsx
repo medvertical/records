@@ -50,10 +50,8 @@ function Router() {
     if (location.startsWith("/resources/")) return "Resource Details";
     if (location === "/packages") return "Package Management";
     if (location === "/settings") return "Settings";
-    return undefined;
+    return "Records";
   };
-
-
 
   // Component wrappers for routing
   const DashboardComponent = () => (
@@ -63,28 +61,50 @@ function Router() {
   const ResourceBrowserComponent = () => (
     <ResourceBrowser />
   );
-  
-  const ResourceDetailComponent = () => (
-    <ResourceDetail />
-  );
 
-  const ProfileManagementComponent = () => (
-    <div className="p-6 h-full overflow-auto">
-      <ProfileManagement />
-    </div>
-  );
-
-  const SettingsComponent = () => (
-    <div className="p-6 h-full overflow-auto">
-      <SettingsPage />
-    </div>
+  const ResourceDetailComponent = ({ params }: { params: { id: string } }) => (
+    <ResourceDetail resourceId={params.id} />
   );
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Switch>
-        <Route path="/" component={DashboardComponent} />
-        <Route path="/dashboard" component={DashboardComponent} />
+        <Route path="/">
+          <div className="min-h-screen bg-gray-50">
+            <Header 
+              title={getPageTitle()}
+              connectionStatus={connectionStatus}
+              onSidebarToggle={toggleSidebar}
+            />
+            <div className="flex pt-16">
+              <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
+              <main className={cn(
+                "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
+                sidebarOpen && !isMobile ? "ml-64" : "ml-0"
+              )}>
+                <DashboardComponent />
+              </main>
+            </div>
+          </div>
+        </Route>
+        <Route path="/dashboard">
+          <div className="min-h-screen bg-gray-50">
+            <Header 
+              title={getPageTitle()}
+              connectionStatus={connectionStatus}
+              onSidebarToggle={toggleSidebar}
+            />
+            <div className="flex pt-16">
+              <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
+              <main className={cn(
+                "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
+                sidebarOpen && !isMobile ? "ml-64" : "ml-0"
+              )}>
+                <DashboardComponent />
+              </main>
+            </div>
+          </div>
+        </Route>
         <Route path="/resources">
           <div className="min-h-screen bg-gray-50">
             <Header 
@@ -116,7 +136,7 @@ function Router() {
                 "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
                 sidebarOpen && !isMobile ? "ml-64" : "ml-0"
               )}>
-                <ResourceDetailComponent />
+                <ResourceDetailComponent params={{ id: "" }} />
               </main>
             </div>
           </div>
@@ -134,7 +154,10 @@ function Router() {
                 "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
                 sidebarOpen && !isMobile ? "ml-64" : "ml-0"
               )}>
-                <ProfileManagementComponent />
+                <div className="p-8">
+                  <h1 className="text-2xl font-bold mb-4">Package Management</h1>
+                  <p className="text-gray-600">Package management functionality coming soon...</p>
+                </div>
               </main>
             </div>
           </div>
@@ -152,7 +175,7 @@ function Router() {
                 "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
                 sidebarOpen && !isMobile ? "ml-64" : "ml-0"
               )}>
-                <SettingsComponent />
+                <SettingsPage />
               </main>
             </div>
           </div>
