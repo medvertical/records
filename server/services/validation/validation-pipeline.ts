@@ -278,8 +278,26 @@ export class ValidationPipeline extends EventEmitter {
     };
 
     try {
-      // Get validation settings
-      const settings = await this.settingsService.getActiveSettings();
+      // Get validation settings with fallback
+      let settings;
+      try {
+        settings = await this.settingsService.getActiveSettings();
+      } catch (error) {
+        console.warn('[ValidationPipeline] Failed to load settings, using defaults:', error instanceof Error ? error.message : error);
+        // Use default settings when database is unavailable
+        settings = {
+          structural: { enabled: true, severity: 'error' },
+          profile: { enabled: true, severity: 'warning' },
+          terminology: { enabled: true, severity: 'warning' },
+          reference: { enabled: true, severity: 'error' },
+          businessRule: { enabled: true, severity: 'warning' },
+          metadata: { enabled: true, severity: 'info' },
+          maxConcurrentValidations: 5,
+          profileResolutionServers: [],
+          terminologyServers: [],
+          customRules: []
+        };
+      }
       
       // Initialize progress stats
       const totalResourcesPlanned = request.resources.length;

@@ -9,7 +9,7 @@
 
 ## 1. Introduction/Overview
 
-**Records** is a comprehensive FHIR (Fast Healthcare Interoperability Resources) validation and management platform designed for healthcare organizations, FHIR server administrators, and healthcare IT professionals. The platform provides enterprise-scale validation capabilities for FHIR resources across multiple servers, with real-time monitoring, comprehensive reporting, and advanced validation engine support.
+**Records** is a comprehensive FHIR (Fast Healthcare Interoperability Resources) validation and management platform designed for healthcare organizations, FHIR server administrators, and healthcare IT professionals. The platform provides enterprise-scale validation capabilities for FHIR resources across multiple servers, with real-time monitoring, comprehensive reporting, and a unified validation engine with comprehensive 6-aspect validation support.
 
 ### Target Audience
 - **Primary Users:** FHIR server administrators, healthcare IT professionals, compliance officers

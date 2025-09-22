@@ -7,7 +7,7 @@ The Records FHIR Validation Platform provides a RESTful API for FHIR server vali
 ## Key Features
 
 - **Real-time Updates**: Server-Sent Events (SSE) for live validation progress
-- **Comprehensive Validation**: 6-aspect validation engine with configurable settings
+- **Comprehensive Validation**: Single unified validation engine with 6-aspect validation and configurable settings
 - **Type Safety**: Complete TypeScript definitions with runtime validation
 - **Error Handling**: Advanced error categorization with recovery strategies
 - **Performance**: Intelligent caching and query optimization

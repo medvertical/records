@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock dependencies before importing
 vi.mock('../fhir/fhir-client');
-vi.mock('./validation-engine');
+vi.mock('./rock-solid-validation-engine');
 vi.mock('./validation-settings-service');
 vi.mock('./validation-pipeline');
 vi.mock('../../storage');
@@ -21,7 +21,7 @@ vi.mock('../../db', () => ({
 
 import { UnifiedValidationService } from './unified-validation';
 import { FhirClient } from '../fhir/fhir-client';
-import { ValidationEngine } from './validation-engine';
+import { getRockSolidValidationEngine } from './rock-solid-validation-engine';
 import { getValidationSettingsService } from './validation-settings-service';
 import { getValidationPipeline } from './validation-pipeline';
 import { storage } from '../../storage';
@@ -75,7 +75,7 @@ describe('UnifiedValidationService - Retry Logic', () => {
     vi.mocked(storage).mockReturnValue(mockStorage);
 
     // Create service instance
-    service = new UnifiedValidationService(mockFhirClient, mockValidationEngine);
+    service = new UnifiedValidationService(mockFhirClient);
   });
 
   afterEach(() => {

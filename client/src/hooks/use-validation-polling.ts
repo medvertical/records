@@ -79,7 +79,11 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
     try {
       // Add timeout to prevent hanging requests
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => {
+        if (!controller.signal.aborted) {
+          controller.abort();
+        }
+      }, 30000); // 30 second timeout
 
       const response = await fetch('/api/validation/bulk/progress', {
         method: 'GET',
@@ -185,6 +189,13 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
         }
       } catch (error) {
         console.error('[ValidationPolling] Polling error:', error);
+        
+        // Handle AbortError gracefully (this is normal during component cleanup)
+        if (error instanceof Error && (error.name === 'AbortError' || error.message?.includes('aborted'))) {
+          console.log('[ValidationPolling] Request aborted - component cleanup in progress');
+          return;
+        }
+        
         retryCountRef.current++;
         
         // Update connection state to error
@@ -235,8 +246,8 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
       // Determine polling frequency based on current status
       let currentInterval = pollInterval;
       if (validationStatus === 'idle' || validationStatus === 'completed') {
-        // Reduce frequency when idle (every 30 seconds)
-        currentInterval = 30000;
+        // Reduce frequency when idle (every 10 seconds)
+        currentInterval = 10000;
       } else if (validationStatus === 'running' || validationStatus === 'paused') {
         // High frequency when active (every 3 seconds)
         currentInterval = 3000;
@@ -334,7 +345,7 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
       // Set new interval based on current status
       let newInterval = pollInterval;
       if (validationStatus === 'idle' || validationStatus === 'completed') {
-        newInterval = 30000; // 30 seconds when idle
+        newInterval = 10000; // 10 seconds when idle
       } else if (validationStatus === 'running' || validationStatus === 'paused') {
         newInterval = 3000; // 3 seconds when active
       }
@@ -355,6 +366,13 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
           }
         } catch (error) {
           console.error('[ValidationPolling] Polling error:', error);
+          
+          // Handle AbortError gracefully (this is normal during component cleanup)
+          if (error instanceof Error && (error.name === 'AbortError' || error.message?.includes('aborted'))) {
+            console.log('[ValidationPolling] Request aborted - component cleanup in progress');
+            return;
+          }
+          
           retryCountRef.current++;
           if (retryCountRef.current >= maxRetries) {
             setLastError(error instanceof Error ? error.message : 'Failed to fetch validation progress');

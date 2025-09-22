@@ -732,10 +732,10 @@ export default function DashboardNew() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">
-                      Processing: {currentValidationProgress.processedResources?.toLocaleString() || 0} / {currentValidationProgress.totalResources?.toLocaleString() || 0}
+                      Processing: {(validationProgress?.processedResources || currentValidationProgress?.processedResources || 0).toLocaleString()} / {(validationProgress?.totalResources || currentValidationProgress?.totalResources || 0).toLocaleString()}
                     </span>
                     <span className="text-sm font-bold text-blue-600">
-                      {Math.min(100, (currentValidationProgress.processedResources / currentValidationProgress.totalResources) * 100).toFixed(1)}%
+                      {Math.min(100, ((validationProgress?.processedResources || currentValidationProgress?.processedResources || 0) / (validationProgress?.totalResources || currentValidationProgress?.totalResources || 1)) * 100).toFixed(1)}%
                     </span>
                   </div>
                   
@@ -806,7 +806,7 @@ export default function DashboardNew() {
                   )}
                   
                   <Progress 
-                    value={Math.min(100, (currentValidationProgress.processedResources / currentValidationProgress.totalResources) * 100)} 
+                    value={Math.min(100, ((validationProgress?.processedResources || currentValidationProgress?.processedResources || 0) / (validationProgress?.totalResources || currentValidationProgress?.totalResources || 1)) * 100)} 
                     className="w-full h-3" 
                   />
                 </div>
@@ -818,14 +818,14 @@ export default function DashboardNew() {
                   <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/30 rounded-lg">
                     <CheckCircle className="h-5 w-5 text-green-500" />
                     <div>
-                      <div className="text-lg font-bold">{currentValidationProgress.validResources?.toLocaleString() || 0}</div>
+                      <div className="text-lg font-bold">{(validationProgress?.validResources || currentValidationProgress?.validResources || 0).toLocaleString()}</div>
                       <div className="text-xs text-muted-foreground">Valid</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg">
                     <AlertCircle className="h-5 w-5 text-red-500" />
                     <div>
-                      <div className="text-lg font-bold">{currentValidationProgress.errorResources?.toLocaleString() || 0}</div>
+                      <div className="text-lg font-bold">{(validationProgress?.errorResources || currentValidationProgress?.errorResources || 0).toLocaleString()}</div>
                       <div className="text-xs text-muted-foreground">Errors</div>
                     </div>
                   </div>

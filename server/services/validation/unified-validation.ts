@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { storage } from '../../storage';
-import { ValidationEngine } from './validation-engine.js';
+import { getRockSolidValidationEngine } from './rock-solid-validation-engine.js';
 import { FhirClient } from '../fhir/fhir-client.js';
 import { getValidationSettingsService } from './validation-settings-service.js';
 import { getValidationPipeline } from './validation-pipeline.js';
@@ -17,6 +17,7 @@ import type { ValidationSettings } from '@shared/validation-settings.js';
  */
 export class UnifiedValidationService {
   private pipeline = getValidationPipeline();
+  private validationEngine = getRockSolidValidationEngine();
   private cachedSettings: ValidationSettings | null = null;
   private settingsCacheTime: number = 0;
   private SETTINGS_CACHE_TTL = 60000; // Cache settings for 1 minute
@@ -27,8 +28,7 @@ export class UnifiedValidationService {
   private deprecationUsageCount = 0;
 
   constructor(
-    private fhirClient: FhirClient,
-    private validationEngine: ValidationEngine
+    private fhirClient: FhirClient
   ) {
     // Get the validation settings service instance
     this.settingsService = getValidationSettingsService();

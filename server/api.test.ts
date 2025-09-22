@@ -12,8 +12,10 @@ vi.mock('./services/fhir/fhir-client', () => ({
   }))
 }))
 
-vi.mock('./services/validation/validation-engine', () => ({
-  ValidationEngine: vi.fn().mockImplementation(() => ({
+vi.mock('./services/validation/rock-solid-validation-engine', () => ({
+  getRockSolidValidationEngine: vi.fn().mockImplementation(() => ({
+    validateResource: vi.fn(),
+    validateResources: vi.fn(),
     startValidation: vi.fn(),
     stopValidation: vi.fn(),
     pauseValidation: vi.fn(),
@@ -226,8 +228,8 @@ describe('API Endpoints', () => {
         }
       }
 
-      const { ValidationEngine } = await import('./services/validation/validation-engine')
-      const mockValidationEngine = new ValidationEngine()
+      const { getRockSolidValidationEngine } = await import('./services/validation/rock-solid-validation-engine')
+      const mockValidationEngine = getRockSolidValidationEngine()
       vi.mocked(mockValidationEngine.startValidation).mockResolvedValue(mockResult)
 
       const response = await request(server)
@@ -248,8 +250,8 @@ describe('API Endpoints', () => {
         }
       }
 
-      const { ValidationEngine } = await import('./services/validation/validation-engine')
-      const mockValidationEngine = new ValidationEngine()
+      const { getRockSolidValidationEngine } = await import('./services/validation/rock-solid-validation-engine')
+      const mockValidationEngine = getRockSolidValidationEngine()
       vi.mocked(mockValidationEngine.stopValidation).mockResolvedValue(mockResult)
 
       const response = await request(server)
@@ -270,8 +272,8 @@ describe('API Endpoints', () => {
         }
       }
 
-      const { ValidationEngine } = await import('./services/validation/validation-engine')
-      const mockValidationEngine = new ValidationEngine()
+      const { getRockSolidValidationEngine } = await import('./services/validation/rock-solid-validation-engine')
+      const mockValidationEngine = getRockSolidValidationEngine()
       vi.mocked(mockValidationEngine.pauseValidation).mockResolvedValue(mockResult)
 
       const response = await request(server)
@@ -292,8 +294,8 @@ describe('API Endpoints', () => {
         }
       }
 
-      const { ValidationEngine } = await import('./services/validation/validation-engine')
-      const mockValidationEngine = new ValidationEngine()
+      const { getRockSolidValidationEngine } = await import('./services/validation/rock-solid-validation-engine')
+      const mockValidationEngine = getRockSolidValidationEngine()
       vi.mocked(mockValidationEngine.resumeValidation).mockResolvedValue(mockResult)
 
       const response = await request(server)
@@ -316,8 +318,8 @@ describe('API Endpoints', () => {
         errors: []
       }
 
-      const { ValidationEngine } = await import('./services/validation/validation-engine')
-      const mockValidationEngine = new ValidationEngine()
+      const { getRockSolidValidationEngine } = await import('./services/validation/rock-solid-validation-engine')
+      const mockValidationEngine = getRockSolidValidationEngine()
       vi.mocked(mockValidationEngine.getStatus).mockReturnValue(mockStatus)
 
       const response = await request(server)
@@ -340,8 +342,8 @@ describe('API Endpoints', () => {
         errors: []
       }
 
-      const { ValidationEngine } = await import('./services/validation/validation-engine')
-      const mockValidationEngine = new ValidationEngine()
+      const { getRockSolidValidationEngine } = await import('./services/validation/rock-solid-validation-engine')
+      const mockValidationEngine = getRockSolidValidationEngine()
       vi.mocked(mockValidationEngine.getStatus).mockReturnValue(mockProgress)
 
       const response = await request(server)
