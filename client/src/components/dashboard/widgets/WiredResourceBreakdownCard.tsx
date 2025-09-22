@@ -1,7 +1,7 @@
 import React from 'react';
 import { ResourceBreakdownCard } from './ResourceBreakdownCard';
 import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
-import { useNavigate } from 'wouter';
+import { useLocation } from 'wouter';
 
 /**
  * WiredResourceBreakdownCard Component - Single responsibility: Connect ResourceBreakdownCard to real resource data
@@ -22,11 +22,11 @@ export const WiredResourceBreakdownCard: React.FC<WiredResourceBreakdownCardProp
     lastUpdated,
   } = useDashboardDataWiring();
 
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
 
   // Handle resource type click - navigate to resources page with filter
   const handleResourceTypeClick = (resourceType: string) => {
-    navigate(`/resources?type=${resourceType}`);
+    setLocation(`/resources?type=${resourceType}`);
   };
 
   return (
