@@ -109,15 +109,15 @@ export const WireframeTrendsCard: React.FC<WireframeTrendsCardProps> = ({
       </CardHeader>
       
       <CardContent className="space-y-4">
-        {/* Current Success Rate */}
+        {/* Validation Velocity */}
         <div className="space-y-1">
-          <div className="text-sm text-gray-600">Success Rate</div>
+          <div className="text-sm text-gray-600">Validation Velocity</div>
           <div className="text-2xl font-bold text-gray-900">
-            {currentSuccessRate.toFixed(1)}%
+            {currentSuccessRate > 0 ? Math.round(currentSuccessRate * 10) : 0}/hr
           </div>
         </div>
 
-        {/* Trend Indicator */}
+        {/* Trend Direction */}
         <div className="space-y-2">
           <div className="flex items-center space-x-2">
             {getTrendIcon(trendDirection)}
@@ -130,18 +130,19 @@ export const WireframeTrendsCard: React.FC<WireframeTrendsCardProps> = ({
           </div>
         </div>
 
-        {/* Previous Rate for Context */}
-        {previousSuccessRate > 0 && (
-          <div className="space-y-1">
-            <div className="text-sm text-gray-600">Previous: {previousSuccessRate.toFixed(1)}%</div>
+        {/* Average Performance */}
+        <div className="space-y-1">
+          <div className="text-sm text-gray-600">Avg Performance</div>
+          <div className="text-lg font-semibold text-blue-600">
+            {((currentSuccessRate + previousSuccessRate) / 2).toFixed(1)}%
           </div>
-        )}
+        </div>
 
         {/* Trend Description */}
         <div className="text-xs text-gray-500 pt-2">
-          {trendDirection === 'up' && 'Performance improving'}
-          {trendDirection === 'down' && 'Performance declining'}
-          {trendDirection === 'stable' && 'Performance stable'}
+          {trendDirection === 'up' && 'Efficiency increasing'}
+          {trendDirection === 'down' && 'Efficiency decreasing'}
+          {trendDirection === 'stable' && 'Consistent performance'}
         </div>
       </CardContent>
     </Card>

@@ -131,40 +131,32 @@ export const WireframeStatusCard: React.FC<WireframeStatusCardProps> = ({
           </div>
         </div>
 
-        {/* Progress */}
+        {/* System Health */}
         <div className="space-y-2">
-          <div className="text-sm text-gray-600">Progress: {progress.toFixed(1)}%</div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className="bg-green-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
+          <div className="text-sm text-gray-600">System Health</div>
+          <div className="flex items-center space-x-2">
+            <div className={`w-2 h-2 rounded-full ${status === 'running' ? 'bg-green-500' : status === 'error' ? 'bg-red-500' : 'bg-yellow-500'}`}></div>
+            <span className="text-sm font-medium">
+              {status === 'running' ? 'Operational' : status === 'error' ? 'Issues Detected' : 'Standby'}
+            </span>
           </div>
         </div>
 
-        {/* Current Activity */}
-        {status === 'running' && (
-          <div className="space-y-2">
-            <div className="text-sm text-gray-600">Currently Processing:</div>
-            <div className="text-sm font-medium text-gray-800">
-{currentResourceType === 'Unknown' ? 'FHIR Resources' : `${currentResourceType} Resources`}
-            </div>
+        {/* Last Validation */}
+        <div className="space-y-1">
+          <div className="text-sm text-gray-600">Last Validation</div>
+          <div className="text-sm font-medium text-gray-800">
+            {status === 'completed' ? 'Completed' : status === 'running' ? 'In Progress' : 'Not Started'}
           </div>
-        )}
+        </div>
 
-        {/* Processing Rate */}
-        {processingRate > 0 && (
-          <div className="space-y-1">
-            <div className="text-sm text-gray-600">Rate: {processingRate.toLocaleString()}/min</div>
+        {/* Engine Uptime */}
+        <div className="space-y-1">
+          <div className="text-sm text-gray-600">Engine Status</div>
+          <div className="text-sm font-medium text-gray-800">
+            {status === 'running' ? 'Active' : 'Ready'}
           </div>
-        )}
-
-        {/* ETA */}
-        {estimatedTimeRemaining && estimatedTimeRemaining > 0 && (
-          <div className="space-y-1">
-            <div className="text-sm text-gray-600">ETA: {estimatedTimeRemaining} min</div>
-          </div>
-        )}
+        </div>
       </CardContent>
     </Card>
   );

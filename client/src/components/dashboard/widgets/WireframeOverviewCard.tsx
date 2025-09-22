@@ -80,26 +80,26 @@ export const WireframeOverviewCard: React.FC<WireframeOverviewCardProps> = ({
       </CardHeader>
       
       <CardContent className="space-y-4">
-        {/* Total Resources */}
+        {/* Server Resources */}
         <div className="space-y-1">
-          <div className="text-sm text-gray-600">Total Resources</div>
+          <div className="text-sm text-gray-600">Server Resources</div>
           <div className="text-2xl font-bold text-gray-900">
             {formatNumber(totalResources)}
           </div>
         </div>
 
-        {/* Validated Resources */}
+        {/* Data Coverage */}
         <div className="space-y-1">
-          <div className="text-sm text-gray-600">Validated</div>
-          <div className="text-lg font-semibold text-gray-800">
-            {formatNumber(validatedResources)}
+          <div className="text-sm text-gray-600">Data Coverage</div>
+          <div className="text-lg font-semibold text-blue-600">
+            {totalResources > 0 ? ((validatedResources / totalResources) * 100).toFixed(1) : 0}%
           </div>
         </div>
 
-        {/* Success Rate */}
+        {/* Quality Score */}
         <div className="space-y-1">
           <div className="flex items-center space-x-2">
-            <div className="text-sm text-gray-600">Success Rate</div>
+            <div className="text-sm text-gray-600">Quality Score</div>
             <TrendingUp className="h-4 w-4 text-green-600" />
           </div>
           <div className="text-lg font-semibold text-green-600">
@@ -107,11 +107,11 @@ export const WireframeOverviewCard: React.FC<WireframeOverviewCardProps> = ({
           </div>
         </div>
 
-        {/* Validation Status Indicator */}
+        {/* System Status */}
         <div className="flex items-center space-x-2 pt-2">
           <CheckCircle className="h-4 w-4 text-green-600" />
           <span className="text-sm text-gray-600">
-            {validatedResources > 0 ? 'Validation Active' : 'Ready to Validate'}
+            {totalResources > 0 ? 'Data Available' : 'No Data'}
           </span>
         </div>
       </CardContent>

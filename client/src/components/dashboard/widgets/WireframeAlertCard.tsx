@@ -123,72 +123,42 @@ export const WireframeAlertCard: React.FC<WireframeAlertCardProps> = ({
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Critical Alerts Section */}
-            {criticalAlerts.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 rounded-full bg-red-600"></div>
-                  <span className="text-sm font-medium text-red-600">
-                    Critical ({criticalAlerts.length})
-                  </span>
+            {/* System Health Summary */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="space-y-1">
+                <div className="text-lg font-bold text-red-600">
+                  {criticalAlerts.length}
                 </div>
-                <div className="space-y-1 ml-5">
-                  {criticalAlerts.slice(0, 3).map((alert, index) => (
-                    <div key={alert.id || index} className="text-sm text-gray-700">
-                      • {alert.message}
-                    </div>
-                  ))}
-                  {criticalAlerts.length > 3 && (
-                    <div className="text-sm text-gray-500">
-                      • ... and {criticalAlerts.length - 3} more
-                    </div>
-                  )}
-                </div>
+                <div className="text-xs text-gray-600">Critical</div>
               </div>
-            )}
+              <div className="space-y-1">
+                <div className="text-lg font-bold text-yellow-600">
+                  {warningAlerts.length}
+                </div>
+                <div className="text-xs text-gray-600">Warnings</div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-lg font-bold text-blue-600">
+                  {infoAlerts.length}
+                </div>
+                <div className="text-xs text-gray-600">Info</div>
+              </div>
+            </div>
 
-            {/* Warning Alerts Section */}
-            {warningAlerts.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 rounded-full bg-yellow-600"></div>
-                  <span className="text-sm font-medium text-yellow-600">
-                    Warnings ({warningAlerts.length})
-                  </span>
+            {/* Recent Alerts */}
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-gray-700">Recent Issues:</div>
+              {criticalAlerts.slice(0, 1).map((alert, index) => (
+                <div key={alert.id || index} className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                  {alert.message}
                 </div>
-                <div className="space-y-1 ml-5">
-                  {warningAlerts.slice(0, 2).map((alert, index) => (
-                    <div key={alert.id || index} className="text-sm text-gray-700">
-                      • {alert.message}
-                    </div>
-                  ))}
-                  {warningAlerts.length > 2 && (
-                    <div className="text-sm text-gray-500">
-                      • ... and {warningAlerts.length - 2} more
-                    </div>
-                  )}
+              ))}
+              {warningAlerts.slice(0, 1).map((alert, index) => (
+                <div key={alert.id || index} className="text-sm text-yellow-600 bg-yellow-50 p-2 rounded">
+                  {alert.message}
                 </div>
-              </div>
-            )}
-
-            {/* Info Alerts Section */}
-            {infoAlerts.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 rounded-full bg-blue-600"></div>
-                  <span className="text-sm font-medium text-blue-600">
-                    Info ({infoAlerts.length})
-                  </span>
-                </div>
-                <div className="space-y-1 ml-5">
-                  {infoAlerts.slice(0, 1).map((alert, index) => (
-                    <div key={alert.id || index} className="text-sm text-gray-700">
-                      • {alert.message}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+              ))}
+            </div>
           </div>
         )}
 
