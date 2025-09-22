@@ -31,9 +31,9 @@ export const ModernAlertCard: React.FC<ModernAlertCardProps> = ({
   onConfigure,
   className,
 }) => {
-  const criticalAlerts = alerts.filter(alert => alert.severity === 'critical');
-  const warningAlerts = alerts.filter(alert => alert.severity === 'warning');
-  const infoAlerts = alerts.filter(alert => alert.severity === 'info');
+  const criticalAlerts = alerts.filter(alert => alert.type === 'critical');
+  const warningAlerts = alerts.filter(alert => alert.type === 'warning');
+  const infoAlerts = alerts.filter(alert => alert.type === 'info');
 
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
