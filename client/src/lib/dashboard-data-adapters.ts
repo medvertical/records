@@ -149,7 +149,7 @@ export class StatusDataAdapter {
       validResources: progress.validResources,
       errorResources: progress.errorResources,
       currentResourceType: progress.currentResourceType || undefined,
-      nextResourceType: undefined, // Not available in current progress data
+      nextResourceType: progress.nextResourceType || undefined,
       processingRate: progress.processingRate || 0,
       estimatedTimeRemaining: progress.estimatedTimeRemaining,
     };
@@ -163,6 +163,8 @@ export class StatusDataAdapter {
       processedResources: 0,
       validResources: 0,
       errorResources: 0,
+      currentResourceType: undefined,
+      nextResourceType: undefined,
       processingRate: 0,
     };
   }
