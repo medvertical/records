@@ -158,12 +158,12 @@ export const ValidationSettingsModal: React.FC<ValidationSettingsModalProps> = (
     if (!localSettings || !settingsData) return;
 
     // Ensure we send the complete settings object with all required fields
-    // Remove fields that might cause validation issues
-    const { createdAt, version, ...settingsWithoutMeta } = settingsData;
-    
+    // Convert date strings to Date objects for schema validation
     const updatedSettings = {
-      ...settingsWithoutMeta, // Start with the complete current settings (without metadata)
+      ...settingsData, // Start with the complete current settings
       ...localSettings, // Apply our local changes
+      createdAt: settingsData.createdAt ? new Date(settingsData.createdAt) : undefined,
+      updatedAt: new Date(), // Set current timestamp for update
       batchProcessingSettings: {
         ...settingsData.batchProcessingSettings,
         ...localSettings.batchProcessingSettings,
