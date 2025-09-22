@@ -269,6 +269,7 @@ export function useDashboardDataWiring(
     hasErrors,
     lastUpdated,
     refreshAll,
+    syncWithApi,
   };
 }
 

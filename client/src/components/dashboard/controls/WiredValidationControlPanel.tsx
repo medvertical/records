@@ -19,6 +19,7 @@ export const WiredValidationControlPanel: React.FC<WiredValidationControlPanelPr
     statusLoading,
     statusError,
     refreshStatus,
+    syncWithApi,
   } = useDashboardDataWiring();
 
   const [isProcessing, setIsProcessing] = useState(false);
