@@ -71,11 +71,9 @@ export const WiredWireframeValidationAspectsPanel: React.FC<WiredWireframeValida
 
   const handleAspectToggle = async (aspectId: string, enabled: boolean) => {
     try {
-      // Convert date strings to Date objects for schema validation
+      // Send the complete settings object with all fields
       const updatedSettings = {
         ...settingsData,
-        createdAt: settingsData.createdAt ? new Date(settingsData.createdAt) : undefined,
-        updatedAt: new Date(), // Set current timestamp for update
         [aspectId]: {
           ...settingsData[aspectId],
           enabled: enabled

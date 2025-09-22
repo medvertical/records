@@ -157,23 +157,19 @@ export const ValidationSettingsModal: React.FC<ValidationSettingsModalProps> = (
   const handleSave = async () => {
     if (!localSettings || !settingsData) return;
 
-    // Ensure we send the complete settings object with all required fields
-    // Convert date strings to Date objects for schema validation
+    // Send the complete settings object with all fields
+    // Only modify the specific fields we want to change
     const updatedSettings = {
       ...settingsData, // Start with the complete current settings
-      ...localSettings, // Apply our local changes
-      createdAt: settingsData.createdAt ? new Date(settingsData.createdAt) : undefined,
-      updatedAt: new Date(), // Set current timestamp for update
+      ...localSettings, // Apply our local changes to validation aspects
       batchProcessingSettings: {
         ...settingsData.batchProcessingSettings,
-        ...localSettings.batchProcessingSettings,
         defaultBatchSize: batchSize,
         useAdaptiveBatchSizing: adaptiveSizing,
         pauseBetweenBatches: pauseBetweenBatches
       },
       resourceTypeFilterSettings: {
         ...settingsData.resourceTypeFilterSettings,
-        ...localSettings.resourceTypeFilterSettings,
         enabled: resourceFilterEnabled
       }
     };
