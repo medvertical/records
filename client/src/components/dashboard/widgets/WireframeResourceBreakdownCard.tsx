@@ -46,9 +46,9 @@ export const WireframeResourceBreakdownCard: React.FC<WireframeResourceBreakdown
   };
 
   const getBarColor = (successRate: number) => {
-    if (successRate >= 90) return 'bg-green-600';
-    if (successRate >= 70) return 'bg-yellow-600';
-    return 'bg-red-600';
+    if (successRate >= 90) return 'bg-blue-600';
+    if (successRate >= 70) return 'bg-blue-500';
+    return 'bg-blue-400';
   };
 
   if (isLoading) {
