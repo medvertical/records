@@ -1,0 +1,291 @@
+/* Dashboard-specific styles using existing Tailwind patterns and FHIR color scheme */
+
+/* Dashboard Layout Utilities */
+@layer components {
+  /* Dashboard Grid System - Following wireframe specifications */
+  .dashboard-grid {
+    @apply grid gap-6;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+
+  .dashboard-grid-mobile {
+    @apply grid grid-cols-1 gap-4;
+  }
+
+  .dashboard-grid-tablet {
+    @apply grid grid-cols-2 gap-4;
+  }
+
+  .dashboard-grid-desktop {
+    @apply grid grid-cols-4 gap-6;
+  }
+
+  /* Widget Base Styles */
+  .dashboard-widget {
+    @apply h-full transition-all duration-200;
+  }
+
+  .dashboard-widget:hover {
+    @apply shadow-md;
+  }
+
+  /* Alert Card Styles */
+  .alert-critical {
+    @apply border-l-4 border-fhir-error bg-fhir-error/5;
+  }
+
+  .alert-warning {
+    @apply border-l-4 border-fhir-warning bg-fhir-warning/5;
+  }
+
+  .alert-info {
+    @apply border-l-4 border-fhir-blue bg-fhir-blue/5;
+  }
+
+  /* Status Indicators */
+  .status-running {
+    @apply text-fhir-success;
+  }
+
+  .status-paused {
+    @apply text-fhir-warning;
+  }
+
+  .status-error {
+    @apply text-fhir-error;
+  }
+
+  .status-idle {
+    @apply text-muted-foreground;
+  }
+
+  /* Progress Bar Styles */
+  .progress-bar {
+    @apply w-full bg-muted rounded-full h-2 overflow-hidden;
+  }
+
+  .progress-fill {
+    @apply h-full bg-fhir-success transition-all duration-300 ease-out;
+  }
+
+  .progress-fill-warning {
+    @apply h-full bg-fhir-warning transition-all duration-300 ease-out;
+  }
+
+  .progress-fill-error {
+    @apply h-full bg-fhir-error transition-all duration-300 ease-out;
+  }
+
+  /* Resource Type Badges */
+  .resource-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .resource-badge-patient {
+    @apply bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200;
+  }
+
+  .resource-badge-observation {
+    @apply bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200;
+  }
+
+  .resource-badge-encounter {
+    @apply bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200;
+  }
+
+  .resource-badge-condition {
+    @apply bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200;
+  }
+
+  .resource-badge-medication {
+    @apply bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200;
+  }
+
+  /* Validation Aspect Status */
+  .aspect-enabled {
+    @apply text-fhir-success;
+  }
+
+  .aspect-warning {
+    @apply text-fhir-warning;
+  }
+
+  .aspect-disabled {
+    @apply text-muted-foreground;
+  }
+
+  /* Dashboard Header Styles */
+  .dashboard-header {
+    @apply flex items-center justify-between p-6 border-b bg-card;
+  }
+
+  .dashboard-header-mobile {
+    @apply flex items-center justify-between p-4 border-b bg-card;
+  }
+
+  /* Server Status Indicator */
+  .server-status-connected {
+    @apply inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-fhir-success/10 text-fhir-success border border-fhir-success/20;
+  }
+
+  .server-status-disconnected {
+    @apply inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-fhir-error/10 text-fhir-error border border-fhir-error/20;
+  }
+
+  /* Sidebar Styles */
+  .dashboard-sidebar {
+    @apply w-64 bg-card border-r transition-all duration-300 ease-in-out;
+  }
+
+  .dashboard-sidebar-collapsed {
+    @apply w-16;
+  }
+
+  .dashboard-sidebar-mobile {
+    @apply fixed inset-y-0 left-0 z-50 w-64 bg-card border-r transform -translate-x-full transition-transform duration-300 ease-in-out;
+  }
+
+  .dashboard-sidebar-mobile-open {
+    @apply translate-x-0;
+  }
+
+  /* Navigation Items */
+  .nav-item {
+    @apply flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors;
+  }
+
+  .nav-item-active {
+    @apply bg-primary text-primary-foreground;
+  }
+
+  .nav-item-inactive {
+    @apply text-muted-foreground hover:text-foreground hover:bg-muted;
+  }
+
+  /* Quick Access Items */
+  .quick-access-item {
+    @apply flex items-center justify-between px-3 py-2 text-sm rounded-md hover:bg-muted transition-colors;
+  }
+
+  /* Mobile Navigation Overlay */
+  .mobile-nav-overlay {
+    @apply fixed inset-0 bg-black/50 z-40 lg:hidden;
+  }
+
+  /* Touch Interactions */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
+
+  /* Loading States */
+  .loading-pulse {
+    @apply animate-pulse;
+  }
+
+  .loading-spinner {
+    @apply animate-spin;
+  }
+
+  /* Error States */
+  .error-state {
+    @apply border-destructive/50 bg-destructive/5;
+  }
+
+  .error-icon {
+    @apply text-destructive;
+  }
+
+  /* Success States */
+  .success-state {
+    @apply border-fhir-success/50 bg-fhir-success/5;
+  }
+
+  .success-icon {
+    @apply text-fhir-success;
+  }
+
+  /* Warning States */
+  .warning-state {
+    @apply border-fhir-warning/50 bg-fhir-warning/5;
+  }
+
+  .warning-icon {
+    @apply text-fhir-warning;
+  }
+
+  /* Chart Container */
+  .chart-container {
+    @apply w-full h-64 flex items-center justify-center;
+  }
+
+  /* Metric Display */
+  .metric-value {
+    @apply text-2xl font-bold;
+  }
+
+  .metric-label {
+    @apply text-sm text-muted-foreground;
+  }
+
+  .metric-change-positive {
+    @apply text-fhir-success;
+  }
+
+  .metric-change-negative {
+    @apply text-fhir-error;
+  }
+
+  .metric-change-neutral {
+    @apply text-muted-foreground;
+  }
+
+  /* Responsive Utilities */
+  @media (max-width: 767px) {
+    .dashboard-grid {
+      @apply grid-cols-1 gap-4;
+    }
+    
+    .dashboard-header {
+      @apply p-4;
+    }
+    
+    .metric-value {
+      @apply text-xl;
+    }
+  }
+
+  @media (min-width: 768px) and (max-width: 1199px) {
+    .dashboard-grid {
+      @apply grid-cols-2 gap-4;
+    }
+  }
+
+  @media (min-width: 1200px) {
+    .dashboard-grid {
+      @apply grid-cols-4 gap-6;
+    }
+  }
+
+  /* Accessibility Improvements */
+  .focus-visible {
+    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+  }
+
+  .sr-only {
+    @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  /* Animation Utilities */
+  .fade-in {
+    @apply animate-in fade-in duration-300;
+  }
+
+  .slide-in {
+    @apply animate-in slide-in-from-right duration-300;
+  }
+
+  .scale-in {
+    @apply animate-in zoom-in duration-200;
+  }
+}
