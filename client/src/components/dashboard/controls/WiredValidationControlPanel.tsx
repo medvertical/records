@@ -43,7 +43,7 @@ export const WiredValidationControlPanel: React.FC<WiredValidationControlPanelPr
       
       // Refresh status after action
       setTimeout(() => {
-        refreshStatus();
+        refreshStatus(); syncWithApi();
       }, 1000);
 
       return result;
@@ -115,7 +115,7 @@ export const WiredValidationControlPanel: React.FC<WiredValidationControlPanelPr
   };
 
   const handleRefresh = () => {
-    refreshStatus();
+    refreshStatus(); syncWithApi();
   };
 
   return (
