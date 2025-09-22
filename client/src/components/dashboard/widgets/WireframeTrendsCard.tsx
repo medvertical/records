@@ -53,11 +53,11 @@ export const WireframeTrendsCard: React.FC<WireframeTrendsCardProps> = ({
     const changeText = change > 0 ? `+${change.toFixed(1)}%` : `${change.toFixed(1)}%`;
     switch (direction) {
       case 'up':
-        return `↗️ ${changeText}`;
+        return `${changeText}`;
       case 'down':
-        return `↘️ ${changeText}`;
+        return `${changeText}`;
       default:
-        return `→ ${changeText}`;
+        return `${changeText}`;
     }
   };
 
@@ -67,7 +67,7 @@ export const WireframeTrendsCard: React.FC<WireframeTrendsCardProps> = ({
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center space-x-2">
             <TrendingUp className="h-5 w-5 text-blue-600" />
-            <span className="text-lg font-semibold">📈 TRENDS</span>
+            <span className="text-lg font-semibold">TRENDS</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -87,7 +87,7 @@ export const WireframeTrendsCard: React.FC<WireframeTrendsCardProps> = ({
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center space-x-2">
             <TrendingUp className="h-5 w-5 text-blue-600" />
-            <span className="text-lg font-semibold">📈 TRENDS</span>
+            <span className="text-lg font-semibold">TRENDS</span>
           </CardTitle>
         </CardHeader>
         <CardContent>

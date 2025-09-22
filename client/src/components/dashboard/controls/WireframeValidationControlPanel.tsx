@@ -101,7 +101,7 @@ export const WireframeValidationControlPanel: React.FC<WireframeValidationContro
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Activity className="h-5 w-5 text-blue-600" />
-              <span className="text-lg font-semibold">🎯 VALIDATION ENGINE</span>
+              <span className="text-lg font-semibold">VALIDATION ENGINE</span>
             </div>
             <div className="h-4 w-4 bg-muted rounded animate-pulse" />
           </CardTitle>
@@ -218,7 +218,7 @@ export const WireframeValidationControlPanel: React.FC<WireframeValidationContro
           <div className="space-y-2">
             <div className="text-sm font-medium">Currently Processing:</div>
             <div className="flex items-center space-x-2 text-sm text-gray-700">
-              <span>🗃️ {currentResourceType === 'Unknown' ? 'FHIR Resources' : `${currentResourceType} Resources`}</span>
+              <span>{currentResourceType === 'Unknown' ? 'FHIR Resources' : `${currentResourceType} Resources`}</span>
               {nextResourceType && nextResourceType !== 'Unknown' && (
                 <>
                   <span>•</span>

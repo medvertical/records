@@ -98,7 +98,7 @@ export const WireframeValidationAspectsPanel: React.FC<WireframeValidationAspect
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <CheckCircle className="h-5 w-5 text-blue-600" />
-              <span className="text-lg font-semibold">🔍 VALIDATION ASPECTS</span>
+              <span className="text-lg font-semibold">VALIDATION ASPECTS</span>
             </div>
             <div className="h-4 w-4 bg-muted rounded animate-pulse" />
           </CardTitle>

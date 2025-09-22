@@ -58,7 +58,7 @@ export const WireframeAlertCard: React.FC<WireframeAlertCardProps> = ({
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <AlertTriangle className="h-5 w-5 text-red-600" />
-              <span className="text-lg font-semibold">🚨 ALERTS</span>
+              <span className="text-lg font-semibold">ALERTS</span>
             </div>
             <div className="h-4 w-4 bg-muted rounded animate-pulse" />
           </CardTitle>
@@ -80,7 +80,7 @@ export const WireframeAlertCard: React.FC<WireframeAlertCardProps> = ({
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center space-x-2">
             <AlertTriangle className="h-5 w-5 text-red-600" />
-            <span className="text-lg font-semibold">🚨 ALERTS</span>
+            <span className="text-lg font-semibold">ALERTS</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -101,7 +101,7 @@ export const WireframeAlertCard: React.FC<WireframeAlertCardProps> = ({
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center space-x-2">
             <AlertTriangle className="h-5 w-5 text-red-600" />
-            <span className="text-lg font-semibold">🚨 ALERTS</span>
+            <span className="text-lg font-semibold">ALERTS</span>
           </CardTitle>
           {onConfigure && (
             <Button variant="ghost" size="sm" onClick={onConfigure} className="p-1">
