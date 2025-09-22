@@ -311,6 +311,14 @@ const ValidationControlPanelComponent: React.FC<ValidationControlPanelProps> = (
             <span className="font-medium">{progress.toFixed(1)}% Complete</span>
           </div>
           <Progress value={progress} className="h-2" />
+          <div className="text-xs text-muted-foreground">
+            {status?.processedResources || 0} / {status?.totalResources || 0} Resources Processed
+            {(status?.validResources !== undefined || status?.errorResources !== undefined) && (
+              <span className="ml-2">
+                • {status?.validResources || 0} Valid • {status?.errorResources || 0} Errors
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Current Activity Section */}
@@ -318,8 +326,8 @@ const ValidationControlPanelComponent: React.FC<ValidationControlPanelProps> = (
           <div className="space-y-3">
             <div className="text-sm font-medium">Currently Processing:</div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>🗃️ {currentResourceType} Resources</span>
-              {nextResourceType && (
+              <span>🗃️ {currentResourceType === 'Unknown' ? 'FHIR Resources' : `${currentResourceType} Resources`}</span>
+              {nextResourceType && nextResourceType !== 'Unknown' && (
                 <>
                   <ChevronRight className="h-3 w-3" />
                   <span>Next: {nextResourceType}</span>
