@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -15,6 +15,7 @@ import {
   ChevronRight,
   BarChart3
 } from 'lucide-react';
+import { dashboardOptimizations } from '@/lib/performance-utils';
 
 /**
  * ResourceBreakdownCard Component - Single responsibility: Display resource type distribution
@@ -30,7 +31,7 @@ interface ResourceBreakdownCardProps {
   className?: string;
 }
 
-export const ResourceBreakdownCard: React.FC<ResourceBreakdownCardProps> = ({
+const ResourceBreakdownCardComponent: React.FC<ResourceBreakdownCardProps> = ({
   data,
   loading = false,
   error,
@@ -320,5 +321,18 @@ export const CompactResourceBreakdown: React.FC<CompactResourceBreakdownProps> =
     </div>
   );
 };
+
+// Memoized ResourceBreakdownCard with custom comparison for performance optimization
+export const ResourceBreakdownCard = memo(ResourceBreakdownCardComponent, (prevProps, nextProps) => {
+  // Compare resource breakdown data efficiently
+  if (prevProps.data?.totalResources !== nextProps.data?.totalResources) return false;
+  if (prevProps.data?.resourceTypes?.length !== nextProps.data?.resourceTypes?.length) return false;
+  
+  // Compare essential props
+  return (
+    prevProps.loading === nextProps.loading &&
+    prevProps.error === nextProps.error
+  );
+});
 
 export default ResourceBreakdownCard;

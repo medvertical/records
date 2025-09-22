@@ -2,6 +2,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ErrorBoundaryProps, ErrorBoundaryState } from '@/shared/types/dashboard-new';
+import { getErrorBoundaryFallback } from '@/lib/error-handling';
 
 /**
  * Dashboard Error Boundary - Single responsibility: Handle dashboard widget errors
@@ -77,7 +78,10 @@ export class DashboardErrorBoundary extends Component<ErrorBoundaryProps, ErrorB
               <span>Dashboard Widget Error</span>
             </CardTitle>
             <CardDescription>
-              Something went wrong with this dashboard widget. Please try refreshing or contact support if the problem persists.
+              {this.state.error ? 
+                getErrorBoundaryFallback(this.state.error, this.props.context || 'dashboard widget').message :
+                'Something went wrong with this dashboard widget. Please try refreshing or contact support if the problem persists.'
+              }
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

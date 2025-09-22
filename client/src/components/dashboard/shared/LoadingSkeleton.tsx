@@ -63,6 +63,40 @@ export const LoadingSkeleton: React.FC<LoadingSkeletonProps> = ({
         />
       );
 
+    case 'validation-control':
+      return (
+        <div className={cn("space-y-4", baseClasses)} style={style}>
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-8 w-8 rounded" />
+          </div>
+          <Skeleton className="h-2 w-full" />
+          <div className="flex gap-2">
+            <Skeleton className="h-10 w-20" />
+            <Skeleton className="h-10 w-20" />
+            <Skeleton className="h-10 w-20" />
+          </div>
+        </div>
+      );
+
+    case 'resource-breakdown':
+      return (
+        <div className={cn("space-y-3", baseClasses)} style={style}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Skeleton className="h-8 w-8 rounded-full" />
+                <div className="space-y-1">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              </div>
+              <Skeleton className="h-4 w-12" />
+            </div>
+          ))}
+        </div>
+      );
+
     default:
       return (
         <Skeleton 

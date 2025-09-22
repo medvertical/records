@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useDashboardData } from './use-dashboard-data';
 import { useValidationPolling } from './use-validation-polling';
 import { useServerData } from './use-server-data';
+import { useDebouncedValue, useThrottledCallback } from '@/lib/performance-utils';
 import {
   AlertDataAdapter,
   OverviewDataAdapter,
@@ -120,16 +121,20 @@ export function useDashboardDataWiring(
     refresh: refreshServer,
   } = useServerData();
 
-  // Transform data using adapters
+  // Debounce rapid updates for better performance
+  const debouncedValidationStats = useDebouncedValue(validationStats, 500);
+  const debouncedServerStatus = useDebouncedValue(serverStatus, 300);
+
+  // Transform data using adapters with debounced inputs
   const alerts = useMemo(() => {
     const validationAlerts = AlertDataAdapter.transformValidationErrors(
-      validationStats?.aspectBreakdown ? Object.values(validationStats.aspectBreakdown) : []
+      debouncedValidationStats?.aspectBreakdown ? Object.values(debouncedValidationStats.aspectBreakdown) : []
     );
     const serverAlerts = AlertDataAdapter.transformServerAlerts(
-      serverStatus?.error ? [{ message: serverStatus.error, level: 'error' }] : []
+      debouncedServerStatus?.error ? [{ message: debouncedServerStatus.error, level: 'error' }] : []
     );
     return [...validationAlerts, ...serverAlerts];
-  }, [validationStats, serverStatus]);
+  }, [debouncedValidationStats, debouncedServerStatus]);
 
   const alertSummary = useMemo(() => {
     return AlertDataAdapter.createAlertSummary(alerts);
@@ -198,33 +203,33 @@ export function useDashboardDataWiring(
   const hasErrors = !!(dashboardError || validationError || serverError);
   const lastUpdated = dashboardLastUpdated || new Date();
 
-  // Refresh functions
-  const refreshAlerts = () => {
+  // Throttled refresh functions to prevent rapid API calls
+  const refreshAlerts = useThrottledCallback(() => {
     refetchValidation();
     refreshServer();
-  };
+  }, 1000);
 
-  const refreshOverview = () => {
+  const refreshOverview = useThrottledCallback(() => {
     refetchDashboard();
-  };
+  }, 1000);
 
-  const refreshStatus = () => {
+  const refreshStatus = useThrottledCallback(() => {
     syncWithApi();
-  };
+  }, 500);
 
-  const refreshTrends = () => {
+  const refreshTrends = useThrottledCallback(() => {
     refetchDashboard();
-  };
+  }, 1000);
 
-  const refreshResourceBreakdown = () => {
+  const refreshResourceBreakdown = useThrottledCallback(() => {
     refetchDashboard();
-  };
+  }, 1000);
 
-  const refreshAll = () => {
+  const refreshAll = useThrottledCallback(() => {
     refetchDashboard();
     syncWithApi();
     refreshServer();
-  };
+  }, 2000);
 
   return {
     // Alert Data

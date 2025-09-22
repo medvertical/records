@@ -17,6 +17,8 @@ import { ValidationStatus } from '@/shared/types/dashboard-new';
 import { formatDistanceToNow, formatDuration, intervalToDuration } from 'date-fns';
 import { getTouchButtonClasses, getMobileButtonSize, getMobileTextSize } from '@/lib/touch-utils';
 import { dashboardNavigation, ariaUtils } from '@/lib/keyboard-navigation';
+import { memo, useMemo, useCallback } from 'react';
+import { dashboardOptimizations } from '@/lib/performance-utils';
 
 /**
  * ValidationControlPanel Component - Single responsibility: Main validation engine control interface
@@ -36,7 +38,7 @@ interface ValidationControlPanelProps {
   className?: string;
 }
 
-export const ValidationControlPanel: React.FC<ValidationControlPanelProps> = ({
+const ValidationControlPanelComponent: React.FC<ValidationControlPanelProps> = ({
   status,
   loading = false,
   error = null,
@@ -49,13 +51,17 @@ export const ValidationControlPanel: React.FC<ValidationControlPanelProps> = ({
   onRefresh,
   className = '',
 }) => {
-  // Get status information with defaults
-  const currentStatus = status?.status || 'idle';
-  const progress = status?.progress || 0;
-  const currentResourceType = status?.currentResourceType || 'Unknown';
-  const nextResourceType = status?.nextResourceType || 'Unknown';
-  const processingRate = status?.processingRate || 0;
-  const estimatedTimeRemaining = status?.estimatedTimeRemaining;
+  // Get status information with defaults - memoized for performance
+  const statusInfo = useMemo(() => ({
+    currentStatus: status?.status || 'idle',
+    progress: status?.progress || 0,
+    currentResourceType: status?.currentResourceType || 'Unknown',
+    nextResourceType: status?.nextResourceType || 'Unknown',
+    processingRate: status?.processingRate || 0,
+    estimatedTimeRemaining: status?.estimatedTimeRemaining,
+  }), [status]);
+
+  const { currentStatus, progress, currentResourceType, nextResourceType, processingRate, estimatedTimeRemaining } = statusInfo;
 
   // Calculate time information
   const getStatusIcon = () => {
@@ -342,5 +348,13 @@ export const ValidationControlPanel: React.FC<ValidationControlPanelProps> = ({
     </Card>
   );
 };
+
+// Memoized ValidationControlPanel with custom comparison for performance optimization
+export const ValidationControlPanel = memo(ValidationControlPanelComponent, (prevProps, nextProps) => {
+  // Use validation status comparison for performance
+  return dashboardOptimizations.validationStatusEqual(prevProps.status, nextProps.status) &&
+         prevProps.loading === nextProps.loading &&
+         prevProps.error === nextProps.error;
+});
 
 export default ValidationControlPanel;

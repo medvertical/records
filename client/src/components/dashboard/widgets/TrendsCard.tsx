@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Widget, WidgetHeader, WidgetContent } from '../shared/Widget';
@@ -11,6 +11,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { dashboardOptimizations } from '@/lib/performance-utils';
 
 /**
  * TrendsCard Component - Single responsibility: Display historical trend analysis
@@ -26,7 +27,7 @@ interface TrendsCardProps {
   className?: string;
 }
 
-export const TrendsCard: React.FC<TrendsCardProps> = ({
+const TrendsCardComponent: React.FC<TrendsCardProps> = ({
   trends = [],
   metrics,
   loading = false,
@@ -349,5 +350,23 @@ export const CompactTrends: React.FC<CompactTrendsProps> = ({
     </div>
   );
 };
+
+// Memoized TrendsCard with custom comparison for performance optimization
+export const TrendsCard = memo(TrendsCardComponent, (prevProps, nextProps) => {
+  // Custom comparison for trends data
+  if (prevProps.trends !== nextProps.trends) {
+    if (!dashboardOptimizations.alertDataEqual(prevProps.trends || [], nextProps.trends || [])) {
+      return false;
+    }
+  }
+  
+  // Compare other essential props
+  return (
+    prevProps.loading === nextProps.loading &&
+    prevProps.error === nextProps.error &&
+    prevProps.metrics?.current === nextProps.metrics?.current &&
+    prevProps.metrics?.direction === nextProps.metrics?.direction
+  );
+});
 
 export default TrendsCard;
