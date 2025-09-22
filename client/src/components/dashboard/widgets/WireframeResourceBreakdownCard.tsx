@@ -83,7 +83,7 @@ export const WireframeResourceBreakdownCard: React.FC<WireframeResourceBreakdown
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center space-x-2">
             <BarChart3 className="h-5 w-5 text-blue-600" />
-            <span className="text-lg font-semibold">📋 RESOURCE BREAKDOWN</span>
+            <span className="text-lg font-semibold">RESOURCE BREAKDOWN</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -103,7 +103,7 @@ export const WireframeResourceBreakdownCard: React.FC<WireframeResourceBreakdown
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center space-x-2">
             <BarChart3 className="h-5 w-5 text-blue-600" />
-            <span className="text-lg font-semibold">📋 RESOURCE BREAKDOWN</span>
+            <span className="text-lg font-semibold">RESOURCE BREAKDOWN</span>
           </CardTitle>
           {onViewAll && (
             <Button variant="ghost" size="sm" className="p-1">

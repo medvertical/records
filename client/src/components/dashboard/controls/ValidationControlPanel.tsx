@@ -326,7 +326,7 @@ const ValidationControlPanelComponent: React.FC<ValidationControlPanelProps> = (
           <div className="space-y-3">
             <div className="text-sm font-medium">Currently Processing:</div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>🗃️ {currentResourceType === 'Unknown' ? 'FHIR Resources' : `${currentResourceType} Resources`}</span>
+              <span>{currentResourceType === 'Unknown' ? 'FHIR Resources' : `${currentResourceType} Resources`}</span>
               {nextResourceType && nextResourceType !== 'Unknown' && (
                 <>
                   <ChevronRight className="h-3 w-3" />

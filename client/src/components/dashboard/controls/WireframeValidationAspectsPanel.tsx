@@ -123,7 +123,7 @@ export const WireframeValidationAspectsPanel: React.FC<WireframeValidationAspect
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center space-x-2">
             <CheckCircle className="h-5 w-5 text-blue-600" />
-            <span className="text-lg font-semibold">🔍 VALIDATION ASPECTS</span>
+            <span className="text-lg font-semibold">VALIDATION ASPECTS</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -144,7 +144,7 @@ export const WireframeValidationAspectsPanel: React.FC<WireframeValidationAspect
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center space-x-2">
             <CheckCircle className="h-5 w-5 text-blue-600" />
-            <span className="text-lg font-semibold">🔍 VALIDATION ASPECTS</span>
+            <span className="text-lg font-semibold">VALIDATION ASPECTS</span>
           </CardTitle>
           {onConfigure && (
             <Button variant="ghost" size="sm" onClick={onConfigure} className="p-1">

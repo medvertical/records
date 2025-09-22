@@ -116,7 +116,7 @@ export const WireframeStatusCard: React.FC<WireframeStatusCardProps> = ({
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center space-x-2">
           <Zap className="h-5 w-5 text-green-600" />
-          <span className="text-lg font-semibold">⚡ STATUS</span>
+          <span className="text-lg font-semibold">STATUS</span>
         </CardTitle>
       </CardHeader>
       

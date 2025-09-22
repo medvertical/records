@@ -123,7 +123,7 @@ export const WireframeValidationControlPanel: React.FC<WireframeValidationContro
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center space-x-2">
             <Activity className="h-5 w-5 text-blue-600" />
-            <span className="text-lg font-semibold">🎯 VALIDATION ENGINE</span>
+            <span className="text-lg font-semibold">VALIDATION ENGINE</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -141,7 +141,7 @@ export const WireframeValidationControlPanel: React.FC<WireframeValidationContro
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center space-x-2">
             <Activity className="h-5 w-5 text-blue-600" />
-            <span className="text-lg font-semibold">🎯 VALIDATION ENGINE</span>
+            <span className="text-lg font-semibold">VALIDATION ENGINE</span>
           </CardTitle>
           {onSettings && (
             <Button variant="ghost" size="sm" onClick={onSettings} className="p-1">

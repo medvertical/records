@@ -75,7 +75,7 @@ export const WireframeOverviewCard: React.FC<WireframeOverviewCardProps> = ({
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center space-x-2">
           <Database className="h-5 w-5 text-blue-600" />
-          <span className="text-lg font-semibold">📊 OVERVIEW</span>
+          <span className="text-lg font-semibold">OVERVIEW</span>
         </CardTitle>
       </CardHeader>
       
