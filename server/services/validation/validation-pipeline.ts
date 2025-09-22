@@ -656,7 +656,9 @@ export class ValidationPipeline extends EventEmitter {
 
   private hashObject(obj: any): string {
     // Simple hash function for objects
-    return JSON.stringify(obj).split('').reduce((hash, char) => {
+    const jsonString = JSON.stringify(obj);
+    if (typeof jsonString !== 'string') return 0;
+    return jsonString.split('').reduce((hash, char) => {
       const code = char.charCodeAt(0);
       hash = ((hash << 5) - hash) + code;
       return hash & hash;

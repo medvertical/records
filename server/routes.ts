@@ -40,7 +40,20 @@ let globalValidationState = {
   resumeData: null as any | null,
   currentResourceType: null as string | null,
   nextResourceType: null as string | null,
-  lastBroadcastTime: null as number | null
+  activeValidationAspects: null as {
+    structural: boolean;
+    profile: boolean;
+    terminology: boolean;
+    reference: boolean;
+    businessRule: boolean;
+    metadata: boolean;
+  } | null,
+  lastBroadcastTime: null as number | null,
+  // Real-time progress counters
+  processedResources: 0,
+  validResources: 0,
+  errorResources: 0,
+  totalResources: 0
 };
 
 // Helper function to calculate retry statistics
@@ -1593,12 +1606,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const forceRevalidation = options.forceRevalidation || false;
 
       // RESET validation state for NEW start (always start at 0)
+      console.log('=== VALIDATION START: Initializing global state ===');
       globalValidationState.isRunning = true;
       globalValidationState.startTime = new Date();
       globalValidationState.canPause = true;
       globalValidationState.shouldStop = false;
       globalValidationState.isPaused = false;
       globalValidationState.resumeData = null;
+      // Reset real-time progress counters
+      globalValidationState.processedResources = 0;
+      globalValidationState.validResources = 0;
+      globalValidationState.errorResources = 0;
+      console.log('=== VALIDATION START: Global state initialized ===');
       
       if (forceRevalidation) {
         console.log('REVALIDATION start - Force revalidation of all resources. Global state: isRunning=true, canPause=true');
@@ -1634,7 +1653,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let realTotalResources = 0;
       const resourceCounts: Record<string, number> = {};
       
+      console.log('=== VALIDATION START: Starting resource count calculation ===');
       for (const resourceType of resourceTypes) {
+        console.log(`=== VALIDATION START: Processing resource type ${resourceType} ===`);
+        
         // Check if validation should stop during initialization
         if (globalValidationState.shouldStop) {
           console.log('Validation stopped during initialization phase');
@@ -1644,12 +1666,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         try {
+          console.log(`Getting count for ${resourceType}...`);
           const count = await fhirClient.getResourceCount(resourceType);
           resourceCounts[resourceType] = count;
           realTotalResources += count; // Include ALL resource types
-          console.log(`${resourceType}: ${count} resources`);
+          console.log(`✓ ${resourceType}: ${count} resources`);
         } catch (error) {
-          console.error(`Failed to get count for ${resourceType}:`, error);
+          console.error(`✗ Failed to get count for ${resourceType}:`, error);
           resourceCounts[resourceType] = 0;
         }
       }
@@ -1665,6 +1688,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error('No resources found on FHIR server. Cannot start validation.');
       }
 
+      // Set total resources in global state for real-time progress tracking
+      globalValidationState.totalResources = realTotalResources;
+
+      // Apply resource type filtering if enabled BEFORE processing
+      let filteredResourceTypes = resourceTypes;
+      let filteredResourceCounts: Record<string, number> = {};
+      let filteredTotalResources = realTotalResources;
+      
+      try {
+        const settingsService = getValidationSettingsService();
+        const validationSettings = await settingsService.getActiveSettings();
+        const filterSettings = validationSettings.resourceTypeFilterSettings;
+        
+        if (filterSettings && filterSettings.enabled) {
+          console.log('Resource type filtering is enabled:', {
+            mode: filterSettings.mode,
+            enabledTypes: filterSettings.resourceTypes,
+            validateUnknownTypes: filterSettings.validateUnknownTypes,
+            validateCustomTypes: filterSettings.validateCustomTypes
+          });
+          
+          if (filterSettings.mode === 'include') {
+            // Only validate the specified resource types
+            filteredResourceTypes = resourceTypes.filter(type => 
+              filterSettings.resourceTypes.includes(type)
+            );
+            console.log(`Filtering to include only ${filteredResourceTypes.length} resource types:`, filteredResourceTypes);
+          } else if (filterSettings.mode === 'exclude') {
+            // Exclude the specified resource types
+            filteredResourceTypes = resourceTypes.filter(type => 
+              !filterSettings.resourceTypes.includes(type)
+            );
+            console.log(`Filtering to exclude ${filterSettings.resourceTypes.length} resource types, keeping ${filteredResourceTypes.length}:`, filteredResourceTypes);
+          }
+          
+          // Recalculate totals based on filtered resource types
+          filteredTotalResources = 0;
+          for (const resourceType of filteredResourceTypes) {
+            filteredResourceCounts[resourceType] = resourceCounts[resourceType] || 0;
+            filteredTotalResources += filteredResourceCounts[resourceType];
+          }
+          
+          console.log(`After filtering: ${filteredTotalResources} resources across ${filteredResourceTypes.length} resource types`);
+        } else {
+          console.log('No resource type filtering applied - validating all resource types');
+          filteredResourceTypes = resourceTypes;
+        }
+      } catch (error) {
+        console.warn('Failed to apply resource type filtering, using all resource types:', error);
+        filteredResourceTypes = resourceTypes;
+      }
+
       // Send "running" status now that initialization is complete
       // Broadcast initializing status via SSE
       // Note: SSE broadcasts are handled by the validation service
@@ -1672,26 +1747,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Start real FHIR server validation using authentic data
       console.log('Starting real FHIR server validation with authentic data from Fire.ly server...');
       
-      // RESET all counters to 0 for NEW start (nicht Resume!)
-      let processedResources = 0;
-      let validResources = 0;
-      let errorResources = 0;
+      // Use global state counters for real-time progress tracking
       const startTime = new Date();
       const errors: string[] = [];
-      console.log('NEW START: Reset all counters to 0 (processedResources=0, validResources=0, errorResources=0)');
+      console.log('=== VALIDATION START: Starting validation process ===');
+      console.log('NEW START: Using global state counters for real-time progress tracking');
       
       // Broadcast RESET progress immediately to ensure UI shows 0/617442
       // SSE progress broadcast handled by validation service
 
+      // TEST: Limit to just a few resource types for debugging
+      const testResourceTypes = ['Appointment', 'Patient', 'Observation'];
+      const limitedResourceTypes = filteredResourceTypes.filter(type => testResourceTypes.includes(type));
+      console.log(`=== TEST: Limiting validation to ${limitedResourceTypes.length} resource types: ${limitedResourceTypes.join(', ')} ===`);
+      
       // Process resource types with real FHIR server data (EXCLUDING types with >50k resources)
       // Use filtered resource types if filtering is enabled
-      for (let i = 0; i < filteredResourceTypes.length; i++) {
-        const resourceType = filteredResourceTypes[i];
-        const nextResourceType = i + 1 < filteredResourceTypes.length ? filteredResourceTypes[i + 1] : null;
+      for (let i = 0; i < limitedResourceTypes.length; i++) {
+        const resourceType = limitedResourceTypes[i];
+        const nextResourceType = i + 1 < limitedResourceTypes.length ? limitedResourceTypes[i + 1] : null;
+        
+        console.log(`=== RESOURCE TYPE LOOP: Processing resource type ${i + 1}/${limitedResourceTypes.length}: ${resourceType} ===`);
         
         // Update current and next resource type in global state
         globalValidationState.currentResourceType = resourceType;
         globalValidationState.nextResourceType = nextResourceType;
+        
+        // IMMEDIATE TEST: Update counter to test if this code is being executed
+        globalValidationState.processedResources += 1;
+        console.log(`IMMEDIATE TEST: Updated processedResources to ${globalValidationState.processedResources} for resource type ${resourceType}`);
         
         // Check if validation should stop (pause/stop request)
         if (globalValidationState.shouldStop) {
@@ -1714,14 +1798,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Get total count for this resource type
           const totalCount = await fhirClient.getResourceCount(resourceType);
           
+          // SKIP resource types with 0 resources
+          if (totalCount === 0) {
+            console.log(`SKIPPING ${resourceType}: 0 resources (no data to validate)`);
+            continue;
+          }
+          
           // SKIP resource types with >50,000 resources
           if (totalCount > 50000) {
             console.log(`SKIPPING ${resourceType}: ${totalCount} resources (>50k threshold)`);
             continue;
           }
           
-          console.log(`Validating ALL ${resourceType} resources from FHIR server...`);
-          console.log(`Found ${totalCount} total ${resourceType} resources on server`);
+          console.log(`=== VALIDATING RESOURCE TYPE: ${resourceType} with ${totalCount} resources ===`);
           
       // Process ALL resources in batches
       let offset = 0;
@@ -1767,6 +1856,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           maxRetryAttempts,
           retryDelayMs
         });
+        
+        // Set active validation aspects in global state
+        globalValidationState.activeValidationAspects = {
+          structural: validationSettings.structural.enabled,
+          profile: validationSettings.profile.enabled,
+          terminology: validationSettings.terminology.enabled,
+          reference: validationSettings.reference.enabled,
+          businessRule: validationSettings.businessRule.enabled,
+          metadata: validationSettings.metadata.enabled
+        };
+        
+        console.log('Active validation aspects:', globalValidationState.activeValidationAspects);
       } catch (error) {
         console.warn('Failed to get validation settings, using default batch settings:', error);
         batchSize = options.batchSize || 20;
@@ -1823,32 +1924,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .join(', '));
         } else {
           console.log('Resource type filtering is disabled - validating all resource types');
-          filteredResourceTypes = resourceTypes;
-          filteredResourceCounts = resourceCounts;
-          filteredTotalResources = realTotalResources;
+          // Variables already set above
         }
       } catch (error) {
         console.warn('Failed to get resource type filter settings, validating all resource types:', error);
-        filteredResourceTypes = resourceTypes;
-        filteredResourceCounts = resourceCounts;
-        filteredTotalResources = realTotalResources;
+        // Variables already set above
       }
           
           while (offset < totalCount && globalValidationState.isRunning && !globalValidationState.shouldStop) {
-            // Get batch of resources
-            const bundle = await fhirClient.searchResources(resourceType, { _offset: offset }, batchSize);
+            let bundle: any = null;
             
-            if (!bundle.entry || bundle.entry.length === 0) {
-              console.log(`No more ${resourceType} resources at offset ${offset}`);
+            try {
+              // Get batch of resources
+              console.log(`=== VALIDATION LOOP: Fetching ${resourceType} resources at offset ${offset} with batch size ${batchSize} ===`);
+              bundle = await fhirClient.searchResources(resourceType, { _offset: offset }, batchSize);
+              
+              console.log(`DEBUG: Bundle received for ${resourceType}:`, {
+                hasBundle: !!bundle,
+                hasEntry: !!bundle?.entry,
+                entryLength: bundle?.entry?.length || 0,
+                total: bundle?.total || 'unknown'
+              });
+              
+              if (!bundle.entry || bundle.entry.length === 0) {
+                console.log(`No more ${resourceType} resources at offset ${offset}`);
+                break;
+              }
+              
+              console.log(`=== PROCESSING BATCH: ${resourceType} batch: ${bundle.entry.length} resources (offset: ${offset}) ===`);
+              
+            } catch (error) {
+              console.error(`ERROR: Failed to fetch ${resourceType} resources at offset ${offset}:`, error);
+              // Skip this resource type and continue with the next one
               break;
             }
             
-            console.log(`Processing ${resourceType} batch: ${bundle.entry.length} resources (offset: ${offset})`);
+            if (!bundle || !bundle.entry) {
+              console.log(`No bundle or entries for ${resourceType}, skipping`);
+              break;
+            }
             
             // Process resources in batched pipeline executions for better throughput
             const PARALLEL_BATCH_SIZE = 10; // Process 10 resources per pipeline batch
             
             for (let i = 0; i < bundle.entry.length; i += PARALLEL_BATCH_SIZE) {
+              console.log(`=== PIPELINE BATCH LOOP: Processing batch ${i}-${i + PARALLEL_BATCH_SIZE} of ${bundle.entry.length} resources ===`);
+              
               // Check if validation should stop before each batch
               if (globalValidationState.shouldStop) {
                 console.log('Validation paused by user request during resource processing');
@@ -1858,9 +1979,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 globalValidationState.resumeData = {
                   resourceType,
                   offset: offset + i,
-                  processedResources,
-                  validResources,
-                  errorResources,
+                  processedResources: globalValidationState.processedResources,
+                  validResources: globalValidationState.validResources,
+                  errorResources: globalValidationState.errorResources,
                   errors,
                   startTime
                 };
@@ -1871,9 +1992,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const parallelBatch = bundle.entry.slice(i, i + PARALLEL_BATCH_SIZE).filter(e => e.resource);
               const resourcesForPipeline = parallelBatch.map(e => ({
                 resource: (e as any).resource,
-                resourceType: (e as any).resource.resourceType,
+                resourceType: resourceType, // Use the actual resourceType variable, not the resource's resourceType
                 resourceId: (e as any).resource.id
               }));
+              
+              console.log(`DEBUG: Created batch with ${resourcesForPipeline.length} resources for pipeline execution`);
+              
+              // CRITICAL TEST: Update counter immediately to test if this code is being executed
+              globalValidationState.processedResources += resourcesForPipeline.length;
+              console.log(`CRITICAL TEST: Updated processedResources to ${globalValidationState.processedResources} (added ${resourcesForPipeline.length})`);
 
               // Process batch with retry logic if configured
               let batchProcessed = false;
@@ -1883,6 +2010,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               while (!batchProcessed && retryAttempt <= maxRetryAttempts) {
                 try {
                   const pipeline = getValidationPipeline();
+                  console.log(`Executing pipeline for ${resourcesForPipeline.length} resources`);
+                  
+                  const resourcesToProcess = resourcesForPipeline.length;
+                  console.log(`DEBUG: About to process ${resourcesToProcess} resources through pipeline`);
+                  
                   const pipelineResult: any = await pipeline.executePipeline({
                     resources: resourcesForPipeline,
                     context: {
@@ -1890,21 +2022,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       requestId: `bulk_${resourceType}_${Date.now()}_${i}_${retryAttempt}`
                     }
                   });
+                  
+                  console.log(`DEBUG: Pipeline execution completed for ${resourcesToProcess} resources`);
+                  
+                  console.log(`Pipeline result:`, {
+                    hasResults: !!pipelineResult?.results,
+                    resultsLength: Array.isArray(pipelineResult?.results) ? pipelineResult.results.length : 0,
+                    status: pipelineResult?.status,
+                    error: pipelineResult?.error
+                  });
 
+                  // Counters already updated above for real-time progress tracking
+                  console.log(`DEBUG: Counters already updated - processed=${globalValidationState.processedResources}`);
+                  
+                  // Log progress every 100 resources for monitoring
+                  if (globalValidationState.processedResources % 100 === 0) {
+                    console.log(`Progress update: ${globalValidationState.processedResources} resources processed`);
+                  }
+                  
                   const batchResults: any[] = Array.isArray(pipelineResult?.results) ? pipelineResult.results : [];
+                  
+                  // Process actual results if available (counters already updated above)
                   for (const r of batchResults) {
-                    processedResources++;
                     const score = (r?.summary?.validationScore ?? 0) as number;
                     const isValid = score >= 95;
                     if (isValid) {
-                      validResources++;
+                      globalValidationState.validResources++;
                     } else {
-                      errorResources++;
+                      globalValidationState.errorResources++;
                       const errCount = (r?.summary?.errorCount ?? 0) as number;
                       const warnCount = (r?.summary?.warningCount ?? 0) as number;
                       const rid = (r?.resourceId || r?.resource?.id || 'unknown') as string;
                       errors.push(`${resourceType}/${rid}: Score ${score}% (${errCount} errors, ${warnCount} warnings)`);
                     }
+                  }
+                  
+                  // If pipeline didn't return results, assume all resources had errors
+                  if (batchResults.length === 0 && resourcesToProcess > 0) {
+                    console.log(`Pipeline returned no results, assuming ${resourcesToProcess} resources had errors`);
+                    globalValidationState.errorResources += resourcesToProcess;
+                    errors.push(`${resourceType}: Pipeline returned no results for ${resourcesToProcess} resources`);
                   }
                   
                   batchProcessed = true;
@@ -1913,8 +2070,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     console.log(`Batch retry successful on attempt ${retryAttempt + 1}`);
                   }
                   
+                  // Log progress every 50 processed resources for real-time feedback
+                  if (globalValidationState.processedResources % 50 === 0) {
+                    const progressPercent = globalValidationState.totalResources > 0 
+                      ? Math.round((globalValidationState.processedResources / globalValidationState.totalResources) * 100)
+                      : 0;
+                    console.log(`Progress: ${globalValidationState.processedResources}/${globalValidationState.totalResources} (${progressPercent}%) - Valid: ${globalValidationState.validResources}, Errors: ${globalValidationState.errorResources}`);
+                  }
+                  
                 } catch (validationError: any) {
                   lastError = validationError;
+                  console.error(`Pipeline execution failed:`, {
+                    error: validationError.message,
+                    stack: validationError.stack,
+                    retryAttempt,
+                    maxRetryAttempts
+                  });
                   retryAttempt++;
                   
                   if (retryAttempt <= maxRetryAttempts && retryFailedBatches) {
@@ -1923,8 +2094,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   } else {
                     // If retry failed or retry is disabled, attribute errors to each resource in the batch
                     for (const e of parallelBatch) {
-                      processedResources++;
-                      errorResources++;
+                      globalValidationState.processedResources++;
+                      globalValidationState.errorResources++;
                       const rid = (e as any).resource?.id || 'unknown';
                       const errorMsg = retryAttempt > 1 
                         ? `Validation failed after ${retryAttempt} attempts - ${validationError?.message || String(validationError)}`
@@ -2016,10 +2187,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // TEST ENDPOINT: Directly update progress counters for testing
+  app.post("/api/validation/bulk/test-counters", async (req, res) => {
+    try {
+      console.log('=== TEST: Updating progress counters directly ===');
+      globalValidationState.processedResources += 100;
+      globalValidationState.validResources += 50;
+      globalValidationState.errorResources += 50;
+      console.log(`=== TEST: Updated counters - processed: ${globalValidationState.processedResources}, valid: ${globalValidationState.validResources}, errors: ${globalValidationState.errorResources} ===`);
+      
+      res.json({
+        success: true,
+        message: "Counters updated successfully",
+        counters: {
+          processedResources: globalValidationState.processedResources,
+          validResources: globalValidationState.validResources,
+          errorResources: globalValidationState.errorResources
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update counters',
+        error: error?.message || String(error)
+      });
+    }
+  });
+
   app.get("/api/validation/bulk/progress", async (req, res) => {
     try {
       if (!unifiedValidationService) {
         return res.status(400).json({ message: "No FHIR server configured" });
+      }
+
+      // TEST: Check if test parameter is provided
+      if (req.query.test === 'counters') {
+        console.log('=== TEST: Updating progress counters via progress endpoint ===');
+        globalValidationState.processedResources += 100;
+        globalValidationState.validResources += 50;
+        globalValidationState.errorResources += 50;
+        console.log(`=== TEST: Updated counters - processed: ${globalValidationState.processedResources}, valid: ${globalValidationState.validResources}, errors: ${globalValidationState.errorResources} ===`);
       }
 
       // Get the total resources from FHIR server for validation
@@ -2067,12 +2274,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status = 'paused';
       }
       
-      // Get processed resources from database
-      const summary = await storage.getResourceStatsWithSettings();
+      // Use real-time progress counters from global state when validation is active
+      let processedResources: number;
+      let validResources: number;
+      let errorResources: number;
       
-      // Always use actual database counts for progress tracking
-      // This ensures progress is shown correctly whether running, paused, or stopped
-      const processedResources = summary.validResources + summary.errorResources;
+      if (globalValidationState.isRunning || globalValidationState.isPaused) {
+        // Use real-time counters during active validation
+        processedResources = globalValidationState.processedResources;
+        validResources = globalValidationState.validResources;
+        errorResources = globalValidationState.errorResources;
+      } else {
+        // Fall back to database counts when validation is not active
+        const summary = await storage.getResourceStatsWithSettings();
+        processedResources = summary.validResources + summary.errorResources;
+        validResources = summary.validResources;
+        errorResources = summary.errorResources;
+      }
 
       // Calculate retry statistics from validation results
       const retryStatistics = await calculateRetryStatistics();
@@ -2108,14 +2326,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      const progress = {
-        totalResources,
-        processedResources,
-        validResources: summary.validResources,
-        errorResources: summary.errorResources,
-        progress: totalResources > 0 ? Math.round((processedResources / totalResources) * 100) : 0,
+      // Get active validation aspects from global state or current settings
+      let activeValidationAspects = undefined;
+      
+      if (globalValidationState.activeValidationAspects) {
+        // Use cached validation aspects from global state
+        activeValidationAspects = globalValidationState.activeValidationAspects;
+      } else {
+        // Fallback to fetching from settings
+        try {
+          const settingsService = getValidationSettingsService();
+          const validationSettings = await settingsService.getActiveSettings();
+          
+          activeValidationAspects = {
+            structural: validationSettings.structural.enabled,
+            profile: validationSettings.profile.enabled,
+            terminology: validationSettings.terminology.enabled,
+            reference: validationSettings.reference.enabled,
+            businessRule: validationSettings.businessRule.enabled,
+            metadata: validationSettings.metadata.enabled
+          };
+        } catch (error) {
+          console.warn('Failed to get validation aspects for progress tracking:', error);
+          // Use default values if settings can't be retrieved
+          activeValidationAspects = {
+            structural: true,
+            profile: true,
+            terminology: true,
+            reference: true,
+            businessRule: true,
+            metadata: true
+          };
+        }
+      }
+      
+        const progress = {
+          totalResources: globalValidationState.totalResources || totalResources,
+          processedResources,
+          validResources,
+          errorResources,
+          progress: (globalValidationState.totalResources || totalResources) > 0 ? Math.round((processedResources / (globalValidationState.totalResources || totalResources)) * 100) : 0,
         currentResourceType,
         nextResourceType,
+        activeValidationAspects,
         isComplete: false,
         errors: [],
         startTime: globalValidationState.startTime ? globalValidationState.startTime.toISOString() : new Date().toISOString(),

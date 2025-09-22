@@ -532,7 +532,9 @@ export class ValidationNotificationService {
     tomorrow.setDate(tomorrow.getDate() + 1);
     
     // Set to end of quiet hours tomorrow
-    const [hours, minutes] = preferences.quietHours.end.split(':');
+    const endTime = preferences.quietHours?.end;
+    if (!endTime || typeof endTime !== 'string') return tomorrow;
+    const [hours, minutes] = endTime.split(':');
     tomorrow.setHours(parseInt(hours), parseInt(minutes), 0, 0);
     
     return tomorrow;

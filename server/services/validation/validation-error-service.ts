@@ -211,7 +211,9 @@ export class ValidationErrorService {
         }
         
         // Count by date for trends
-        const dateKey = error.timestamp.toISOString().split('T')[0];
+        const timestamp = error.timestamp?.toISOString();
+        if (!timestamp || typeof timestamp !== 'string') continue;
+        const dateKey = timestamp.split('T')[0];
         if (dailyCounts.has(dateKey)) {
           dailyCounts.get(dateKey)!.count++;
         } else {
@@ -261,7 +263,9 @@ export class ValidationErrorService {
       const dailyCounts = new Map<string, { count: number; severity: ValidationErrorSeverity }>();
       
       errors.forEach(error => {
-        const dateKey = error.timestamp.toISOString().split('T')[0];
+        const timestamp = error.timestamp?.toISOString();
+        if (!timestamp || typeof timestamp !== 'string') return;
+        const dateKey = timestamp.split('T')[0];
         if (dailyCounts.has(dateKey)) {
           dailyCounts.get(dateKey)!.count++;
         } else {

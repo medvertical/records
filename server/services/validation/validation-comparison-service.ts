@@ -365,7 +365,9 @@ export class ValidationComparisonService {
     const successRate: number[] = [];
 
     for (const run of runs) {
-      dates.push(run.startTime.toISOString().split('T')[0]);
+      const timestamp = run.startTime?.toISOString();
+      if (!timestamp || typeof timestamp !== 'string') continue;
+      dates.push(timestamp.split('T')[0]);
       throughput.push(run.performance.throughput);
       efficiency.push(run.performance.efficiency);
       

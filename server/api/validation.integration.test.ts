@@ -15,12 +15,12 @@ vi.mock('../db', () => ({
   }
 }));
 
-vi.mock('../services/fhir/fhir-client-service', () => ({
-  getFhirClient: () => ({
+vi.mock('../services/fhir/fhir-client', () => ({
+  FhirClient: vi.fn().mockImplementation(() => ({
     searchResources: vi.fn(),
     getResource: vi.fn(),
     getResourcesByType: vi.fn()
-  })
+  }))
 }));
 
 vi.mock('../services/validation/validation-pipeline', () => ({
@@ -237,6 +237,41 @@ describe('Validation API Integration Tests', () => {
       expect(response.body.data.forceRevalidation).toBe(true);
     });
 
+    it('should handle retry logic for failed validation attempts', async () => {
+      const { getResourceById } = await import('../storage');
+      vi.mocked(getResourceById).mockResolvedValue(mockResources[0]);
+
+      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      let attemptCount = 0;
+      vi.mocked(getValidationPipeline).mockReturnValue({
+        executePipeline: vi.fn().mockImplementation(() => {
+          attemptCount++;
+          if (attemptCount < 2) {
+            throw new Error('Temporary validation failure');
+          }
+          return Promise.resolve({
+            success: true,
+            results: [mockValidationResult]
+          });
+        }),
+        cancelPipeline: vi.fn()
+      });
+
+      const { storeValidationResult } = await import('../storage');
+      vi.mocked(storeValidationResult).mockResolvedValue(mockValidationResult);
+
+      const response = await request(server)
+        .post('/api/validation/validate-by-ids')
+        .send({
+          resourceIds: [1],
+          forceRevalidation: false
+        })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(attemptCount).toBe(2); // Should retry once after first failure
+    });
+
     it('should handle missing resources gracefully', async () => {
       const { getResourceById } = await import('../storage');
       vi.mocked(getResourceById).mockResolvedValue(null); // Resource not found
@@ -361,7 +396,7 @@ describe('Validation API Integration Tests', () => {
 
   describe('POST /api/validation/bulk/start', () => {
     it('should start bulk validation successfully', async () => {
-      const { getFhirClient } = await import('../services/fhir/fhir-client-service');
+      const { FhirClient } = await import('../services/fhir/fhir-client');
       const mockFhirClient = {
         searchResources: vi.fn().mockResolvedValue({
           entry: mockResources.map(r => ({ resource: r.data }))
@@ -369,7 +404,7 @@ describe('Validation API Integration Tests', () => {
         getResource: vi.fn(),
         getResourcesByType: vi.fn()
       };
-      vi.mocked(getFhirClient).mockReturnValue(mockFhirClient);
+      vi.mocked(FhirClient).mockImplementation(() => mockFhirClient);
 
       const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
       vi.mocked(getValidationPipeline).mockReturnValue({
@@ -389,6 +424,117 @@ describe('Validation API Integration Tests', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.message).toContain('Validation started');
+    });
+
+    it('should use configured batch size from validation settings', async () => {
+      const { getValidationSettingsService } = await import('../services/validation/validation-settings-service');
+      const mockSettingsService = {
+        getActiveSettings: vi.fn().mockResolvedValue({
+          ...mockValidationSettings,
+          batchProcessingSettings: {
+            defaultBatchSize: 100,
+            minBatchSize: 50,
+            maxBatchSize: 500,
+            pauseBetweenBatches: true,
+            pauseDurationMs: 1000,
+            useAdaptiveBatchSizing: false,
+            retryFailedBatches: true,
+            maxRetryAttempts: 3,
+            retryDelayMs: 2000
+          }
+        }),
+        updateSettings: vi.fn()
+      };
+      vi.mocked(getValidationSettingsService).mockReturnValue(mockSettingsService);
+
+      const { FhirClient } = await import('../services/fhir/fhir-client');
+      const mockFhirClient = {
+        getAllResourceTypes: vi.fn().mockResolvedValue(['Patient', 'Observation']),
+        getResourceCount: vi.fn().mockResolvedValue(1000),
+        searchResources: vi.fn().mockResolvedValue({
+          entry: mockResources.map(r => ({ resource: r.data }))
+        }),
+        getResource: vi.fn(),
+        getResourcesByType: vi.fn()
+      };
+      vi.mocked(FhirClient).mockImplementation(() => mockFhirClient);
+
+      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      vi.mocked(getValidationPipeline).mockReturnValue({
+        executePipeline: vi.fn().mockResolvedValue({
+          success: true,
+          results: [mockValidationResult]
+        }),
+        cancelPipeline: vi.fn()
+      });
+
+      const response = await request(server)
+        .post('/api/validation/bulk/start')
+        .send({
+          forceRevalidation: false
+        })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(mockSettingsService.getActiveSettings).toHaveBeenCalled();
+    });
+
+    it('should apply resource type filtering when enabled', async () => {
+      const { getValidationSettingsService } = await import('../services/validation/validation-settings-service');
+      const mockSettingsService = {
+        getActiveSettings: vi.fn().mockResolvedValue({
+          ...mockValidationSettings,
+          resourceTypeFilterSettings: {
+            enabled: true,
+            mode: 'include',
+            resourceTypes: ['Patient', 'Observation']
+          },
+          batchProcessingSettings: {
+            defaultBatchSize: 200,
+            minBatchSize: 50,
+            maxBatchSize: 500,
+            pauseBetweenBatches: false,
+            pauseDurationMs: 100,
+            useAdaptiveBatchSizing: false,
+            retryFailedBatches: false,
+            maxRetryAttempts: 1,
+            retryDelayMs: 1000
+          }
+        }),
+        updateSettings: vi.fn()
+      };
+      vi.mocked(getValidationSettingsService).mockReturnValue(mockSettingsService);
+
+      const { FhirClient } = await import('../services/fhir/fhir-client');
+      const mockFhirClient = {
+        getAllResourceTypes: vi.fn().mockResolvedValue(['Patient', 'Observation', 'DiagnosticReport', 'Medication']),
+        getResourceCount: vi.fn().mockResolvedValue(1000),
+        searchResources: vi.fn().mockResolvedValue({
+          entry: mockResources.map(r => ({ resource: r.data }))
+        }),
+        getResource: vi.fn(),
+        getResourcesByType: vi.fn()
+      };
+      vi.mocked(FhirClient).mockImplementation(() => mockFhirClient);
+
+      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      vi.mocked(getValidationPipeline).mockReturnValue({
+        executePipeline: vi.fn().mockResolvedValue({
+          success: true,
+          results: [mockValidationResult]
+        }),
+        cancelPipeline: vi.fn()
+      });
+
+      const response = await request(server)
+        .post('/api/validation/bulk/start')
+        .send({
+          forceRevalidation: false
+        })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(mockSettingsService.getActiveSettings).toHaveBeenCalled();
     });
 
     it('should handle bulk validation when already running', async () => {
@@ -417,13 +563,13 @@ describe('Validation API Integration Tests', () => {
     });
 
     it('should handle FHIR client errors during bulk validation', async () => {
-      const { getFhirClient } = await import('../services/fhir/fhir-client-service');
+      const { FhirClient } = await import('../services/fhir/fhir-client');
       const mockFhirClient = {
         searchResources: vi.fn().mockRejectedValue(new Error('FHIR server connection failed')),
         getResource: vi.fn(),
         getResourcesByType: vi.fn()
       };
-      vi.mocked(getFhirClient).mockReturnValue(mockFhirClient);
+      vi.mocked(FhirClient).mockImplementation(() => mockFhirClient);
 
       const response = await request(server)
         .post('/api/validation/bulk/start')
@@ -459,6 +605,42 @@ describe('Validation API Integration Tests', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.data).toBeDefined();
+    });
+
+    it('should include active validation aspects in progress response', async () => {
+      const { getValidationSettingsService } = await import('../services/validation/validation-settings-service');
+      const mockSettingsService = {
+        getActiveSettings: vi.fn().mockResolvedValue({
+          ...mockValidationSettings,
+          structural: { enabled: true, severity: 'error' },
+          profile: { enabled: true, severity: 'warning' },
+          terminology: { enabled: false, severity: 'warning' },
+          reference: { enabled: true, severity: 'error' },
+          businessRule: { enabled: false, severity: 'warning' },
+          metadata: { enabled: true, severity: 'information' }
+        }),
+        updateSettings: vi.fn()
+      };
+      vi.mocked(getValidationSettingsService).mockReturnValue(mockSettingsService);
+
+      const { getResourceStatsWithSettings } = await import('../storage');
+      vi.mocked(getResourceStatsWithSettings).mockResolvedValue({
+        validResources: 100,
+        errorResources: 50,
+        warningResources: 25,
+        totalValidated: 175
+      });
+
+      const response = await request(server)
+        .get('/api/validation/bulk/progress')
+        .expect(200);
+
+      expect(response.body.currentResourceType).toBeDefined();
+      expect(response.body.nextResourceType).toBeDefined();
+      expect(response.body.activeValidationAspects).toBeDefined();
+      expect(response.body.activeValidationAspects.structural).toBe(true);
+      expect(response.body.activeValidationAspects.terminology).toBe(false);
+      expect(response.body.activeValidationAspects.businessRule).toBe(false);
     });
 
     it('should handle validation progress when not running', async () => {
@@ -546,7 +728,7 @@ describe('Validation API Integration Tests', () => {
     });
 
     it('should handle service initialization errors', async () => {
-      const { getFhirClient } = await import('../services/fhir/fhir-client-service');
+      const { FhirClient } = await import('../services/fhir/fhir-client');
       vi.mocked(getFhirClient).mockReturnValue(null);
 
       const response = await request(server)
@@ -571,7 +753,7 @@ describe('Validation API Integration Tests', () => {
     it('should handle concurrent validation requests', async () => {
       // This test would verify that concurrent validation requests are handled properly
       // by checking that only one validation can run at a time
-      const { getFhirClient } = await import('../services/fhir/fhir-client-service');
+      const { FhirClient } = await import('../services/fhir/fhir-client');
       const mockFhirClient = {
         searchResources: vi.fn().mockResolvedValue({
           entry: mockResources.map(r => ({ resource: r.data }))
@@ -579,7 +761,7 @@ describe('Validation API Integration Tests', () => {
         getResource: vi.fn(),
         getResourcesByType: vi.fn()
       };
-      vi.mocked(getFhirClient).mockReturnValue(mockFhirClient);
+      vi.mocked(FhirClient).mockImplementation(() => mockFhirClient);
 
       // Start first validation
       const response1 = await request(server)
@@ -598,6 +780,154 @@ describe('Validation API Integration Tests', () => {
         .expect(409);
 
       expect(response2.body.message).toContain('Validation is already running');
+    });
+  });
+
+  describe('Enhanced Backend Validation Workflow', () => {
+    it('should handle batch processing with retry logic', async () => {
+      const { getValidationSettingsService } = await import('../services/validation/validation-settings-service');
+      const mockSettingsService = {
+        getActiveSettings: vi.fn().mockResolvedValue({
+          ...mockValidationSettings,
+          batchProcessingSettings: {
+            defaultBatchSize: 50,
+            minBatchSize: 10,
+            maxBatchSize: 200,
+            pauseBetweenBatches: false,
+            pauseDurationMs: 100,
+            useAdaptiveBatchSizing: false,
+            retryFailedBatches: true,
+            maxRetryAttempts: 2,
+            retryDelayMs: 500
+          }
+        }),
+        updateSettings: vi.fn()
+      };
+      vi.mocked(getValidationSettingsService).mockReturnValue(mockSettingsService);
+
+      const { FhirClient } = await import('../services/fhir/fhir-client');
+      const mockFhirClient = {
+        getAllResourceTypes: vi.fn().mockResolvedValue(['Patient']),
+        getResourceCount: vi.fn().mockResolvedValue(100),
+        searchResources: vi.fn().mockResolvedValue({
+          entry: mockResources.map(r => ({ resource: r.data }))
+        }),
+        getResource: vi.fn(),
+        getResourcesByType: vi.fn()
+      };
+      vi.mocked(FhirClient).mockImplementation(() => mockFhirClient);
+
+      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      let batchAttemptCount = 0;
+      vi.mocked(getValidationPipeline).mockReturnValue({
+        executePipeline: vi.fn().mockImplementation(() => {
+          batchAttemptCount++;
+          if (batchAttemptCount < 2) {
+            throw new Error('Batch processing failed');
+          }
+          return Promise.resolve({
+            success: true,
+            results: [mockValidationResult]
+          });
+        }),
+        cancelPipeline: vi.fn()
+      });
+
+      const response = await request(server)
+        .post('/api/validation/bulk/start')
+        .send({
+          forceRevalidation: false
+        })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(mockSettingsService.getActiveSettings).toHaveBeenCalled();
+    });
+
+    it('should apply resource type filtering with exclude mode', async () => {
+      const { getValidationSettingsService } = await import('../services/validation/validation-settings-service');
+      const mockSettingsService = {
+        getActiveSettings: vi.fn().mockResolvedValue({
+          ...mockValidationSettings,
+          resourceTypeFilterSettings: {
+            enabled: true,
+            mode: 'exclude',
+            resourceTypes: ['DiagnosticReport', 'Medication']
+          },
+          batchProcessingSettings: {
+            defaultBatchSize: 200,
+            minBatchSize: 50,
+            maxBatchSize: 500,
+            pauseBetweenBatches: false,
+            pauseDurationMs: 100,
+            useAdaptiveBatchSizing: false,
+            retryFailedBatches: false,
+            maxRetryAttempts: 1,
+            retryDelayMs: 1000
+          }
+        }),
+        updateSettings: vi.fn()
+      };
+      vi.mocked(getValidationSettingsService).mockReturnValue(mockSettingsService);
+
+      const { FhirClient } = await import('../services/fhir/fhir-client');
+      const mockFhirClient = {
+        getAllResourceTypes: vi.fn().mockResolvedValue(['Patient', 'Observation', 'DiagnosticReport', 'Medication']),
+        getResourceCount: vi.fn().mockResolvedValue(1000),
+        searchResources: vi.fn().mockResolvedValue({
+          entry: mockResources.map(r => ({ resource: r.data }))
+        }),
+        getResource: vi.fn(),
+        getResourcesByType: vi.fn()
+      };
+      vi.mocked(FhirClient).mockImplementation(() => mockFhirClient);
+
+      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      vi.mocked(getValidationPipeline).mockReturnValue({
+        executePipeline: vi.fn().mockResolvedValue({
+          success: true,
+          results: [mockValidationResult]
+        }),
+        cancelPipeline: vi.fn()
+      });
+
+      const response = await request(server)
+        .post('/api/validation/bulk/start')
+        .send({
+          forceRevalidation: false
+        })
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(mockSettingsService.getActiveSettings).toHaveBeenCalled();
+    });
+
+    it('should include retry statistics in progress response', async () => {
+      const { getResourceStatsWithSettings } = await import('../storage');
+      vi.mocked(getResourceStatsWithSettings).mockResolvedValue({
+        validResources: 100,
+        errorResources: 50,
+        warningResources: 25,
+        totalValidated: 175
+      });
+
+      // Mock retry statistics calculation
+      const mockDb = await import('../db');
+      vi.mocked(mockDb.db.select).mockReturnValue({
+        from: vi.fn().mockResolvedValue([
+          { retryAttemptCount: 1, maxRetryAttempts: 3, isRetry: false, canRetry: true, totalRetryDurationMs: 0, isValid: true },
+          { retryAttemptCount: 2, maxRetryAttempts: 3, isRetry: true, canRetry: false, totalRetryDurationMs: 1000, isValid: false },
+          { retryAttemptCount: 1, maxRetryAttempts: 3, isRetry: false, canRetry: true, totalRetryDurationMs: 0, isValid: true }
+        ])
+      });
+
+      const response = await request(server)
+        .get('/api/validation/bulk/progress')
+        .expect(200);
+
+      expect(response.body.retryStatistics).toBeDefined();
+      expect(response.body.retryStatistics.totalRetryAttempts).toBeDefined();
+      expect(response.body.retryStatistics.resourcesWithRetries).toBeDefined();
     });
   });
 

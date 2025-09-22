@@ -204,6 +204,13 @@ export interface ValidationError {
   path: string;
   expression?: string;
   code?: string;
+  category?: 'structural' | 'profile' | 'terminology' | 'reference' | 'businessRule' | 'metadata';
+  resolutionStatus?: 'unresolved' | 'acknowledged' | 'resolved' | 'ignored';
+  resolutionNotes?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  acknowledgedBy?: string;
+  acknowledgedAt?: string;
 }
 
 export interface ResourceStats {

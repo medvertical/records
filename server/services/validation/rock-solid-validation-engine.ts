@@ -307,8 +307,26 @@ export class RockSolidValidationEngine extends EventEmitter {
         throw new Error('Maximum concurrent validations reached');
       }
 
-      // Get current validation settings
-      const settings = await this.settingsService.getActiveSettings();
+      // Get current validation settings with fallback
+      let settings;
+      try {
+        settings = await this.settingsService.getActiveSettings();
+      } catch (error) {
+        console.warn('[RockSolidValidationEngine] Failed to load settings, using defaults:', error instanceof Error ? error.message : error);
+        // Use default settings when database is unavailable
+        settings = {
+          structural: { enabled: true, severity: 'error' },
+          profile: { enabled: true, severity: 'warning' },
+          terminology: { enabled: true, severity: 'warning' },
+          reference: { enabled: true, severity: 'error' },
+          businessRule: { enabled: true, severity: 'warning' },
+          metadata: { enabled: true, severity: 'info' },
+          maxConcurrentValidations: 5,
+          profileResolutionServers: [],
+          terminologyServers: [],
+          customRules: []
+        };
+      }
       
       if (this.config.includeDebugInfo) {
         console.debug('[DefaultValidationEngine] Starting validation', {
@@ -1114,7 +1132,7 @@ export class RockSolidValidationEngine extends EventEmitter {
   }
 
   private getValueByPath(obj: any, path: string): any {
-    if (!path) return obj;
+    if (!path || typeof path !== 'string') return obj;
     return path.split('.').reduce((acc: any, key: string) => (acc == null ? undefined : acc[key]), obj);
   }
 
@@ -1804,12 +1822,17 @@ export class RockSolidValidationEngine extends EventEmitter {
    * Parse a reference into its components
    */
   private parseReference(reference: string): {resourceType?: string, id?: string, url?: string} {
+    // Handle null/undefined reference
+    if (!reference || typeof reference !== 'string') {
+      return { id: reference || '' };
+    }
+    
     // Handle different reference formats
     if (reference.startsWith('http')) {
       return { url: reference };
     }
     
-    if (reference.includes('/')) {
+    if (reference && typeof reference === 'string' && reference.includes('/')) {
       const parts = reference.split('/');
       if (parts.length >= 2) {
         return { resourceType: parts[parts.length - 2], id: parts[parts.length - 1] };

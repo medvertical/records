@@ -396,6 +396,7 @@ export class ValidationSchedulerService {
    */
   private isValidCronExpression(expression: string): boolean {
     // Basic validation - in real implementation, use a proper cron parser
+    if (!expression || typeof expression !== 'string') return false;
     const parts = expression.split(' ');
     return parts.length >= 5 && parts.length <= 6;
   }

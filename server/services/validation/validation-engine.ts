@@ -307,6 +307,7 @@ export class ValidationEngine {
   private async fetchProfile(profileUrl: string): Promise<any> {
     try {
       // Try to fetch the profile from the FHIR server
+      if (!profileUrl || typeof profileUrl !== 'string') return null;
       const profileId = profileUrl.split('/').pop();
       if (profileId) {
         return await this.fhirClient.getResource('StructureDefinition', profileId);
@@ -536,6 +537,7 @@ export class ValidationEngine {
   }
 
   private getValueByPath(obj: any, path: string): any {
+    if (!path || typeof path !== 'string') return obj;
     return path.split('.').reduce((current, key) => {
       if (current && typeof current === 'object') {
         return current[key];
@@ -582,12 +584,12 @@ export class ValidationEngine {
     for (const fieldPath of requiredFields) {
       const value = this.getValueByPath(resource, fieldPath);
       if (value === undefined || value === null || value === '') {
-        const fieldName = fieldPath.split('.').pop() || fieldPath;
+        const fieldName = (fieldPath && typeof fieldPath === 'string') ? fieldPath.split('.').pop() || fieldPath : fieldPath;
         issues.push({
           severity: 'error',
           code: 'required-field-missing',
           details: `Required field '${fieldPath}' is missing or empty`,
-          location: fieldPath.split('.'),
+          location: (fieldPath && typeof fieldPath === 'string') ? fieldPath.split('.') : [fieldPath],
           humanReadable: `The field "${fieldName}" is required but was not provided or is empty.`,
           suggestion: `Add a value for the "${fieldName}" field. Check the FHIR specification for valid values.`,
           category: 'structure'
@@ -673,7 +675,7 @@ export class ValidationEngine {
             severity: rule.severity,
             code: rule.code || `custom-rule-${rule.type}`,
             details: rule.message,
-            location: rule.path.split('.'),
+            location: (rule.path && typeof rule.path === 'string') ? rule.path.split('.') : [rule.path],
             humanReadable: rule.message,
             category: 'business-rule'
           });
@@ -683,7 +685,7 @@ export class ValidationEngine {
           severity: 'error',
           code: 'custom-rule-error',
           details: `Custom rule evaluation failed: ${error.message}`,
-          location: rule.path.split('.'),
+          location: (rule.path && typeof rule.path === 'string') ? rule.path.split('.') : [rule.path],
           humanReadable: 'A business rule validation failed.',
           category: 'business-rule'
         });
@@ -763,9 +765,17 @@ export class ValidationEngine {
     
     try {
       const profile = this.profileCache.get(profileUrl);
-      return profile?.name || profile?.title || profileUrl.split('/').pop();
+      if (profile?.name) return profile.name;
+      if (profile?.title) return profile.title;
+      if (profileUrl && typeof profileUrl === 'string') {
+        return profileUrl.split('/').pop() || 'Unknown Profile';
+      }
+      return 'Unknown Profile';
     } catch {
-      return profileUrl.split('/').pop();
+      if (profileUrl && typeof profileUrl === 'string') {
+        return profileUrl.split('/').pop() || 'Unknown Profile';
+      }
+      return 'Unknown Profile';
     }
   }
 
@@ -793,7 +803,7 @@ export class ValidationEngine {
   }
 
   private getSuggestion(code?: string, path?: string): string {
-    const fieldName = path?.split('.').pop() || 'field';
+    const fieldName = (path && typeof path === 'string') ? path.split('.').pop() || 'field' : 'field';
     
     switch (code) {
       case 'required-field-missing':
@@ -890,6 +900,7 @@ export class ValidationEngine {
   private async fetchProfileFromFhirServer(profileUrl: string): Promise<any> {
     try {
       // Extract the profile ID from the URL
+      if (!profileUrl || typeof profileUrl !== 'string') return null;
       const profileId = profileUrl.split('/').pop();
       if (!profileId) return null;
 
@@ -932,6 +943,7 @@ export class ValidationEngine {
       if (!this.simplifierClient) return null;
 
       // Try to get package details if the URL contains package information
+      if (!profileUrl || typeof profileUrl !== 'string') return null;
       const urlParts = profileUrl.split('/');
       const packageId = this.extractPackageIdFromProfileUrl(profileUrl);
       
@@ -959,6 +971,7 @@ export class ValidationEngine {
       // http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient -> hl7.fhir.us.core
       // http://hl7.org/fhir/uv/ips/StructureDefinition/ips-patient -> hl7.fhir.uv.ips
       
+      if (!profileUrl || typeof profileUrl !== 'string') return null;
       const url = new URL(profileUrl);
       const pathParts = url.pathname.split('/').filter(p => p);
       

@@ -1023,6 +1023,7 @@ export class EnhancedValidationEngine extends EventEmitter {
    */
   private extractProfileIdentifier(profileUrl: string): string {
     // Extract the last part of the URL as the profile identifier
+    if (!profileUrl || typeof profileUrl !== 'string') return 'unknown';
     const parts = profileUrl.split('/');
     return parts[parts.length - 1] || 'unknown';
   }
@@ -1078,7 +1079,12 @@ export class EnhancedValidationEngine extends EventEmitter {
    * Extract base resource type from profile
    */
   private extractBaseResourceType(profile: any): string | null {
-    return profile.type || profile.baseDefinition?.split('/').pop() || null;
+    if (!profile) return null;
+    if (profile.type) return profile.type;
+    if (profile.baseDefinition && typeof profile.baseDefinition === 'string') {
+      return profile.baseDefinition.split('/').pop() || null;
+    }
+    return null;
   }
 
   /**
@@ -1105,6 +1111,7 @@ export class EnhancedValidationEngine extends EventEmitter {
    * Check if resource has a specific element path
    */
   private resourceHasElement(resource: any, elementPath: string): boolean {
+    if (!elementPath || typeof elementPath !== 'string') return false;
     const pathParts = elementPath.split('.');
     let current = resource;
     
@@ -1765,6 +1772,7 @@ export class EnhancedValidationEngine extends EventEmitter {
    */
   private async validateInternalReferenceExistence(reference: string, path: string, issues: ValidationIssue[]): Promise<void> {
     try {
+      if (!reference || typeof reference !== 'string') return;
       const [resourceType, resourceId] = reference.split('/');
       
       // Check if resource exists in our database
