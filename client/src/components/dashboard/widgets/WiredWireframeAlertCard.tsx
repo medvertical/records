@@ -1,5 +1,5 @@
 import React from 'react';
-import { WireframeAlertCard } from './WireframeAlertCard';
+import { AlertCard } from './AlertCard';
 import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
 
 interface WiredWireframeAlertCardProps {
@@ -15,7 +15,7 @@ export const WiredWireframeAlertCard: React.FC<WiredWireframeAlertCardProps> = (
   const { alerts, isLoading, hasErrors, refreshAlerts } = useDashboardDataWiring();
 
   return (
-    <WireframeAlertCard
+    <AlertCard
       alerts={alerts}
       isLoading={isLoading}
       error={hasErrors ? 'Failed to load alerts' : null}

@@ -1,124 +1,157 @@
 import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { 
-  Settings, 
-  CheckCircle, 
-  AlertTriangle, 
-  XCircle,
-  ChevronRight
-} from 'lucide-react';
-import { ValidationAspects } from '@/shared/types/dashboard-new';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Shield, Settings } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
-/**
- * ValidationAspectsPanel Component - Single responsibility: Validation configuration interface
- * Follows global rules: Under 300 lines, single responsibility, uses existing UI components
- */
 interface ValidationAspectsPanelProps {
-  aspects?: ValidationAspects;
-  loading?: boolean;
-  error?: string | null;
-  onAspectToggle?: (aspectId: string, enabled: boolean) => void;
-  onConfigure?: () => void;
-  onRefresh?: () => void;
   className?: string;
 }
 
+/**
+ * Validation Aspects Panel - Displays and manages validation aspect settings
+ */
 export const ValidationAspectsPanel: React.FC<ValidationAspectsPanelProps> = ({
-  aspects,
-  loading = false,
-  error = null,
-  onAspectToggle,
-  onConfigure,
-  onRefresh,
-  className = '',
+  className,
 }) => {
-  // Default aspects if none provided
-  const defaultAspects: ValidationAspects = {
-    structural: { enabled: true, status: 'success' },
-    profile: { enabled: true, status: 'success' },
-    terminology: { enabled: true, status: 'warning' },
-    reference: { enabled: true, status: 'success' },
-    businessRules: { enabled: false, status: 'error' },
-    metadata: { enabled: true, status: 'success' },
-  };
+  // Fetch validation settings to get the current aspects
+  const { data: settingsData, isLoading, error } = useQuery({
+    queryKey: ['validation-settings'],
+    queryFn: async () => {
+      const response = await fetch('/api/validation/settings');
+      const data = await response.json();
+      return data.settings;
+    },
+    refetchInterval: 5000 // Refresh every 5 seconds
+  });
 
-  const currentAspects = aspects || defaultAspects;
+  // Transform settings data to aspects format
+  const aspects = settingsData ? [
+    {
+      id: 'structural',
+      name: 'Structural',
+      enabled: settingsData.structural?.enabled ?? true,
+      severity: settingsData.structural?.severity ?? 'error',
+      description: 'Validates JSON structure and FHIR resource format'
+    },
+    {
+      id: 'profile',
+      name: 'Profile',
+      enabled: settingsData.profile?.enabled ?? true,
+      severity: settingsData.profile?.severity ?? 'warning',
+      description: 'Validates against FHIR profiles and constraints'
+    },
+    {
+      id: 'terminology',
+      name: 'Terminology',
+      enabled: settingsData.terminology?.enabled ?? true,
+      severity: settingsData.terminology?.severity ?? 'warning',
+      description: 'Validates codes against terminology servers'
+    },
+    {
+      id: 'reference',
+      name: 'Reference',
+      enabled: settingsData.reference?.enabled ?? true,
+      severity: settingsData.reference?.severity ?? 'error',
+      description: 'Validates resource references and integrity'
+    },
+    {
+      id: 'businessRule',
+      name: 'Business Rules',
+      enabled: settingsData.businessRule?.enabled ?? true,
+      severity: settingsData.businessRule?.severity ?? 'warning',
+      description: 'Validates custom business rules and constraints'
+    },
+    {
+      id: 'metadata',
+      name: 'Metadata',
+      enabled: settingsData.metadata?.enabled ?? true,
+      severity: settingsData.metadata?.severity ?? 'info',
+      description: 'Validates metadata and version information'
+    }
+  ] : [];
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'success':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case 'warning':
-        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-      case 'error':
-        return <XCircle className="h-4 w-4 text-red-500" />;
-      default:
-        return <CheckCircle className="h-4 w-4 text-gray-500" />;
+  const handleAspectToggle = async (aspectId: string, enabled: boolean) => {
+    try {
+      const response = await fetch('/api/validation/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          [aspectId]: { enabled }
+        }),
+      });
+      
+      if (response.ok) {
+        // The query will automatically refetch due to the refetchInterval
+        console.log(`Aspect ${aspectId} ${enabled ? 'enabled' : 'disabled'}`);
+      }
+    } catch (error) {
+      console.error('Failed to update aspect setting:', error);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'success':
-        return 'bg-green-500';
-      case 'warning':
-        return 'bg-yellow-500';
-      case 'error':
-        return 'bg-red-500';
-      default:
-        return 'bg-gray-500';
+  const handleSeverityChange = async (aspectId: string, severity: string) => {
+    try {
+      const response = await fetch('/api/validation/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          [aspectId]: { severity }
+        }),
+      });
+      
+      if (response.ok) {
+        // The query will automatically refetch due to the refetchInterval
+        console.log(`Aspect ${aspectId} severity changed to ${severity}`);
+      }
+    } catch (error) {
+      console.error('Failed to update aspect severity:', error);
     }
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'success':
-        return 'Enabled';
-      case 'warning':
-        return 'Warning Mode';
-      case 'error':
-        return 'Disabled';
-      default:
-        return 'Unknown';
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'error': return 'destructive';
+      case 'warning': return 'secondary';
+      case 'info': return 'outline';
+      default: return 'outline';
     }
   };
 
-  const getAspectDescription = (aspectId: string) => {
-    const descriptions: Record<string, string> = {
-      structural: 'JSON schema validation',
-      profile: 'Conformance validation',
-      terminology: 'Code system validation',
-      reference: 'Resource reference checking',
-      businessRules: 'Custom rule validation',
-      metadata: 'Version & timestamp validation',
-    };
-    return descriptions[aspectId] || 'Validation aspect';
-  };
-
-  const handleAspectToggle = (aspectId: string, enabled: boolean) => {
-    onAspectToggle?.(aspectId, enabled);
-  };
+  if (isLoading) {
+    return (
+      <Card className={className}>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <Shield className="h-5 w-5 mr-2" />
+            Validation Aspects
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-sm text-muted-foreground">Loading aspects...</div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (error) {
     return (
-      <Card className={`border-red-200 ${className}`}>
+      <Card className={className}>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-red-700">
-            <Settings className="h-5 w-5" />
+          <CardTitle className="flex items-center">
+            <Shield className="h-5 w-5 mr-2" />
             Validation Aspects
           </CardTitle>
-          <CardDescription>Error loading validation aspects</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-8">
-            <p className="text-red-600 mb-4">{error}</p>
-            <Button onClick={onRefresh} variant="outline">
-              Try Again
-            </Button>
-          </div>
+          <div className="text-sm text-destructive">Failed to load validation aspects</div>
         </CardContent>
       </Card>
     );
@@ -127,76 +160,52 @@ export const ValidationAspectsPanel: React.FC<ValidationAspectsPanelProps> = ({
   return (
     <Card className={className}>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            <CardTitle>Validation Aspects</CardTitle>
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center">
+            <Shield className="h-5 w-5 mr-2" />
+            Validation Aspects
           </div>
-          <Button
-            onClick={onConfigure}
-            variant="ghost"
-            size="sm"
-            className="flex items-center gap-2"
-          >
+          <Button variant="ghost" size="sm">
             <Settings className="h-4 w-4" />
           </Button>
-        </div>
-        <CardDescription>
-          Configure validation aspects and rules
-        </CardDescription>
+        </CardTitle>
       </CardHeader>
-      
       <CardContent className="space-y-4">
-        {Object.entries(currentAspects).map(([aspectId, aspect]) => (
-          <div key={aspectId} className="flex items-center justify-between p-3 rounded-lg border">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${getStatusColor(aspect.status)}`} />
-                {getStatusIcon(aspect.status)}
+        {aspects.map((aspect) => (
+          <div key={aspect.id} className="flex items-center justify-between p-3 border rounded-lg">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-medium">{aspect.name}</span>
+                <Badge variant={getSeverityColor(aspect.severity)}>
+                  {aspect.severity}
+                </Badge>
               </div>
-              <div>
-                <div className="font-medium capitalize">
-                  {aspectId.replace(/([A-Z])/g, ' $1').trim()}
-                </div>
-                <div 
-                  id={`${aspectId}-description`}
-                  className="text-xs text-muted-foreground"
-                >
-                  {getAspectDescription(aspectId)}
-                </div>
-              </div>
+              <p className="text-sm text-muted-foreground">{aspect.description}</p>
             </div>
             
             <div className="flex items-center gap-3">
-              <Badge variant={aspect.enabled ? 'default' : 'secondary'}>
-                {getStatusText(aspect.status)}
-              </Badge>
+              <Select
+                value={aspect.severity}
+                onValueChange={(value) => handleSeverityChange(aspect.id, value)}
+              >
+                <SelectTrigger className="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="error">Error</SelectItem>
+                  <SelectItem value="warning">Warning</SelectItem>
+                  <SelectItem value="info">Info</SelectItem>
+                </SelectContent>
+              </Select>
+              
               <Switch
                 checked={aspect.enabled}
-                onCheckedChange={(enabled) => handleAspectToggle(aspectId, enabled)}
-                disabled={loading}
-                aria-label={`Toggle ${aspectId} validation aspect`}
-                aria-describedby={`${aspectId}-description`}
+                onCheckedChange={(checked) => handleAspectToggle(aspect.id, checked)}
               />
             </div>
           </div>
         ))}
-
-        {/* Configure Button */}
-        <div className="pt-4 border-t">
-          <Button
-            onClick={onConfigure}
-            variant="outline"
-            className="w-full flex items-center justify-center gap-2"
-          >
-            <Settings className="h-4 w-4" />
-            Configure Aspects
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
       </CardContent>
     </Card>
   );
 };
-
-export default ValidationAspectsPanel;

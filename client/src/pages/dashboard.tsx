@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { ModernDashboardLayout } from '@/components/dashboard/layout/ModernDashboardLayout';
+import { DashboardErrorBoundary } from '@/components/dashboard/shared/ErrorBoundary';
 
 /**
  * Modern Dashboard Component - Single responsibility: Main dashboard page with modern design
@@ -13,7 +14,9 @@ import { ModernDashboardLayout } from '@/components/dashboard/layout/ModernDashb
 export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
-      <ModernDashboardLayout />
+      <DashboardErrorBoundary context="Dashboard">
+        <ModernDashboardLayout />
+      </DashboardErrorBoundary>
     </div>
   );
 }

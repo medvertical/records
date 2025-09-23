@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { logger } from './logger.js';
 import type { ValidationSettings } from '@shared/validation-settings';
-import type { ValidationResult, ValidationSummary, ValidationPerformance } from '../services/validation/rock-solid-validation-engine.js';
+import type { ValidationResult } from '../services/validation/core/validation-engine.js';
 
 /**
  * Utility functions for validation result caching and persistence

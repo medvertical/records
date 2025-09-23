@@ -11,14 +11,21 @@ vi.mock('./server/services/fhir/fhir-client', () => ({
   }))
 }))
 
-vi.mock('./server/services/validation/validation-engine', () => ({
-  ValidationEngine: vi.fn().mockImplementation(() => ({
+vi.mock('./server/services/validation', () => ({
+  ConsolidatedValidationService: vi.fn().mockImplementation(() => ({
     startValidation: vi.fn(),
     stopValidation: vi.fn(),
     pauseValidation: vi.fn(),
     resumeValidation: vi.fn(),
     getStatus: vi.fn()
-  }))
+  })),
+  getConsolidatedValidationService: vi.fn().mockReturnValue({
+    startValidation: vi.fn(),
+    stopValidation: vi.fn(),
+    pauseValidation: vi.fn(),
+    resumeValidation: vi.fn(),
+    getStatus: vi.fn()
+  })
 }))
 
 vi.mock('./server/services/dashboard/dashboard-service', () => ({
@@ -72,7 +79,7 @@ vi.mock('./server/static', () => ({
 }))
 
 // Import the server after mocking
-import { app } from './server'
+import { app } from './server.ts'
 
 describe('Server', () => {
   let server: any
@@ -243,9 +250,9 @@ describe('Server', () => {
         }
       }
 
-      const { ValidationEngine } = await import('./server/services/validation/validation-engine')
-      const mockValidationEngine = new ValidationEngine()
-      vi.mocked(mockValidationEngine.startValidation).mockResolvedValue(mockResult)
+      const { getConsolidatedValidationService } = await import('./server/services/validation')
+      const mockValidationService = getConsolidatedValidationService()
+      vi.mocked(mockValidationService.startValidation).mockResolvedValue(mockResult)
 
       const response = await request(server)
         .post('/api/validation/start')
@@ -265,9 +272,9 @@ describe('Server', () => {
         }
       }
 
-      const { ValidationEngine } = await import('./server/services/validation/validation-engine')
-      const mockValidationEngine = new ValidationEngine()
-      vi.mocked(mockValidationEngine.stopValidation).mockResolvedValue(mockResult)
+      const { getConsolidatedValidationService } = await import('./server/services/validation')
+      const mockValidationService = getConsolidatedValidationService()
+      vi.mocked(mockValidationService.stopValidation).mockResolvedValue(mockResult)
 
       const response = await request(server)
         .post('/api/validation/stop')
@@ -287,9 +294,9 @@ describe('Server', () => {
         }
       }
 
-      const { ValidationEngine } = await import('./server/services/validation/validation-engine')
-      const mockValidationEngine = new ValidationEngine()
-      vi.mocked(mockValidationEngine.pauseValidation).mockResolvedValue(mockResult)
+      const { getConsolidatedValidationService } = await import('./server/services/validation')
+      const mockValidationService = getConsolidatedValidationService()
+      vi.mocked(mockValidationService.pauseValidation).mockResolvedValue(mockResult)
 
       const response = await request(server)
         .post('/api/validation/pause')
@@ -309,9 +316,9 @@ describe('Server', () => {
         }
       }
 
-      const { ValidationEngine } = await import('./server/services/validation/validation-engine')
-      const mockValidationEngine = new ValidationEngine()
-      vi.mocked(mockValidationEngine.resumeValidation).mockResolvedValue(mockResult)
+      const { getConsolidatedValidationService } = await import('./server/services/validation')
+      const mockValidationService = getConsolidatedValidationService()
+      vi.mocked(mockValidationService.resumeValidation).mockResolvedValue(mockResult)
 
       const response = await request(server)
         .post('/api/validation/resume')
@@ -333,9 +340,9 @@ describe('Server', () => {
         errors: []
       }
 
-      const { ValidationEngine } = await import('./server/services/validation/validation-engine')
-      const mockValidationEngine = new ValidationEngine()
-      vi.mocked(mockValidationEngine.getStatus).mockReturnValue(mockStatus)
+      const { getConsolidatedValidationService } = await import('./server/services/validation')
+      const mockValidationService = getConsolidatedValidationService()
+      vi.mocked(mockValidationService.getStatus).mockReturnValue(mockStatus)
 
       const response = await request(server)
         .get('/api/validation/status')
@@ -357,9 +364,9 @@ describe('Server', () => {
         errors: []
       }
 
-      const { ValidationEngine } = await import('./server/services/validation/validation-engine')
-      const mockValidationEngine = new ValidationEngine()
-      vi.mocked(mockValidationEngine.getStatus).mockReturnValue(mockProgress)
+      const { getConsolidatedValidationService } = await import('./server/services/validation')
+      const mockValidationService = getConsolidatedValidationService()
+      vi.mocked(mockValidationService.getStatus).mockReturnValue(mockProgress)
 
       const response = await request(server)
         .get('/api/validation/progress')

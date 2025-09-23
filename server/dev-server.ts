@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import { registerRoutes } from "./routes/index.js";
 
 const app = express();
 app.use(express.json());
@@ -37,7 +37,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  const server = await registerRoutes(app);
+  await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -57,11 +57,7 @@ app.use((req, res, next) => {
 
   // Default backend API to 3000 so Vite proxy and docs stay in sync
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
+  app.listen(port, "0.0.0.0", () => {
     console.log(`Development server serving on port ${port} (Replit-compatible)`);
   });
 })();

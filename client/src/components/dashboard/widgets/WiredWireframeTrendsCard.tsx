@@ -1,5 +1,5 @@
 import React from 'react';
-import { WireframeTrendsCard } from './WireframeTrendsCard';
+import { TrendsCard } from './TrendsCard';
 import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
 
 interface WiredWireframeTrendsCardProps {
@@ -30,7 +30,7 @@ export const WiredWireframeTrendsCard: React.FC<WiredWireframeTrendsCardProps> =
   const trendDirection = trendChange > 0.5 ? 'up' : trendChange < -0.5 ? 'down' : 'stable';
 
   return (
-    <WireframeTrendsCard
+    <TrendsCard
       currentSuccessRate={currentSuccessRate}
       previousSuccessRate={previousSuccessRate}
       trendDirection={trendDirection}

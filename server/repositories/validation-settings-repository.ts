@@ -144,6 +144,20 @@ export class ValidationSettingsRepository {
   };
 
   /**
+   * Initialize the repository
+   */
+  async initialize(): Promise<void> {
+    try {
+      // Test database connection by running a simple query
+      await db.select().from(validationSettings).limit(1);
+      console.log('[ValidationSettingsRepository] Repository initialized successfully');
+    } catch (error) {
+      console.error('[ValidationSettingsRepository] Failed to initialize repository:', error);
+      throw new Error(`Repository initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Execute operation with retry logic
    */
   private async executeWithRetry<T>(
@@ -224,6 +238,37 @@ export class ValidationSettingsRepository {
   private sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
+  /**
+   * Update active validation settings
+   */
+  async updateActive(settings: ValidationSettings, updatedBy?: string): Promise<ValidationSettingsRecord> {
+    return await this.executeWithRetry(async () => {
+      // Get current active settings
+      const activeRecord = await this.getActive();
+      if (!activeRecord) {
+        // Create new active settings if none exist
+        return await this.create({ settings, isActive: true, createdBy: updatedBy });
+      }
+
+      // Update the active settings
+      const result = await db
+        .update(validationSettings)
+        .set({
+          settings: settings as any,
+          updatedAt: new Date(),
+          updatedBy: updatedBy
+        })
+        .where(eq(validationSettings.id, activeRecord.id))
+        .returning();
+
+      if (!result[0]) {
+        throw new Error('Failed to update active validation settings');
+      }
+
+      return this.mapToRecord(result[0]);
+    }, 'updateActive');
+  }
+
   /**
    * Create new validation settings
    */

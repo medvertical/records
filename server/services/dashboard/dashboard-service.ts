@@ -31,6 +31,12 @@ export class DashboardService {
   };
 
   constructor(fhirClient: FhirClient, storage: DatabaseStorage) {
+    if (!fhirClient) {
+      throw new Error('FhirClient is required for DashboardService');
+    }
+    if (!storage) {
+      throw new Error('DatabaseStorage is required for DashboardService');
+    }
     this.fhirClient = fhirClient;
     this.storage = storage;
   }
@@ -49,6 +55,9 @@ export class DashboardService {
       console.log('[DashboardService] Fetching FHIR server statistics...');
       
       // Test connection and get server info
+      if (!this.fhirClient) {
+        throw new Error('FHIR client not available');
+      }
       const connectionTest = await this.fhirClient.testConnection();
       
       // Get resource counts from FHIR server with timeout
@@ -133,6 +142,9 @@ export class DashboardService {
       console.log('[DashboardService] Fetching validation statistics...');
       
       // Get validation stats from database with settings filter
+      if (!this.storage) {
+        throw new Error('Storage not available');
+      }
       const dbStats = await this.storage.getResourceStatsWithSettings();
       
       // Get FHIR server total for progress calculation (avoid recursion)

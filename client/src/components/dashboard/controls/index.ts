@@ -1,18 +1,10 @@
 // Dashboard Control Components - Single responsibility: Export control components
 // Follows global rules: Simple exports, no custom logic, single responsibility
 
-// Base control components
-export { default as ValidationControlPanel } from './ValidationControlPanel';
-export { 
-  default as ProgressBar, 
-  CompactProgressBar, 
-  ValidationProgressBar 
-} from './ProgressBar';
-export { default as ValidationAspectsPanel } from './ValidationAspectsPanel';
+// Clean control components (renamed from WiredWireframe for better naming)
+export { ValidationControlPanel } from './ValidationControlPanel';
+export { ValidationAspectsPanel } from './ValidationAspectsPanel';
 
-// Wired control components (connected to real APIs)
-export { default as WiredValidationControlPanel } from './WiredValidationControlPanel';
-export { default as WiredValidationAspectsPanel } from './WiredValidationAspectsPanel';
-
-// Modern wired control components (new design)
-export { default as WiredModernValidationAspectsPanel } from './WiredModernValidationAspectsPanel';
+// Legacy exports for backward compatibility (deprecated)
+export { WiredWireframeValidationControlPanel } from './WiredWireframeValidationControlPanel';
+export { WiredWireframeValidationAspectsPanel } from './WiredWireframeValidationAspectsPanel';

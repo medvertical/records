@@ -1,5 +1,5 @@
 import React from 'react';
-import { WireframeStatusCard } from './WireframeStatusCard';
+import { StatusCard } from './StatusCard';
 import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
 
 interface WiredWireframeStatusCardProps {
@@ -20,7 +20,7 @@ export const WiredWireframeStatusCard: React.FC<WiredWireframeStatusCardProps> =
   } = useDashboardDataWiring();
 
   return (
-    <WireframeStatusCard
+    <StatusCard
       status={validationStatus?.status}
       progress={validationStatus?.progress}
       currentResourceType={validationStatus?.currentResourceType}

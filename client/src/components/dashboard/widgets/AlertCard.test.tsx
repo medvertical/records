@@ -1,275 +1,171 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { AlertCard } from './AlertCard';
-import { Alert, AlertSummary } from '@/shared/types/dashboard-new';
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
+import { AlertCard } from './AlertCard'
 
-// Mock the Widget component
-jest.mock('../shared/Widget', () => ({
-  Widget: ({ children, title, subtitle, loading, error, onRefresh }: any) => (
-    <div data-testid="widget" data-title={title} data-subtitle={subtitle} data-loading={loading} data-error={error}>
-      <button onClick={onRefresh} data-testid="refresh-button">Refresh</button>
-      {children}
+// Mock the dashboard data wiring hook
+const mockUseDashboardDataWiring = vi.fn()
+vi.mock('@/hooks/use-dashboard-data-wiring', () => ({
+  useDashboardDataWiring: () => mockUseDashboardDataWiring()
+}))
+
+// Mock lucide-react icons
+vi.mock('lucide-react', () => ({
+  Bell: () => <div data-testid="bell-icon" />,
+  AlertTriangle: () => <div data-testid="alert-triangle-icon" />,
+  Settings: () => <div data-testid="settings-icon" />
+}))
+
+// Mock the base dashboard card components
+vi.mock('./BaseDashboardCard', () => ({
+  BaseDashboardCard: ({ children, title, icon: Icon, className }: any) => (
+    <div data-testid="base-dashboard-card" className={className}>
+      <div data-testid="card-header">
+        <span>{title}</span>
+        <Icon />
+      </div>
+      <div data-testid="card-content">{children}</div>
     </div>
   ),
-  WidgetHeader: ({ children }: any) => <div data-testid="widget-header">{children}</div>,
-  WidgetContent: ({ children }: any) => <div data-testid="widget-content">{children}</div>,
-}));
-
-// Mock the Badge component
-jest.mock('@/components/ui/badge', () => ({
-  Badge: ({ children, variant }: any) => (
-    <span data-testid="badge" data-variant={variant}>{children}</span>
+  LoadingCard: ({ title, icon: Icon, className }: any) => (
+    <div data-testid="loading-card" className={className}>
+      <div data-testid="card-header">
+        <span>{title}</span>
+        <Icon />
+      </div>
+      <div>Loading...</div>
+    </div>
   ),
-}));
-
-// Mock the Button component
-jest.mock('@/components/ui/button', () => ({
-  Button: ({ children, onClick, disabled }: any) => (
-    <button onClick={onClick} disabled={disabled} data-testid="button">
-      {children}
-    </button>
-  ),
-}));
+  ErrorCard: ({ title, icon: Icon, error, className }: any) => (
+    <div data-testid="error-card" className={className}>
+      <div data-testid="card-header">
+        <span>{title}</span>
+        <Icon />
+      </div>
+      <div className="text-destructive">{error}</div>
+    </div>
+  )
+}))
 
 describe('AlertCard', () => {
-  const mockAlerts: Alert[] = [
-    {
-      id: '1',
-      type: 'critical',
-      title: 'Critical Error',
-      message: 'This is a critical error',
-      timestamp: new Date('2023-01-01'),
-      resolved: false,
-    },
-    {
-      id: '2',
-      type: 'warning',
-      title: 'Warning',
-      message: 'This is a warning',
-      timestamp: new Date('2023-01-02'),
-      resolved: false,
-    },
-    {
-      id: '3',
-      type: 'info',
-      title: 'Info',
-      message: 'This is an info message',
-      timestamp: new Date('2023-01-03'),
-      resolved: true,
-    },
-  ];
-
-  const mockSummary: AlertSummary = {
-    critical: 1,
-    warnings: 1,
-    info: 1,
-    total: 3,
-  };
-
-  const defaultProps = {
-    alerts: mockAlerts,
-    summary: mockSummary,
-    loading: false,
-    error: null,
-    onRefresh: jest.fn(),
-  };
-
   beforeEach(() => {
-    jest.clearAllMocks();
-  });
+    vi.clearAllMocks()
+  })
 
-  describe('Rendering', () => {
-    it('renders with correct title and subtitle', () => {
-      render(<AlertCard {...defaultProps} />);
-      
-      expect(screen.getByTestId('widget')).toHaveAttribute('data-title', 'Alerts');
-      expect(screen.getByTestId('widget')).toHaveAttribute('data-subtitle', '3 active alerts');
-    });
+  it('should render loading state', () => {
+    mockUseDashboardDataWiring.mockReturnValue({
+      alerts: undefined,
+      isLoading: true,
+      hasErrors: false,
+      refreshAlerts: vi.fn()
+    })
 
-    it('renders with no active alerts subtitle when summary is empty', () => {
-      const emptySummary: AlertSummary = {
-        critical: 0,
-        warnings: 0,
-        info: 0,
-        total: 0,
-      };
+    render(<AlertCard />)
 
-      render(<AlertCard {...defaultProps} summary={emptySummary} />);
-      
-      expect(screen.getByTestId('widget')).toHaveAttribute('data-subtitle', 'No active alerts');
-    });
+    expect(screen.getByTestId('loading-card')).toBeInTheDocument()
+    expect(screen.getByText('Alerts')).toBeInTheDocument()
+    expect(screen.getByTestId('bell-icon')).toBeInTheDocument()
+  })
 
-    it('renders loading state', () => {
-      render(<AlertCard {...defaultProps} loading={true} />);
-      
-      expect(screen.getByTestId('widget')).toHaveAttribute('data-loading', 'true');
-    });
+  it('should render error state', () => {
+    mockUseDashboardDataWiring.mockReturnValue({
+      alerts: undefined,
+      isLoading: false,
+      hasErrors: true,
+      refreshAlerts: vi.fn()
+    })
 
-    it('renders error state', () => {
-      render(<AlertCard {...defaultProps} error="Test error" />);
-      
-      expect(screen.getByTestId('widget')).toHaveAttribute('data-error', 'Test error');
-    });
-  });
+    render(<AlertCard />)
 
-  describe('Alert Summary Display', () => {
-    it('displays alert counts correctly', () => {
-      render(<AlertCard {...defaultProps} />);
-      
-      expect(screen.getByText('1')).toBeInTheDocument(); // Critical count
-      expect(screen.getByText('1')).toBeInTheDocument(); // Warning count
-      expect(screen.getByText('1')).toBeInTheDocument(); // Info count
-    });
+    expect(screen.getByTestId('error-card')).toBeInTheDocument()
+    expect(screen.getByText('Alerts')).toBeInTheDocument()
+    expect(screen.getByTestId('alert-triangle-icon')).toBeInTheDocument()
+    expect(screen.getByText('Failed to load alerts')).toBeInTheDocument()
+  })
 
-    it('displays critical alerts badge with correct variant', () => {
-      render(<AlertCard {...defaultProps} />);
-      
-      const criticalBadge = screen.getAllByTestId('badge').find(badge => 
-        badge.getAttribute('data-variant') === 'destructive'
-      );
-      expect(criticalBadge).toBeInTheDocument();
-      expect(criticalBadge).toHaveTextContent('1');
-    });
+  it('should render alerts data', () => {
+    const mockAlerts = [
+      { id: '1', severity: 'error', message: 'Critical error', timestamp: new Date() },
+      { id: '2', severity: 'warning', message: 'Warning message', timestamp: new Date() },
+      { id: '3', severity: 'info', message: 'Info message', timestamp: new Date() }
+    ]
 
-    it('displays warning alerts badge with correct variant', () => {
-      render(<AlertCard {...defaultProps} />);
-      
-      const warningBadge = screen.getAllByTestId('badge').find(badge => 
-        badge.getAttribute('data-variant') === 'default'
-      );
-      expect(warningBadge).toBeInTheDocument();
-      expect(warningBadge).toHaveTextContent('1');
-    });
+    mockUseDashboardDataWiring.mockReturnValue({
+      alerts: mockAlerts,
+      isLoading: false,
+      hasErrors: false,
+      refreshAlerts: vi.fn()
+    })
 
-    it('displays info alerts badge with correct variant', () => {
-      render(<AlertCard {...defaultProps} />);
-      
-      const infoBadge = screen.getAllByTestId('badge').find(badge => 
-        badge.getAttribute('data-variant') === 'secondary'
-      );
-      expect(infoBadge).toBeInTheDocument();
-      expect(infoBadge).toHaveTextContent('1');
-    });
-  });
+    render(<AlertCard />)
 
-  describe('Alert List', () => {
-    it('displays all alerts when not collapsed', () => {
-      render(<AlertCard {...defaultProps} />);
-      
-      expect(screen.getByText('Critical Error')).toBeInTheDocument();
-      expect(screen.getByText('Warning')).toBeInTheDocument();
-      expect(screen.getByText('Info')).toBeInTheDocument();
-    });
+    expect(screen.getByTestId('base-dashboard-card')).toBeInTheDocument()
+    expect(screen.getByText('Alerts')).toBeInTheDocument()
+    expect(screen.getByTestId('bell-icon')).toBeInTheDocument()
+    expect(screen.getByText('3')).toBeInTheDocument() // Total alerts
+    expect(screen.getByText('1 critical')).toBeInTheDocument() // Critical alerts
+  })
 
-    it('displays alert messages', () => {
-      render(<AlertCard {...defaultProps} />);
-      
-      expect(screen.getByText('This is a critical error')).toBeInTheDocument();
-      expect(screen.getByText('This is a warning')).toBeInTheDocument();
-      expect(screen.getByText('This is an info message')).toBeInTheDocument();
-    });
+  it('should render no alerts message', () => {
+    mockUseDashboardDataWiring.mockReturnValue({
+      alerts: [],
+      isLoading: false,
+      hasErrors: false,
+      refreshAlerts: vi.fn()
+    })
 
-    it('displays timestamps in relative format', () => {
-      render(<AlertCard {...defaultProps} />);
-      
-      // The exact text will depend on the date-fns implementation
-      // We just check that some time-related text is present
-      const timeElements = screen.getAllByText(/ago|minute|hour|day/);
-      expect(timeElements.length).toBeGreaterThan(0);
-    });
+    render(<AlertCard />)
 
-    it('shows resolved status for resolved alerts', () => {
-      render(<AlertCard {...defaultProps} />);
-      
-      // Check that resolved alerts are marked appropriately
-      expect(screen.getByText('Info')).toBeInTheDocument();
-    });
-  });
+    expect(screen.getByTestId('base-dashboard-card')).toBeInTheDocument()
+    expect(screen.getByText('0')).toBeInTheDocument() // Total alerts
+    expect(screen.getByText('No active alerts')).toBeInTheDocument()
+  })
 
-  describe('Interactions', () => {
-    it('calls onRefresh when refresh button is clicked', () => {
-      const mockOnRefresh = jest.fn();
-      render(<AlertCard {...defaultProps} onRefresh={mockOnRefresh} />);
-      
-      fireEvent.click(screen.getByTestId('refresh-button'));
-      
-      expect(mockOnRefresh).toHaveBeenCalledTimes(1);
-    });
+  it('should handle button clicks', () => {
+    const mockRefreshAlerts = vi.fn()
+    mockUseDashboardDataWiring.mockReturnValue({
+      alerts: [],
+      isLoading: false,
+      hasErrors: false,
+      refreshAlerts: mockRefreshAlerts
+    })
 
-    it('calls onAlertAction when alert action is triggered', () => {
-      const mockOnAlertAction = jest.fn();
-      const alertsWithActions = mockAlerts.map(alert => ({
-        ...alert,
-        actions: [{
-          id: 'action1',
-          label: 'Dismiss',
-          type: 'secondary' as const,
-          action: jest.fn(),
-        }],
-      }));
+    render(<AlertCard />)
 
-      render(
-        <AlertCard 
-          {...defaultProps} 
-          alerts={alertsWithActions}
-          onAlertAction={mockOnAlertAction}
-        />
-      );
-      
-      // This would depend on the actual implementation of alert actions
-      // For now, we just verify the component renders with actions
-      expect(screen.getByText('Critical Error')).toBeInTheDocument();
-    });
+    const viewAllButton = screen.getByText('View All')
+    const configureButton = screen.getByTestId('settings-icon')
 
-    it('calls onDismissAlert when alert is dismissed', () => {
-      const mockOnDismissAlert = jest.fn();
-      
-      render(
-        <AlertCard 
-          {...defaultProps} 
-          onDismissAlert={mockOnDismissAlert}
-        />
-      );
-      
-      // This would depend on the actual implementation of dismiss functionality
-      // For now, we just verify the component renders
-      expect(screen.getByText('Critical Error')).toBeInTheDocument();
-    });
-  });
+    fireEvent.click(viewAllButton)
+    fireEvent.click(configureButton)
 
-  describe('Edge Cases', () => {
-    it('handles empty alerts array', () => {
-      render(<AlertCard {...defaultProps} alerts={[]} />);
-      
-      expect(screen.getByTestId('widget')).toHaveAttribute('data-subtitle', 'No active alerts');
-    });
+    // These buttons currently just log to console, so we can't test the actual behavior
+    // In a real implementation, we would test the actual functionality
+  })
 
-    it('handles undefined alerts', () => {
-      render(<AlertCard {...defaultProps} alerts={undefined} />);
-      
-      expect(screen.getByTestId('widget')).toHaveAttribute('data-subtitle', 'No active alerts');
-    });
+  it('should apply custom className', () => {
+    mockUseDashboardDataWiring.mockReturnValue({
+      alerts: [],
+      isLoading: false,
+      hasErrors: false,
+      refreshAlerts: vi.fn()
+    })
 
-    it('handles undefined summary', () => {
-      render(<AlertCard {...defaultProps} summary={undefined} />);
-      
-      expect(screen.getByTestId('widget')).toHaveAttribute('data-subtitle', 'No active alerts');
-    });
-  });
+    render(<AlertCard className="custom-alert-class" />)
 
-  describe('Accessibility', () => {
-    it('has proper ARIA labels', () => {
-      render(<AlertCard {...defaultProps} />);
-      
-      const widget = screen.getByTestId('widget');
-      expect(widget).toHaveAttribute('aria-label', 'Alerts');
-    });
+    expect(screen.getByTestId('base-dashboard-card')).toHaveClass('custom-alert-class')
+  })
 
-    it('has proper role attributes', () => {
-      render(<AlertCard {...defaultProps} />);
-      
-      const widget = screen.getByTestId('widget');
-      expect(widget).toHaveAttribute('role', 'region');
-    });
-  });
-});
+  it('should handle undefined alerts gracefully', () => {
+    mockUseDashboardDataWiring.mockReturnValue({
+      alerts: undefined,
+      isLoading: false,
+      hasErrors: false,
+      refreshAlerts: vi.fn()
+    })
+
+    render(<AlertCard />)
+
+    expect(screen.getByTestId('base-dashboard-card')).toBeInTheDocument()
+    expect(screen.getByText('0')).toBeInTheDocument() // Should default to 0
+    expect(screen.getByText('No active alerts')).toBeInTheDocument()
+  })
+})

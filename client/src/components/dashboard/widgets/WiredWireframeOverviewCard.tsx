@@ -1,5 +1,5 @@
 import React from 'react';
-import { WireframeOverviewCard } from './WireframeOverviewCard';
+import { OverviewCard } from './OverviewCard';
 import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
 
 interface WiredWireframeOverviewCardProps {
@@ -26,7 +26,7 @@ export const WiredWireframeOverviewCard: React.FC<WiredWireframeOverviewCardProp
     : 0;
 
   return (
-    <WireframeOverviewCard
+    <OverviewCard
       totalResources={fhirServerStats?.totalResources}
       validatedResources={validationStats?.totalValidated}
       successRate={successRate}

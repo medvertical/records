@@ -1,5 +1,5 @@
 import React from 'react';
-import { WireframeResourceBreakdownCard } from './WireframeResourceBreakdownCard';
+import { ResourceBreakdownCard } from './ResourceBreakdownCard';
 import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
 import { useLocation } from 'wouter';
 
@@ -31,7 +31,7 @@ export const WiredWireframeResourceBreakdownCard: React.FC<WiredWireframeResourc
   };
 
   return (
-    <WireframeResourceBreakdownCard
+    <ResourceBreakdownCard
       resourceTypes={resourceBreakdown?.resourceTypes}
       totalResources={resourceBreakdown?.totalResources}
       onResourceTypeClick={handleResourceTypeClick}
