@@ -22,10 +22,17 @@ export const ValidationAspectsPanel: React.FC<ValidationAspectsPanelProps> = ({
     queryKey: ['validation-settings'],
     queryFn: async () => {
       const response = await fetch('/api/validation/settings');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch validation settings: ${response.statusText}`);
+      }
       const data = await response.json();
-      return data.settings;
+      // API returns settings directly, not wrapped in a 'settings' property
+      return data;
     },
-    refetchInterval: 5000 // Refresh every 5 seconds
+    refetchInterval: 10000, // Refresh every 10 seconds (reduced frequency)
+    staleTime: 5000, // Consider data stale after 5 seconds
+    retry: 3, // Retry failed requests up to 3 times
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000) // Exponential backoff
   });
 
   // Transform settings data to aspects format

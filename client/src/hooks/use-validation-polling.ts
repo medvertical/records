@@ -167,12 +167,10 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
         const progressData = await fetchValidationProgress();
         
         // Mark as connected on successful fetch
-        if (connectionState !== 'connected') {
-          setConnectionState('connected');
-          setIsConnected(true);
-          setLastConnectedAt(new Date());
-          console.log('[ValidationPolling] Connected successfully');
-        }
+        setConnectionState('connected');
+        setIsConnected(true);
+        setLastConnectedAt(new Date());
+        console.log('[ValidationPolling] Connected successfully');
         
         // Reset retry state on successful connection
         retryCountRef.current = 0;
@@ -259,7 +257,7 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
 
     // Set up initial polling
     setupSmartPolling();
-  }, [enabled, hasActiveServer, pollInterval, fetchValidationProgress]);
+  }, [enabled, hasActiveServer, pollInterval, fetchValidationProgress, validationStatus]);
 
   // Stop polling
   const stopPolling = useCallback(() => {
@@ -272,7 +270,7 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
     }
-  }, []);
+  }, []); // Empty dependency array since this function doesn't depend on any state
 
   // Reset progress state
   const resetProgress = useCallback(() => {
@@ -327,7 +325,7 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
     return () => {
       stopPolling();
     };
-  }, [enabled, hasActiveServer]); // Removed startPolling and stopPolling dependencies
+  }, [enabled, hasActiveServer]); // Removed startPolling and stopPolling dependencies to prevent infinite loops
 
   // Fetch current server on mount
   useEffect(() => {

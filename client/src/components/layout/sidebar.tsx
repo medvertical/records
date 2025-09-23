@@ -50,7 +50,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
   
   const { servers, serverStatus, activeServer, isLoading, isConnectionLoading, refreshServerData } = useServerData();
   // Use actual connection status if available, otherwise fall back to isActive
-  const isServerConnected = serverStatus ? serverStatus.connected : Boolean(activeServer?.isActive);
+  const isServerConnected = serverStatus ? serverStatus.connected : (activeServer?.isActive || false);
 
   const { data: resourceCounts } = useQuery<Record<string, number>>({
     queryKey: ["/api/fhir/resource-counts"],
@@ -180,12 +180,12 @@ function SidebarContent({
   // Debug logging to see connection status changes
   useEffect(() => {
     console.log('[Sidebar] Connection status update:', {
-      activeServer: activeServer?.name,
-      isActive: activeServer?.isActive,
-      serverStatus,
-      isServerConnected,
-      isConnectionLoading,
-      isCheckingConnection
+      activeServer: activeServer?.name || 'No active server',
+      isActive: activeServer?.isActive || false,
+      serverStatus: serverStatus || 'Not loaded yet',
+      isServerConnected: isServerConnected || false,
+      isConnectionLoading: isConnectionLoading || false,
+      isCheckingConnection: isCheckingConnection || false
     });
   }, [activeServer?.id, serverStatus, isServerConnected, isConnectionLoading, isCheckingConnection]);
 
