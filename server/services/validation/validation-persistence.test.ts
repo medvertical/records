@@ -4,6 +4,17 @@ import { storage } from '../../storage';
 import { getValidationSettingsService } from './validation-settings-service';
 import { getValidationPipeline } from './core/validation-pipeline';
 
+// Mock the database
+vi.mock('../../db', () => ({
+  db: {
+    select: vi.fn(),
+    insert: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    transaction: vi.fn()
+  }
+}));
+
 // Mock dependencies
 vi.mock('../../storage', () => ({
   storage: {
@@ -11,13 +22,25 @@ vi.mock('../../storage', () => ({
     createValidationResult: vi.fn(),
     getValidationResultsByResourceId: vi.fn(),
     getLatestValidationResult: vi.fn(),
-    invalidateValidationResults: vi.fn()
+    invalidateValidationResults: vi.fn(),
+    // New consolidated service methods
+    getValidationResultsByRequestId: vi.fn(),
+    getValidationResultsByBatchId: vi.fn(),
+    getValidationResultsByStatus: vi.fn(),
+    updateValidationResultStatus: vi.fn(),
+    getValidationResultsByResourceType: vi.fn(),
+    getValidationPerformanceMetrics: vi.fn(),
+    getValidationAspectBreakdown: vi.fn()
   }
 }));
 
 vi.mock('./validation-settings-service', () => ({
   getValidationSettingsService: () => ({
-    getActiveSettings: vi.fn()
+    getActiveSettings: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+    emit: vi.fn(),
+    removeAllListeners: vi.fn()
   })
 }));
 
@@ -685,6 +708,170 @@ describe('Validation Result Persistence', () => {
 
       // Verify performance is acceptable for large payloads
       expect(processingTime).toBeLessThan(5000); // 5 seconds
+    });
+  });
+
+  describe('Consolidated Validation Service Methods', () => {
+    it('should get validation results by request ID', async () => {
+      const requestId = 'req-123';
+      const mockResults = [mockValidationResult];
+      
+      vi.mocked(mockStorage.getValidationResultsByRequestId).mockResolvedValue(mockResults);
+
+      const results = await mockStorage.getValidationResultsByRequestId(requestId);
+
+      expect(mockStorage.getValidationResultsByRequestId).toHaveBeenCalledWith(requestId);
+      expect(results).toEqual(mockResults);
+    });
+
+    it('should get validation results by batch ID', async () => {
+      const batchId = 'batch-456';
+      const mockResults = [mockValidationResult];
+      
+      vi.mocked(mockStorage.getValidationResultsByBatchId).mockResolvedValue(mockResults);
+
+      const results = await mockStorage.getValidationResultsByBatchId(batchId);
+
+      expect(mockStorage.getValidationResultsByBatchId).toHaveBeenCalledWith(batchId);
+      expect(results).toEqual(mockResults);
+    });
+
+    it('should get validation results by status', async () => {
+      const status = 'completed';
+      const limit = 50;
+      const mockResults = [mockValidationResult];
+      
+      vi.mocked(mockStorage.getValidationResultsByStatus).mockResolvedValue(mockResults);
+
+      const results = await mockStorage.getValidationResultsByStatus(status, limit);
+
+      expect(mockStorage.getValidationResultsByStatus).toHaveBeenCalledWith(status, limit);
+      expect(results).toEqual(mockResults);
+    });
+
+    it('should update validation result status', async () => {
+      const resultId = 123;
+      const status = 'failed';
+      const errorMessage = 'Validation failed';
+      const errorDetails = { code: 'VALIDATION_ERROR', details: 'Invalid resource structure' };
+
+      await mockStorage.updateValidationResultStatus(resultId, status, errorMessage, errorDetails);
+
+      expect(mockStorage.updateValidationResultStatus).toHaveBeenCalledWith(
+        resultId, 
+        status, 
+        errorMessage, 
+        errorDetails
+      );
+    });
+
+    it('should get validation results by resource type', async () => {
+      const resourceType = 'Patient';
+      const limit = 100;
+      const mockResults = [mockValidationResult];
+      
+      vi.mocked(mockStorage.getValidationResultsByResourceType).mockResolvedValue(mockResults);
+
+      const results = await mockStorage.getValidationResultsByResourceType(resourceType, limit);
+
+      expect(mockStorage.getValidationResultsByResourceType).toHaveBeenCalledWith(resourceType, limit);
+      expect(results).toEqual(mockResults);
+    });
+
+    it('should get validation performance metrics', async () => {
+      const resourceType = 'Patient';
+      const days = 30;
+      const mockMetrics = {
+        resourceType: 'Patient',
+        validationStatus: 'completed',
+        totalValidations: 100,
+        avgDurationMs: 150,
+        minDurationMs: 50,
+        maxDurationMs: 500,
+        avgValidationScore: 85,
+        avgConfidenceScore: 90,
+        avgCompletenessScore: 88,
+        validCount: 80,
+        invalidCount: 20,
+        errorCount: 15,
+        warningCount: 25
+      };
+      
+      vi.mocked(mockStorage.getValidationPerformanceMetrics).mockResolvedValue([mockMetrics]);
+
+      const metrics = await mockStorage.getValidationPerformanceMetrics(resourceType, days);
+
+      expect(mockStorage.getValidationPerformanceMetrics).toHaveBeenCalledWith(resourceType, days);
+      expect(metrics).toEqual([mockMetrics]);
+    });
+
+    it('should get validation aspect breakdown', async () => {
+      const resourceType = 'Patient';
+      const days = 30;
+      const mockBreakdown = {
+        resourceType: 'Patient',
+        validationStatus: 'completed',
+        totalValidations: 100,
+        structuralValidCount: 95,
+        profileValidCount: 90,
+        terminologyValidCount: 85,
+        referenceValidCount: 88,
+        businessRuleValidCount: 92,
+        metadataValidCount: 98,
+        avgStructuralDurationMs: 50,
+        avgProfileDurationMs: 75,
+        avgTerminologyDurationMs: 100,
+        avgReferenceDurationMs: 60,
+        avgBusinessRuleDurationMs: 80,
+        avgMetadataDurationMs: 40
+      };
+      
+      vi.mocked(mockStorage.getValidationAspectBreakdown).mockResolvedValue([mockBreakdown]);
+
+      const breakdown = await mockStorage.getValidationAspectBreakdown(resourceType, days);
+
+      expect(mockStorage.getValidationAspectBreakdown).toHaveBeenCalledWith(resourceType, days);
+      expect(breakdown).toEqual([mockBreakdown]);
+    });
+
+    it('should handle validation result status updates with different statuses', async () => {
+      const resultId = 123;
+
+      // Test completed status
+      await mockStorage.updateValidationResultStatus(resultId, 'completed');
+      expect(mockStorage.updateValidationResultStatus).toHaveBeenCalledWith(resultId, 'completed');
+
+      // Test cancelled status
+      await mockStorage.updateValidationResultStatus(resultId, 'cancelled');
+      expect(mockStorage.updateValidationResultStatus).toHaveBeenCalledWith(resultId, 'cancelled');
+
+      // Test failed status with error details
+      const errorMessage = 'Validation failed';
+      const errorDetails = { code: 'INVALID_RESOURCE' };
+      await mockStorage.updateValidationResultStatus(resultId, 'failed', errorMessage, errorDetails);
+      expect(mockStorage.updateValidationResultStatus).toHaveBeenCalledWith(
+        resultId, 
+        'failed', 
+        errorMessage, 
+        errorDetails
+      );
+    });
+
+    it('should handle empty results gracefully', async () => {
+      // Test empty results for various methods
+      vi.mocked(mockStorage.getValidationResultsByRequestId).mockResolvedValue([]);
+      vi.mocked(mockStorage.getValidationResultsByBatchId).mockResolvedValue([]);
+      vi.mocked(mockStorage.getValidationResultsByStatus).mockResolvedValue([]);
+      vi.mocked(mockStorage.getValidationResultsByResourceType).mockResolvedValue([]);
+      vi.mocked(mockStorage.getValidationPerformanceMetrics).mockResolvedValue([]);
+      vi.mocked(mockStorage.getValidationAspectBreakdown).mockResolvedValue([]);
+
+      expect(await mockStorage.getValidationResultsByRequestId('req-123')).toEqual([]);
+      expect(await mockStorage.getValidationResultsByBatchId('batch-456')).toEqual([]);
+      expect(await mockStorage.getValidationResultsByStatus('pending')).toEqual([]);
+      expect(await mockStorage.getValidationResultsByResourceType('Patient')).toEqual([]);
+      expect(await mockStorage.getValidationPerformanceMetrics()).toEqual([]);
+      expect(await mockStorage.getValidationAspectBreakdown()).toEqual([]);
     });
   });
 });

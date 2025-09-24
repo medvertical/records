@@ -81,6 +81,35 @@ export const validationResults = pgTable("validation_results", {
   coverageMetrics: jsonb("coverage_metrics").default({}), // Coverage metrics by aspect and field
   missingValidationAreas: jsonb("missing_validation_areas").default([]), // Areas not validated
   validationGaps: jsonb("validation_gaps").default([]), // Specific validation gaps identified
+  // Consolidated service fields
+  validationRequestId: text("validation_request_id"),
+  validationBatchId: text("validation_batch_id"),
+  validationPriority: text("validation_priority").default("normal"), // 'low', 'normal', 'high', 'urgent'
+  validationStatus: text("validation_status").default("completed"), // 'pending', 'running', 'completed', 'failed', 'cancelled'
+  validationStartedAt: timestamp("validation_started_at"),
+  validationCompletedAt: timestamp("validation_completed_at"),
+  validationCancelledAt: timestamp("validation_cancelled_at"),
+  validationErrorMessage: text("validation_error_message"),
+  validationErrorDetails: jsonb("validation_error_details").default({}),
+  // Detailed aspect results
+  structuralValidationResult: jsonb("structural_validation_result").default({}),
+  profileValidationResult: jsonb("profile_validation_result").default({}),
+  terminologyValidationResult: jsonb("terminology_validation_result").default({}),
+  referenceValidationResult: jsonb("reference_validation_result").default({}),
+  businessRuleValidationResult: jsonb("business_rule_validation_result").default({}),
+  metadataValidationResult: jsonb("metadata_validation_result").default({}),
+  // Validation settings reference
+  validationSettingsId: integer("validation_settings_id").references(() => validationSettings.id),
+  validationSettingsSnapshot: jsonb("validation_settings_snapshot").default({}),
+  // Resource metadata
+  resourceType: text("resource_type"),
+  resourceVersion: text("resource_version"),
+  resourceSizeBytes: integer("resource_size_bytes"),
+  resourceComplexityScore: integer("resource_complexity_score").default(0),
+  // Validation context
+  validationContext: jsonb("validation_context").default({}),
+  validationEnvironment: text("validation_environment").default("production"), // 'development', 'testing', 'production'
+  validationSource: text("validation_source").default("api"), // 'api', 'batch', 'scheduled', 'manual'
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -234,4 +263,84 @@ export interface ResourceStats {
     informationCount: number;
     score: number;
   }>;
+}
+
+// Additional types for consolidated validation service
+export interface ValidationRequest {
+  id: string;
+  batchId?: string;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  resourceIds: number[];
+  settingsId?: number;
+  settingsSnapshot?: any;
+  context?: any;
+  environment: 'development' | 'testing' | 'production';
+  source: 'api' | 'batch' | 'scheduled' | 'manual';
+  startedAt?: Date;
+  completedAt?: Date;
+  cancelledAt?: Date;
+  errorMessage?: string;
+  errorDetails?: any;
+}
+
+export interface ValidationBatch {
+  id: string;
+  name?: string;
+  description?: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  totalResources: number;
+  completedResources: number;
+  failedResources: number;
+  cancelledResources: number;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  settingsId?: number;
+  context?: any;
+  environment: 'development' | 'testing' | 'production';
+  source: 'api' | 'batch' | 'scheduled' | 'manual';
+  startedAt?: Date;
+  completedAt?: Date;
+  cancelledAt?: Date;
+  errorMessage?: string;
+  errorDetails?: any;
+}
+
+export interface AspectValidationResult {
+  isValid: boolean;
+  issues: ValidationError[];
+  durationMs: number;
+  score: number;
+  confidence: number;
+  completeness: number;
+  details?: any;
+}
+
+export interface DetailedValidationResult {
+  isValid: boolean;
+  overallScore: number;
+  overallConfidence: number;
+  overallCompleteness: number;
+  totalDurationMs: number;
+  aspectResults: {
+    structural: AspectValidationResult;
+    profile: AspectValidationResult;
+    terminology: AspectValidationResult;
+    reference: AspectValidationResult;
+    businessRule: AspectValidationResult;
+    metadata: AspectValidationResult;
+  };
+  summary: {
+    totalIssues: number;
+    errorCount: number;
+    warningCount: number;
+    informationCount: number;
+    issueCountByAspect: Record<string, number>;
+  };
+  performance: {
+    totalDurationMs: number;
+    durationByAspect: Record<string, number>;
+    resourceSizeBytes?: number;
+    complexityScore?: number;
+  };
+  context?: any;
 }

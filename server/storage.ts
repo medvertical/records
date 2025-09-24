@@ -19,6 +19,10 @@ import {
   type InsertValidationSettings,
   type FhirResourceWithValidation,
   type ResourceStats,
+  type ValidationRequest,
+  type ValidationBatch,
+  type AspectValidationResult,
+  type DetailedValidationResult,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gt, lt, sql, getTableColumns } from "drizzle-orm";
@@ -61,6 +65,15 @@ export interface IStorage {
   getValidationResultByHash(resourceId: number, settingsHash: string, resourceHash: string): Promise<ValidationResult | undefined>;
   invalidateValidationResults(resourceId?: number, settingsHash?: string): Promise<void>;
   cleanupOldValidationResults(maxAgeHours?: number): Promise<number>;
+
+  // Consolidated Validation Service Methods
+  getValidationResultsByRequestId(requestId: string): Promise<ValidationResult[]>;
+  getValidationResultsByBatchId(batchId: string): Promise<ValidationResult[]>;
+  getValidationResultsByStatus(status: string, limit?: number): Promise<ValidationResult[]>;
+  updateValidationResultStatus(id: number, status: string, errorMessage?: string, errorDetails?: any): Promise<void>;
+  getValidationResultsByResourceType(resourceType: string, limit?: number): Promise<ValidationResult[]>;
+  getValidationPerformanceMetrics(resourceType?: string, days?: number): Promise<any>;
+  getValidationAspectBreakdown(resourceType?: string, days?: number): Promise<any>;
 
   // Dashboard
   getDashboardCards(): Promise<DashboardCard[]>;
@@ -385,6 +398,115 @@ export class DatabaseStorage implements IStorage {
     });
     
     return deletedCount;
+  }
+
+  // Consolidated Validation Service Methods
+  async getValidationResultsByRequestId(requestId: string): Promise<ValidationResult[]> {
+    return await db.select()
+      .from(validationResults)
+      .where(eq(validationResults.validationRequestId, requestId))
+      .orderBy(desc(validationResults.validatedAt));
+  }
+
+  async getValidationResultsByBatchId(batchId: string): Promise<ValidationResult[]> {
+    return await db.select()
+      .from(validationResults)
+      .where(eq(validationResults.validationBatchId, batchId))
+      .orderBy(desc(validationResults.validatedAt));
+  }
+
+  async getValidationResultsByStatus(status: string, limit = 100): Promise<ValidationResult[]> {
+    return await db.select()
+      .from(validationResults)
+      .where(eq(validationResults.validationStatus, status))
+      .orderBy(desc(validationResults.validatedAt))
+      .limit(limit);
+  }
+
+  async updateValidationResultStatus(id: number, status: string, errorMessage?: string, errorDetails?: any): Promise<void> {
+    const updateData: any = {
+      validationStatus: status,
+      updatedAt: new Date()
+    };
+
+    if (status === 'completed') {
+      updateData.validationCompletedAt = new Date();
+    } else if (status === 'failed') {
+      updateData.validationErrorMessage = errorMessage;
+      updateData.validationErrorDetails = errorDetails;
+    } else if (status === 'cancelled') {
+      updateData.validationCancelledAt = new Date();
+    }
+
+    await db.update(validationResults)
+      .set(updateData)
+      .where(eq(validationResults.id, id));
+  }
+
+  async getValidationResultsByResourceType(resourceType: string, limit = 100): Promise<ValidationResult[]> {
+    return await db.select()
+      .from(validationResults)
+      .where(eq(validationResults.resourceType, resourceType))
+      .orderBy(desc(validationResults.validatedAt))
+      .limit(limit);
+  }
+
+  async getValidationPerformanceMetrics(resourceType?: string, days = 30): Promise<any> {
+    const cutoffDate = new Date(Date.now() - (days * 24 * 60 * 60 * 1000));
+    
+    let query = db.select({
+      resourceType: validationResults.resourceType,
+      validationStatus: validationResults.validationStatus,
+      totalValidations: sql<number>`count(*)`,
+      avgDurationMs: sql<number>`avg(${validationResults.validationDurationMs})`,
+      minDurationMs: sql<number>`min(${validationResults.validationDurationMs})`,
+      maxDurationMs: sql<number>`max(${validationResults.validationDurationMs})`,
+      avgValidationScore: sql<number>`avg(${validationResults.validationScore})`,
+      avgConfidenceScore: sql<number>`avg(${validationResults.confidenceScore})`,
+      avgCompletenessScore: sql<number>`avg(${validationResults.completenessScore})`,
+      validCount: sql<number>`count(case when ${validationResults.isValid} = true then 1 end)`,
+      invalidCount: sql<number>`count(case when ${validationResults.isValid} = false then 1 end)`,
+      errorCount: sql<number>`count(case when ${validationResults.errorCount} > 0 then 1 end)`,
+      warningCount: sql<number>`count(case when ${validationResults.warningCount} > 0 then 1 end)`
+    })
+    .from(validationResults)
+    .where(gt(validationResults.validatedAt, cutoffDate));
+
+    if (resourceType) {
+      query = query.where(eq(validationResults.resourceType, resourceType));
+    }
+
+    return await query.groupBy(validationResults.resourceType, validationResults.validationStatus);
+  }
+
+  async getValidationAspectBreakdown(resourceType?: string, days = 30): Promise<any> {
+    const cutoffDate = new Date(Date.now() - (days * 24 * 60 * 60 * 1000));
+    
+    let query = db.select({
+      resourceType: validationResults.resourceType,
+      validationStatus: validationResults.validationStatus,
+      totalValidations: sql<number>`count(*)`,
+      structuralValidCount: sql<number>`count(case when (${validationResults.structuralValidationResult}->>'isValid')::boolean = true then 1 end)`,
+      profileValidCount: sql<number>`count(case when (${validationResults.profileValidationResult}->>'isValid')::boolean = true then 1 end)`,
+      terminologyValidCount: sql<number>`count(case when (${validationResults.terminologyValidationResult}->>'isValid')::boolean = true then 1 end)`,
+      referenceValidCount: sql<number>`count(case when (${validationResults.referenceValidationResult}->>'isValid')::boolean = true then 1 end)`,
+      businessRuleValidCount: sql<number>`count(case when (${validationResults.businessRuleValidationResult}->>'isValid')::boolean = true then 1 end)`,
+      metadataValidCount: sql<number>`count(case when (${validationResults.metadataValidationResult}->>'isValid')::boolean = true then 1 end)`,
+      avgStructuralDurationMs: sql<number>`avg((${validationResults.structuralValidationResult}->>'durationMs')::integer)`,
+      avgProfileDurationMs: sql<number>`avg((${validationResults.profileValidationResult}->>'durationMs')::integer)`,
+      avgTerminologyDurationMs: sql<number>`avg((${validationResults.terminologyValidationResult}->>'durationMs')::integer)`,
+      avgReferenceDurationMs: sql<number>`avg((${validationResults.referenceValidationResult}->>'durationMs')::integer)`,
+      avgBusinessRuleDurationMs: sql<number>`avg((${validationResults.businessRuleValidationResult}->>'durationMs')::integer)`,
+      avgMetadataDurationMs: sql<number>`avg((${validationResults.metadataValidationResult}->>'durationMs')::integer)`
+    })
+    .from(validationResults)
+    .where(gt(validationResults.validatedAt, cutoffDate));
+
+    if (resourceType) {
+      query = query.where(eq(validationResults.resourceType, resourceType));
+    }
+
+    return await query.groupBy(validationResults.resourceType, validationResults.validationStatus);
   }
 
   async getDashboardCards(): Promise<DashboardCard[]> {

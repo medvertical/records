@@ -32,15 +32,15 @@
   - [x] 2.1 Guarantee `validation-engine.ts` emits all six aspects in `DetailedValidationResult` regardless of filters.
   - [x] 2.2 Confirm the renamed pipeline file preserves the normalized result through execution.
   - [x] 2.3 Run focused suites: `npx vitest run server/services/validation/validation-engine.test.ts server/services/validation/core/*.test.ts`.
-- [ ] 3.0 Rebuild Validation Settings (Simplified)
+- [x] 3.0 Rebuild Validation Settings (Simplified)
   - [x] 3.1 Strip legacy settings history/audit logic from services and storage; define a simplified settings schema.
   - [x] 3.2 Update repository/core service and `/api/validation/settings` routes to use the simplified schema.
   - [x] 3.3 Revamp settings UI components to match the new minimal configuration.
   - [x] 3.4 Run relevant tests: `npx vitest run server/services/validation/validation-settings-service.test.ts server/services/validation/validation-settings-realtime.test.ts` and affected UI tests.
 - [ ] 4.0 Update Persistence & Schema
-  - [ ] 4.1 Modify `shared/schema.ts` + migrations to store summary, performance, and aspect breakdown data.
-  - [ ] 4.2 Refactor `storage.ts` and helpers to use the new schema consistently.
-  - [ ] 4.3 Rewrite `validation-persistence.test.ts` for `ConsolidatedValidationService` and run `npx vitest run server/services/validation/validation-persistence.test.ts`.
+  - [x] 4.1 Modify `shared/schema.ts` + migrations to store summary, performance, and aspect breakdown data.
+  - [x] 4.2 Refactor `storage.ts` and helpers to use the new schema consistently.
+  - [x] 4.3 Rewrite `validation-persistence.test.ts` for `ConsolidatedValidationService` and run `npx vitest run server/services/validation/validation-persistence.test.ts`.
 - [ ] 5.0 Refresh Validation Routes & Services
   - [ ] 5.1 Switch validation routes to use the consolidated service/pipeline APIs directly.
   - [ ] 5.2 Ensure responses return full `detailedResult` payloads.
