@@ -24,14 +24,14 @@
 
 ## Tasks
 
-- [ ] 1.0 Remove Legacy Shims & Clean Naming
+- [x] 1.0 Remove Legacy Shims & Clean Naming
 - [x] 1.1 Rename `validation-pipeline-new.ts` and related imports to `validation-pipeline.ts` (or another final name) across the codebase.
 - [x] 1.2 Update all services/tests/routes to import directly from the renamed core pipeline file and consolidated service; remove `unified-validation.ts` and old pipeline shims.
 - [x] 1.3 Ensure `npx vitest run server/services/validation/validation-engine.test.ts` remains green after renaming and import updates.
 - [ ] 2.0 Align Pipeline & Engine with Full-Aspect Output
-  - [ ] 2.1 Guarantee `validation-engine.ts` emits all six aspects in `DetailedValidationResult` regardless of filters.
-  - [ ] 2.2 Confirm the renamed pipeline file preserves the normalized result through execution.
-  - [ ] 2.3 Run focused suites: `npx vitest run server/services/validation/validation-engine.test.ts server/services/validation/core/*.test.ts`.
+  - [x] 2.1 Guarantee `validation-engine.ts` emits all six aspects in `DetailedValidationResult` regardless of filters.
+  - [x] 2.2 Confirm the renamed pipeline file preserves the normalized result through execution.
+  - [x] 2.3 Run focused suites: `npx vitest run server/services/validation/validation-engine.test.ts server/services/validation/core/*.test.ts`.
 - [ ] 3.0 Rebuild Validation Settings (Simplified)
   - [ ] 3.1 Strip legacy settings history/audit logic from services and storage; define a simplified settings schema.
   - [ ] 3.2 Update repository/core service and `/api/validation/settings` routes to use the simplified schema.

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConsolidatedValidationService } from './core/consolidated-validation-service';
 import { storage } from '../../storage';
 import { getValidationSettingsService } from './validation-settings-service';
-import { getValidationPipeline } from './validation-pipeline';
+import { getValidationPipeline } from './core/validation-pipeline';
 
 // Mock dependencies
 vi.mock('../../storage', () => ({
