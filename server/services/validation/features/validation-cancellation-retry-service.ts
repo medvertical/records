@@ -9,7 +9,7 @@
 import { EventEmitter } from 'events';
 import { getValidationQueueService } from '../performance/validation-queue-service';
 import { getIndividualResourceProgressService } from './individual-resource-progress-service';
-import { getValidationPipeline } from '../core/validation-pipeline-new';
+import { getValidationPipeline } from '../core/validation-pipeline';
 
 // ============================================================================
 // Types and Interfaces

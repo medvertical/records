@@ -16,7 +16,7 @@ import ResourceTreeViewer from './resource-tree-viewer';
 // Types
 // ============================================================================
 
-interface ValidationIssue {
+export interface ValidationIssue {
   id?: string;
   code?: string;
   message?: string;
@@ -27,7 +27,7 @@ interface ValidationIssue {
   humanReadable?: string;
 }
 
-interface ValidationResult {
+export interface ValidationResult {
   isValid: boolean;
   issues: ValidationIssue[];
   summary: {
@@ -62,8 +62,9 @@ export default function ResourceViewer({
   data, 
   title = "Resource Structure" 
 }: ResourceViewerProps) {
-  // Use data if provided, otherwise use resource.data
-  const resourceData = data || resource?.data;
+  // Use data if provided, otherwise use resource.data or resource
+  // Handle different resource structures: {data: {...}} or direct resource object
+  const resourceData = data || resource?.data || resource;
   
   // State management
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
@@ -115,6 +116,10 @@ export default function ResourceViewer({
   const validateResource = async () => {
     if (!resourceData) return;
     
+    console.log('[ResourceViewer] Starting validation with resource data:', resourceData);
+    console.log('[ResourceViewer] Resource ID:', resourceData.id);
+    console.log('[ResourceViewer] Resource Type:', resourceData.resourceType);
+    
     setIsValidating(true);
     setValidationError(null);
 
@@ -144,9 +149,26 @@ export default function ResourceViewer({
       }
 
       const result = await response.json();
-      setValidationResult(result);
+      console.log('[ResourceViewer] Validation response:', result);
+      
+      const issues = Array.isArray(result.issues) ? result.issues : [];
+      const sanitizedResult: ValidationResult = {
+        ...result,
+        issues,
+        summary: {
+          ...(result.summary || {}),
+          totalIssues: result.summary?.totalIssues ?? issues.length,
+          errorCount: result.summary?.errorCount ?? 0,
+          warningCount: result.summary?.warningCount ?? 0,
+          informationCount: result.summary?.informationCount ?? 0,
+          score: result.summary?.score ?? 0,
+        },
+      };
+      console.log('[ResourceViewer] Sanitized validation result:', sanitizedResult);
+      setValidationResult(sanitizedResult);
     } catch (error: any) {
-      console.error('Validation error:', error);
+      console.error('[ResourceViewer] Validation error:', error);
+      console.error('[ResourceViewer] Error response:', await error.response?.text?.() || 'No response text');
       setValidationError(error.message || 'Failed to validate resource');
     } finally {
       setIsValidating(false);
@@ -199,25 +221,15 @@ export default function ResourceViewer({
     return null;
   };
 
-  // Filter validation issues based on current filters
-  const filteredIssues = validationResult?.issues.filter(issue => {
-    if (selectedCategory !== 'all' && issue.category !== selectedCategory) {
-      return false;
-    }
-    if (selectedSeverity !== 'all' && issue.severity !== selectedSeverity) {
-      return false;
-    }
-    if (selectedPath && issue.path !== selectedPath) {
-      return false;
-    }
-    return true;
-  }) || [];
+  const validationIssues = Array.isArray(validationResult?.issues)
+    ? (validationResult?.issues as ValidationIssue[])
+    : [];
 
   return (
     <div className="space-y-4">
       {/* Main content: Resource structure full width when no validation messages, otherwise two columns */}
       <div className={`grid gap-4 ${
-        validationResult && validationResult.issues.length > 0 
+        validationResult && validationIssues.length > 0 
           ? 'grid-cols-1 lg:grid-cols-2' 
           : 'grid-cols-1'
       }`}>
@@ -242,7 +254,7 @@ export default function ResourceViewer({
           <CardContent className="pt-0">
             <ResourceTreeViewer 
               resourceData={resourceData} 
-              validationResults={validationResult?.issues || []}
+              validationResults={validationIssues}
               selectedCategory={selectedCategory}
               selectedSeverity={selectedSeverity}
               selectedPath={selectedPath}
@@ -256,7 +268,7 @@ export default function ResourceViewer({
         </Card>
 
         {/* Validation Messages - Right side */}
-        {validationResult && validationResult.issues.length > 0 && (
+        {validationResult && validationIssues.length > 0 && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">

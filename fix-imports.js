@@ -10,7 +10,6 @@ const importMappings = {
     'validation-settings-service': '../settings/validation-settings-service',
     'validation-engine-core': '../engine/validation-engine-core',
     'validation-pipeline': '../core/validation-pipeline',
-    'validation-pipeline-new': '../core/validation-pipeline-new',
     'rock-solid-validation-engine': '../core/rock-solid-validation-engine'
   },
   

@@ -62,13 +62,41 @@ function Router() {
     <ResourceBrowser />
   );
 
-  const ResourceDetailComponent = ({ params }: { params: { id: string } }) => (
-    <ResourceDetail resourceId={params.id} />
-  );
+  const ResourceDetailComponent = ({ params }: { params: { id: string } }) => {
+    if (!params || !params.id) {
+      return <div>Loading...</div>;
+    }
+    return <ResourceDetail resourceId={params.id} />;
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Switch>
+        <Route path="/resources/:id">
+          {(params) => {
+            if (!params?.id) {
+              return <div className="p-4">No resource ID provided</div>;
+            }
+            return (
+              <div className="min-h-screen bg-gray-50">
+                <Header 
+                  title={getPageTitle()}
+                  connectionStatus={connectionStatus}
+                  onSidebarToggle={toggleSidebar}
+                />
+                <div className="flex pt-16">
+                  <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
+                  <main className={cn(
+                    "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
+                    sidebarOpen && !isMobile ? "ml-64" : "ml-0"
+                  )}>
+                    <ResourceDetail resourceId={params.id} />
+                  </main>
+                </div>
+              </div>
+            );
+          }}
+        </Route>
         <Route path="/">
           <div className="min-h-screen bg-gray-50">
             <Header 
@@ -119,24 +147,6 @@ function Router() {
                 sidebarOpen && !isMobile ? "ml-64" : "ml-0"
               )}>
                 <ResourceBrowserComponent />
-              </main>
-            </div>
-          </div>
-        </Route>
-        <Route path="/resources/:id">
-          <div className="min-h-screen bg-gray-50">
-            <Header 
-              title={getPageTitle()}
-              connectionStatus={connectionStatus}
-              onSidebarToggle={toggleSidebar}
-            />
-            <div className="flex pt-16">
-              <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
-              <main className={cn(
-                "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
-                sidebarOpen && !isMobile ? "ml-64" : "ml-0"
-              )}>
-                <ResourceDetailComponent params={{ id: "" }} />
               </main>
             </div>
           </div>

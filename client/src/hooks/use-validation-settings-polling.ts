@@ -84,7 +84,8 @@ export function useValidationSettingsPolling(options: ValidationSettingsPollingO
       }
 
       const data = await response.json();
-      const newSettings = data.settings;
+      // API returns settings directly, not wrapped in a 'settings' property
+      const newSettings = data;
       const newSettingsString = JSON.stringify(newSettings);
 
       setState(prev => ({
@@ -135,7 +136,7 @@ export function useValidationSettingsPolling(options: ValidationSettingsPollingO
         window.dispatchEvent(new CustomEvent('settingsChanged', {
           detail: {
             changeType: 'updated',
-            settingsId: newSettings.id || 'current',
+            settingsId: newSettings?.id || 'current',
             timestamp: new Date().toISOString(),
             previousVersion: previousSettings,
             newVersion: newSettings
@@ -151,7 +152,7 @@ export function useValidationSettingsPolling(options: ValidationSettingsPollingO
             },
             body: JSON.stringify({
               changeType: 'polling_detected',
-              settingsId: newSettings.id || 'current',
+              settingsId: newSettings?.id || 'current',
               previousVersion: previousSettings,
               newVersion: newSettings
             })
@@ -261,14 +262,7 @@ export function useValidationSettingsPolling(options: ValidationSettingsPollingO
     return () => {
       stopPolling();
     };
-  }, [enabled, startPolling, stopPolling]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopPolling();
-    };
-  }, [stopPolling]);
+  }, [enabled]); // Remove startPolling and stopPolling from dependencies
 
   return {
     ...state,

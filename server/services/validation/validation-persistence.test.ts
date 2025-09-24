@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { UnifiedValidationService } from './unified-validation';
+import { ConsolidatedValidationService } from './core/consolidated-validation-service';
 import { storage } from '../../storage';
 import { getValidationSettingsService } from './validation-settings-service';
 import { getValidationPipeline } from './validation-pipeline';
@@ -28,7 +28,7 @@ vi.mock('./validation-pipeline', () => ({
 }));
 
 describe('Validation Result Persistence', () => {
-  let validationService: UnifiedValidationService;
+  let validationService: ConsolidatedValidationService;
   let mockStorage: any;
   let mockSettingsService: any;
   let mockPipeline: any;
@@ -105,7 +105,7 @@ describe('Validation Result Persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     
-    validationService = new UnifiedValidationService();
+    validationService = new ConsolidatedValidationService();
     mockStorage = storage;
     mockSettingsService = getValidationSettingsService();
     mockPipeline = getValidationPipeline();

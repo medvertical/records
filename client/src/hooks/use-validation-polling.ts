@@ -339,6 +339,7 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
     if (isPollingRef.current && pollingIntervalRef.current) {
       // Clear existing interval
       clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
       
       // Set new interval based on current status
       let newInterval = pollInterval;
@@ -382,7 +383,7 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
       
       console.log(`[ValidationPolling] Adjusted polling interval to ${newInterval}ms for status: ${validationStatus}`);
     }
-  }, [validationStatus, pollInterval, fetchValidationProgress, stopPolling]);
+  }, [validationStatus, pollInterval]); // Removed fetchValidationProgress and stopPolling dependencies
 
   // Cleanup on unmount
   useEffect(() => {

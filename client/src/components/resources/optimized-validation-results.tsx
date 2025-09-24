@@ -115,7 +115,7 @@ export function OptimizedValidationResults({
   
   // Memoized filtered issues
   const filteredIssues = useMemo(() => {
-    return result.issues.filter(issue => {
+    return (result.issues || []).filter(issue => {
       if (selectedCategory && selectedCategory !== 'all' && issue.category !== selectedCategory) {
         return false;
       }
@@ -127,28 +127,28 @@ export function OptimizedValidationResults({
       }
       return true;
     });
-  }, [result.issues, selectedCategory, selectedSeverity, selectedPath]);
+  }, [(result.issues || []), selectedCategory, selectedSeverity, selectedPath]);
   
   // Memoized category counts
   const categoryCounts = useMemo(() => {
-    return result.issues.reduce((acc: any, issue: any) => {
+    return (result.issues || []).reduce((acc: any, issue: any) => {
       const category = issue.category || 'general';
       acc[category] = (acc[category] || 0) + 1;
       return acc;
     }, {});
-  }, [result.issues]);
+  }, [(result.issues || [])]);
   
   // Memoized severity counts
   const severityCounts = useMemo(() => {
-    return result.issues.reduce((acc: any, issue: any) => {
+    return (result.issues || []).reduce((acc: any, issue: any) => {
       const severity = issue.severity || 'information';
       acc[severity] = (acc[severity] || 0) + 1;
       return acc;
     }, {});
-  }, [result.issues]);
+  }, [(result.issues || [])]);
   
   const categories = [
-    { value: 'all', label: 'All', count: result.issues.length },
+    { value: 'all', label: 'All', count: (result.issues || []).length },
     { value: 'structural', label: 'Structural', count: categoryCounts.structural || 0 },
     { value: 'profile', label: 'Profile', count: categoryCounts.profile || 0 },
     { value: 'terminology', label: 'Terminology', count: categoryCounts.terminology || 0 },
@@ -159,7 +159,7 @@ export function OptimizedValidationResults({
   ].filter(cat => cat.value === 'all' || cat.count > 0);
   
   const severities = [
-    { value: 'all', label: 'All', count: result.issues.length },
+    { value: 'all', label: 'All', count: (result.issues || []).length },
     { value: 'error', label: 'Errors', count: severityCounts.error || 0 },
     { value: 'warning', label: 'Warnings', count: severityCounts.warning || 0 },
     { value: 'information', label: 'Information', count: severityCounts.information || 0 }
@@ -205,7 +205,7 @@ export function OptimizedValidationResults({
       </div>
       
       {/* Filters */}
-      {result.issues.length > 0 && (
+      {(result.issues || []).length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium">Filter Issues</h4>

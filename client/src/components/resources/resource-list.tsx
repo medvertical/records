@@ -34,6 +34,8 @@ interface ResourceListProps {
   pageSize?: number;
   validatingResourceIds?: Set<number>; // Track which resources are currently being validated
   validationProgress?: Map<number, ValidationProgress>; // Track validation progress per resource
+  availableResourceTypes?: string[]; // Available resource types when none is selected
+  noResourceTypeMessage?: string; // Message to show when no resource type is selected
 }
 
 export default function ResourceList({
@@ -44,6 +46,8 @@ export default function ResourceList({
   pageSize = 20,
   validatingResourceIds = new Set(),
   validationProgress = new Map(),
+  availableResourceTypes = [],
+  noResourceTypeMessage,
 }: ResourceListProps) {
   // Fetch current validation settings for UI filtering
   const { data: validationSettingsData } = useQuery({
@@ -173,12 +177,8 @@ export default function ResourceList({
     // Use real validation results from the database
     const validationSummary = resource._validationSummary;
     
-    if (!validationSummary) {
-      return 'not-validated';
-    }
-    
-    // Check if validation has actually been performed (lastValidated should not be null)
-    if (!validationSummary.lastValidated) {
+    // Only consider a resource validated if it has actual validation data from the database
+    if (!validationSummary || !validationSummary.lastValidated) {
       return 'not-validated';
     }
     
@@ -215,6 +215,7 @@ export default function ResourceList({
       if (status === 'not-validated') {
         return 0; // Always show 0% for unvalidated resources
       }
+      
       return filteredSummary?.validationScore || 0;
     };
     
@@ -416,7 +417,7 @@ export default function ResourceList({
             
             return (
               <div key={resource.id || `${resource.resourceType}-${index}`} className="mb-4 last:mb-0">
-                <Link href={`/resources/${resource.id}`}>
+                <Link href={`/resources/${resource.resourceId || resource.id}?type=${resource.resourceType}`}>
                   <Card className={cn(
                     "hover:bg-gray-50 transition-colors cursor-pointer",
                     validationStatus === 'not-validated' && "border-dashed border-gray-300 bg-gray-50/50"
@@ -479,10 +480,33 @@ export default function ResourceList({
               <div className="text-gray-400 mb-4">
                 <XCircle className="h-12 w-12 mx-auto" />
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No Resources Found</h3>
-              <p className="text-gray-600">
-                No resources match your current search criteria. Try adjusting your filters.
-              </p>
+              {noResourceTypeMessage ? (
+                <>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Select a Resource Type</h3>
+                  <p className="text-gray-600 mb-4">
+                    {noResourceTypeMessage}
+                  </p>
+                  {availableResourceTypes.length > 0 && (
+                    <div className="mt-6">
+                      <p className="text-sm text-gray-500 mb-3">Available resource types:</p>
+                      <div className="flex flex-wrap gap-2 justify-center">
+                        {availableResourceTypes.map((type) => (
+                          <Badge key={type} variant="outline" className="text-xs">
+                            {type}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Resources Found</h3>
+                  <p className="text-gray-600">
+                    No resources match your current search criteria. Try adjusting your filters.
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
         )}

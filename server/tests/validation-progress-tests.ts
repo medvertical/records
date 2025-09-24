@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { getValidationPipeline } from '../services/validation-pipeline.js';
+import { getValidationPipeline } from '../services/validation/core/validation-pipeline';
 import { FhirClient } from '../services/fhir-client.js';
 
 describe('Validation Progress Calculations', () => {

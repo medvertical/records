@@ -19,6 +19,7 @@ export const fhirResources = pgTable("fhir_resources", {
   versionId: text("version_id"),
   data: jsonb("data").notNull(),
   resourceHash: text("resource_hash"),
+  lastValidated: timestamp("last_validated"),
   lastModified: timestamp("last_modified").defaultNow(),
 });
 

@@ -24,6 +24,8 @@ export class PipelineOrchestrator extends EventEmitter {
   constructor(config: Partial<ValidationPipelineConfig> = {}) {
     super();
     
+    console.log('[PipelineOrchestrator] Constructor called');
+    
     this.config = {
       enableParallelProcessing: true,
       maxConcurrentValidations: 10,
@@ -47,6 +49,9 @@ export class PipelineOrchestrator extends EventEmitter {
    */
   async executePipeline(request: ValidationPipelineRequest): Promise<ValidationPipelineResult> {
     const requestId = request.context?.requestId || `pipeline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    console.log(`[PipelineOrchestrator] executePipeline called with requestId: ${requestId}`);
+    console.log(`[PipelineOrchestrator] Resources to process: ${request.resources.length}`);
     
     // Check for concurrent pipeline limit
     if (this.activePipelines.size >= this.config.maxConcurrentValidations) {
@@ -148,7 +153,7 @@ export class PipelineOrchestrator extends EventEmitter {
         startTime: new Date(timestamps.startedAt).toISOString()
       };
       
-      // Process resources (this will be handled by the batch processor)
+      // Process resources using the validation engine
       const results: ValidationResult[] = [];
       
       // Emit pipeline started event
@@ -158,6 +163,65 @@ export class PipelineOrchestrator extends EventEmitter {
         config: this.config
       });
 
+      // Process each resource
+      for (const resourceRequest of request.resources) {
+        try {
+          console.log(`[PipelineOrchestrator] Processing resource: ${resourceRequest.resourceType}/${resourceRequest.resourceId}`);
+          
+          // Convert to validation request format
+          const validationRequest: ValidationRequest = {
+            resource: resourceRequest.resource,
+            resourceType: resourceRequest.resourceType,
+            profileUrl: resourceRequest.profileUrl,
+            settings: settings // Include settings in the request
+          };
+
+          // Validate the resource
+          const result = await this.engine.validateResource(validationRequest);
+          results.push(result);
+          
+          progressStats.processedResources++;
+          if (result.isValid) {
+            progressStats.validResources++;
+          } else {
+            progressStats.errorResources++;
+          }
+          
+          console.log(`[PipelineOrchestrator] Completed validation for ${resourceRequest.resourceType}/${resourceRequest.resourceId}: ${result.isValid ? 'valid' : 'invalid'}`);
+        } catch (error) {
+          console.error(`[PipelineOrchestrator] Failed to validate resource ${resourceRequest.resourceType}/${resourceRequest.resourceId}:`, error);
+          progressStats.errorResources++;
+          
+          // Create error result
+          const errorResult: ValidationResult = {
+            resourceType: resourceRequest.resourceType,
+            resourceId: resourceRequest.resourceId,
+            isValid: false,
+            issues: [{
+              severity: 'error',
+              code: 'validation-error',
+              message: error instanceof Error ? error.message : 'Unknown validation error',
+              path: '',
+              details: {}
+            }],
+            summary: {
+              score: 0,
+              totalIssues: 1,
+              errorCount: 1,
+              warningCount: 0,
+              informationCount: 0
+            },
+            validatedAt: new Date(),
+            performance: {
+              totalTimeMs: 0,
+              validationTimeMs: 0,
+              cacheHit: false
+            }
+          };
+          results.push(errorResult);
+        }
+      }
+
       // Update timestamps
       timestamps.completedAt = new Date();
 
@@ -165,8 +229,8 @@ export class PipelineOrchestrator extends EventEmitter {
         requestId,
         status: 'completed',
         results,
-        summary: this.createEmptySummary(),
-        performance: this.createEmptyPerformance(startTime),
+        summary: this.createSummaryFromResults(results),
+        performance: this.createPerformanceFromResults(results, startTime),
         timestamps
       };
 
@@ -258,6 +322,75 @@ export class PipelineOrchestrator extends EventEmitter {
         averageConcurrency: 0,
         peakConcurrency: 0
       }
+    };
+  }
+
+  private createSummaryFromResults(results: ValidationResult[]) {
+    const totalResources = results.length;
+    const successfulValidations = results.filter(r => r.isValid).length;
+    const failedValidations = totalResources - successfulValidations;
+    
+    let totalIssues = 0;
+    let errorCount = 0;
+    let warningCount = 0;
+    let informationCount = 0;
+    
+    results.forEach(result => {
+      if (result.issues) {
+        totalIssues += result.issues.length;
+        errorCount += result.issues.filter(i => i.severity === 'error' || i.severity === 'fatal').length;
+        warningCount += result.issues.filter(i => i.severity === 'warning').length;
+        informationCount += result.issues.filter(i => i.severity === 'information').length;
+      }
+    });
+    
+    const overallValidationScore = totalResources > 0 ? Math.round((successfulValidations / totalResources) * 100) : 0;
+    
+    return {
+      totalResources,
+      successfulValidations,
+      failedValidations,
+      resourcesWithErrors: results.filter(r => r.issues?.some(i => i.severity === 'error' || i.severity === 'fatal')).length,
+      resourcesWithWarnings: results.filter(r => r.issues?.some(i => i.severity === 'warning')).length,
+      overallValidationScore,
+      issuesByAspect: {
+        structural: 0, // TODO: categorize issues by aspect
+        profile: 0,
+        terminology: 0,
+        reference: 0,
+        businessRule: 0,
+        metadata: 0
+      },
+      commonIssues: [] // TODO: analyze common issues
+    };
+  }
+
+  private createPerformanceFromResults(results: ValidationResult[], startTime: number) {
+    const totalTimeMs = Date.now() - startTime;
+    const averageTimePerResourceMs = results.length > 0 ? totalTimeMs / results.length : 0;
+    
+    let totalValidationTime = 0;
+    let cacheHits = 0;
+    
+    results.forEach(result => {
+      if (result.performance) {
+        totalValidationTime += result.performance.validationTimeMs || 0;
+        if (result.performance.cacheHit) {
+          cacheHits++;
+        }
+      }
+    });
+    
+    const cacheHitRate = results.length > 0 ? (cacheHits / results.length) * 100 : 0;
+    const throughput = totalTimeMs > 0 ? (results.length / totalTimeMs) * 1000 : 0; // resources per second
+    
+    return {
+      totalTimeMs,
+      averageTimePerResourceMs,
+      validationTimeMs: totalValidationTime,
+      cacheHitRate,
+      memoryUsageMB: 0, // TODO: implement memory tracking
+      throughput
     };
   }
 

@@ -5,7 +5,7 @@
  */
 
 // Main components
-export { default as ResourceViewer } from './resource-viewer-new';
+export { default as ResourceViewer } from './resource-viewer';
 export { default as ResourceTreeViewer } from './resource-tree-viewer';
 
 // Validation components
@@ -29,4 +29,4 @@ export {
 export type {
   ValidationIssue,
   ValidationResult
-} from './resource-viewer-new';
+} from './resource-viewer';

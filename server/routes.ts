@@ -2,12 +2,12 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { FhirClient } from "./services/fhir/fhir-client";
-import { getConsolidatedValidationService, UnifiedValidationService } from "./services/validation";
+import { getConsolidatedValidationService, ConsolidatedValidationService } from "./services/validation";
 import { DashboardService } from "./services/dashboard/dashboard-service";
 import { setupAllRoutes } from "./routes/index.js";
 
 let fhirClient: FhirClient;
-let consolidatedValidationService: InstanceType<typeof UnifiedValidationService>;
+let consolidatedValidationService: ConsolidatedValidationService;
 let dashboardService: DashboardService;
 
 // Make dashboard service available globally for validation settings service

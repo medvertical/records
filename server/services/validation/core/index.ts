@@ -2,9 +2,9 @@
 // Follows global rules: Simple exports, no custom logic, single responsibility
 
 // Main validation services
-export { ConsolidatedValidationService, getConsolidatedValidationService, UnifiedValidationService, getUnifiedValidationService } from './consolidated-validation-service';
+export { ConsolidatedValidationService, getConsolidatedValidationService, createConsolidatedValidationService, resetConsolidatedValidationService } from './consolidated-validation-service';
 export { ValidationEngine, getValidationEngine } from './validation-engine';
-export { ValidationPipeline, getValidationPipeline } from './validation-pipeline-new';
+export { ValidationPipeline, getValidationPipeline } from './validation-pipeline';
 
 // Engine components
 export * from '../engine/validation-engine-core';

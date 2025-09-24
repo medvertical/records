@@ -6,7 +6,7 @@
  */
 
 import { EventEmitter } from 'events';
-import { getValidationPipeline, type ValidationRequest, type ValidationResult } from '../core/validation-pipeline-new';
+import { getValidationPipeline, type ValidationRequest, type ValidationResult } from '../core/validation-pipeline';
 import { getValidationSettingsService } from '../settings/validation-settings-service';
 import type { ValidationSettings } from '@shared/validation-settings';
 

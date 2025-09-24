@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // Mock all dependencies before importing the engine
-vi.mock('../fhir/fhir-client')
-vi.mock('../fhir/terminology-client')
+vi.mock('../fhir/fhir-client.js')
+vi.mock('../fhir/terminology-client.js')
 vi.mock('../../utils/logger.js', () => ({
   logger: {
     validation: vi.fn(),
@@ -27,39 +27,63 @@ vi.mock('../../utils/error-handler.js', () => ({
 }))
 
 // Mock database connection
-vi.mock('../../../db', () => ({
+vi.mock('../../db.js', () => ({
   db: {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
-        limit: vi.fn(() => Promise.resolve([]))
-      }))
-    }))
-  }
-}))
-
-vi.mock('../settings/validation-settings-service', () => ({
-  getValidationSettingsService: vi.fn(() => ({
-    getActiveSettings: vi.fn().mockResolvedValue({
-      structural: { enabled: true, severity: 'error' },
-      profile: { enabled: true, severity: 'error' },
-      terminology: { enabled: true, severity: 'error' },
-      businessRule: { enabled: true, severity: 'error' },
-      reference: { enabled: true, severity: 'error' },
-      metadata: { enabled: true, severity: 'error' }
-    })
-  }))
-}))
-
-vi.mock('../../db.js', () => ({
-  db: {
-    select: vi.fn(),
+        where: vi.fn(() => ({
+          orderBy: vi.fn(() => ({
+            limit: vi.fn(() => Promise.resolve([{ settings: mockSettings }]))
+          })),
+        })),
+        orderBy: vi.fn(() => ({
+          limit: vi.fn(() => Promise.resolve([{ settings: mockSettings }]))
+        })),
+        limit: vi.fn(() => Promise.resolve([{ settings: mockSettings }]))
+      })),
+    })),
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn()
   }
 }))
 
-vi.mock('../../storage', () => ({
+// Mock validation settings repository
+const mockSettings = {
+  version: 1,
+  isActive: true,
+  structural: { enabled: true, severity: 'error' },
+  profile: { enabled: true, severity: 'error' },
+  terminology: { enabled: true, severity: 'error' },
+  businessRule: { enabled: true, severity: 'error' },
+  reference: { enabled: true, severity: 'error' },
+  metadata: { enabled: true, severity: 'error' },
+}
+
+vi.mock('../../../repositories/validation-settings-repository.js', () => ({
+  __esModule: true,
+  ValidationSettingsRepository: vi.fn().mockImplementation(() => ({
+    initialize: vi.fn().mockResolvedValue(undefined),
+    getSettings: vi.fn().mockResolvedValue(mockSettings),
+    getActive: vi.fn().mockResolvedValue(mockSettings),
+    getLatest: vi.fn().mockResolvedValue(mockSettings),
+    saveSettings: vi.fn().mockResolvedValue(mockSettings),
+    getSettingsHistory: vi.fn().mockResolvedValue([]),
+  }))
+}))
+
+vi.mock('../settings/validation-settings-service.js', () => ({
+  __esModule: true,
+  getValidationSettingsService: vi.fn(() => ({
+    on: vi.fn(),
+    emit: vi.fn(),
+    getActiveSettings: vi.fn().mockResolvedValue(mockSettings),
+    getSettings: vi.fn().mockResolvedValue(mockSettings),
+    forceReloadSettings: vi.fn().mockResolvedValue(mockSettings),
+  })),
+}))
+
+vi.mock('../../storage.js', () => ({
   storage: {
     getResourceStatsWithSettings: vi.fn().mockResolvedValue({
       totalResources: 0,

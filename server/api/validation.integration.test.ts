@@ -23,7 +23,7 @@ vi.mock('../services/fhir/fhir-client', () => ({
   }))
 }));
 
-vi.mock('../services/validation/validation-pipeline', () => ({
+vi.mock('../services/validation/core/validation-pipeline', () => ({
   getValidationPipeline: () => ({
     executePipeline: vi.fn(),
     cancelPipeline: vi.fn()
@@ -134,7 +134,7 @@ describe('Validation API Integration Tests', () => {
       const { getResourceById } = await import('../storage');
       vi.mocked(getResourceById).mockResolvedValue(mockResources[0]);
 
-      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      const { getValidationPipeline } = await import('../services/validation/core/validation-pipeline');
       vi.mocked(getValidationPipeline).mockReturnValue({
         executePipeline: vi.fn().mockResolvedValue({
           success: true,
@@ -165,7 +165,7 @@ describe('Validation API Integration Tests', () => {
 
     it('should handle validation errors gracefully', async () => {
       // Mock validation pipeline error
-      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      const { getValidationPipeline } = await import('../services/validation/core/validation-pipeline');
       vi.mocked(getValidationPipeline).mockReturnValue({
         executePipeline: vi.fn().mockRejectedValue(new Error('Validation pipeline error')),
         cancelPipeline: vi.fn()
@@ -213,7 +213,7 @@ describe('Validation API Integration Tests', () => {
       const { getResourceById } = await import('../storage');
       vi.mocked(getResourceById).mockResolvedValue(mockResources[0]);
 
-      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      const { getValidationPipeline } = await import('../services/validation/core/validation-pipeline');
       vi.mocked(getValidationPipeline).mockReturnValue({
         executePipeline: vi.fn().mockResolvedValue({
           success: true,
@@ -241,7 +241,7 @@ describe('Validation API Integration Tests', () => {
       const { getResourceById } = await import('../storage');
       vi.mocked(getResourceById).mockResolvedValue(mockResources[0]);
 
-      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      const { getValidationPipeline } = await import('../services/validation/core/validation-pipeline');
       let attemptCount = 0;
       vi.mocked(getValidationPipeline).mockReturnValue({
         executePipeline: vi.fn().mockImplementation(() => {
@@ -406,7 +406,7 @@ describe('Validation API Integration Tests', () => {
       };
       vi.mocked(FhirClient).mockImplementation(() => mockFhirClient);
 
-      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      const { getValidationPipeline } = await import('../services/validation/core/validation-pipeline');
       vi.mocked(getValidationPipeline).mockReturnValue({
         executePipeline: vi.fn().mockResolvedValue({
           success: true,
@@ -459,7 +459,7 @@ describe('Validation API Integration Tests', () => {
       };
       vi.mocked(FhirClient).mockImplementation(() => mockFhirClient);
 
-      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      const { getValidationPipeline } = await import('../services/validation/core/validation-pipeline');
       vi.mocked(getValidationPipeline).mockReturnValue({
         executePipeline: vi.fn().mockResolvedValue({
           success: true,
@@ -517,7 +517,7 @@ describe('Validation API Integration Tests', () => {
       };
       vi.mocked(FhirClient).mockImplementation(() => mockFhirClient);
 
-      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      const { getValidationPipeline } = await import('../services/validation/core/validation-pipeline');
       vi.mocked(getValidationPipeline).mockReturnValue({
         executePipeline: vi.fn().mockResolvedValue({
           success: true,
@@ -817,7 +817,7 @@ describe('Validation API Integration Tests', () => {
       };
       vi.mocked(FhirClient).mockImplementation(() => mockFhirClient);
 
-      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      const { getValidationPipeline } = await import('../services/validation/core/validation-pipeline');
       let batchAttemptCount = 0;
       vi.mocked(getValidationPipeline).mockReturnValue({
         executePipeline: vi.fn().mockImplementation(() => {
@@ -882,7 +882,7 @@ describe('Validation API Integration Tests', () => {
       };
       vi.mocked(FhirClient).mockImplementation(() => mockFhirClient);
 
-      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      const { getValidationPipeline } = await import('../services/validation/core/validation-pipeline');
       vi.mocked(getValidationPipeline).mockReturnValue({
         executePipeline: vi.fn().mockResolvedValue({
           success: true,
@@ -946,7 +946,7 @@ describe('Validation API Integration Tests', () => {
       const { getResourceById } = await import('../storage');
       vi.mocked(getResourceById).mockResolvedValue(largeResourceList[0]);
 
-      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      const { getValidationPipeline } = await import('../services/validation/core/validation-pipeline');
       vi.mocked(getValidationPipeline).mockReturnValue({
         executePipeline: vi.fn().mockResolvedValue({
           success: true,
@@ -979,7 +979,7 @@ describe('Validation API Integration Tests', () => {
     });
 
     it('should handle validation timeout scenarios', async () => {
-      const { getValidationPipeline } = await import('../services/validation/validation-pipeline');
+      const { getValidationPipeline } = await import('../services/validation/core/validation-pipeline');
       vi.mocked(getValidationPipeline).mockReturnValue({
         executePipeline: vi.fn().mockImplementation(() => 
           new Promise((resolve) => setTimeout(resolve, 10000)) // 10 second delay

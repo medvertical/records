@@ -5,8 +5,8 @@
  */
 
 // Main components
-export { ValidationPipeline, getValidationPipeline, createValidationPipeline, resetValidationPipeline } from '../core/validation-pipeline-new';
-export { ValidationPipelineFacade, getValidationPipelineFacade } from '../core/validation-pipeline-new';
+export { ValidationPipeline, getValidationPipeline, createValidationPipeline, resetValidationPipeline } from '../core/validation-pipeline';
+export { ValidationPipelineFacade, getValidationPipelineFacade } from '../core/validation-pipeline';
 
 // Core pipeline components
 export { PipelineOrchestrator } from './pipeline-orchestrator';

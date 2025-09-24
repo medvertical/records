@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { ValidationStateService } from '../features/validation-state-service.js';
-import { getValidationPipeline } from '../core/validation-pipeline-new.js';
+import { getValidationPipeline } from '../core/validation-pipeline';
 import { storage } from '../../../storage';
 
 export interface ValidationSchedule {

@@ -79,7 +79,17 @@ export class FhirClient {
   async getResourceCounts(): Promise<Record<string, number>> {
     try {
       const response = await apiRequest('GET', `${this.baseUrl}/resource-counts`);
-      return await response.json();
+      const data = await response.json();
+      
+      // Transform the API response format to the expected format
+      const counts: Record<string, number> = {};
+      if (data.resourceTypes && Array.isArray(data.resourceTypes)) {
+        data.resourceTypes.forEach((item: { resourceType: string; count: number }) => {
+          counts[item.resourceType] = item.count;
+        });
+      }
+      
+      return counts;
     } catch (error: any) {
       throw new FhirClientError('Failed to fetch resource counts', error.status, error);
     }

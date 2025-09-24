@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { FhirClient } from "../services/fhir/fhir-client";
-import { ConsolidatedValidationService, UnifiedValidationService } from "../services/validation";
+import { ConsolidatedValidationService } from "../services/validation";
 import { DashboardService } from "../services/dashboard/dashboard-service";
 
 // Import route modules
@@ -8,7 +8,7 @@ import { setupValidationRoutes, setupValidationQueueRoutes, setupValidationSetti
 import { setupFhirRoutes, setupProfileRoutes } from "./api/fhir";
 import { setupDashboardRoutes } from "./api/dashboard";
 
-export function setupAllRoutes(app: Express, fhirClient: FhirClient, consolidatedValidationService: InstanceType<typeof UnifiedValidationService>, dashboardService: DashboardService) {
+export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, consolidatedValidationService: ConsolidatedValidationService | null, dashboardService: DashboardService | null) {
   // Health check endpoint
   app.get('/api/health', (req, res) => {
     res.json({ 
@@ -32,7 +32,12 @@ export async function registerRoutes(app: Express) {
   let fhirClient, consolidatedValidationService, dashboardService;
   
   try {
-    fhirClient = new FhirClient('https://hapi.fhir.org/baseR4'); // Default FHIR server
+    // Get the active FHIR server from database
+    const { storage } = await import('../storage');
+    const activeServer = await storage.getActiveFhirServer();
+    const serverUrl = activeServer?.url || 'https://hapi.fhir.org/baseR4';
+    console.log(`[Routes] Using FHIR server: ${serverUrl}`);
+    fhirClient = new FhirClient(serverUrl);
   } catch (error) {
     console.warn('FHIR client creation failed:', error.message);
     fhirClient = null;
@@ -46,7 +51,6 @@ export async function registerRoutes(app: Express) {
   }
   
   try {
-    const { storage } = await import('../storage');
     dashboardService = new DashboardService(fhirClient, storage);
   } catch (error) {
     console.warn('Dashboard service creation failed:', error.message);

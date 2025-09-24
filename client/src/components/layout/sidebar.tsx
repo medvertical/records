@@ -62,6 +62,20 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
     refetchOnMount: false, // Don't refetch on component mount if data exists
     // Only fetch resource counts when there's an active server
     enabled: isServerConnected,
+    queryFn: async () => {
+      const response = await fetch('/api/fhir/resource-counts');
+      const data = await response.json();
+      
+      // Transform the API response format to the expected format
+      const counts: Record<string, number> = {};
+      if (data.resourceTypes && Array.isArray(data.resourceTypes)) {
+        data.resourceTypes.forEach((item: { resourceType: string; count: number }) => {
+          counts[item.resourceType] = item.count;
+        });
+      }
+      
+      return counts;
+    },
   });
 
   if (isMobile) {

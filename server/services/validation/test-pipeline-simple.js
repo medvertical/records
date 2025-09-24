@@ -5,7 +5,7 @@
  * Tests the basic functionality of the validation pipeline
  */
 
-import { getValidationPipeline } from './validation-pipeline';
+import { getValidationPipeline } from './core/validation-pipeline';
 
 async function testPipeline() {
   console.log('🧪 Testing Validation Pipeline...\n');

@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../storage.js";
-import { ConsolidatedValidationService, UnifiedValidationService } from "../services/validation";
+import { ConsolidatedValidationService } from "../services/validation";
 import { getValidationSettingsService } from "../services/validation/settings/validation-settings-service";
 import { getValidationPipeline, getValidationQueueService, ValidationPriority, getIndividualResourceProgressService, getValidationCancellationRetryService } from "../services/validation";
 import { DashboardService } from "../services/dashboard/dashboard-service";
@@ -57,7 +57,7 @@ let globalValidationState = {
   }>
 };
 
-export function setupValidationRoutes(app: Express, consolidatedValidationService: InstanceType<typeof UnifiedValidationService>, dashboardService: DashboardService) {
+export function setupValidationRoutes(app: Express, consolidatedValidationService: ConsolidatedValidationService | null, dashboardService: DashboardService | null) {
   // Individual resource validation
   app.post("/api/validation/validate-resource", async (req, res) => {
     try {
@@ -65,29 +65,17 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
         return res.status(400).json({ message: "Validation service not initialized" });
       }
 
-      const { resource, profileUrl, config } = req.body;
-      // Delegate to unified validation adapter (backed by default pipeline)
-      const { validationResults } = await consolidatedValidationService.validateResource(resource, true, true);
-      const latest = validationResults.sort((a: any, b: any) => new Date(b.validatedAt).getTime() - new Date(a.validatedAt).getTime())[0];
-      const result = {
-        isValid: latest?.isValid ?? true,
-        errors: latest?.errors ?? [],
-        warnings: latest?.warnings ?? []
-      };
-      
-      // Store validation result
-      const resourceRecord = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
-      if (resourceRecord) {
-        await storage.createValidationResult({
-          resourceId: resourceRecord.id,
-          profileId: null, // TODO: link to profile if available
-          isValid: result.isValid,
-          errors: result.errors,
-          warnings: result.warnings,
-        });
-      }
-      
-      res.json(result);
+      const { resource } = req.body;
+      const { detailedResult } = await consolidatedValidationService.validateResource(resource, true, true);
+
+      const errors = detailedResult.issues.filter(issue => issue.severity === 'error' || issue.severity === 'fatal');
+      const warnings = detailedResult.issues.filter(issue => issue.severity === 'warning');
+
+      res.json({
+        isValid: detailedResult.isValid,
+        errors,
+        warnings,
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -95,27 +83,14 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
 
   app.post("/api/validation/validate-resource-detailed", async (req, res) => {
     try {
-      // Validation is handled by the pipeline via UnifiedValidationService
+      // Validation is handled by the pipeline via consolidated service
 
-      const { resource, config } = req.body;
+      const { resource } = req.body;
       
       // Create enhanced config with profiles from installed packages
-      const installedProfiles = await storage.getValidationProfiles(resource?.resourceType);
-      const enhancedConfig = {
-        strictMode: config?.strictMode || false,
-        requiredFields: config?.requiredFields || [],
-        customRules: config?.customRules || [],
-        autoValidate: true,
-        profiles: installedProfiles.map(p => p.url).slice(0, 3), // Limit to 3 profiles for performance
-        fetchFromSimplifier: config?.fetchFromSimplifier !== false,
-        fetchFromFhirServer: config?.fetchFromFhirServer !== false,
-        terminologyServer: config?.terminologyServer || 'https://terminology.hl7.org',
-        profileResolutionServer: config?.profileResolutionServer || 'https://simplifier.net'
-      };
-
-      const result = await consolidatedValidationService.validateResource(resource, true, true);
+      const { detailedResult } = await consolidatedValidationService.validateResource(resource, true, true);
       
-      res.json(result);
+      res.json(detailedResult);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -280,10 +255,9 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
   // Validation test settings
   app.post("/api/validation/test-settings", async (req, res) => {
     try {
-      const { settings, testResource } = req.body;
-      // Test validation with provided settings
-      const result = await consolidatedValidationService.validateResource(testResource, true, true);
-      res.json(result);
+      const { testResource } = req.body;
+      const { detailedResult } = await consolidatedValidationService.validateResource(testResource, true, true);
+      res.json(detailedResult);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

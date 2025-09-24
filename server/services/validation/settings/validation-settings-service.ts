@@ -416,6 +416,20 @@ export class ValidationSettingsService extends EventEmitter {
   async getSettings(): Promise<ValidationSettings> {
     return this.getCurrentSettings();
   }
+
+  /**
+   * Notify settings change (for polling-based notifications)
+   */
+  async notifySettingsChange(changeType: string, details?: any): Promise<void> {
+    try {
+      console.log(`[ValidationSettingsService] Settings change notification: ${changeType}`, details);
+      // Emit event for any listeners
+      this.emit('settingsChanged', { changeType, details, timestamp: new Date() });
+    } catch (error) {
+      console.error('[ValidationSettingsService] Failed to notify settings change:', error);
+      throw error;
+    }
+  }
 }
 
 // Factory function for backward compatibility

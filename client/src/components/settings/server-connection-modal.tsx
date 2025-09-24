@@ -51,7 +51,7 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
   const [urlValidationStatus, setUrlValidationStatus] = useState<{ isValid: boolean; error?: string; warning?: string }>({ isValid: true });
 
   // Server data hook
-  const { existingServers, refreshServerData } = useServerData();
+  const { servers: existingServers, refreshServerData } = useServerData();
 
   // Server operations hook
   const {

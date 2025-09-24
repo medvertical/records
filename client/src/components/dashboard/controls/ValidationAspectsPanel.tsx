@@ -27,7 +27,8 @@ export const ValidationAspectsPanel: React.FC<ValidationAspectsPanelProps> = ({
       }
       const data = await response.json();
       // API returns settings directly, not wrapped in a 'settings' property
-      return data;
+      // Ensure we always return a valid object to prevent TanStack Query undefined error
+      return data || {};
     },
     refetchInterval: 10000, // Refresh every 10 seconds (reduced frequency)
     staleTime: 5000, // Consider data stale after 5 seconds

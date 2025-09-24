@@ -7,6 +7,18 @@
 
 import type { ValidationSettings, ValidationAspect, ValidationSeverity } from '@shared/validation-settings';
 
+// Canonical list of validation aspects used across engine, pipeline, and UI
+export const ALL_VALIDATION_ASPECTS: ValidationAspect[] = [
+  'structural',
+  'profile',
+  'terminology',
+  'reference',
+  'businessRule',
+  'metadata'
+];
+
+export type ValidationAspectExecutionStatus = 'executed' | 'skipped' | 'disabled' | 'failed';
+
 // ============================================================================
 // Core Validation Types
 // ============================================================================
@@ -46,6 +58,8 @@ export interface ValidationAspectResult {
   isValid: boolean;
   issues: ValidationIssue[];
   validationTime: number;
+  status?: ValidationAspectExecutionStatus;
+  reason?: string;
 }
 
 // ============================================================================

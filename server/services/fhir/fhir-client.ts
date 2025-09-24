@@ -704,6 +704,59 @@ export class FhirClient {
     }
   }
 
+  // Alias for getAllResourceTypes to match API expectations
+  async getResourceTypes(): Promise<string[]> {
+    return this.getAllResourceTypes();
+  }
+
+  // Get resource counts for multiple resource types (optimized for performance)
+  async getResourceCounts(): Promise<Record<string, number>> {
+    try {
+      console.log('[FhirClient] Getting resource counts for common resource types...');
+      
+      // Only get counts for the most common resource types to avoid timeouts
+      const commonResourceTypes = [
+        'Patient', 'Observation', 'Encounter', 'Condition', 'DiagnosticReport',
+        'Medication', 'MedicationRequest', 'Procedure', 'AllergyIntolerance',
+        'Immunization', 'DocumentReference', 'Organization', 'Practitioner'
+      ];
+      
+      const counts: Record<string, number> = {};
+      
+      // Get counts for common resource types with timeout and concurrency limit
+      const concurrencyLimit = 3; // Process 3 resource types at a time
+      for (let i = 0; i < commonResourceTypes.length; i += concurrencyLimit) {
+        const batch = commonResourceTypes.slice(i, i + concurrencyLimit);
+        
+        const batchPromises = batch.map(async (resourceType) => {
+          try {
+            // Add timeout to individual requests
+            const timeoutPromise = new Promise<number>((_, reject) => {
+              setTimeout(() => reject(new Error('Request timeout')), 5000); // 5 second timeout
+            });
+            
+            const countPromise = this.getResourceCount(resourceType);
+            const count = await Promise.race([countPromise, timeoutPromise]);
+            
+            counts[resourceType] = count;
+            console.log(`[FhirClient] ${resourceType}: ${count}`);
+          } catch (error) {
+            console.warn(`[FhirClient] Failed to get count for ${resourceType}:`, error.message);
+            counts[resourceType] = 0;
+          }
+        });
+        
+        await Promise.all(batchPromises);
+      }
+      
+      console.log(`[FhirClient] Completed resource counts for ${Object.keys(counts).length} resource types`);
+      return counts;
+    } catch (error) {
+      console.error('[FhirClient] Failed to get resource counts:', error);
+      return {};
+    }
+  }
+
   private formatOperationOutcome(outcome: FhirOperationOutcome): string {
     return outcome.issue
       .map(issue => `${issue.severity}: ${issue.details?.text || issue.diagnostics || 'Unknown error'}`)

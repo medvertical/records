@@ -14,12 +14,62 @@ import { EventEmitter } from 'events';
 import { createHash } from 'crypto';
 import { storage } from '../../../storage';
 import { getValidationEngine } from './validation-engine';
-import { getValidationPipeline } from './validation-pipeline-new';
+import { getValidationPipeline } from './validation-pipeline';
 import { getValidationSettingsService } from '../settings/validation-settings-service';
-import ValidationCacheManager from '../../../utils/validation-cache-manager';
-import type { FhirResource, InsertFhirResource, InsertValidationResult, ValidationResult } from '@shared/schema';
+import type {
+  FhirResourceWithValidation,
+  InsertFhirResource,
+  InsertValidationResult,
+  ValidationResult as StoredValidationResult,
+} from '@shared/schema';
 import type { ValidationSettings } from '@shared/validation-settings';
-import type { ValidationPipelineRequest, ValidationPipelineResult } from '../pipeline/pipeline-types';
+import type {
+  ValidationPipelineRequest,
+  ValidationPipelineConfig,
+} from '../pipeline/pipeline-types';
+import type {
+  ValidationAspectResult,
+  ValidationIssue as EngineValidationIssue,
+  ValidationResult as EngineValidationResult,
+} from '../types/validation-types';
+import { ALL_VALIDATION_ASPECTS } from '../types/validation-types';
+
+interface DetailedValidationIssue extends EngineValidationIssue {
+  category?: string;
+}
+
+interface ValidationSummary {
+  totalIssues: number;
+  errorCount: number;
+  warningCount: number;
+  informationCount: number;
+  score: number;
+}
+
+interface ValidationPerformanceSummary {
+  totalTimeMs: number;
+  aspectTimes: Record<string, number>;
+}
+
+interface DetailedValidationResult {
+  resourceType: string;
+  resourceId: string | null;
+  isValid: boolean;
+  issues: DetailedValidationIssue[];
+  summary: ValidationSummary;
+  performance: ValidationPerformanceSummary;
+  validatedAt: string;
+}
+
+interface ValidateResourceOptions {
+  pipelineConfig?: Partial<ValidationPipelineConfig>;
+  validationSettingsOverride?: ValidationSettings;
+  requestContext?: {
+    requestId?: string;
+    requestedBy?: string;
+    metadata?: Record<string, any>;
+  };
+}
 
 // ============================================================================
 // Consolidated Validation Service
@@ -155,93 +205,115 @@ export class ConsolidatedValidationService extends EventEmitter {
    * Display filtering happens at the API layer
    */
   async validateResource(
-    resource: any, 
-    skipUnchanged: boolean = true, 
+    resource: any,
+    skipUnchanged: boolean = true,
     forceRevalidation: boolean = false,
-    retryAttempt: number = 0
+    retryAttempt: number = 0,
+    options: ValidateResourceOptions = {}
   ): Promise<{
-    validationResults: ValidationResult[];
+    validationResults: StoredValidationResult[];
+    detailedResult: DetailedValidationResult;
     wasRevalidated: boolean;
   }> {
+    console.log(`[ConsolidatedValidation] validateResource called for ${resource.resourceType}/${resource.id}`);
     const resourceHash = this.createResourceHash(resource);
-    
-    // Check if resource already exists in database
-    let dbResource = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
-    let wasRevalidated = false;
 
-    // Save or update resource in database
-    const resourceData: InsertFhirResource = {
-      resourceType: resource.resourceType,
-      resourceId: resource.id,
-      versionId: resource.meta?.versionId,
-      data: resource,
-      resourceHash: resourceHash,
-      serverId: 1 // Default server ID, should be dynamic in production
-    };
+    let dbResource: FhirResourceWithValidation | undefined;
+    let dbResourceId: number | undefined;
 
-    if (dbResource) {
-      // Update existing resource
-      await storage.updateFhirResource(dbResource.id, resource);
-      // Get updated resource with current validation results
-      const updatedResource = await storage.getFhirResourceById(dbResource.id);
-      if (updatedResource) {
-        dbResource = updatedResource;
+    try {
+      if (resource._dbId) {
+        dbResource = await storage.getFhirResourceById(resource._dbId);
+        dbResourceId = dbResource?.id;
+      } else if (resource.id) {
+        const existing = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
+        if (existing) {
+          dbResourceId = existing.id;
+        }
       }
-    } else {
-      // Create new resource
-      dbResource = await storage.createFhirResource(resourceData);
-      dbResource.validationResults = [];
-    }
 
-    // Check if we need to revalidate
-    const needsRevalidation = this.shouldRevalidateResource(dbResource, forceRevalidation, skipUnchanged);
-    
-    if (needsRevalidation) {
-      // Perform validation using the pipeline
-      const validationRequest: ValidationPipelineRequest = {
-        resources: [{
-          resource: resource,
+      if (resource.id) {
+        const resourceData: InsertFhirResource = {
           resourceType: resource.resourceType,
           resourceId: resource.id,
-          profileUrl: undefined, // Will be determined by settings
-          context: {
-            requestId: `resource_${resource.resourceType}_${resource.id}_${Date.now()}`,
-            requestedBy: 'consolidated-validation-service'
-          }
-        }],
-        context: {
-          requestId: `validation_${Date.now()}`,
-          requestedBy: 'consolidated-validation-service'
+          versionId: resource.meta?.versionId,
+          data: resource,
+          resourceHash,
+          serverId: 1 // TODO: inject active server
+        };
+
+        if (dbResourceId) {
+          await storage.updateFhirResource(dbResourceId, resource);
+        } else {
+          const created = await storage.createFhirResource(resourceData);
+          dbResourceId = created.id;
         }
+
+        if (dbResourceId) {
+          dbResource = await storage.getFhirResourceById(dbResourceId);
+        }
+      }
+    } catch (error) {
+      console.error('[ConsolidatedValidation] Failed to persist resource before validation:', error);
+      throw error;
+    }
+
+    let wasRevalidated = false;
+    let detailedResult: DetailedValidationResult | null = null;
+
+    const needsRevalidation = !dbResource
+      ? true
+      : this.shouldRevalidateResource(dbResource, forceRevalidation, skipUnchanged);
+
+    if (needsRevalidation) {
+      const requestContext = options.requestContext || {};
+      const pipelineRequest: ValidationPipelineRequest = {
+        resources: [
+          {
+            resource,
+            resourceType: resource.resourceType,
+            resourceId: resource.id,
+            profileUrl: undefined,
+            settings: options.validationSettingsOverride,
+          } as any,
+        ],
+        context: {
+          requestId: requestContext.requestId ?? `validation_${Date.now()}`,
+          requestedBy: requestContext.requestedBy ?? 'consolidated-validation-service',
+          metadata: requestContext.metadata,
+        },
       };
 
+      if (options.pipelineConfig) {
+        pipelineRequest.config = options.pipelineConfig;
+      }
+
       try {
-        const pipelineResult = await this.pipeline.executePipeline(validationRequest);
-        const validationResult = pipelineResult.results[0];
+        const pipelineResult = await this.pipeline.executePipeline(pipelineRequest);
+        if (!pipelineResult.results || pipelineResult.results.length === 0) {
+          throw new Error('Validation pipeline returned no results');
+        }
 
-        if (validationResult) {
-          // Save validation result to database
-          const validationResultData: InsertValidationResult = {
-            resourceId: dbResource.id,
-            profileId: null, // TODO: link to profile if available
-            isValid: validationResult.isValid,
-            errors: validationResult.issues.filter(issue => issue.severity === 'error'),
-            warnings: validationResult.issues.filter(issue => issue.severity === 'warning'),
-            information: validationResult.issues.filter(issue => issue.severity === 'info'),
-            summary: validationResult.summary,
-            performance: validationResult.performance,
-            validatedAt: validationResult.validatedAt,
-            settingsUsed: validationResult.settingsUsed
-          };
+        const pipelineValidationResult = pipelineResult.results[0];
+        detailedResult = this.buildDetailedResultFromEngine(
+          pipelineValidationResult,
+          resource.resourceType,
+          resource.id ?? null
+        );
+        wasRevalidated = true;
 
-          await storage.createValidationResult(validationResultData);
-          wasRevalidated = true;
+        if (dbResourceId) {
+          const insertData = this.buildInsertValidationResult(
+            dbResourceId,
+            detailedResult,
+            resourceHash,
+            pipelineValidationResult
+          );
 
-          // Update resource with new validation results
-          const updatedResource = await storage.getFhirResourceById(dbResource.id);
-          if (updatedResource) {
-            dbResource = updatedResource;
-          }
+          console.log(`[ConsolidatedValidation] Saving validation result for resource ID: ${dbResourceId}`);
+          await storage.createValidationResult(insertData);
+          await storage.updateFhirResourceLastValidated(dbResourceId, detailedResult.validatedAt);
+          dbResource = await storage.getFhirResourceById(dbResourceId);
         }
       } catch (error) {
         console.error('[ConsolidatedValidation] Validation failed:', error);
@@ -249,18 +321,320 @@ export class ConsolidatedValidationService extends EventEmitter {
       }
     }
 
+    if (!detailedResult) {
+      const latestStored = dbResource?.validationResults
+        ? this.getLatestStoredValidationResult(dbResource.validationResults)
+        : undefined;
+
+      if (latestStored) {
+        detailedResult = this.buildDetailedResultFromStored(
+          latestStored,
+          resource.resourceType,
+          resource.id ?? null
+        );
+      }
+    }
+
+    if (!detailedResult) {
+      detailedResult = this.createEmptyDetailedResult(resource);
+    }
+
     return {
-      validationResults: dbResource.validationResults || [],
-      wasRevalidated
+      validationResults: dbResource?.validationResults || [],
+      detailedResult,
+      wasRevalidated,
     };
+  }
+
+  private buildDetailedResultFromEngine(
+    result: EngineValidationResult,
+    resourceType: string,
+    resourceId: string | null
+  ): DetailedValidationResult {
+    const issues = this.normalizeIssues(result.issues || []);
+    const summary = this.buildSummary(issues, result.isValid, undefined);
+    const performance = this.buildPerformanceSummaryFromEngine(result);
+    const validatedAt = result.validatedAt instanceof Date
+      ? result.validatedAt.toISOString()
+      : new Date().toISOString();
+
+    return {
+      resourceType,
+      resourceId,
+      isValid: result.isValid,
+      issues,
+      summary,
+      performance,
+      validatedAt,
+    };
+  }
+
+  private buildDetailedResultFromStored(
+    stored: StoredValidationResult,
+    resourceType: string,
+    resourceId: string | null
+  ): DetailedValidationResult {
+    const issues = this.normalizeIssues(Array.isArray(stored.issues) ? stored.issues : []);
+    const summary = this.buildSummary(issues, stored.isValid, {
+      totalIssues: Array.isArray(stored.issues) ? stored.issues.length : undefined,
+      errorCount: stored.errorCount ?? undefined,
+      warningCount: stored.warningCount ?? undefined,
+      informationCount: undefined,
+      score: stored.validationScore ?? undefined,
+    });
+    const performance = this.buildPerformanceSummaryFromStored(stored);
+    const validatedAt = stored.validatedAt
+      ? new Date(stored.validatedAt).toISOString()
+      : new Date().toISOString();
+
+    return {
+      resourceType,
+      resourceId,
+      isValid: stored.isValid,
+      issues,
+      summary,
+      performance,
+      validatedAt,
+    };
+  }
+
+  private createEmptyDetailedResult(resource: any): DetailedValidationResult {
+    return {
+      resourceType: resource?.resourceType || 'Unknown',
+      resourceId: resource?.id ?? null,
+      isValid: true,
+      issues: [],
+      summary: {
+        totalIssues: 0,
+        errorCount: 0,
+        warningCount: 0,
+        informationCount: 0,
+        score: 100,
+      },
+      performance: {
+        totalTimeMs: 0,
+        aspectTimes: {},
+      },
+      validatedAt: new Date().toISOString(),
+    };
+  }
+
+  private buildInsertValidationResult(
+    resourceId: number,
+    detailedResult: DetailedValidationResult,
+    resourceHash: string,
+    engineResult?: EngineValidationResult
+  ): InsertValidationResult {
+    const errorIssues = detailedResult.issues.filter(issue => this.isErrorSeverity(issue.severity));
+    const warningIssues = detailedResult.issues.filter(issue => issue.severity === 'warning');
+
+    return {
+      resourceId,
+      profileId: null,
+      isValid: detailedResult.isValid,
+      errors: errorIssues,
+      warnings: warningIssues,
+      issues: detailedResult.issues,
+      errorCount: detailedResult.summary.errorCount,
+      warningCount: detailedResult.summary.warningCount,
+      validationScore: detailedResult.summary.score,
+      validatedAt: new Date(detailedResult.validatedAt),
+      resourceHash,
+      performanceMetrics: detailedResult.performance,
+      aspectBreakdown: this.buildAspectBreakdown(engineResult?.aspects),
+      validationDurationMs: detailedResult.performance.totalTimeMs,
+    };
+  }
+
+  private buildAspectBreakdown(aspects?: ValidationAspectResult[]): Record<string, any> {
+    const baseline = ALL_VALIDATION_ASPECTS.reduce<Record<string, any>>((acc, aspect) => {
+      const key = this.normalizeAspectKey(aspect) ?? aspect;
+      acc[key] = {
+        issueCount: 0,
+        errorCount: 0,
+        warningCount: 0,
+        informationCount: 0,
+        validationScore: 0,
+        passed: false,
+        enabled: false,
+        status: 'skipped',
+        reason: 'Aspect result unavailable',
+        duration: 0,
+        issues: []
+      };
+      return acc;
+    }, {});
+
+    if (!aspects || aspects.length === 0) {
+      return baseline;
+    }
+
+    return aspects.reduce<Record<string, any>>((acc, aspect) => {
+      const normalizedKey = this.normalizeAspectKey(aspect.aspect);
+      if (!normalizedKey) {
+        return acc;
+      }
+
+      const aspectIssues = this.normalizeIssues(aspect.issues || []);
+      const errorCount = aspectIssues.filter(issue => this.isErrorSeverity(issue.severity)).length;
+      const warningCount = aspectIssues.filter(issue => issue.severity === 'warning').length;
+      const informationCount = aspectIssues.filter(issue => this.isInformationSeverity(issue.severity)).length;
+
+      acc[normalizedKey] = {
+        issueCount: aspectIssues.length,
+        errorCount,
+        warningCount,
+        informationCount,
+        validationScore: aspect.isValid ? 100 : 0,
+        passed: aspect.isValid,
+        enabled: aspect.status !== 'disabled',
+        status: aspect.status ?? 'executed',
+        reason: aspect.reason,
+        duration: aspect.validationTime ?? 0,
+        issues: aspectIssues
+      };
+      return acc;
+    }, baseline);
+  }
+
+  private buildSummary(
+    issues: DetailedValidationIssue[],
+    isValid: boolean,
+    existing?: Partial<ValidationSummary>
+  ): ValidationSummary {
+    const errorCount = existing?.errorCount ?? issues.filter(issue => this.isErrorSeverity(issue.severity)).length;
+    const warningCount = existing?.warningCount ?? issues.filter(issue => issue.severity === 'warning').length;
+    const informationCount = existing?.informationCount ?? issues.filter(issue => this.isInformationSeverity(issue.severity)).length;
+    const totalIssues = existing?.totalIssues ?? issues.length;
+    const score = existing?.score ?? (isValid ? 100 : 0);
+
+    return {
+      totalIssues,
+      errorCount,
+      warningCount,
+      informationCount,
+      score,
+    };
+  }
+
+  private buildPerformanceSummaryFromEngine(result: EngineValidationResult): ValidationPerformanceSummary {
+    const totalTimeMs = typeof result.validationTime === 'number' ? result.validationTime : 0;
+    const aspectTimes = (result.aspects || []).reduce<Record<string, number>>((acc, aspect) => {
+      const key = this.normalizeAspectKey(aspect.aspect);
+      acc[key] = aspect.validationTime || 0;
+      return acc;
+    }, {});
+
+    return {
+      totalTimeMs,
+      aspectTimes,
+    };
+  }
+
+  private buildPerformanceSummaryFromStored(stored: StoredValidationResult): ValidationPerformanceSummary {
+    const metrics = (stored.performanceMetrics || {}) as Record<string, any>;
+    const totalTimeMs = typeof metrics.totalTimeMs === 'number'
+      ? metrics.totalTimeMs
+      : stored.validationDurationMs ?? 0;
+    const aspectTimes = metrics.aspectTimes && typeof metrics.aspectTimes === 'object'
+      ? metrics.aspectTimes
+      : {};
+
+    return {
+      totalTimeMs,
+      aspectTimes,
+    };
+  }
+
+  private normalizeIssues(issues: Array<EngineValidationIssue | any>): DetailedValidationIssue[] {
+    if (!Array.isArray(issues)) {
+      return [];
+    }
+
+    return issues.map((issue, index) => {
+      const severity = typeof issue.severity === 'string' ? issue.severity : 'information';
+      const category = issue.category ?? this.mapAspectToCategory(issue.aspect);
+      return {
+        id: issue.id ?? `issue-${index}`,
+        aspect: issue.aspect,
+        severity,
+        message: issue.message,
+        path: issue.path,
+        code: issue.code,
+        details: issue.details,
+        location: issue.location,
+        humanReadable: issue.humanReadable,
+        category,
+      } as DetailedValidationIssue;
+    });
+  }
+
+  private mapAspectToCategory(aspect?: string): string {
+    if (!aspect) {
+      return 'general';
+    }
+
+    const normalized = aspect.toLowerCase();
+    if (normalized.includes('business')) {
+      return 'business-rule';
+    }
+    if (normalized.includes('struct')) {
+      return 'structural';
+    }
+    if (normalized.includes('terminology')) {
+      return 'terminology';
+    }
+    if (normalized.includes('profile')) {
+      return 'profile';
+    }
+    if (normalized.includes('reference')) {
+      return 'reference';
+    }
+    if (normalized.includes('metadata')) {
+      return 'metadata';
+    }
+    return this.normalizeAspectKey(normalized);
+  }
+
+  private normalizeAspectKey(aspect?: string): string {
+    if (!aspect) {
+      return 'general';
+    }
+
+    return aspect
+      .replace(/([a-z])([A-Z])/g, '$1-$2')
+      .replace(/_/g, '-')
+      .toLowerCase();
+  }
+
+  private getLatestStoredValidationResult(results: StoredValidationResult[]): StoredValidationResult | undefined {
+    if (!Array.isArray(results) || results.length === 0) {
+      return undefined;
+    }
+
+    return results
+      .slice()
+      .sort((a, b) => {
+        const aTime = a.validatedAt ? new Date(a.validatedAt).getTime() : 0;
+        const bTime = b.validatedAt ? new Date(b.validatedAt).getTime() : 0;
+        return bTime - aTime;
+      })[0];
+  }
+
+  private isErrorSeverity(severity?: string): boolean {
+    return severity === 'error' || severity === 'fatal';
+  }
+
+  private isInformationSeverity(severity?: string): boolean {
+    return severity === 'information' || severity === 'info';
   }
 
   /**
    * Check if resource needs revalidation
    */
   private shouldRevalidateResource(
-    dbResource: FhirResource, 
-    forceRevalidation: boolean, 
+    dbResource: FhirResourceWithValidation,
+    forceRevalidation: boolean,
     skipUnchanged: boolean
   ): boolean {
     if (forceRevalidation) {
@@ -271,13 +645,16 @@ export class ConsolidatedValidationService extends EventEmitter {
       return true;
     }
 
-    // Check if resource has validation results
-    if (!dbResource.validationResults || dbResource.validationResults.length === 0) {
+    const validationResults = dbResource.validationResults || [];
+    if (validationResults.length === 0) {
       return true;
     }
 
-    // Check if latest validation is recent enough (within 1 hour)
-    const latestValidation = dbResource.validationResults[0];
+    const latestValidation = this.getLatestStoredValidationResult(validationResults);
+    if (!latestValidation?.validatedAt) {
+      return true;
+    }
+
     const validationAge = Date.now() - new Date(latestValidation.validatedAt).getTime();
     const maxAge = 60 * 60 * 1000; // 1 hour
 
@@ -288,31 +665,49 @@ export class ConsolidatedValidationService extends EventEmitter {
    * Check and revalidate resource if needed
    */
   async checkAndRevalidateResource(
-    resourceWithValidation: FhirResource & { validationResults?: ValidationResult[] }
+    resourceWithValidation: FhirResourceWithValidation
   ): Promise<{
     needsRevalidation: boolean;
     wasRevalidated: boolean;
-    validationResults: ValidationResult[];
+    validationResults: StoredValidationResult[];
+    detailedResult: DetailedValidationResult;
   }> {
     const needsRevalidation = this.shouldRevalidateResource(
-      resourceWithValidation, 
-      false, // Don't force revalidation
-      true   // Skip unchanged
+      resourceWithValidation,
+      false,
+      true
     );
 
     let wasRevalidated = false;
     let validationResults = resourceWithValidation.validationResults || [];
+    let detailedResult: DetailedValidationResult;
 
     if (needsRevalidation) {
       const result = await this.validateResource(resourceWithValidation.data, true, false);
       validationResults = result.validationResults;
       wasRevalidated = result.wasRevalidated;
+      detailedResult = result.detailedResult;
+    } else {
+      const latest = this.getLatestStoredValidationResult(validationResults);
+      if (latest) {
+        detailedResult = this.buildDetailedResultFromStored(
+          latest,
+          resourceWithValidation.resourceType,
+          resourceWithValidation.resourceId
+        );
+      } else {
+        detailedResult = this.createEmptyDetailedResult(resourceWithValidation.data ?? {
+          resourceType: resourceWithValidation.resourceType,
+          id: resourceWithValidation.resourceId,
+        });
+      }
     }
 
     return {
       needsRevalidation,
       wasRevalidated,
-      validationResults
+      validationResults,
+      detailedResult,
     };
   }
 
@@ -333,7 +728,8 @@ export class ConsolidatedValidationService extends EventEmitter {
   ): Promise<{
     results: Array<{
       resource: any;
-      validationResults: ValidationResult[];
+      validationResults: StoredValidationResult[];
+      detailedResult: DetailedValidationResult;
       wasRevalidated: boolean;
     }>;
     summary: {
@@ -347,15 +743,11 @@ export class ConsolidatedValidationService extends EventEmitter {
 
     // Create validation requests
     const validationRequests = resources.map(resource => ({
-      resource: resource,
+      resource,
       resourceType: resource.resourceType,
       resourceId: resource.id,
       profileUrl: undefined,
-      context: {
-        requestId: `batch_${resource.resourceType}_${resource.id}_${Date.now()}`,
-        requestedBy: 'consolidated-validation-service'
-      }
-    }));
+    })) as any[];
 
     // Execute batch validation using pipeline
     const pipelineRequest: ValidationPipelineRequest = {
@@ -373,16 +765,19 @@ export class ConsolidatedValidationService extends EventEmitter {
 
     try {
       const pipelineResult = await this.pipeline.executePipeline(pipelineRequest);
-      
-      // Process results and save to database
-      const results = [];
+      const results = [] as Array<{
+        resource: any;
+        validationResults: StoredValidationResult[];
+        detailedResult: DetailedValidationResult;
+        wasRevalidated: boolean;
+      }>;
       let revalidated = 0;
       let cached = 0;
       let errors = 0;
 
       for (let i = 0; i < resources.length; i++) {
         const resource = resources[i];
-        const validationResult = pipelineResult.results[i];
+        const validationResult = pipelineResult.results?.[i];
 
         try {
           // Save resource to database
@@ -395,38 +790,66 @@ export class ConsolidatedValidationService extends EventEmitter {
             serverId: 1
           };
 
-          let dbResource = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
-          if (dbResource) {
-            await storage.updateFhirResource(dbResource.id, resource);
-          } else {
-            dbResource = await storage.createFhirResource(resourceData);
+          let dbResource = resource.id
+            ? await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id)
+            : undefined;
+
+          if (resource.id) {
+            if (dbResource) {
+              await storage.updateFhirResource(dbResource.id, resource);
+            } else {
+              dbResource = await storage.createFhirResource(resourceData);
+            }
           }
 
-          // Save validation result
-          if (validationResult) {
-            const validationResultData: InsertValidationResult = {
-              resourceId: dbResource.id,
-              profileId: null,
-              isValid: validationResult.isValid,
-              errors: validationResult.issues.filter(issue => issue.severity === 'error'),
-              warnings: validationResult.issues.filter(issue => issue.severity === 'warning'),
-              information: validationResult.issues.filter(issue => issue.severity === 'info'),
-              summary: validationResult.summary,
-              performance: validationResult.performance,
-              validatedAt: validationResult.validatedAt,
-              settingsUsed: validationResult.settingsUsed
-            };
+          let storedResults: StoredValidationResult[] = [];
+          let detailedResult: DetailedValidationResult;
+          let wasResourceRevalidated = false;
 
-            await storage.createValidationResult(validationResultData);
+          if (validationResult && dbResource?.id) {
+            const detailed = this.buildDetailedResultFromEngine(
+              validationResult,
+              resource.resourceType,
+              resource.id ?? null
+            );
+            const insertData = this.buildInsertValidationResult(
+              dbResource.id,
+              detailed,
+              resourceData.resourceHash,
+              validationResult
+            );
+
+            const savedResult = await storage.createValidationResult(insertData);
+            await storage.updateFhirResourceLastValidated(dbResource.id, detailed.validatedAt);
+            const refreshed = await storage.getFhirResourceById(dbResource.id);
+            storedResults = refreshed?.validationResults || [savedResult];
+            detailedResult = detailed;
+            wasResourceRevalidated = true;
+            revalidated++;
+          } else if (validationResult) {
+            detailedResult = this.buildDetailedResultFromEngine(
+              validationResult,
+              resource.resourceType,
+              resource.id ?? null
+            );
+            wasResourceRevalidated = true;
+            storedResults = [];
             revalidated++;
           } else {
+            const refreshed = dbResource?.id ? await storage.getFhirResourceById(dbResource.id) : undefined;
+            storedResults = refreshed?.validationResults || [];
+            const latest = this.getLatestStoredValidationResult(storedResults);
+            detailedResult = latest
+              ? this.buildDetailedResultFromStored(latest, resource.resourceType, resource.id ?? null)
+              : this.createEmptyDetailedResult(resource);
             cached++;
           }
 
           results.push({
             resource,
-            validationResults: [validationResult],
-            wasRevalidated: !!validationResult
+            validationResults: storedResults,
+            detailedResult,
+            wasRevalidated: wasResourceRevalidated,
           });
 
         } catch (error) {
@@ -435,7 +858,8 @@ export class ConsolidatedValidationService extends EventEmitter {
           results.push({
             resource,
             validationResults: [],
-            wasRevalidated: false
+            detailedResult: this.createEmptyDetailedResult(resource),
+            wasRevalidated: false,
           });
         }
       }
@@ -575,17 +999,3 @@ export function resetConsolidatedValidationService(): void {
 // ============================================================================
 // Backward Compatibility Alias
 // ============================================================================
-
-/**
- * Backward compatibility alias for UnifiedValidationService
- * @deprecated Use ConsolidatedValidationService instead
- */
-export const UnifiedValidationService = ConsolidatedValidationService;
-
-/**
- * Backward compatibility factory function
- * @deprecated Use getConsolidatedValidationService instead
- */
-export function getUnifiedValidationService(): ConsolidatedValidationService {
-  return getConsolidatedValidationService();
-}

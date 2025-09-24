@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { storage } from "../../../storage.js";
-import { ConsolidatedValidationService, UnifiedValidationService } from "../../../services/validation";
+import { ConsolidatedValidationService } from "../../../services/validation";
 import { getValidationSettingsService } from "../../../services/validation/settings/validation-settings-service";
 import { getValidationPipeline, getValidationQueueService, ValidationPriority, getIndividualResourceProgressService, getValidationCancellationRetryService } from "../../../services/validation";
 import { DashboardService } from "../../../services/dashboard/dashboard-service";
@@ -57,7 +57,7 @@ let globalValidationState = {
   }>
 };
 
-export function setupValidationRoutes(app: Express, consolidatedValidationService: InstanceType<typeof UnifiedValidationService>, dashboardService: DashboardService) {
+export function setupValidationRoutes(app: Express, consolidatedValidationService: ConsolidatedValidationService | null, dashboardService: DashboardService | null) {
   // Individual resource validation
   app.post("/api/validation/validate-resource", async (req, res) => {
     try {
@@ -65,29 +65,17 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
         return res.status(400).json({ message: "Validation service not initialized" });
       }
 
-      const { resource, profileUrl, config } = req.body;
-      // Delegate to unified validation adapter (backed by default pipeline)
-      const { validationResults } = await consolidatedValidationService.validateResource(resource, true, true);
-      const latest = validationResults.sort((a: any, b: any) => new Date(b.validatedAt).getTime() - new Date(a.validatedAt).getTime())[0];
-      const result = {
-        isValid: latest?.isValid ?? true,
-        errors: latest?.errors ?? [],
-        warnings: latest?.warnings ?? []
-      };
-      
-      // Store validation result
-      const resourceRecord = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
-      if (resourceRecord) {
-        await storage.createValidationResult({
-          resourceId: resourceRecord.id,
-          profileId: null, // TODO: link to profile if available
-          isValid: result.isValid,
-          errors: result.errors,
-          warnings: result.warnings,
-        });
-      }
-      
-      res.json(result);
+      const { resource } = req.body;
+      const { detailedResult } = await consolidatedValidationService.validateResource(resource, true, true);
+
+      const errors = detailedResult.issues.filter(issue => issue.severity === 'error' || issue.severity === 'fatal');
+      const warnings = detailedResult.issues.filter(issue => issue.severity === 'warning');
+
+      res.json({
+        isValid: detailedResult.isValid,
+        errors,
+        warnings,
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -95,27 +83,13 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
 
   app.post("/api/validation/validate-resource-detailed", async (req, res) => {
     try {
-      // Validation is handled by the pipeline via UnifiedValidationService
+      // Validation is handled by the pipeline via consolidated service
 
-      const { resource, config } = req.body;
-      
-      // Create enhanced config with profiles from installed packages
-      const installedProfiles = await storage.getValidationProfiles(resource?.resourceType);
-      const enhancedConfig = {
-        strictMode: config?.strictMode || false,
-        requiredFields: config?.requiredFields || [],
-        customRules: config?.customRules || [],
-        autoValidate: true,
-        profiles: installedProfiles.map(p => p.url).slice(0, 3), // Limit to 3 profiles for performance
-        fetchFromSimplifier: config?.fetchFromSimplifier !== false,
-        fetchFromFhirServer: config?.fetchFromFhirServer !== false,
-        terminologyServer: config?.terminologyServer || 'https://terminology.hl7.org',
-        profileResolutionServer: config?.profileResolutionServer || 'https://simplifier.net'
-      };
+      const { resource } = req.body;
 
-      const result = await consolidatedValidationService.validateResource(resource, true, true);
+      const { detailedResult } = await consolidatedValidationService.validateResource(resource, true, true);
       
-      res.json(result);
+      res.json(detailedResult);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -280,10 +254,9 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
   // Validation test settings
   app.post("/api/validation/test-settings", async (req, res) => {
     try {
-      const { settings, testResource } = req.body;
-      // Test validation with provided settings
-      const result = await consolidatedValidationService.validateResource(testResource, true, true);
-      res.json(result);
+      const { testResource } = req.body;
+      const { detailedResult } = await consolidatedValidationService.validateResource(testResource, true, true);
+      res.json(detailedResult);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -449,5 +422,154 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
       message: "Real-time streaming is disabled in MVP version. Use polling instead.",
       pollingEndpoint: "/api/validation/bulk/progress"
     });
+  });
+
+  // Test endpoint to update lastValidated field
+  app.post("/api/validation/test-update", async (req, res) => {
+    try {
+      const { resourceId } = req.body;
+      console.log(`[ValidationAPI] Testing update for resource ID: ${resourceId}`);
+      
+      await storage.updateFhirResourceLastValidated(resourceId, new Date().toISOString());
+      
+      res.json({ success: true, message: `Updated lastValidated for resource ${resourceId}` });
+    } catch (error: any) {
+      console.error('[ValidationAPI] Test update failed:', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Test endpoint to create validation result
+  app.post("/api/validation/test-create-result", async (req, res) => {
+    try {
+      const { resourceId } = req.body;
+      console.log(`[ValidationAPI] Testing validation result creation for resource ID: ${resourceId}`);
+      
+      const testResult = {
+        resourceId: resourceId,
+        profileId: null,
+        isValid: true,
+        errors: [],
+        warnings: [],
+        issues: [],
+        errorCount: 0,
+        warningCount: 0,
+        validationScore: 100,
+        validatedAt: new Date(),
+        performanceMetrics: {}
+      };
+      
+      const savedResult = await storage.createValidationResult(testResult);
+      
+      res.json({ success: true, message: `Created validation result with ID: ${savedResult.id}` });
+    } catch (error: any) {
+      console.error('[ValidationAPI] Test validation result creation failed:', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Validate specific resources by IDs
+  app.post("/api/validation/validate-by-ids", async (req, res) => {
+    try {
+      const { resourceIds, resourceType, resources } = req.body;
+      console.log(`[ValidationAPI] Received validation request:`, { resourceIds, resourceType, resources: resources?.length });
+      
+      // Handle mixed resource types (when resources array is provided)
+      if (resources && Array.isArray(resources) && resources.length > 0) {
+        console.log(`[ValidationAPI] Validating ${resources.length} mixed resources by resource objects`);
+        
+        const validationService = new ConsolidatedValidationService();
+        let validatedCount = 0;
+        
+        for (const resource of resources) {
+          try {
+            if (resource && resource.resourceType) {
+              // Ensure the resource has an ID - use the resourceId from the database if available
+              const resourceToValidate = {
+                ...resource,
+                id: resource.id || resource.resourceId || resource._dbId
+              };
+              
+              if (resourceToValidate.id) {
+                // Validate the resource directly
+                await validationService.validateResource(resourceToValidate);
+                validatedCount++;
+                console.log(`[ValidationAPI] Successfully validated ${resource.resourceType} resource ${resourceToValidate.id}`);
+              } else {
+                console.warn(`[ValidationAPI] Skipping resource without ID:`, resource);
+              }
+            }
+          } catch (error) {
+            console.warn(`[ValidationAPI] Failed to validate ${resource.resourceType} resource:`, error.message);
+          }
+        }
+        
+        return res.json({
+          success: true,
+          validatedCount,
+          requestedCount: resources.length,
+          message: `Successfully validated ${validatedCount} out of ${resources.length} mixed resources`
+        });
+      }
+      
+      // Handle single resource type (legacy behavior)
+      if (!resourceIds || !Array.isArray(resourceIds) || resourceIds.length === 0) {
+        return res.status(400).json({ message: "Resource IDs array is required" });
+      }
+
+      if (!resourceType) {
+        return res.status(400).json({ message: "Resource type is required" });
+      }
+
+      console.log(`[ValidationAPI] Validating ${resourceIds.length} ${resourceType} resources by IDs:`, resourceIds);
+
+      // Get validation service
+      const validationService = new ConsolidatedValidationService();
+      
+      // Get FHIR client to fetch resources
+      const { FhirClient } = await import("../../../services/fhir/fhir-client");
+      const fhirClient = new FhirClient('https://hapi.fhir.org/baseR4');
+      
+      // Validate each resource
+      let validatedCount = 0;
+      for (const resourceId of resourceIds) {
+        try {
+          // First, get the resource from the database to get the actual FHIR resource data
+          const dbResource = await storage.getFhirResourceById(resourceId);
+          
+          if (dbResource && dbResource.data) {
+            console.log(`[ValidationAPI] Found resource in database: ID=${dbResource.id}, ResourceID=${dbResource.resourceId}, Type=${dbResource.resourceType}`);
+            // Validate the resource using the data from the database
+            // Pass the database resource ID so validation results can be saved properly
+            const resourceToValidate = {
+              ...dbResource.data,
+              _dbId: dbResource.id // Add database ID to the resource
+            };
+            const validationResult = await validationService.validateResource(resourceToValidate);
+            console.log(`[ValidationAPI] Validation result:`, validationResult);
+            validatedCount++;
+            console.log(`[ValidationAPI] Successfully validated ${resourceType} resource ${dbResource.resourceId} (DB ID: ${resourceId})`);
+          } else {
+            console.warn(`[ValidationAPI] Resource with database ID ${resourceId} not found in database`);
+          }
+        } catch (error) {
+          console.warn(`[ValidationAPI] Failed to validate resource with database ID ${resourceId}:`, error.message);
+        }
+      }
+
+      res.json({
+        success: true,
+        validatedCount,
+        requestedCount: resourceIds.length,
+        message: `Successfully validated ${validatedCount} out of ${resourceIds.length} ${resourceType} resources`
+      });
+
+    } catch (error: any) {
+      console.error('[ValidationAPI] Error in validate-by-ids:', error);
+      res.status(500).json({ 
+        success: false,
+        message: error.message || 'Internal server error'
+      });
+    }
   });
 }

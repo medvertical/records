@@ -9,6 +9,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Loader2, Play, Settings } from "lucide-react";
 
+// Simple client-side cache to track validated resources
+const validatedResourcesCache = new Set<string>();
+
+// Make cache accessible globally for other components
+if (typeof window !== 'undefined') {
+  (window as any).validatedResourcesCache = validatedResourcesCache;
+}
+
 interface ResourcesResponse {
   resources: any[];
   total: number;
@@ -158,26 +166,8 @@ export default function ResourceBrowser() {
     return;
   }, []);
 
-  // Get active server with minimal re-renders - use local state instead of hook
-  const [stableActiveServer, setStableActiveServer] = useState<any>(null);
-  
-  // Fetch active server once on mount and when location changes
-  useEffect(() => {
-    const fetchActiveServer = async () => {
-      try {
-        const response = await fetch('/api/fhir/servers');
-        if (response.ok) {
-          const servers = await response.json();
-          const activeServer = servers.find((server: any) => server.isActive);
-          setStableActiveServer(activeServer);
-        }
-      } catch (error) {
-        console.error('Failed to fetch active server:', error);
-      }
-    };
-    
-    fetchActiveServer();
-  }, [location]); // Only refetch when location changes
+  // Get active server using the proper hook
+  const { activeServer: stableActiveServer } = useServerData();
 
   // Debug logging for component state - reduced frequency
   useEffect(() => {
@@ -357,7 +347,7 @@ export default function ResourceBrowser() {
     });
     setValidationProgress(initialProgress);
 
-    // Simulate progress updates
+    // Simulate progress updates with more realistic timing
     let currentAspectIndex = 0;
     const updateInterval = setInterval(() => {
       setValidationProgress(prev => {
@@ -367,17 +357,21 @@ export default function ResourceBrowser() {
         resourceIds.forEach(id => {
           const current = updated.get(id);
           if (current && currentAspectIndex < totalAspects) {
-            const progress = ((currentAspectIndex + 1) / totalAspects) * 100;
-            const completedAspects = aspects.slice(0, currentAspectIndex + 1);
+            // More gradual progress increase
+            const baseProgress = (currentAspectIndex / totalAspects) * 100;
+            const aspectProgress = (1 / totalAspects) * 100;
+            const progress = Math.min(baseProgress + (aspectProgress * 0.3), 95); // Cap at 95% until completion
+            
+            const completedAspects = aspects.slice(0, currentAspectIndex);
             
             updated.set(id, {
               ...current,
-              progress: Math.min(progress, 100),
+              progress: Math.min(progress, 95), // Don't show 100% until actually complete
               currentAspect: currentAspectIndex < totalAspects ? `Validating ${aspects[currentAspectIndex]}...` : 'Completing...',
               completedAspects: completedAspects
             });
 
-            if (progress < 100) {
+            if (currentAspectIndex < totalAspects) {
               allComplete = false;
             }
           }
@@ -385,17 +379,13 @@ export default function ResourceBrowser() {
 
         if (allComplete) {
           clearInterval(updateInterval);
-          // Clear progress after a short delay
-          setTimeout(() => {
-            setValidationProgress(new Map());
-          }, 1000);
         }
 
         return updated;
       });
 
       currentAspectIndex++;
-    }, 500); // Update every 500ms
+    }, 800); // Slower updates for more realistic feel
 
     return updateInterval;
   }, []);
@@ -430,7 +420,14 @@ export default function ResourceBrowser() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          resourceIds: resourceIds
+          // If we have a specific resource type, use the legacy approach
+          ...(resourceType && resourceType !== "All" ? {
+            resourceIds: resourceIds,
+            resourceType: resourceType
+          } : {
+            // For mixed resource types, send the actual resource objects
+            resources: resourcesData.resources
+          })
         })
       });
 
@@ -444,6 +441,30 @@ export default function ResourceBrowser() {
         validatedCount: result.validatedCount,
         requestedCount: result.requestedCount
       });
+
+      // Clear the progress simulation and show completion
+      clearInterval(progressInterval);
+      
+      // Show completion state briefly before clearing
+      setValidationProgress(prev => {
+        const completed = new Map(prev);
+        resourceIds.forEach(id => {
+          const current = completed.get(id);
+          if (current) {
+            completed.set(id, {
+              ...current,
+              progress: 100,
+              currentAspect: 'Validation complete'
+            });
+          }
+        });
+        return completed;
+      });
+
+      // Clear progress after showing completion
+      setTimeout(() => {
+        setValidationProgress(new Map());
+      }, 1500);
 
       // Invalidate the resource query to refresh with new validation results
       queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
@@ -466,10 +487,18 @@ export default function ResourceBrowser() {
       return;
     }
 
-    // Check if any resources need validation (lastValidated is null)
+    // Check if any resources need validation (only based on database results)
     const unvalidatedResources = resourcesData.resources.filter((resource: any) => {
       const validationSummary = resource._validationSummary;
-      return !validationSummary?.lastValidated;
+      
+      // Only consider a resource validated if it has actual validation data from the database
+      const hasValidationData = validationSummary?.lastValidated;
+      
+      if (hasValidationData) {
+        console.log(`[ResourceBrowser] Resource ${resource.id} already validated (lastValidated: ${validationSummary.lastValidated})`);
+      }
+      
+      return !hasValidationData;
     });
 
     if (unvalidatedResources.length === 0) {
@@ -494,7 +523,14 @@ export default function ResourceBrowser() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          resourceIds: resourceIds
+          // If we have a specific resource type, use the legacy approach
+          ...(resourceType && resourceType !== "All" ? {
+            resourceIds: resourceIds,
+            resourceType: resourceType
+          } : {
+            // For mixed resource types, send the actual resource objects
+            resources: unvalidatedResources
+          })
         })
       });
 
@@ -511,6 +547,38 @@ export default function ResourceBrowser() {
         validatedCount: result.validatedCount,
         requestedCount: result.requestedCount
       });
+
+      // Only add resources to cache if validation was actually successful
+      // We'll rely on the database validation results instead of the cache
+      // The cache is now only used to prevent duplicate validation requests during the same session
+      if (result.validatedCount > 0) {
+        console.log(`[ResourceBrowser] Validation completed for ${result.validatedCount} resources`);
+        // Note: We're not adding to cache anymore - let the database results drive the UI
+      }
+
+      // Clear the progress simulation and show completion
+      clearInterval(progressInterval);
+      
+      // Show completion state briefly before clearing
+      setValidationProgress(prev => {
+        const completed = new Map(prev);
+        resourceIds.forEach(id => {
+          const current = completed.get(id);
+          if (current) {
+            completed.set(id, {
+              ...current,
+              progress: 100,
+              currentAspect: 'Validation complete'
+            });
+          }
+        });
+        return completed;
+      });
+
+      // Clear progress after showing completion
+      setTimeout(() => {
+        setValidationProgress(new Map());
+      }, 1500);
 
       // Invalidate the resource query to refresh with new validation results
       queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
@@ -593,6 +661,8 @@ export default function ResourceBrowser() {
             onPageChange={handlePageChange}
             validatingResourceIds={validatingResourceIds}
             validationProgress={validationProgress}
+            availableResourceTypes={resourcesData?.availableResourceTypes}
+            noResourceTypeMessage={resourcesData?.message}
           />
         )}
       </div>
