@@ -6,8 +6,8 @@
  */
 
 // Main simplified service
-export { ValidationSettingsService } from '../settings/validation-settings-service-simplified';
-export type { ValidationSettingsServiceConfig } from '../settings/validation-settings-service-simplified';
+export { ValidationSettingsService } from './validation-settings-service-simplified';
+export type { ValidationSettingsServiceConfig } from './validation-settings-service-simplified';
 
 // Core services
 export { ValidationSettingsCoreService } from './settings-core-service';
@@ -29,6 +29,6 @@ export type {
 } from './settings-preset-service';
 
 // Factory functions for backward compatibility
-export { getValidationSettingsService } from '../validation-settings-service-simplified';
-export { initializeValidationSettingsService } from '../validation-settings-service-simplified';
-export { shutdownValidationSettingsService } from '../validation-settings-service-simplified';
+export { getValidationSettingsService } from './validation-settings-service-simplified';
+export { initializeValidationSettingsService } from './validation-settings-service-simplified';
+export { shutdownValidationSettingsService } from './validation-settings-service-simplified';

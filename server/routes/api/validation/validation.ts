@@ -67,14 +67,8 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
       const { resource } = req.body;
       const { detailedResult } = await consolidatedValidationService.validateResource(resource, true, true);
 
-      const errors = detailedResult.issues.filter(issue => issue.severity === 'error' || issue.severity === 'fatal');
-      const warnings = detailedResult.issues.filter(issue => issue.severity === 'warning');
-
-      res.json({
-        isValid: detailedResult.isValid,
-        errors,
-        warnings,
-      });
+      // Return full detailed result payload
+      res.json(detailedResult);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -102,6 +96,10 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
       }
 
       const { resourceTypes, validationAspects, config } = req.body;
+      
+      // Use consolidated validation service for bulk operations
+      const validationPipeline = getValidationPipeline();
+      const queueService = getValidationQueueService();
       
       // Initialize global state
       globalValidationState = {
@@ -141,7 +139,22 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
 
   app.get("/api/validation/bulk/progress", async (req, res) => {
     try {
-      res.json(globalValidationState);
+      // Get progress from consolidated service
+      const progressService = getIndividualResourceProgressService();
+      const progress = await progressService.getOverallProgress();
+      
+      // Combine with global state for backward compatibility
+      const combinedProgress = {
+        ...globalValidationState,
+        ...progress,
+        // Ensure we have the latest progress data
+        processedResources: progress.processedResources || globalValidationState.processedResources,
+        totalResources: progress.totalResources || globalValidationState.totalResources,
+        errors: progress.errors || globalValidationState.errors,
+        warnings: progress.warnings || globalValidationState.warnings
+      };
+      
+      res.json(combinedProgress);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -153,6 +166,10 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
         return res.status(400).json({ message: "No validation is currently running" });
       }
 
+      // Use consolidated service for pause operations
+      const cancellationService = getValidationCancellationRetryService();
+      await cancellationService.pauseValidation();
+      
       globalValidationState.isPaused = true;
       globalValidationState.canPause = false;
       
@@ -171,6 +188,10 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
         return res.status(400).json({ message: "No validation is currently paused" });
       }
 
+      // Use consolidated service for resume operations
+      const cancellationService = getValidationCancellationRetryService();
+      await cancellationService.resumeValidation();
+      
       globalValidationState.isPaused = false;
       globalValidationState.canPause = true;
       
@@ -185,6 +206,10 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
 
   app.post("/api/validation/bulk/stop", async (req, res) => {
     try {
+      // Use consolidated service for stop operations
+      const cancellationService = getValidationCancellationRetryService();
+      await cancellationService.cancelValidation();
+      
       globalValidationState.isRunning = false;
       globalValidationState.isPaused = false;
       globalValidationState.shouldStop = true;
@@ -288,9 +313,24 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
   app.post("/api/validation/pipeline", async (req, res) => {
     try {
       const { resources, config } = req.body;
-      const pipeline = getValidationPipeline();
-      const result = await pipeline.processResources(resources, config);
-      res.json(result);
+      
+      // Use consolidated validation service for pipeline operations
+      if (!consolidatedValidationService) {
+        return res.status(400).json({ message: "Validation service not initialized" });
+      }
+      
+      const results = [];
+      for (const resource of resources) {
+        const { detailedResult } = await consolidatedValidationService.validateResource(resource, true, true);
+        results.push(detailedResult);
+      }
+      
+      res.json({
+        results,
+        totalProcessed: results.length,
+        successCount: results.filter(r => r.isValid).length,
+        errorCount: results.filter(r => !r.isValid).length
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -299,8 +339,23 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
   app.get("/api/validation/pipeline/:requestId/status", async (req, res) => {
     try {
       const { requestId } = req.params;
-      const pipeline = getValidationPipeline();
-      const status = await pipeline.getRequestStatus(requestId);
+      
+      // Use consolidated service to get validation results by request ID
+      const results = await storage.getValidationResultsByRequestId(requestId);
+      
+      if (results.length === 0) {
+        return res.status(404).json({ message: "Request not found" });
+      }
+      
+      const status = {
+        requestId,
+        status: results[0].validationStatus || 'completed',
+        totalResults: results.length,
+        completedResults: results.filter(r => r.validationStatus === 'completed').length,
+        failedResults: results.filter(r => r.validationStatus === 'failed').length,
+        results
+      };
+      
       res.json(status);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -310,8 +365,19 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
   app.post("/api/validation/pipeline/:requestId/cancel", async (req, res) => {
     try {
       const { requestId } = req.params;
-      const pipeline = getValidationPipeline();
-      await pipeline.cancelRequest(requestId);
+      
+      // Use consolidated service to cancel validation request
+      const results = await storage.getValidationResultsByRequestId(requestId);
+      
+      if (results.length === 0) {
+        return res.status(404).json({ message: "Request not found" });
+      }
+      
+      // Update all results for this request to cancelled status
+      for (const result of results) {
+        await storage.updateValidationResultStatus(result.id, 'cancelled');
+      }
+      
       res.json({ message: "Request cancelled" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -479,6 +545,7 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
         
         const validationService = new ConsolidatedValidationService();
         let validatedCount = 0;
+        const detailedResults = [];
         
         for (const resource of resources) {
           try {
@@ -490,16 +557,36 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
               };
               
               if (resourceToValidate.id) {
-                // Validate the resource directly
-                await validationService.validateResource(resourceToValidate);
+                // Validate the resource directly and get detailed results
+                const { detailedResult } = await validationService.validateResource(resourceToValidate, true, true);
+                
+                detailedResults.push({
+                  resourceId: resourceToValidate.id,
+                  resourceType: resource.resourceType,
+                  resourceIdentifier: resourceToValidate.id,
+                  detailedResult
+                });
+                
                 validatedCount++;
                 console.log(`[ValidationAPI] Successfully validated ${resource.resourceType} resource ${resourceToValidate.id}`);
               } else {
                 console.warn(`[ValidationAPI] Skipping resource without ID:`, resource);
+                detailedResults.push({
+                  resourceId: null,
+                  resourceType: resource.resourceType,
+                  resourceIdentifier: null,
+                  error: "Resource missing ID"
+                });
               }
             }
           } catch (error) {
             console.warn(`[ValidationAPI] Failed to validate ${resource.resourceType} resource:`, error.message);
+            detailedResults.push({
+              resourceId: resource.id || resource.resourceId || resource._dbId,
+              resourceType: resource.resourceType,
+              resourceIdentifier: resource.id || resource.resourceId || resource._dbId,
+              error: error.message
+            });
           }
         }
         
@@ -507,7 +594,8 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
           success: true,
           validatedCount,
           requestedCount: resources.length,
-          message: `Successfully validated ${validatedCount} out of ${resources.length} mixed resources`
+          message: `Successfully validated ${validatedCount} out of ${resources.length} mixed resources`,
+          detailedResults
         });
       }
       
@@ -529,8 +617,10 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
       const { FhirClient } = await import("../../../services/fhir/fhir-client");
       const fhirClient = new FhirClient('https://hapi.fhir.org/baseR4');
       
-      // Validate each resource
+      // Validate each resource and collect detailed results
       let validatedCount = 0;
+      const detailedResults = [];
+      
       for (const resourceId of resourceIds) {
         try {
           // First, get the resource from the database to get the actual FHIR resource data
@@ -544,15 +634,35 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
               ...dbResource.data,
               _dbId: dbResource.id // Add database ID to the resource
             };
-            const validationResult = await validationService.validateResource(resourceToValidate);
-            console.log(`[ValidationAPI] Validation result:`, validationResult);
+            const { detailedResult } = await validationService.validateResource(resourceToValidate, true, true);
+            console.log(`[ValidationAPI] Validation result:`, detailedResult);
+            
+            detailedResults.push({
+              resourceId: dbResource.id,
+              resourceType: dbResource.resourceType,
+              resourceIdentifier: dbResource.resourceId,
+              detailedResult
+            });
+            
             validatedCount++;
             console.log(`[ValidationAPI] Successfully validated ${resourceType} resource ${dbResource.resourceId} (DB ID: ${resourceId})`);
           } else {
             console.warn(`[ValidationAPI] Resource with database ID ${resourceId} not found in database`);
+            detailedResults.push({
+              resourceId,
+              resourceType,
+              resourceIdentifier: null,
+              error: "Resource not found in database"
+            });
           }
         } catch (error) {
           console.warn(`[ValidationAPI] Failed to validate resource with database ID ${resourceId}:`, error.message);
+          detailedResults.push({
+            resourceId,
+            resourceType,
+            resourceIdentifier: null,
+            error: error.message
+          });
         }
       }
 
@@ -560,7 +670,8 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
         success: true,
         validatedCount,
         requestedCount: resourceIds.length,
-        message: `Successfully validated ${validatedCount} out of ${resourceIds.length} ${resourceType} resources`
+        message: `Successfully validated ${validatedCount} out of ${resourceIds.length} ${resourceType} resources`,
+        detailedResults
       });
 
     } catch (error: any) {

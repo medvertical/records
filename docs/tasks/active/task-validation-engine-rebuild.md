@@ -37,14 +37,14 @@
   - [x] 3.2 Update repository/core service and `/api/validation/settings` routes to use the simplified schema.
   - [x] 3.3 Revamp settings UI components to match the new minimal configuration.
   - [x] 3.4 Run relevant tests: `npx vitest run server/services/validation/validation-settings-service.test.ts server/services/validation/validation-settings-realtime.test.ts` and affected UI tests.
-- [ ] 4.0 Update Persistence & Schema
+- [x] 4.0 Update Persistence & Schema
   - [x] 4.1 Modify `shared/schema.ts` + migrations to store summary, performance, and aspect breakdown data.
   - [x] 4.2 Refactor `storage.ts` and helpers to use the new schema consistently.
   - [x] 4.3 Rewrite `validation-persistence.test.ts` for `ConsolidatedValidationService` and run `npx vitest run server/services/validation/validation-persistence.test.ts`.
 - [ ] 5.0 Refresh Validation Routes & Services
-  - [ ] 5.1 Switch validation routes to use the consolidated service/pipeline APIs directly.
-  - [ ] 5.2 Ensure responses return full `detailedResult` payloads.
-  - [ ] 5.3 Run/extend route tests: `npx vitest run server/routes/**/validation*.test.ts`.
+  - [x] 5.1 Switch validation routes to use the consolidated service/pipeline APIs directly.
+  - [x] 5.2 Ensure responses return full `detailedResult` payloads.
+  - [x] 5.3 Run/extend route tests: `npx vitest run server/routes/**/validation*.test.ts`.
 - [ ] 6.0 Integrate with Dashboard/UI
   - [ ] 6.1 Update hooks (`use-validation-*`, dashboard wiring) to consume normalized results.
   - [ ] 6.2 Expose validation results in resource list/detail components and corresponding tests.
