@@ -5,9 +5,9 @@
  * Provides a clean API for importing validation settings functionality.
  */
 
-// Main unified service
-export { ValidationSettingsService } from '../settings/validation-settings-service';
-export type { ValidationSettingsServiceConfig } from '../settings/validation-settings-service';
+// Main simplified service
+export { ValidationSettingsService } from '../settings/validation-settings-service-simplified';
+export type { ValidationSettingsServiceConfig } from '../settings/validation-settings-service-simplified';
 
 // Core services
 export { ValidationSettingsCoreService } from './settings-core-service';
@@ -29,6 +29,6 @@ export type {
 } from './settings-preset-service';
 
 // Factory functions for backward compatibility
-export { getValidationSettingsService } from '../validation-settings-service';
-export { initializeValidationSettingsService } from '../validation-settings-service';
-export { shutdownValidationSettingsService } from '../validation-settings-service';
+export { getValidationSettingsService } from '../validation-settings-service-simplified';
+export { initializeValidationSettingsService } from '../validation-settings-service-simplified';
+export { shutdownValidationSettingsService } from '../validation-settings-service-simplified';

@@ -24,8 +24,8 @@ export {
   getSupportedFhirVersions
 } from './connection-testing';
 
-// Settings tab components (from previous task)
-export { ValidationSettingsTab } from './validation-settings-tab';
+// Settings tab components (simplified)
+export { ValidationSettingsTab } from './validation-settings-tab-simplified';
 export { ServerManagementTab } from './server-management-tab';
 export { DashboardSettingsTab } from './dashboard-settings-tab';
 export { SystemSettingsTab } from './system-settings-tab';

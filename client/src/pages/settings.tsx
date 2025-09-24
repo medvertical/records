@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 
 // Import tab components
-import { ValidationSettingsTab } from '@/components/settings/validation-settings-tab';
+import { ValidationSettingsTab } from '@/components/settings/validation-settings-tab-simplified';
 import { ServerManagementTab } from '@/components/settings/server-management-tab';
 import { DashboardSettingsTab } from '@/components/settings/dashboard-settings-tab';
 import { SystemSettingsTab } from '@/components/settings/system-settings-tab';

@@ -28,15 +28,15 @@
 - [x] 1.1 Rename `validation-pipeline-new.ts` and related imports to `validation-pipeline.ts` (or another final name) across the codebase.
 - [x] 1.2 Update all services/tests/routes to import directly from the renamed core pipeline file and consolidated service; remove `unified-validation.ts` and old pipeline shims.
 - [x] 1.3 Ensure `npx vitest run server/services/validation/validation-engine.test.ts` remains green after renaming and import updates.
-- [ ] 2.0 Align Pipeline & Engine with Full-Aspect Output
+- [x] 2.0 Align Pipeline & Engine with Full-Aspect Output
   - [x] 2.1 Guarantee `validation-engine.ts` emits all six aspects in `DetailedValidationResult` regardless of filters.
   - [x] 2.2 Confirm the renamed pipeline file preserves the normalized result through execution.
   - [x] 2.3 Run focused suites: `npx vitest run server/services/validation/validation-engine.test.ts server/services/validation/core/*.test.ts`.
 - [ ] 3.0 Rebuild Validation Settings (Simplified)
-  - [ ] 3.1 Strip legacy settings history/audit logic from services and storage; define a simplified settings schema.
-  - [ ] 3.2 Update repository/core service and `/api/validation/settings` routes to use the simplified schema.
-  - [ ] 3.3 Revamp settings UI components to match the new minimal configuration.
-  - [ ] 3.4 Run relevant tests: `npx vitest run server/services/validation/validation-settings-service.test.ts server/services/validation/validation-settings-realtime.test.ts` and affected UI tests.
+  - [x] 3.1 Strip legacy settings history/audit logic from services and storage; define a simplified settings schema.
+  - [x] 3.2 Update repository/core service and `/api/validation/settings` routes to use the simplified schema.
+  - [x] 3.3 Revamp settings UI components to match the new minimal configuration.
+  - [x] 3.4 Run relevant tests: `npx vitest run server/services/validation/validation-settings-service.test.ts server/services/validation/validation-settings-realtime.test.ts` and affected UI tests.
 - [ ] 4.0 Update Persistence & Schema
   - [ ] 4.1 Modify `shared/schema.ts` + migrations to store summary, performance, and aspect breakdown data.
   - [ ] 4.2 Refactor `storage.ts` and helpers to use the new schema consistently.

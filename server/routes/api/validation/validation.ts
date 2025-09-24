@@ -1,11 +1,10 @@
 import type { Express } from "express";
 import { storage } from "../../../storage.js";
 import { ConsolidatedValidationService } from "../../../services/validation";
-import { getValidationSettingsService } from "../../../services/validation/settings/validation-settings-service";
+import { getValidationSettingsService } from "../../../services/validation/settings/validation-settings-service-simplified";
 import { getValidationPipeline, getValidationQueueService, ValidationPriority, getIndividualResourceProgressService, getValidationCancellationRetryService } from "../../../services/validation";
 import { DashboardService } from "../../../services/dashboard/dashboard-service";
-import type { ValidationSettings, ValidationSettingsUpdate } from "@shared/validation-settings.js";
-import { BUILT_IN_PRESETS } from "@shared/validation-settings.js";
+import type { ValidationSettings, ValidationSettingsUpdate } from "@shared/validation-settings-simplified";
 import ValidationCacheManager from "../../../utils/validation-cache-manager.js";
 
 // Global validation state tracking
@@ -199,7 +198,7 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
     }
   });
 
-  // Validation settings
+  // Validation settings (simplified)
   app.get("/api/validation/settings", async (req, res) => {
     try {
       const settingsService = getValidationSettingsService();

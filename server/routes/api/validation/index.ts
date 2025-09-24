@@ -3,4 +3,4 @@
 
 export { setupValidationRoutes } from './validation';
 export { setupValidationQueueRoutes } from './validation-queue';
-export { setupValidationSettingsRoutes } from './validation-settings';
+export { setupValidationSettingsRoutes } from './validation-settings-simplified';
