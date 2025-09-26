@@ -145,7 +145,18 @@ export function useDashboardDataWiring(
   }, [fhirServerStats, validationStats]);
 
   const validationStatus = useMemo(() => {
-    return StatusDataAdapter.transformValidationProgress(validationProgress);
+    const status = StatusDataAdapter.transformValidationProgress(validationProgress);
+    // Enhance with normalized validation results if available
+    if (status && validationProgress?.aspectBreakdown) {
+      status.aspectBreakdown = validationProgress.aspectBreakdown;
+    }
+    if (status && validationProgress?.overallValidationMetrics) {
+      status.overallValidationMetrics = validationProgress.overallValidationMetrics;
+    }
+    if (status && validationProgress?.retryStatistics) {
+      status.retryStatistics = validationProgress.retryStatistics;
+    }
+    return status;
   }, [validationProgress]);
 
   const trendData = useMemo(() => {

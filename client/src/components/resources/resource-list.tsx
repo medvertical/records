@@ -17,13 +17,42 @@ import { cn } from "@/lib/utils";
 import { CircularProgress } from "@/components/ui/circular-progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useQuery } from "@tanstack/react-query";
+import { useValidationResults } from "@/hooks/validation";
+import type { ValidationProgress, EnhancedValidationSummary } from '@shared/types/validation';
 
-interface ValidationProgress {
+// Extended types for this component
+interface ExtendedValidationProgress extends ValidationProgress {
   resourceId: number;
   progress: number; // 0-100
   currentAspect?: string; // Current validation aspect being processed
   completedAspects: string[]; // List of completed validation aspects
   totalAspects: number; // Total number of validation aspects
+}
+
+interface ExtendedEnhancedValidationSummary extends EnhancedValidationSummary {
+  isValid: boolean;
+  overallConfidence: number;
+  overallCompleteness: number;
+  totalDurationMs: number;
+  aspectResults: {
+    structural: { isValid: boolean; score: number; issues: any[] };
+    profile: { isValid: boolean; score: number; issues: any[] };
+    terminology: { isValid: boolean; score: number; issues: any[] };
+    reference: { isValid: boolean; score: number; issues: any[] };
+    businessRule: { isValid: boolean; score: number; issues: any[] };
+    metadata: { isValid: boolean; score: number; issues: any[] };
+  };
+  summary: {
+    totalIssues: number;
+    errorCount: number;
+    warningCount: number;
+    informationCount: number;
+    issueCountByAspect: Record<string, number>;
+  };
+  performance: {
+    totalDurationMs: number;
+    durationByAspect: Record<string, number>;
+  };
 }
 
 interface ResourceListProps {
@@ -70,7 +99,7 @@ export default function ResourceList({
   const endIndex = validTotal > 0 ? Math.min((currentPage + 1) * pageSize, validTotal) : 0;
 
   // Get current validation settings for filtering
-  const currentSettings = validationSettingsData?.settings;
+  const currentSettings = validationSettingsData;
   
   // Function to filter validation results based on enabled aspects
   const getFilteredValidationSummary = (validationSummary: any) => {
@@ -88,8 +117,8 @@ export default function ResourceList({
 
       // Filter each aspect based on enabled status
       Object.keys(filteredBreakdown).forEach(aspect => {
-        // Use top-level settings (the correct ones), fallback to nested settings if needed
-        const aspectEnabled = currentSettings[aspect]?.enabled !== false || currentSettings.settings?.[aspect]?.enabled !== false;
+        // Access aspects from the correct nested structure
+        const aspectEnabled = currentSettings.aspects?.[aspect]?.enabled !== false;
         
         if (!aspectEnabled) {
           // Reset counts for disabled aspects
@@ -174,7 +203,20 @@ export default function ResourceList({
   };
 
   const getValidationStatus = (resource: any) => {
-    // Use real validation results from the database
+    // Check for enhanced validation results first
+    const enhancedValidation = resource._enhancedValidationSummary;
+    if (enhancedValidation) {
+      // Use enhanced validation data
+      if (!enhancedValidation.isValid) {
+        return 'error';
+      }
+      if (enhancedValidation.summary.warningCount > 0) {
+        return 'warning';
+      }
+      return 'valid';
+    }
+
+    // Fallback to legacy validation results
     const validationSummary = resource._validationSummary;
     
     // Only consider a resource validated if it has actual validation data from the database
@@ -184,6 +226,11 @@ export default function ResourceList({
     
     // Apply UI filtering based on enabled aspects
     const filteredSummary = getFilteredValidationSummary(validationSummary);
+    
+    // If no filtered summary, return not-validated
+    if (!filteredSummary) {
+      return 'not-validated';
+    }
     
     if (filteredSummary.hasErrors) {
       return 'error';
@@ -201,19 +248,33 @@ export default function ResourceList({
   };
 
   const renderValidationBadge = (resource: any) => {
-    const validationSummary = resource._validationSummary;
+    const enhancedValidation = resource._enhancedValidationSummary;
+    const legacyValidationSummary = resource._validationSummary;
     const status = getValidationStatus(resource);
     const resourceId = resource._dbId || resource.id;
     const isValidating = validatingResourceIds.has(resourceId);
     const progress = validationProgress.get(resourceId);
     
-    // Apply UI filtering to get the filtered validation summary
-    const filteredSummary = getFilteredValidationSummary(validationSummary);
+    // Use enhanced validation data if available, otherwise fallback to legacy
+    const validationSummary = enhancedValidation || legacyValidationSummary;
+    
+    // Apply UI filtering to get the filtered validation summary (only for legacy data)
+    const filteredSummary = enhancedValidation ? enhancedValidation : getFilteredValidationSummary(legacyValidationSummary);
     
     // Determine the validation score to display
     const getValidationScore = () => {
       if (status === 'not-validated') {
         return 0; // Always show 0% for unvalidated resources
+      }
+      
+      // Use enhanced validation score if available
+      if (enhancedValidation) {
+        return enhancedValidation.overallScore || 0;
+      }
+      
+      // If no validation data exists, show 0%
+      if (!legacyValidationSummary || !legacyValidationSummary.lastValidated) {
+        return 0;
       }
       
       return filteredSummary?.validationScore || 0;

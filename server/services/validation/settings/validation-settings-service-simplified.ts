@@ -472,3 +472,22 @@ export function getValidationSettingsService(): ValidationSettingsService {
 export function resetValidationSettingsService(): void {
   settingsServiceInstance = null;
 }
+
+/**
+ * Initialize the singleton instance
+ */
+export async function initializeValidationSettingsService(): Promise<ValidationSettingsService> {
+  const service = getValidationSettingsService();
+  await service.initialize();
+  return service;
+}
+
+/**
+ * Shutdown the singleton instance
+ */
+export async function shutdownValidationSettingsService(): Promise<void> {
+  if (settingsServiceInstance) {
+    await settingsServiceInstance.shutdown();
+    settingsServiceInstance = null;
+  }
+}

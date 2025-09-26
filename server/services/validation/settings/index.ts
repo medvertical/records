@@ -29,6 +29,9 @@ export type {
 } from './settings-preset-service';
 
 // Factory functions for backward compatibility
-export { getValidationSettingsService } from './validation-settings-service-simplified';
-export { initializeValidationSettingsService } from './validation-settings-service-simplified';
-export { shutdownValidationSettingsService } from './validation-settings-service-simplified';
+export { 
+  getValidationSettingsService,
+  resetValidationSettingsService,
+  initializeValidationSettingsService,
+  shutdownValidationSettingsService
+} from './validation-settings-service-simplified';

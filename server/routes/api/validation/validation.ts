@@ -77,13 +77,29 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
   app.post("/api/validation/validate-resource-detailed", async (req, res) => {
     try {
       // Validation is handled by the pipeline via consolidated service
+      console.log('[ValidationRoute] Request body:', JSON.stringify(req.body, null, 2));
 
       const { resource } = req.body;
+
+      if (!resource) {
+        return res.status(400).json({ message: 'Resource is required in request body' });
+      }
+
+      if (!resource.resourceType) {
+        return res.status(400).json({ message: 'Resource must have a resourceType property' });
+      }
+
+      if (!resource.id) {
+        return res.status(400).json({ message: 'Resource must have an id property' });
+      }
+
+      console.log('[ValidationRoute] Validating resource:', resource.resourceType, resource.id);
 
       const { detailedResult } = await consolidatedValidationService.validateResource(resource, true, true);
       
       res.json(detailedResult);
     } catch (error: any) {
+      console.error('[ValidationRoute] Validation error:', error);
       res.status(500).json({ message: error.message });
     }
   });

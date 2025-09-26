@@ -6,10 +6,11 @@ This directory contains technical documentation for developers and system admini
 
 ### 🔍 [Validation System](./validation/)
 Documentation for the validation engine and related systems:
+- **Consolidated Validation Architecture** - Complete architecture overview and DTOs
 - **Validation Result Interfaces** - Interface documentation and formats
 - **Validation Aspects Mapping** - 6-aspect validation system mapping
 - **Validation Engine Analysis** - Engine usage and implementation analysis
-- **Validation Engine Migration Plan** - Migration documentation
+- **Validation Engine Migration Plan** - Migration documentation (completed)
 - **Foundation Engine Analysis** - Foundation system analysis
 
 ### 🏗️ [Architecture](./architecture/)
@@ -32,10 +33,18 @@ System architecture and design documentation:
 - Settings integration for each aspect
 - Feature comparison and status
 
+#### **Consolidated Validation Architecture**
+- Complete architecture overview and components
+- Data Transfer Objects (DTOs) and interfaces
+- Simplified settings model documentation
+- API integration and response formats
+- UI integration and component updates
+- Migration benefits and testing strategy
+
 #### **Validation Engine Analysis**
 - Current engine usage analysis
 - Active vs legacy engine identification
-- Migration recommendations
+- Migration recommendations (completed)
 - Performance considerations
 
 ## 🏗️ Architecture Documentation

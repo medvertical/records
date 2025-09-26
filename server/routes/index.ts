@@ -7,6 +7,7 @@ import { DashboardService } from "../services/dashboard/dashboard-service";
 import { setupValidationRoutes, setupValidationQueueRoutes, setupValidationSettingsRoutes } from "./api/validation";
 import { setupFhirRoutes, setupProfileRoutes } from "./api/fhir";
 import { setupDashboardRoutes } from "./api/dashboard";
+import adminRoutes from "./api/admin/clear-validation-results";
 
 export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, consolidatedValidationService: ConsolidatedValidationService | null, dashboardService: DashboardService | null) {
   // Health check endpoint
@@ -25,6 +26,9 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   setupProfileRoutes(app);
   setupValidationSettingsRoutes(app);
   setupValidationQueueRoutes(app);
+  
+  // Admin routes
+  app.use('/api/admin', adminRoutes);
 }
 
 export async function registerRoutes(app: Express) {

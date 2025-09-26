@@ -45,6 +45,7 @@ export default function ResourceBrowser() {
   const [isValidating, setIsValidating] = useState(false);
   const [validatingResourceIds, setValidatingResourceIds] = useState<Set<number>>(new Set());
   const [validationProgress, setValidationProgress] = useState<Map<number, any>>(new Map());
+  const [hasValidatedCurrentPage, setHasValidatedCurrentPage] = useState(false);
   const queryClient = useQueryClient();
 
   // Use validation settings polling to detect changes and refresh resource list
@@ -59,6 +60,8 @@ export default function ResourceBrowser() {
   useEffect(() => {
     if (lastChange) {
       console.log('[ResourceBrowser] Validation settings changed, refreshing resource list');
+      // Reset validation flag when settings change to allow re-validation with new settings
+      setHasValidatedCurrentPage(false);
       // Invalidate resource queries to refresh with new validation settings
       queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
     }
@@ -467,7 +470,10 @@ export default function ResourceBrowser() {
       }, 1500);
 
       // Invalidate the resource query to refresh with new validation results
-      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+      // Add a small delay to ensure validation results are saved to database
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+      }, 1000);
 
     } catch (error) {
       console.error('[ResourceBrowser] Validation error:', error);
@@ -484,6 +490,12 @@ export default function ResourceBrowser() {
   // Function to check if resources need validation and validate them automatically
   const validateUnvalidatedResources = useCallback(async () => {
     if (!resourcesData?.resources || resourcesData.resources.length === 0) {
+      return;
+    }
+
+    // Don't start validation if already validating
+    if (isValidating || validatingResourceIds.size > 0) {
+      console.log('[ResourceBrowser] Validation already in progress, skipping');
       return;
     }
 
@@ -581,7 +593,10 @@ export default function ResourceBrowser() {
       }, 1500);
 
       // Invalidate the resource query to refresh with new validation results
-      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+      // Add a small delay to ensure validation results are saved to database
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+      }, 1000);
 
     } catch (error) {
       console.warn('[ResourceBrowser] Background validation error:', error);
@@ -593,17 +608,23 @@ export default function ResourceBrowser() {
     }
   }, [resourcesData, queryClient, simulateValidationProgress]);
 
+  // Reset validation flag when page or resource type changes
+  useEffect(() => {
+    setHasValidatedCurrentPage(false);
+  }, [resourceType, page]);
+
   // Auto-validate resources when they're loaded (controlled from Settings page)
   useEffect(() => {
-    if (resourcesData?.resources && resourcesData.resources.length > 0) {
+    if (resourcesData?.resources && resourcesData.resources.length > 0 && !hasValidatedCurrentPage) {
       // Add a small delay to avoid interfering with the initial page load
       const timeoutId = setTimeout(() => {
         validateUnvalidatedResources();
+        setHasValidatedCurrentPage(true);
       }, 1000);
 
       return () => clearTimeout(timeoutId);
     }
-  }, [resourcesData?.resources, validateUnvalidatedResources]);
+  }, [resourcesData?.resources?.length, resourceType, page, hasValidatedCurrentPage]); // Remove validateUnvalidatedResources from deps to prevent loop
 
   return (
     <div className="p-6 h-full overflow-y-auto">

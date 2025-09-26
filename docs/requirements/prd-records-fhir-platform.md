@@ -26,7 +26,7 @@ The platform aims to achieve the following objectives:
 2. **Enterprise Scale Performance:** Handle 800K+ resources efficiently with sub-second dashboard loading and intelligent caching
 3. **Progress Monitoring:** Offer validation progress tracking with polling-based updates for MVP simplicity
 4. **Multi-Server Management:** Support connection to and validation across multiple FHIR servers simultaneously
-5. **Advanced Validation Engine:** Implement 6-aspect validation (Structural, Profile, Terminology, Reference, Business Rules, Metadata)
+5. **Consolidated Validation Engine:** Implement unified 6-aspect validation (Structural, Profile, Terminology, Reference, Business Rules, Metadata) with simplified settings and normalized results
 6. **User Experience:** Deliver intuitive dashboard with modern UI/UX for complex healthcare data management
 
 ---
@@ -91,12 +91,12 @@ The platform aims to achieve the following objectives:
    - **Business Rule Validation:** Cross-field logic and business constraints
    - **Metadata Validation:** Version, timestamp, and metadata compliance
 
-6. **Validation Configuration**
-   - Configurable validation settings per validation aspect
-   - Strict mode for enhanced validation rigor
-   - Custom profile selection and management
-   - Terminology server configuration
-   - Profile resolution server settings
+6. **Simplified Validation Configuration**
+   - Unified validation settings with 6-aspect configuration
+   - Simplified settings model with minimal complexity
+   - Normalized validation results across all aspects
+   - Consolidated validation service API
+   - Streamlined settings management without legacy audit trails
 
 ### 4.4 Real-time Validation Processing
 7. **Batch Validation Operations**
@@ -230,9 +230,10 @@ The polling-based approach provides a clear upgrade path to real-time features:
 ### 8.1 Architecture
 - **Full-Stack TypeScript Application** with shared type definitions
 - **Frontend:** React 18 with Vite build system and Wouter routing
-- **Backend:** Express.js server with TypeScript and modular service architecture
+- **Backend:** Express.js server with TypeScript and consolidated validation architecture
 - **Database:** PostgreSQL with Drizzle ORM for type-safe database operations
 - **State Management:** TanStack Query for server state and React hooks for local state
+- **Validation Engine:** Consolidated validation service with unified 6-aspect validation and simplified settings
 
 ### 8.2 Performance Optimizations
 - **Intelligent Caching:** 5-minute resource count caching for dashboard performance

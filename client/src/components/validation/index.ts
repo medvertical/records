@@ -1,24 +1,45 @@
 /**
- * Validation Components - Unified Export
+ * Validation Components - Main Entry Point
  * 
- * Exports all validation related components for easy importing.
+ * This module provides all validation-related UI components organized by functionality:
+ * 
+ * - Main Components: Primary validation display components
+ * - View Components: Different views for validation results
+ * - Control Components: User interaction and filtering controls
+ * - Issue Components: Individual issue display and management
+ * - Utility Functions: Helper functions for validation logic
+ * 
+ * Follows global rules: Simple exports, no custom logic, single responsibility
  */
 
-// Main components
+// Main components - Primary validation display
 export { default as ValidationErrors } from './validation-errors-new';
+export { ValidationResults } from './validation-results';
+export { ServerValidation } from './server-validation';
 
-// Filter and control components
-export { ValidationFilterControls } from './validation-filter-controls';
-
-// View components
+// View components - Different result display modes
 export { ValidationGroupedView } from './validation-grouped-view';
 export { ValidationFlatView } from './validation-flat-view';
 export { ValidationAggregatedView } from './validation-aggregated-view';
 
-// Issue components
+// Control components - User interaction and filtering
+export { ValidationFilterControls } from './validation-filter-controls';
+export { ValidationQueueManagement } from './validation-queue-management';
+export { ValidationCancellationRetry } from './validation-cancellation-retry';
+
+// Issue components - Individual issue display
 export { ValidationIssueCard } from './validation-issue-card';
 
-// Utility functions and logic
+// Settings components - Settings management UI
+export { ValidationSettingsAuditTrail } from './validation-settings-audit-trail';
+export { ValidationSettingsDashboardDemo } from './validation-settings-dashboard-demo';
+export { ValidationSettingsPollingDemo } from './validation-settings-polling-demo';
+export { ValidationSettingsRealtimeIndicator } from './validation-settings-realtime-indicator';
+
+// Progress components - Progress tracking and display
+export { IndividualResourceProgress } from './individual-resource-progress';
+
+// Utility functions and logic - Helper functions
 export { 
   groupIssuesByCategoryAndSeverity,
   groupIssuesBy,
@@ -30,8 +51,17 @@ export {
   getCategoryInfo
 } from './validation-grouping-logic';
 
-// Types (re-exported for convenience)
+// Types - Re-exported for convenience
 export type {
   ValidationResult,
-  ValidationError
+  ValidationError,
+  ValidationSettings,
+  ValidationAspect
 } from '@shared/schema';
+
+export type {
+  ValidationStatus,
+  ValidationAction,
+  ValidationProgress,
+  ValidationControlsState
+} from '@shared/types/validation';

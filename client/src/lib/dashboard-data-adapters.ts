@@ -170,6 +170,10 @@ export class StatusDataAdapter {
       nextResourceType: progress.nextResourceType || undefined,
       processingRate: progress.processingRate || 0,
       estimatedTimeRemaining: progress.estimatedTimeRemaining,
+      // Enhanced with normalized validation results
+      aspectBreakdown: progress.aspectBreakdown || undefined,
+      overallValidationMetrics: progress.overallValidationMetrics || undefined,
+      retryStatistics: progress.retryStatistics || undefined,
     };
   }
 

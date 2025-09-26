@@ -3,6 +3,111 @@ import { storage } from "../../../storage.js";
 import { FhirClient } from "../../../services/fhir/fhir-client";
 import { profileManager } from "../../../services/fhir/profile-manager";
 
+// Helper function to enhance resources with validation data
+async function enhanceResourcesWithValidationData(resources: any[]): Promise<any[]> {
+  console.log(`[FHIR API] enhanceResourcesWithValidationData called with ${resources.length} resources`);
+  const enhancedResources = [];
+  
+  for (const resource of resources) {
+    try {
+      // Try to find the resource in our database
+      let dbResource = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
+      console.log(`[FHIR API] Looking up resource ${resource.resourceType}/${resource.id} in database:`, dbResource ? `Found with ID ${dbResource.id}` : 'Not found');
+      console.log(`[FHIR API] Resource data for lookup:`, { resourceType: resource.resourceType, id: resource.id });
+      
+      // If resource doesn't exist in database, create it
+      if (!dbResource) {
+        try {
+          // Get active server ID
+          const activeServer = await storage.getActiveFhirServer();
+          console.log(`[FHIR API] Active server:`, activeServer);
+          if (activeServer) {
+            // Create resource in database
+            const resourceData = {
+              serverId: activeServer.id,
+              resourceType: resource.resourceType,
+              resourceId: resource.id,
+              versionId: resource.meta?.versionId || '1',
+              data: resource,
+              resourceHash: null, // Will be calculated during validation
+              lastValidated: null
+            };
+            console.log(`[FHIR API] Creating database entry for ${resource.resourceType}/${resource.id} with data:`, resourceData);
+            dbResource = await storage.createFhirResource(resourceData);
+            console.log(`[FHIR API] Successfully created database entry for ${resource.resourceType}/${resource.id} with ID: ${dbResource.id}`);
+          } else {
+            console.warn(`[FHIR API] No active server found, cannot create database entry for ${resource.resourceType}/${resource.id}`);
+          }
+        } catch (createError) {
+          console.error(`[FHIR API] Failed to create database entry for ${resource.resourceType}/${resource.id}:`, createError);
+          console.error(`[FHIR API] Error details:`, {
+            message: createError.message,
+            stack: createError.stack,
+            code: createError.code,
+            detail: createError.detail
+          });
+        }
+      }
+      
+      if (dbResource) {
+        // Get validation results for this resource
+        const validationResults = await storage.getValidationResultsByResourceId(dbResource.id);
+        
+        // Create validation summary from the latest validation result
+        let validationSummary = null;
+        if (validationResults && validationResults.length > 0) {
+          const latestResult = validationResults[0]; // Assuming results are ordered by date
+          
+          // Simplified validation check - just ensure we have valid data
+          const hasBeenValidated = (
+            latestResult.validatedAt && 
+            latestResult.validationScore !== null
+          );
+          
+          // Include all validation data that has been properly validated
+          if (hasBeenValidated) {
+            validationSummary = {
+              isValid: latestResult.isValid,
+              hasErrors: latestResult.errorCount > 0,
+              hasWarnings: latestResult.warningCount > 0,
+              errorCount: latestResult.errorCount,
+              warningCount: latestResult.warningCount,
+              informationCount: latestResult.issues?.filter((issue: any) => issue.severity === 'information').length || 0,
+              lastValidated: latestResult.validatedAt,
+              validationScore: latestResult.validationScore,
+              aspectBreakdown: latestResult.aspectBreakdown
+            };
+          } else {
+            console.log(`[FHIR API] Skipping validation data for ${resource.resourceType}/${resource.id} - appears to be default/mock data or not properly validated`);
+          }
+        }
+        
+        // Enhance the resource with database ID and validation data
+        enhancedResources.push({
+          ...resource,
+          _dbId: dbResource.id,
+          _validationSummary: validationSummary
+        });
+      } else {
+        // Resource not in database and couldn't be created, no validation data
+        enhancedResources.push({
+          ...resource,
+          _validationSummary: null
+        });
+      }
+    } catch (error) {
+      console.warn(`[FHIR API] Error enhancing resource ${resource.resourceType}/${resource.id} with validation data:`, error.message);
+      // Add resource without validation data if enhancement fails
+      enhancedResources.push({
+        ...resource,
+        _validationSummary: null
+      });
+    }
+  }
+  
+  return enhancedResources;
+}
+
 // Mock data helper for testing when FHIR server is unavailable
 function createMockBundle(resourceType: string, batchSize: number, offset: number): any {
   const entries = [];
@@ -137,7 +242,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       const { id } = req.params;
       let { resourceType } = req.query;
       
-      console.log(`[FHIR API] Fetching individual resource: ${resourceType || 'unknown'}/${id}`);
+      console.log(`[FHIR API] Individual resource endpoint called for: ${resourceType || 'unknown'}/${id}`);
 
       // If resourceType is provided, use it directly
       if (resourceType) {
@@ -153,7 +258,12 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
           }
 
           console.log(`[FHIR API] Successfully fetched ${resourceType} resource ${id}`);
-          res.json(resource);
+          
+          // Enhance resource with validation data
+          console.log(`[FHIR API] About to enhance resource with validation data`);
+          const enhancedResources = await enhanceResourcesWithValidationData([resource]);
+          console.log(`[FHIR API] Enhancement completed, returning enhanced resource`);
+          res.json(enhancedResources[0]);
           return;
           
         } catch (error: any) {
@@ -181,7 +291,12 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
           
           if (resource) {
             console.log(`[FHIR API] Successfully fetched ${type} resource ${id}`);
-            res.json(resource);
+            
+            // Enhance resource with validation data
+            console.log(`[FHIR API] About to enhance resource with validation data (type search)`);
+            const enhancedResources = await enhanceResourcesWithValidationData([resource]);
+            console.log(`[FHIR API] Enhancement completed, returning enhanced resource (type search)`);
+            res.json(enhancedResources[0]);
             return;
           }
         } catch (error: any) {
@@ -260,10 +375,13 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
           
           console.log(`[FHIR API] Fetched ${limitedResources.length} resources from all types (total available: ${totalCount})`);
           
+          // Enhance resources with validation data
+          const enhancedResources = await enhanceResourcesWithValidationData(limitedResources);
+          
           return res.json({
-            resources: limitedResources,
+            resources: enhancedResources,
             total: totalCount,
-            message: `Showing ${limitedResources.length} resources from all types`,
+            message: `Showing ${enhancedResources.length} resources from all types`,
             resourceType: "All"
           });
           
@@ -317,8 +435,11 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
         total = resources.length;
       }
 
+      // Enhance resources with validation data
+      const enhancedResources = await enhanceResourcesWithValidationData(resources);
+
       res.json({
-        resources,
+        resources: enhancedResources,
         total,
         bundle // Include original bundle for debugging if needed
       });

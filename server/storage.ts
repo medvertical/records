@@ -46,6 +46,7 @@ export interface IStorage {
   getFhirResourceByTypeAndId(resourceType: string, resourceId: string): Promise<FhirResource | undefined>;
   createFhirResource(resource: InsertFhirResource): Promise<FhirResource>;
   updateFhirResource(id: number, data: any): Promise<void>;
+  updateFhirResourceLastValidated(id: number, validatedAt: string): Promise<void>;
   searchFhirResources(query: string, resourceType?: string): Promise<FhirResource[]>;
 
   // Validation Profiles
@@ -265,6 +266,12 @@ export class DatabaseStorage implements IStorage {
   async updateFhirResource(id: number, data: any): Promise<void> {
     await db.update(fhirResources)
       .set({ data, lastModified: new Date() })
+      .where(eq(fhirResources.id, id));
+  }
+
+  async updateFhirResourceLastValidated(id: number, validatedAt: string): Promise<void> {
+    await db.update(fhirResources)
+      .set({ lastValidated: new Date(validatedAt) })
       .where(eq(fhirResources.id, id));
   }
 

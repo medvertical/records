@@ -1,11 +1,12 @@
 /**
- * Shared Validation Types
+ * Server-Specific Validation Types
  * 
- * This file contains all shared type definitions for the validation system.
- * These types are used across all validation components to ensure consistency.
+ * This file contains server-specific type definitions for the validation system.
+ * It extends the shared types with server-specific functionality.
  */
 
 import type { ValidationSettings, ValidationAspect, ValidationSeverity } from '@shared/validation-settings';
+import type { ValidationResult, ValidationIssue } from '@shared/types/validation';
 
 // Canonical list of validation aspects used across engine, pipeline, and UI
 export const ALL_VALIDATION_ASPECTS: ValidationAspect[] = [
@@ -31,23 +32,16 @@ export interface ValidationRequest {
   settings?: ValidationSettings;
 }
 
-export interface ValidationResult {
-  resourceId: string;
-  resourceType: string;
-  isValid: boolean;
-  issues: ValidationIssue[];
+// Note: ValidationResult and ValidationIssue are now imported from @shared/types/validation
+
+// Server-specific extensions
+export interface ServerValidationResult extends ValidationResult {
   aspects: ValidationAspectResult[];
-  validatedAt: Date;
-  validationTime: number;
 }
 
-export interface ValidationIssue {
-  id?: string;
+export interface ServerValidationIssue extends ValidationIssue {
   aspect: ValidationAspect;
   severity: ValidationSeverity;
-  message: string;
-  path?: string;
-  code?: string;
   details?: any;
   location?: string[];
   humanReadable?: string;

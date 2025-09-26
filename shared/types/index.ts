@@ -22,6 +22,8 @@ export * from './services.js';
 // ============================================================================
 export * from './validation.js';
 
+// Note: Validation types are already exported above via export * from './validation.js'
+
 // ============================================================================
 // Dashboard Types
 // ============================================================================
@@ -108,28 +110,7 @@ export type {
   ServiceEventEmitter
 } from './services.js';
 
-// Validation Types
-export type {
-  ValidationStatus,
-  ValidationAction,
-  ValidationProgress,
-  ValidationControlsState,
-  ValidationConfiguration,
-  ValidationRunHistory,
-  ValidationMetrics,
-  ValidationControlsActions,
-  StartValidationOptions,
-  ValidationWebSocketMessage,
-  ValidationProgressMessage,
-  ValidationCompletedMessage,
-  ValidationErrorMessage,
-  ValidationRunSummary,
-  ValidationError,
-  ValidationControlsConfig,
-  ValidationControlsHook,
-  ValidationExportOptions,
-  ValidationBenchmark
-} from './validation.js';
+// Note: Validation types are already exported above via export * from './validation.js'
 
 // Dashboard Types
 export type {

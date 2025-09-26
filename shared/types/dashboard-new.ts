@@ -74,6 +74,28 @@ export interface ValidationStatus {
   nextResourceType?: string;
   processingRate: number; // resources per minute
   estimatedTimeRemaining?: number; // minutes
+  // Enhanced with normalized validation results
+  aspectBreakdown?: {
+    structural: { errors: number; warnings: number; score: number };
+    profile: { errors: number; warnings: number; score: number };
+    terminology: { errors: number; warnings: number; score: number };
+    reference: { errors: number; warnings: number; score: number };
+    businessRule: { errors: number; warnings: number; score: number };
+    metadata: { errors: number; warnings: number; score: number };
+  };
+  overallValidationMetrics?: {
+    averageScore: number;
+    averageConfidence: number;
+    averageCompleteness: number;
+    totalDurationMs: number;
+  };
+  retryStatistics?: {
+    totalRetryAttempts: number;
+    successfulRetries: number;
+    failedRetries: number;
+    resourcesWithRetries: number;
+    averageRetriesPerResource: number;
+  };
 }
 
 /**

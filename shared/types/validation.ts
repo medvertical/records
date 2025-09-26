@@ -1053,3 +1053,74 @@ export interface ValidationCompletenessAction {
   /** Implementation steps */
   implementationSteps?: string[];
 }
+
+// ============================================================================
+// UI Component Types
+// ============================================================================
+
+/**
+ * Enhanced validation badge props for UI components
+ */
+export interface EnhancedValidationBadgeProps {
+  validationResult: any; // DetailedValidationResult from schema
+  showDetails?: boolean;
+  compact?: boolean;
+  className?: string;
+}
+
+/**
+ * Validation issue for UI display
+ */
+export interface ValidationIssue {
+  id?: string;
+  aspect: string;
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  path?: string;
+  code?: string;
+  details?: string;
+  suggestions?: string[];
+  timestamp?: Date;
+}
+
+/**
+ * Validation result for UI display
+ */
+export interface ValidationResult {
+  resourceId: string;
+  resourceType: string;
+  isValid: boolean;
+  issues: ValidationIssue[];
+  aspects: any[]; // AspectValidationResult from schema
+  validatedAt: Date;
+  validationTime: number;
+  overallScore?: number;
+  confidence?: number;
+}
+
+/**
+ * Enhanced validation summary for UI display
+ */
+export interface EnhancedValidationSummary {
+  resourceId: string;
+  resourceType: string;
+  overallScore: number;
+  confidence: number;
+  status: 'valid' | 'warning' | 'invalid';
+  aspectBreakdown: {
+    structural: { score: number; confidence: number; issues: number };
+    profile: { score: number; confidence: number; issues: number };
+    terminology: { score: number; confidence: number; issues: number };
+    reference: { score: number; confidence: number; issues: number };
+    businessRule: { score: number; confidence: number; issues: number };
+    metadata: { score: number; confidence: number; issues: number };
+  };
+  totalIssues: number;
+  errorCount: number;
+  warningCount: number;
+  infoCount: number;
+  validatedAt: Date;
+  validationTime: number;
+}
+
+// Note: ValidationProgress is already defined above in the main types section

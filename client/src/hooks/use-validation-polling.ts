@@ -22,6 +22,21 @@ export interface ValidationProgress {
     resourcesWithRetries: number;
     averageRetriesPerResource: number;
   };
+  // Enhanced with normalized validation results
+  aspectBreakdown?: {
+    structural: { errors: number; warnings: number; score: number };
+    profile: { errors: number; warnings: number; score: number };
+    terminology: { errors: number; warnings: number; score: number };
+    reference: { errors: number; warnings: number; score: number };
+    businessRule: { errors: number; warnings: number; score: number };
+    metadata: { errors: number; warnings: number; score: number };
+  };
+  overallValidationMetrics?: {
+    averageScore: number;
+    averageConfidence: number;
+    averageCompleteness: number;
+    totalDurationMs: number;
+  };
 }
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -120,7 +135,11 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
         currentResourceType: data.currentResourceType || null,
         estimatedTimeRemaining: data.estimatedTimeRemaining,
         processingRate: data.processingRate,
-        isComplete: data.isComplete || false
+        isComplete: data.isComplete || false,
+        // Enhanced with normalized validation results
+        aspectBreakdown: data.aspectBreakdown || undefined,
+        overallValidationMetrics: data.overallValidationMetrics || undefined,
+        retryStatistics: data.retryStatistics || undefined
       };
     } catch (error) {
       console.error('[ValidationPolling] Failed to fetch validation progress:', error);
