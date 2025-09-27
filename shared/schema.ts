@@ -42,7 +42,11 @@ export const validationProfiles = pgTable("validation_profiles", {
 
 export const validationResults = pgTable("validation_results", {
   id: serial("id").primaryKey(),
-  resourceId: integer("resource_id").references(() => fhirResources.id),
+  resourceId: integer("resource_id").references(() => fhirResources.id), // Keep for backward compatibility
+  // FHIR identity fields for stable resource identification
+  serverId: integer("server_id").references(() => fhirServers.id),
+  resourceType: text("resource_type").notNull(),
+  fhirResourceId: text("fhir_resource_id").notNull(),
   profileId: integer("profile_id").references(() => validationProfiles.id),
   isValid: boolean("is_valid").notNull(),
   errors: jsonb("errors").default([]),
@@ -102,7 +106,6 @@ export const validationResults = pgTable("validation_results", {
   validationSettingsId: integer("validation_settings_id").references(() => validationSettings.id),
   validationSettingsSnapshot: jsonb("validation_settings_snapshot").default({}),
   // Resource metadata
-  resourceType: text("resource_type"),
   resourceVersion: text("resource_version"),
   resourceSizeBytes: integer("resource_size_bytes"),
   resourceComplexityScore: integer("resource_complexity_score").default(0),

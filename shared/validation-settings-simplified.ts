@@ -69,6 +69,18 @@ export interface ValidationSettings {
     maxConcurrent: number;
     batchSize: number;
   };
+  
+  /** Resource type filtering configuration */
+  resourceTypes: {
+    /** Whether resource type filtering is enabled */
+    enabled: boolean;
+    /** List of resource types to validate (empty means all types) */
+    includedTypes: string[];
+    /** List of resource types to exclude from validation */
+    excludedTypes: string[];
+    /** Whether to validate only the latest version of each resource */
+    latestOnly: boolean;
+  };
 }
 
 // ============================================================================
@@ -110,6 +122,12 @@ export const DEFAULT_VALIDATION_SETTINGS: ValidationSettings = {
   performance: {
     maxConcurrent: 8,
     batchSize: 100
+  },
+  resourceTypes: {
+    enabled: false,
+    includedTypes: [],
+    excludedTypes: [],
+    latestOnly: false
   }
 };
 
@@ -122,6 +140,7 @@ export interface ValidationSettingsUpdate {
   aspects?: Partial<ValidationSettings['aspects']>;
   server?: Partial<ValidationSettings['server']>;
   performance?: Partial<ValidationSettings['performance']>;
+  resourceTypes?: Partial<ValidationSettings['resourceTypes']>;
 }
 
 // ============================================================================
@@ -204,6 +223,116 @@ export const BUILT_IN_PRESETS: ValidationSettingsPreset[] = [
     }
   }
 ];
+
+// ============================================================================
+// Common FHIR Resource Types
+// ============================================================================
+
+export const COMMON_FHIR_RESOURCE_TYPES = [
+  'Patient',
+  'Observation',
+  'Condition',
+  'Medication',
+  'MedicationRequest',
+  'Encounter',
+  'DiagnosticReport',
+  'Procedure',
+  'AllergyIntolerance',
+  'Immunization',
+  'Organization',
+  'Practitioner',
+  'PractitionerRole',
+  'Location',
+  'Device',
+  'Specimen',
+  'DocumentReference',
+  'ImagingStudy',
+  'CarePlan',
+  'Goal',
+  'ServiceRequest',
+  'Task',
+  'Questionnaire',
+  'QuestionnaireResponse',
+  'Appointment',
+  'Schedule',
+  'Slot',
+  'Account',
+  'ChargeItem',
+  'Invoice',
+  'PaymentNotice',
+  'PaymentReconciliation',
+  'Coverage',
+  'CoverageEligibilityRequest',
+  'CoverageEligibilityResponse',
+  'EnrollmentRequest',
+  'EnrollmentResponse',
+  'Claim',
+  'ClaimResponse',
+  'ExplanationOfBenefit',
+  'InsurancePlan',
+  'MedicinalProduct',
+  'MedicinalProductAuthorization',
+  'MedicinalProductContraindication',
+  'MedicinalProductIndication',
+  'MedicinalProductIngredient',
+  'MedicinalProductInteraction',
+  'MedicinalProductManufactured',
+  'MedicinalProductPackaged',
+  'MedicinalProductPharmaceutical',
+  'MedicinalProductUndesirableEffect',
+  'Substance',
+  'SubstanceNucleicAcid',
+  'SubstancePolymer',
+  'SubstanceProtein',
+  'SubstanceReferenceInformation',
+  'SubstanceSourceMaterial',
+  'SubstanceSpecification',
+  'ActivityDefinition',
+  'PlanDefinition',
+  'ResearchDefinition',
+  'ResearchElementDefinition',
+  'ResearchStudy',
+  'ResearchSubject',
+  'CatalogEntry',
+  'EventDefinition',
+  'Evidence',
+  'EvidenceVariable',
+  'ExampleScenario',
+  'GuidanceResponse',
+  'Library',
+  'Measure',
+  'MeasureReport',
+  'MessageDefinition',
+  'MessageHeader',
+  'NamingSystem',
+  'OperationDefinition',
+  'OperationOutcome',
+  'Parameters',
+  'SearchParameter',
+  'StructureDefinition',
+  'StructureMap',
+  'TerminologyCapabilities',
+  'TestScript',
+  'ValueSet',
+  'ConceptMap',
+  'CodeSystem',
+  'CompartmentDefinition',
+  'GraphDefinition',
+  'ImplementationGuide',
+  'CapabilityStatement',
+  'AuditEvent',
+  'Provenance',
+  'Consent',
+  'Contract',
+  'Composition',
+  'List',
+  'Bundle',
+  'Binary',
+  'DomainResource',
+  'Resource'
+] as const;
+
+export type CommonFhirResourceType = typeof COMMON_FHIR_RESOURCE_TYPES[number];
 
 // ============================================================================
 // Type Exports

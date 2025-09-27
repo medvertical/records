@@ -20,7 +20,7 @@ export interface FhirBundle {
 export interface FhirOperationOutcome {
   resourceType: 'OperationOutcome';
   issue: Array<{
-    severity: 'fatal' | 'error' | 'warning' | 'information';
+    severity: 'fatal' | 'error' | 'warning' | 'info';
     code: string;
     details?: {
       text: string;

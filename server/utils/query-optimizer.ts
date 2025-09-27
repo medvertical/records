@@ -197,6 +197,7 @@ export class QueryOptimizer {
 
   /**
    * Get validation results with optimized query
+   * Supports both database ID and FHIR identity lookup
    */
   async getValidationResults(
     resourceId?: number, 
@@ -242,6 +243,92 @@ export class QueryOptimizer {
       logger.database(0, 'Failed to fetch validation results', 'getValidationResults', { error: error.message });
       throw error;
     }
+  }
+
+  /**
+   * Get validation results by FHIR identity with optimized query
+   */
+  async getValidationResultsByFhirIdentity(
+    serverId: number,
+    resourceType: string,
+    fhirResourceId: string,
+    limit = 50,
+    offset = 0,
+    options: OptimizedQueryOptions = {}
+  ): Promise<ValidationResult[]> {
+    const cacheKey = `validation-results-fhir-${serverId}-${resourceType}-${fhirResourceId}-${limit}-${offset}`;
+    
+    if (options.useCache !== false) {
+      const cached = cacheManager.get<ValidationResult[]>(cacheKey);
+      if (cached) return cached;
+    }
+
+    try {
+      const results = await db.select()
+        .from(validationResults)
+        .where(and(
+          eq(validationResults.serverId, serverId),
+          eq(validationResults.resourceType, resourceType),
+          eq(validationResults.fhirResourceId, fhirResourceId)
+        ))
+        .orderBy(desc(validationResults.validatedAt))
+        .limit(limit)
+        .offset(offset);
+
+      if (options.useCache !== false) {
+        cacheManager.set(cacheKey, results, {
+          ttl: options.cacheTTL || 1 * 60 * 1000, // 1 minute
+          tags: options.cacheTags || [CACHE_TAGS.VALIDATION_RESULTS]
+        });
+      }
+
+      logger.database(2, 'Fetched validation results by FHIR identity', 'getValidationResultsByFhirIdentity', { 
+        count: results.length, 
+        serverId, 
+        resourceType, 
+        fhirResourceId, 
+        limit, 
+        offset 
+      });
+      
+      return results;
+    } catch (error: any) {
+      logger.database(0, 'Failed to fetch validation results by FHIR identity', 'getValidationResultsByFhirIdentity', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Get validation results with dual-mode lookup (FHIR identity first, then database ID fallback)
+   */
+  async getValidationResultsDualMode(
+    serverId: number,
+    resourceType: string,
+    fhirResourceId: string,
+    resourceId?: number,
+    limit = 50,
+    offset = 0,
+    options: OptimizedQueryOptions = {}
+  ): Promise<ValidationResult[]> {
+    // First try FHIR identity lookup
+    let results = await this.getValidationResultsByFhirIdentity(serverId, resourceType, fhirResourceId, limit, offset, options);
+    
+    // If no results found and we have a resourceId, fall back to database ID lookup
+    if (results.length === 0 && resourceId) {
+      results = await this.getValidationResults(resourceId, limit, offset, options);
+    }
+    
+    logger.database(2, 'Fetched validation results with dual-mode lookup', 'getValidationResultsDualMode', { 
+      count: results.length, 
+      serverId, 
+      resourceType, 
+      fhirResourceId, 
+      resourceId, 
+      limit, 
+      offset 
+    });
+    
+    return results;
   }
 
   /**

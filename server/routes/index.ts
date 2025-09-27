@@ -33,11 +33,14 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
 
 export async function registerRoutes(app: Express) {
   // Create services with error handling
-  let fhirClient, consolidatedValidationService, dashboardService;
+  let fhirClient, consolidatedValidationService, dashboardService, storage;
   
   try {
+    // Import storage first
+    const storageModule = await import('../storage');
+    storage = storageModule.storage;
+    
     // Get the active FHIR server from database
-    const { storage } = await import('../storage');
     const activeServer = await storage.getActiveFhirServer();
     const serverUrl = activeServer?.url || 'https://hapi.fhir.org/baseR4';
     console.log(`[Routes] Using FHIR server: ${serverUrl}`);
@@ -45,6 +48,7 @@ export async function registerRoutes(app: Express) {
   } catch (error) {
     console.warn('FHIR client creation failed:', error.message);
     fhirClient = null;
+    storage = null;
   }
   
   try {
@@ -55,7 +59,12 @@ export async function registerRoutes(app: Express) {
   }
   
   try {
-    dashboardService = new DashboardService(fhirClient, storage);
+    if (storage) {
+      dashboardService = new DashboardService(fhirClient, storage);
+    } else {
+      console.warn('Dashboard service creation skipped: storage not available');
+      dashboardService = null;
+    }
   } catch (error) {
     console.warn('Dashboard service creation failed:', error.message);
     dashboardService = null;

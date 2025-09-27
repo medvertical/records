@@ -16,6 +16,8 @@ import { storage } from '../../../storage';
 import { getValidationEngine } from './validation-engine';
 import { getValidationPipeline } from './validation-pipeline';
 import { getValidationSettingsService } from '../settings/validation-settings-service';
+import { getValidationResourceTypeFilteringService } from '../features/validation-resource-type-filtering-service';
+import { cacheManager } from '../../../utils/cache-manager';
 import type {
   FhirResourceWithValidation,
   InsertFhirResource,
@@ -56,9 +58,13 @@ interface DetailedValidationResult {
   resourceId: string | null;
   isValid: boolean;
   issues: DetailedValidationIssue[];
+  aspects: ValidationAspectResult[];
   summary: ValidationSummary;
   performance: ValidationPerformanceSummary;
   validatedAt: string;
+  validationTime: number;
+  wasFiltered?: boolean;
+  filterReason?: string;
 }
 
 interface ValidateResourceOptions {
@@ -216,6 +222,37 @@ export class ConsolidatedValidationService extends EventEmitter {
     wasRevalidated: boolean;
   }> {
     console.log(`[ConsolidatedValidation] validateResource called for ${resource.resourceType}/${resource.id}`);
+    
+    // Check resource type filtering
+    const resourceTypeFilteringService = getValidationResourceTypeFilteringService();
+    await resourceTypeFilteringService.initialize();
+    
+    const filterResult = resourceTypeFilteringService.shouldValidateResource(
+      resource.resourceType,
+      resource.meta?.versionId === '1' // Assume version 1 is latest if no version info
+    );
+    
+    if (!filterResult.shouldValidate) {
+      console.log(`[ConsolidatedValidation] Skipping validation for ${resource.resourceType}/${resource.id}: ${filterResult.reason}`);
+      
+      // Return empty result for filtered resources
+      return {
+        validationResults: [],
+        detailedResult: {
+          resourceId: resource.id,
+          resourceType: resource.resourceType,
+          isValid: true, // Assume valid if not validated
+          issues: [],
+          aspects: [],
+          validationTime: 0,
+          validatedAt: new Date(),
+          wasFiltered: true,
+          filterReason: filterResult.reason
+        },
+        wasRevalidated: false
+      };
+    }
+    
     const resourceHash = this.createResourceHash(resource);
 
     let dbResource: FhirResourceWithValidation | undefined;
@@ -310,9 +347,23 @@ export class ConsolidatedValidationService extends EventEmitter {
             pipelineValidationResult
           );
 
-          console.log(`[ConsolidatedValidation] Saving validation result for resource ID: ${dbResourceId}`);
-          await storage.createValidationResult(insertData);
+          // Get active server ID for FHIR identity
+          const activeServer = await storage.getActiveFhirServer();
+          const serverId = activeServer?.id || 1;
+
+          console.log(`[ConsolidatedValidation] Saving validation result for resource ID: ${dbResourceId} with FHIR identity: ${serverId}:${resource.resourceType}:${resource.id}`);
+          await storage.createValidationResultWithFhirIdentity(
+            insertData,
+            serverId,
+            resource.resourceType,
+            resource.id
+          );
           await storage.updateFhirResourceLastValidated(dbResourceId, detailedResult.validatedAt);
+          
+          // Clear all cache entries to ensure fresh data
+          cacheManager.clear();
+          console.log(`[ConsolidatedValidation] Cleared all cache for resource ID: ${dbResourceId}`);
+          
           dbResource = await storage.getFhirResourceById(dbResourceId);
         }
       } catch (error) {
@@ -552,7 +603,7 @@ export class ConsolidatedValidationService extends EventEmitter {
     }
 
     return issues.map((issue, index) => {
-      const severity = typeof issue.severity === 'string' ? issue.severity : 'information';
+      const severity = typeof issue.severity === 'string' ? issue.severity : 'info';
       const category = issue.category ?? this.mapAspectToCategory(issue.aspect);
       return {
         id: issue.id ?? `issue-${index}`,
@@ -626,7 +677,7 @@ export class ConsolidatedValidationService extends EventEmitter {
   }
 
   private isInformationSeverity(severity?: string): boolean {
-    return severity === 'information' || severity === 'info';
+    return severity === 'info';
   }
 
   /**
@@ -737,12 +788,21 @@ export class ConsolidatedValidationService extends EventEmitter {
       revalidated: number;
       cached: number;
       errors: number;
+      filtered: number;
     };
   }> {
     const { forceRevalidation = false, skipUnchanged = true, maxConcurrency = 5 } = options;
 
-    // Create validation requests
-    const validationRequests = resources.map(resource => ({
+    // Apply resource type filtering
+    const resourceTypeFilteringService = getValidationResourceTypeFilteringService();
+    await resourceTypeFilteringService.initialize();
+    
+    const { filtered: filteredResources, statistics: filterStatistics } = resourceTypeFilteringService.filterResources(resources);
+    
+    console.log(`[ConsolidatedValidation] Resource type filtering: ${filterStatistics.totalResources} total, ${filterStatistics.filteredResources} to validate, ${filterStatistics.totalResources - filterStatistics.filteredResources} filtered out`);
+
+    // Create validation requests for filtered resources only
+    const validationRequests = filteredResources.map(resource => ({
       resource,
       resourceType: resource.resourceType,
       resourceId: resource.id,
@@ -819,8 +879,21 @@ export class ConsolidatedValidationService extends EventEmitter {
               validationResult
             );
 
-            const savedResult = await storage.createValidationResult(insertData);
+            // Get active server ID for FHIR identity
+            const activeServer = await storage.getActiveFhirServer();
+            const serverId = activeServer?.id || 1;
+
+            const savedResult = await storage.createValidationResultWithFhirIdentity(
+              insertData,
+              serverId,
+              resource.resourceType,
+              resource.id
+            );
             await storage.updateFhirResourceLastValidated(dbResource.id, detailed.validatedAt);
+            
+            // Clear all cache entries to ensure fresh data
+            cacheManager.clear();
+            
             const refreshed = await storage.getFhirResourceById(dbResource.id);
             storedResults = refreshed?.validationResults || [savedResult];
             detailedResult = detailed;
@@ -870,7 +943,8 @@ export class ConsolidatedValidationService extends EventEmitter {
           total: resources.length,
           revalidated,
           cached,
-          errors
+          errors,
+          filtered: filterStatistics.totalResources - filterStatistics.filteredResources
         }
       };
 

@@ -13,6 +13,7 @@ import { OptimizedValidationResults } from './optimized-validation-results';
 import ResourceTreeViewer from './resource-tree-viewer';
 import { EnhancedValidationBadge } from './enhanced-validation-badge';
 import { useValidationResults, useValidationAspectsForResource } from '@/hooks/validation';
+import { cn } from '@/lib/utils';
 
 // ============================================================================
 // Types

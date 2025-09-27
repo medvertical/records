@@ -38,7 +38,7 @@ export class ValidationCacheManager {
         },
         metadata: {
           enabled: settings.metadata?.enabled ?? true,
-          severity: settings.metadata?.severity ?? 'information'
+          severity: settings.metadata?.severity ?? 'info'
         },
         strictMode: settings.strictMode ?? false,
         validateAgainstBaseSpec: settings.validateAgainstBaseSpec ?? true,

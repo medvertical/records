@@ -340,7 +340,7 @@ export class PipelineOrchestrator extends EventEmitter {
         totalIssues += result.issues.length;
         errorCount += result.issues.filter(i => i.severity === 'error' || i.severity === 'fatal').length;
         warningCount += result.issues.filter(i => i.severity === 'warning').length;
-        informationCount += result.issues.filter(i => i.severity === 'information').length;
+        informationCount += result.issues.filter(i => i.severity === 'info').length;
       }
     });
     

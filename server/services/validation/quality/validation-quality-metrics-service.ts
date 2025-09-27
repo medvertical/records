@@ -550,7 +550,7 @@ export class ValidationQualityMetricsService extends EventEmitter {
         const issues = result.aspectBreakdown[aspect].issues || [];
         issueCount += issues.length;
         issues.forEach((issue: any) => {
-          const severity = issue.severity || 'information';
+          const severity = issue.severity || 'info';
           if (severity in issueSeverityDistribution) {
             issueSeverityDistribution[severity as keyof typeof issueSeverityDistribution]++;
           }

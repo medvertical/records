@@ -32,7 +32,7 @@ export type ValidationErrorSeverity =
   | 'fatal' 
   | 'error' 
   | 'warning' 
-  | 'information';
+  | 'info';
 
 export type ValidationErrorCategory = 
   | 'syntax' 
@@ -177,7 +177,7 @@ export class ValidationErrorService {
 
       // Initialize counters
       const errorTypes: ValidationErrorType[] = ['structural', 'profile', 'terminology', 'reference', 'business_rule', 'metadata', 'system'];
-      const severities: ValidationErrorSeverity[] = ['fatal', 'error', 'warning', 'information'];
+      const severities: ValidationErrorSeverity[] = ['fatal', 'error', 'warning', 'info'];
       const categories: ValidationErrorCategory[] = ['syntax', 'semantics', 'constraints', 'terminology', 'references', 'business_logic', 'performance', 'security', 'compliance'];
 
       errorTypes.forEach(type => aggregation.errorsByType[type] = 0);
@@ -418,7 +418,7 @@ export class ValidationErrorService {
     }
 
     // Information level - minor issues or suggestions
-    return 'information';
+    return 'info';
   }
 
   /**

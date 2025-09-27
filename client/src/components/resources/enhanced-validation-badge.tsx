@@ -28,7 +28,15 @@ export function EnhancedValidationBadge({
   compact = false,
   className
 }: EnhancedValidationBadgeProps) {
-  const { isValid, overallScore, overallConfidence, overallCompleteness, aspectResults, summary, performance } = validationResult;
+  const { 
+    isValid = false, 
+    overallScore = 0, 
+    overallConfidence = 0, 
+    overallCompleteness = 0, 
+    aspectResults = {}, 
+    summary = {}, 
+    performance = {} 
+  } = validationResult || {};
 
   // Determine status and styling
   const getStatusInfo = () => {
@@ -41,7 +49,7 @@ export function EnhancedValidationBadge({
       };
     }
     
-    if (summary.warningCount > 0) {
+    if (summary?.warningCount > 0) {
       return {
         status: 'warning',
         icon: AlertTriangle,
@@ -50,7 +58,7 @@ export function EnhancedValidationBadge({
       };
     }
     
-    if (summary.informationCount > 0) {
+    if (summary?.informationCount > 0) {
       return {
         status: 'info',
         icon: AlertCircle,
@@ -72,11 +80,15 @@ export function EnhancedValidationBadge({
 
   // Get aspect breakdown for tooltip
   const getAspectBreakdown = () => {
+    if (!aspectResults || typeof aspectResults !== 'object') {
+      return [];
+    }
+    
     const aspects = Object.entries(aspectResults).map(([aspect, result]) => ({
       aspect: aspect.charAt(0).toUpperCase() + aspect.slice(1),
       isValid: result.isValid,
       score: result.score,
-      issueCount: result.issues.length
+      issueCount: result.issues?.length || 0
     }));
 
     return aspects;
@@ -101,13 +113,13 @@ export function EnhancedValidationBadge({
           <div className="space-y-2">
             <div className="font-medium">{statusInfo.label} - {overallScore}%</div>
             <div className="text-sm text-muted-foreground">
-              {summary.errorCount} errors, {summary.warningCount} warnings
+              {summary?.errorCount || 0} errors, {summary?.warningCount || 0} warnings
             </div>
             {showDetails && (
               <div className="text-xs">
                 <div>Confidence: {overallConfidence}%</div>
                 <div>Completeness: {overallCompleteness}%</div>
-                <div>Duration: {performance.totalDurationMs}ms</div>
+                <div>Duration: {performance?.totalDurationMs || 0}ms</div>
               </div>
             )}
           </div>
@@ -149,25 +161,25 @@ export function EnhancedValidationBadge({
             </div>
             <div className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              <span>{performance.totalDurationMs}ms</span>
+              <span>{performance?.totalDurationMs || 0}ms</span>
             </div>
           </div>
 
           {/* Issue counts */}
           <div className="flex items-center gap-2 text-xs">
-            {summary.errorCount > 0 && (
+            {(summary?.errorCount || 0) > 0 && (
               <Badge variant="destructive" className="text-xs">
-                {summary.errorCount} errors
+                {summary?.errorCount || 0} errors
               </Badge>
             )}
-            {summary.warningCount > 0 && (
+            {(summary?.warningCount || 0) > 0 && (
               <Badge variant="warning" className="text-xs">
-                {summary.warningCount} warnings
+                {summary?.warningCount || 0} warnings
               </Badge>
             )}
-            {summary.informationCount > 0 && (
+            {(summary?.informationCount || 0) > 0 && (
               <Badge variant="secondary" className="text-xs">
-                {summary.informationCount} info
+                {summary?.informationCount || 0} info
               </Badge>
             )}
           </div>

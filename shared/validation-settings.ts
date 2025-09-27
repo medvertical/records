@@ -14,7 +14,7 @@ export interface ValidationAspectConfig {
   enabled: boolean;
   
   /** Severity level for issues found by this aspect */
-  severity: 'error' | 'warning' | 'information';
+  severity: 'error' | 'warning' | 'info';
   
   /** Custom rules or overrides for this aspect */
   customRules?: ValidationRule[];
@@ -40,7 +40,7 @@ export interface ValidationRule {
   enabled: boolean;
   
   /** Severity override for this specific rule */
-  severity?: 'error' | 'warning' | 'information';
+  severity?: 'error' | 'warning' | 'info';
   
   /** Rule-specific configuration */
   config?: Record<string, any>;
@@ -302,7 +302,7 @@ export interface ValidationSettings {
   strictMode: boolean;
   
   /** Default severity for validation issues */
-  defaultSeverity: 'error' | 'warning' | 'information';
+  defaultSeverity: 'error' | 'warning' | 'info';
   
   /** Whether to include debug information in validation results */
   includeDebugInfo: boolean;
@@ -411,7 +411,7 @@ export const DEFAULT_VALIDATION_SETTINGS: ValidationSettings = {
   
   metadata: {
     enabled: true,
-    severity: 'information',
+    severity: 'info',
     timeoutMs: 15000,
     failFast: false
   },
@@ -656,13 +656,13 @@ export const BUILT_IN_PRESETS: ValidationSettingsPreset[] = [
     tags: ['permissive', 'development', 'testing'],
     settings: {
       strictMode: false,
-      defaultSeverity: 'information',
+      defaultSeverity: 'info',
       structural: { enabled: true, severity: 'warning' },
-      profile: { enabled: false, severity: 'information' },
-      terminology: { enabled: false, severity: 'information' },
+      profile: { enabled: false, severity: 'info' },
+      terminology: { enabled: false, severity: 'info' },
       reference: { enabled: true, severity: 'warning' },
-      businessRule: { enabled: false, severity: 'information' },
-      metadata: { enabled: false, severity: 'information' },
+      businessRule: { enabled: false, severity: 'info' },
+      metadata: { enabled: false, severity: 'info' },
       validateExternalReferences: false,
       validateNonExistentReferences: false,
       validateReferenceTypes: false,
@@ -703,7 +703,7 @@ export const BUILT_IN_PRESETS: ValidationSettingsPreset[] = [
       terminology: { enabled: true, severity: 'warning' },
       reference: { enabled: true, severity: 'error' },
       businessRule: { enabled: true, severity: 'warning' },
-      metadata: { enabled: true, severity: 'information' },
+      metadata: { enabled: true, severity: 'info' },
       validateExternalReferences: false,
       validateNonExistentReferences: true,
       validateReferenceTypes: true,
@@ -739,7 +739,7 @@ export type ValidationAspect = keyof Pick<ValidationSettings,
   'structural' | 'profile' | 'terminology' | 'reference' | 'businessRule' | 'metadata'
 >;
 
-export type ValidationSeverity = 'error' | 'warning' | 'information';
+export type ValidationSeverity = 'error' | 'warning' | 'info';
 
 export type FHIRVersion = 'R4' | 'R4B' | 'R5';
 

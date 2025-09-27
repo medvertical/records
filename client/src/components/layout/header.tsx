@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, PanelLeft } from "lucide-react";
+import { RefreshCw, PanelLeft, Trash2 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -47,6 +47,71 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
     }
   };
 
+  const handleClearCache = async () => {
+    console.log('[Header] Starting cache clearing process...');
+    
+    try {
+      console.log('[Header] Clearing validation caches...');
+      // Clear all validation caches
+      const response = await fetch('/api/validation/cache/clear-all', { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('[Header] Validation cache clear result:', result);
+      
+      console.log('[Header] Clearing analytics cache...');
+      // Also clear analytics cache
+      const analyticsResponse = await fetch('/api/validation/analytics/clear-cache', { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (analyticsResponse.ok) {
+        const analyticsResult = await analyticsResponse.json();
+        console.log('[Header] Analytics cache clear result:', analyticsResult);
+      }
+      
+      console.log('[Header] Invalidating frontend query caches...');
+      // Invalidate all validation-related queries
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/validation/results"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/validation/aspects"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/validation/analytics"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/fhir/resources"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/validation-stats"] }),
+      ]);
+      
+      console.log('[Header] Cache clearing completed successfully');
+      
+      // Trigger cache cleared event for other components
+      if (typeof window !== 'undefined' && (window as any).triggerCacheCleared) {
+        (window as any).triggerCacheCleared();
+      }
+      
+      toast({
+        title: "Cache Cleared",
+        description: "All validation caches have been cleared successfully.",
+      });
+    } catch (error) {
+      console.error('[Header] Cache clear error:', error);
+      toast({
+        title: "Cache Clear Failed",
+        description: "Failed to clear validation cache. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <header className="bg-white border-b border-gray-200 w-screen fixed top-0 left-0 z-50">
       <div className="flex items-center justify-between px-6 py-4">
@@ -71,6 +136,17 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
         <div className="flex items-center space-x-4">
           {/* Validation Aspects Dropdown */}
           <ValidationAspectsDropdown />
+          
+          {/* Cache Clear Button */}
+          <Button 
+            onClick={handleClearCache}
+            variant="outline"
+            size="sm"
+            className="flex items-center space-x-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+          >
+            <Trash2 className="h-4 w-4" />
+            <span className="hidden lg:inline">Clear Cache</span>
+          </Button>
           
           {/* Refresh Button - Keep for now but make it smaller */}
           <Button 

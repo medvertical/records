@@ -22,11 +22,10 @@ import type {
 } from '@shared/validation-settings';
 import type {
   ValidationRequest,
-  ValidationResult,
-  ValidationIssue,
   ValidationAspectResult,
   ValidationAspectExecutionStatus
 } from '../types/validation-types';
+import type { ValidationResult, ValidationIssue } from '@shared/types/validation';
 import { ALL_VALIDATION_ASPECTS } from '../types/validation-types';
 
 // ============================================================================
@@ -93,23 +92,13 @@ export class ValidationEngine extends EventEmitter {
       const aspectResults: ValidationAspectResult[] = [];
 
       for (const aspect of ALL_VALIDATION_ASPECTS) {
-        const aspectEnabled = this.isAspectEnabled(aspect, settings);
-        const shouldExecute = aspectsToExecute.has(aspect) && aspectEnabled;
+        // Always execute all aspects - UI will filter results based on settings
+        const aspectResult = await this.validateAspect(request, aspect, settings);
+        aspectResults.push(aspectResult);
+        result.issues.push(...aspectResult.issues);
 
-        if (shouldExecute) {
-          const aspectResult = await this.validateAspect(request, aspect, settings);
-          aspectResults.push(aspectResult);
-          result.issues.push(...aspectResult.issues);
-
-          if (!aspectResult.isValid) {
-            result.isValid = false;
-          }
-        } else {
-          const status: ValidationAspectExecutionStatus = aspectEnabled ? 'skipped' : 'disabled';
-          const reason = aspectEnabled
-            ? 'Aspect filtered out by request or temporary override'
-            : 'Aspect disabled in validation settings';
-          aspectResults.push(this.createPlaceholderAspectResult(aspect, status, { reason }));
+        if (!aspectResult.isValid) {
+          result.isValid = false;
         }
       }
 
@@ -127,6 +116,8 @@ export class ValidationEngine extends EventEmitter {
       return result;
       
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown validation error';
+      console.error(`[ValidationEngine] Validation failed for ${request.resourceType}/${request.resource?.id}:`, errorMessage);
       this.emit('validationError', error);
       throw error;
     }
@@ -185,74 +176,12 @@ export class ValidationEngine extends EventEmitter {
     settings: ValidationSettings,
     requested?: (ValidationAspect | string)[] | null
   ): Set<ValidationAspect> {
-    const normalizedRequest = this.normalizeAspectCollection(requested);
-    if (normalizedRequest.size > 0) {
-      return normalizedRequest;
-    }
-
-    const legacyEnabled = this.normalizeAspectCollection((settings as any)?.enabledAspects);
-    if (legacyEnabled.size > 0) {
-      return legacyEnabled;
-    }
-
-    const enabledAspects = ALL_VALIDATION_ASPECTS.filter((aspect) => this.isAspectEnabled(aspect, settings));
-    if (enabledAspects.length > 0) {
-      return new Set(enabledAspects);
-    }
-
+    // Always return all aspects - engine always performs all 6 aspects
+    // UI will filter results based on settings
     return new Set(ALL_VALIDATION_ASPECTS);
   }
 
-  private normalizeAspectCollection(
-    aspects?: (ValidationAspect | string | null | undefined)[] | null
-  ): Set<ValidationAspect> {
-    if (!aspects || aspects.length === 0) {
-      return new Set();
-    }
 
-    const normalized = aspects
-      .map((aspect) => this.normalizeAspect(aspect))
-      .filter((aspect): aspect is ValidationAspect => Boolean(aspect));
-
-    return new Set(normalized);
-  }
-
-  private normalizeAspect(aspect?: ValidationAspect | string | null): ValidationAspect | null {
-    if (!aspect) {
-      return null;
-    }
-
-    const value = aspect.toString().trim().toLowerCase();
-    switch (value) {
-      case 'structural':
-        return 'structural';
-      case 'profile':
-        return 'profile';
-      case 'terminology':
-        return 'terminology';
-      case 'reference':
-        return 'reference';
-      case 'businessrule':
-      case 'businessrules':
-      case 'business-rule':
-      case 'business_rules':
-        return 'businessRule';
-      case 'metadata':
-        return 'metadata';
-      default:
-        return null;
-    }
-  }
-
-  private isAspectEnabled(aspect: ValidationAspect, settings: ValidationSettings): boolean {
-    const config = (settings as Record<string, any>)[aspect];
-    if (config && typeof config === 'object') {
-      if (typeof config.enabled === 'boolean') {
-        return config.enabled;
-      }
-    }
-    return true;
-  }
 
   private createPlaceholderAspectResult(
     aspect: ValidationAspect,
@@ -328,6 +257,9 @@ export class ValidationEngine extends EventEmitter {
       };
       
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown aspect validation error';
+      console.error(`[ValidationEngine] Aspect ${aspect} validation failed:`, errorMessage);
+      
       return {
         aspect,
         isValid: false,
@@ -335,7 +267,7 @@ export class ValidationEngine extends EventEmitter {
           id: `aspect-error-${Date.now()}`,
           aspect,
           severity: 'error' as ValidationSeverity,
-          message: `Aspect validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          message: `Aspect validation failed: ${errorMessage}`,
           code: 'ASPECT_ERROR'
         }],
         validationTime: Date.now() - startTime,

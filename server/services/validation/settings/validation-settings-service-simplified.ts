@@ -217,8 +217,8 @@ export class ValidationSettingsService extends EventEmitter {
             errors.push(`${aspect} validation enabled must be a boolean`);
           }
           
-          if (!['error', 'warning', 'information'].includes(aspectConfig.severity)) {
-            errors.push(`${aspect} validation severity must be 'error', 'warning', or 'information'`);
+          if (!['error', 'warning', 'info'].includes(aspectConfig.severity)) {
+            errors.push(`${aspect} validation severity must be 'error', 'warning', or 'info'`);
           }
         }
       }
@@ -315,11 +315,11 @@ export class ValidationSettingsService extends EventEmitter {
         settings: {
           aspects: {
             structural: { enabled: true, severity: 'warning' },
-            profile: { enabled: false, severity: 'information' },
-            terminology: { enabled: false, severity: 'information' },
+            profile: { enabled: false, severity: 'info' },
+            terminology: { enabled: false, severity: 'info' },
             reference: { enabled: true, severity: 'warning' },
-            businessRule: { enabled: false, severity: 'information' },
-            metadata: { enabled: false, severity: 'information' }
+            businessRule: { enabled: false, severity: 'info' },
+            metadata: { enabled: false, severity: 'info' }
           },
           server: {
             url: 'https://hapi.fhir.org/baseR4',
@@ -431,7 +431,7 @@ export class ValidationSettingsService extends EventEmitter {
 
   private async loadCurrentSettings(): Promise<void> {
     try {
-      const settings = await this.repository.getCurrentSettings();
+      const settings = await this.repository.getActiveSettings();
       this.currentSettings = settings || { ...DEFAULT_VALIDATION_SETTINGS };
       this.lastCacheTime = Date.now();
     } catch (error) {

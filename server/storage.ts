@@ -58,8 +58,14 @@ export interface IStorage {
 
   // Validation Results
   getValidationResultsByResourceId(resourceId: number): Promise<ValidationResult[]>;
+  getValidationResultsByFhirIdentity(serverId: number, resourceType: string, fhirResourceId: string): Promise<ValidationResult[]>;
+  getValidationResultsDualMode(serverId: number, resourceType: string, fhirResourceId: string, resourceId?: number): Promise<ValidationResult[]>;
   createValidationResult(result: InsertValidationResult): Promise<ValidationResult>;
+  createValidationResultWithFhirIdentity(result: InsertValidationResult, serverId: number, resourceType: string, fhirResourceId: string): Promise<ValidationResult>;
   getRecentValidationErrors(limit?: number, serverId?: number): Promise<ValidationResult[]>;
+  getLatestValidationResults(options?: { limit?: number; offset?: number; resourceType?: string }): Promise<ValidationResult[]>;
+  clearValidationResultsForResource(resourceId: number): Promise<void>;
+  clearValidationResultsForFhirIdentity(serverId: number, resourceType: string, fhirResourceId: string): Promise<void>;
   
   // Enhanced Validation Result Caching
   getLatestValidationResult(resourceId: number, settingsHash?: string): Promise<ValidationResult | undefined>;
@@ -319,9 +325,33 @@ export class DatabaseStorage implements IStorage {
     return await queryOptimizer.getValidationResults(resourceId);
   }
 
+  async getValidationResultsByFhirIdentity(serverId: number, resourceType: string, fhirResourceId: string): Promise<ValidationResult[]> {
+    return await queryOptimizer.getValidationResultsByFhirIdentity(serverId, resourceType, fhirResourceId);
+  }
+
+  async getValidationResultsDualMode(serverId: number, resourceType: string, fhirResourceId: string, resourceId?: number): Promise<ValidationResult[]> {
+    return await queryOptimizer.getValidationResultsDualMode(serverId, resourceType, fhirResourceId, resourceId);
+  }
+
   async clearAllValidationResults(): Promise<void> {
     await db.delete(validationResults);
     console.log('[Storage] Cleared all validation results');
+  }
+
+  async clearValidationResultsForResource(resourceId: number): Promise<void> {
+    await db.delete(validationResults)
+      .where(eq(validationResults.resourceId, resourceId));
+    console.log(`[Storage] Cleared validation results for resource ${resourceId}`);
+  }
+
+  async clearValidationResultsForFhirIdentity(serverId: number, resourceType: string, fhirResourceId: string): Promise<void> {
+    await db.delete(validationResults)
+      .where(and(
+        eq(validationResults.serverId, serverId),
+        eq(validationResults.resourceType, resourceType),
+        eq(validationResults.fhirResourceId, fhirResourceId)
+      ));
+    console.log(`[Storage] Cleared validation results for FHIR identity ${serverId}:${resourceType}:${fhirResourceId}`);
   }
 
   async createValidationResult(result: InsertValidationResult): Promise<ValidationResult> {
@@ -332,8 +362,39 @@ export class DatabaseStorage implements IStorage {
     return newResult;
   }
 
+  async createValidationResultWithFhirIdentity(result: InsertValidationResult, serverId: number, resourceType: string, fhirResourceId: string): Promise<ValidationResult> {
+    const [newResult] = await db
+      .insert(validationResults)
+      .values({
+        ...result,
+        serverId,
+        resourceType,
+        fhirResourceId
+      })
+      .returning();
+    return newResult;
+  }
+
   async getRecentValidationErrors(limit = 10, serverId?: number): Promise<ValidationResult[]> {
     return await queryOptimizer.getRecentValidationErrors(limit, serverId);
+  }
+
+  async getLatestValidationResults(options: { limit?: number, offset?: number, resourceType?: string } = {}): Promise<ValidationResult[]> {
+    const { limit = 50, offset = 0, resourceType } = options;
+    
+    let query = db
+      .select()
+      .from(validationResults)
+      .orderBy(desc(validationResults.validatedAt))
+      .limit(limit)
+      .offset(offset);
+    
+    // Filter by resource type if specified
+    if (resourceType) {
+      query = query.where(eq(validationResults.resourceType, resourceType));
+    }
+    
+    return await query;
   }
 
   async getLatestValidationResult(resourceId: number, settingsHash?: string): Promise<ValidationResult | undefined> {
@@ -565,7 +626,7 @@ export class DatabaseStorage implements IStorage {
       terminology: { enabled: true, severity: 'warning' as const },
       reference: { enabled: true, severity: 'error' as const },
       businessRule: { enabled: true, severity: 'warning' as const },
-      metadata: { enabled: true, severity: 'information' as const }
+      metadata: { enabled: true, severity: 'info' as const }
     };
     
 
@@ -664,7 +725,6 @@ export class DatabaseStorage implements IStorage {
             case 'warning':
               aspectBreakdown[aspect].warningCount++;
               break;
-            case 'information':
             case 'info':
               aspectBreakdown[aspect].informationCount++;
               break;

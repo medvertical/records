@@ -12,9 +12,19 @@ import { Loader2, Play, Settings } from "lucide-react";
 // Simple client-side cache to track validated resources
 const validatedResourcesCache = new Set<string>();
 
+// Cache clearing event system
+let cacheClearedListeners: (() => void)[] = [];
+
 // Make cache accessible globally for other components
 if (typeof window !== 'undefined') {
   (window as any).validatedResourcesCache = validatedResourcesCache;
+  (window as any).onCacheCleared = (callback: () => void) => {
+    cacheClearedListeners.push(callback);
+  };
+  (window as any).triggerCacheCleared = () => {
+    validatedResourcesCache.clear();
+    cacheClearedListeners.forEach(listener => listener());
+  };
 }
 
 interface ResourcesResponse {
@@ -46,6 +56,7 @@ export default function ResourceBrowser() {
   const [validatingResourceIds, setValidatingResourceIds] = useState<Set<number>>(new Set());
   const [validationProgress, setValidationProgress] = useState<Map<number, any>>(new Map());
   const [hasValidatedCurrentPage, setHasValidatedCurrentPage] = useState(false);
+  const [cacheCleared, setCacheCleared] = useState(false);
   const queryClient = useQueryClient();
 
   // Use validation settings polling to detect changes and refresh resource list
@@ -423,14 +434,11 @@ export default function ResourceBrowser() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          // If we have a specific resource type, use the legacy approach
-          ...(resourceType && resourceType !== "All" ? {
-            resourceIds: resourceIds,
-            resourceType: resourceType
-          } : {
-            // For mixed resource types, send the actual resource objects
-            resources: resourcesData.resources
-          })
+          // Always send the resources array with database IDs
+          resources: resourcesData.resources.map((resource: any) => ({
+            ...resource,
+            _dbId: resource._dbId || resource.id // Ensure _dbId is available
+          }))
         })
       });
 
@@ -444,6 +452,14 @@ export default function ResourceBrowser() {
         validatedCount: result.validatedCount,
         requestedCount: result.requestedCount
       });
+
+      // Mark resources as validated in cache
+      if (result.validatedCount > 0) {
+        resourcesData.resources.forEach((resource: any) => {
+          const cacheKey = `${resource.resourceType}/${resource.id}`;
+          validatedResourcesCache.add(cacheKey);
+        });
+      }
 
       // Clear the progress simulation and show completion
       clearInterval(progressInterval);
@@ -515,6 +531,8 @@ export default function ResourceBrowser() {
 
     if (unvalidatedResources.length === 0) {
       console.log('[ResourceBrowser] All resources on current page are already validated');
+      // Show a brief notification that all resources are validated
+      // This helps users understand why no validation is happening
       return;
     }
 
@@ -535,14 +553,11 @@ export default function ResourceBrowser() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          // If we have a specific resource type, use the legacy approach
-          ...(resourceType && resourceType !== "All" ? {
-            resourceIds: resourceIds,
-            resourceType: resourceType
-          } : {
-            // For mixed resource types, send the actual resource objects
-            resources: unvalidatedResources
-          })
+          // Always send the resources array with database IDs
+          resources: unvalidatedResources.map((resource: any) => ({
+            ...resource,
+            _dbId: resource._dbId || resource.id // Ensure _dbId is available
+          }))
         })
       });
 
@@ -561,11 +576,13 @@ export default function ResourceBrowser() {
       });
 
       // Only add resources to cache if validation was actually successful
-      // We'll rely on the database validation results instead of the cache
-      // The cache is now only used to prevent duplicate validation requests during the same session
       if (result.validatedCount > 0) {
         console.log(`[ResourceBrowser] Validation completed for ${result.validatedCount} resources`);
-        // Note: We're not adding to cache anymore - let the database results drive the UI
+        // Mark resources as validated in cache
+        unvalidatedResources.forEach((resource: any) => {
+          const cacheKey = `${resource.resourceType}/${resource.id}`;
+          validatedResourcesCache.add(cacheKey);
+        });
       }
 
       // Clear the progress simulation and show completion
@@ -613,6 +630,23 @@ export default function ResourceBrowser() {
     setHasValidatedCurrentPage(false);
   }, [resourceType, page]);
 
+  // Listen for cache clearing events
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).onCacheCleared) {
+      (window as any).onCacheCleared(() => {
+        console.log('[ResourceBrowser] Cache cleared event received, forcing revalidation');
+        setCacheCleared(true);
+        setHasValidatedCurrentPage(false);
+        // Force revalidation of current page resources
+        if (resourcesData?.resources && resourcesData.resources.length > 0) {
+          setTimeout(() => {
+            validateCurrentPage();
+          }, 100);
+        }
+      });
+    }
+  }, [resourcesData?.resources]);
+
   // Auto-validate resources when they're loaded (controlled from Settings page)
   useEffect(() => {
     if (resourcesData?.resources && resourcesData.resources.length > 0 && !hasValidatedCurrentPage) {
@@ -642,7 +676,37 @@ export default function ResourceBrowser() {
           {/* Validation Controls */}
           {resourcesData?.resources && resourcesData.resources.length > 0 && (
             <div className="flex items-center space-x-4 lg:ml-4">
-
+              {/* Validation Status Indicator */}
+              {(() => {
+                const totalResources = resourcesData.resources.length;
+                const validatedResources = resourcesData.resources.filter((resource: any) => 
+                  resource._validationSummary?.lastValidated
+                ).length;
+                const unvalidatedResources = totalResources - validatedResources;
+                
+                return (
+                  <div className="text-sm text-muted-foreground">
+                    {validatedResources > 0 && (
+                      <span className="text-green-600">
+                        {validatedResources} validated
+                      </span>
+                    )}
+                    {validatedResources > 0 && unvalidatedResources > 0 && (
+                      <span className="mx-2">•</span>
+                    )}
+                    {unvalidatedResources > 0 && (
+                      <span className="text-orange-600">
+                        {unvalidatedResources} need validation
+                      </span>
+                    )}
+                    {validatedResources === totalResources && unvalidatedResources === 0 && (
+                      <span className="text-green-600">
+                        All {totalResources} validated
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Manual Validation Button */}
               <Button

@@ -8,6 +8,9 @@
 import type { ValidationSettings, ValidationAspect, ValidationSeverity } from '@shared/validation-settings';
 import type { ValidationResult, ValidationIssue } from '@shared/types/validation';
 
+// Re-export shared types for convenience
+export type { ValidationResult, ValidationIssue } from '@shared/types/validation';
+
 // Canonical list of validation aspects used across engine, pipeline, and UI
 export const ALL_VALIDATION_ASPECTS: ValidationAspect[] = [
   'structural',

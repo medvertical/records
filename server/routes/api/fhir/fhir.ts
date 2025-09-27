@@ -50,36 +50,36 @@ async function enhanceResourcesWithValidationData(resources: any[]): Promise<any
       }
       
       if (dbResource) {
-        // Get validation results for this resource
-        const validationResults = await storage.getValidationResultsByResourceId(dbResource.id);
+        // Get validation results for this resource using dual-mode lookup (FHIR identity first, then database ID fallback)
+        const activeServer = await storage.getActiveFhirServer();
+        const validationResults = await storage.getValidationResultsDualMode(
+          activeServer?.id || 0,
+          resource.resourceType,
+          resource.id,
+          dbResource.id
+        );
         
         // Create validation summary from the latest validation result
         let validationSummary = null;
         if (validationResults && validationResults.length > 0) {
           const latestResult = validationResults[0]; // Assuming results are ordered by date
           
-          // Simplified validation check - just ensure we have valid data
-          const hasBeenValidated = (
-            latestResult.validatedAt && 
-            latestResult.validationScore !== null
-          );
+          // Always include validation data - UI will handle filtering based on settings
+          validationSummary = {
+            isValid: latestResult.isValid || false,
+            hasErrors: (latestResult.errorCount || 0) > 0,
+            hasWarnings: (latestResult.warningCount || 0) > 0,
+            errorCount: latestResult.errorCount || 0,
+            warningCount: latestResult.warningCount || 0,
+            informationCount: latestResult.issues?.filter((issue: any) => issue.severity === 'info').length || 0,
+            lastValidated: latestResult.validatedAt,
+            validationScore: latestResult.validationScore || 0,
+            aspectBreakdown: latestResult.aspectBreakdown || {}
+          };
           
-          // Include all validation data that has been properly validated
-          if (hasBeenValidated) {
-            validationSummary = {
-              isValid: latestResult.isValid,
-              hasErrors: latestResult.errorCount > 0,
-              hasWarnings: latestResult.warningCount > 0,
-              errorCount: latestResult.errorCount,
-              warningCount: latestResult.warningCount,
-              informationCount: latestResult.issues?.filter((issue: any) => issue.severity === 'information').length || 0,
-              lastValidated: latestResult.validatedAt,
-              validationScore: latestResult.validationScore,
-              aspectBreakdown: latestResult.aspectBreakdown
-            };
-          } else {
-            console.log(`[FHIR API] Skipping validation data for ${resource.resourceType}/${resource.id} - appears to be default/mock data or not properly validated`);
-          }
+          console.log(`[FHIR API] Enhanced ${resource.resourceType}/${resource.id} with validation data:`, validationSummary);
+        } else {
+          console.log(`[FHIR API] No validation results found for ${resource.resourceType}/${resource.id}`);
         }
         
         // Enhance the resource with database ID and validation data
@@ -177,9 +177,18 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
 
   app.post("/api/fhir/servers/:id/activate", async (req, res) => {
     try {
-      const { id } = req.params;
-      const server = await storage.activateFhirServer(id);
-      res.json(server);
+      const id = parseInt(req.params.id);
+      // First deactivate all servers
+      const servers = await storage.getFhirServers();
+      for (const server of servers) {
+        if (server.isActive) {
+          await storage.updateFhirServerStatus(server.id, false);
+        }
+      }
+      // Then activate the selected server
+      await storage.updateFhirServerStatus(id, true);
+      const server = await storage.getActiveFhirServer();
+      res.json({ message: 'Server activated successfully', server });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -187,9 +196,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
 
   app.post("/api/fhir/servers/:id/deactivate", async (req, res) => {
     try {
-      const { id } = req.params;
-      const server = await storage.deactivateFhirServer(id);
-      res.json(server);
+      const id = parseInt(req.params.id);
+      await storage.updateFhirServerStatus(id, false);
+      res.json({ message: 'Server deactivated successfully' });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -535,6 +544,111 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       res.json(resource);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // Filtered Resources Endpoint
+  // ============================================================================
+
+  // GET /api/fhir/resources/filtered - Get filtered resources with validation data
+  app.get("/api/fhir/resources/filtered", async (req, res) => {
+    try {
+      const {
+        resourceTypes,
+        hasErrors,
+        hasWarnings,
+        hasInformation,
+        isValid,
+        search,
+        limit = 50,
+        offset = 0,
+        sortBy = 'lastValidated',
+        sortDirection = 'desc'
+      } = req.query;
+
+      // Get the backend filtering service
+      const { getValidationBackendFilteringService } = await import('../../../services/validation/features/validation-backend-filtering-service');
+      const filteringService = getValidationBackendFilteringService();
+      
+      // Initialize if not already done
+      await filteringService.initialize();
+
+      // Parse resource types
+      const resourceTypesArray = resourceTypes 
+        ? (Array.isArray(resourceTypes) ? resourceTypes : resourceTypes.toString().split(','))
+        : [];
+
+      // Parse validation status filters
+      const validationStatus: any = {};
+      if (hasErrors !== undefined) validationStatus.hasErrors = hasErrors === 'true';
+      if (hasWarnings !== undefined) validationStatus.hasWarnings = hasWarnings === 'true';
+      if (hasInformation !== undefined) validationStatus.hasInformation = hasInformation === 'true';
+      if (isValid !== undefined) validationStatus.isValid = isValid === 'true';
+
+      // Create filter options
+      const filterOptions = {
+        resourceTypes: resourceTypesArray,
+        validationStatus: Object.keys(validationStatus).length > 0 ? validationStatus : undefined,
+        search: search as string,
+        pagination: {
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string)
+        },
+        sorting: {
+          field: sortBy as any,
+          direction: sortDirection as 'asc' | 'desc'
+        }
+      };
+
+      // Filter resources
+      const result = await filteringService.filterResources(filterOptions);
+
+      res.json({
+        success: true,
+        data: result,
+        message: `Found ${result.totalCount} resources matching the filter criteria`
+      });
+    } catch (error) {
+      console.error('[FHIR API] Error filtering resources:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to filter resources',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // GET /api/fhir/resources/filtered/statistics - Get filtering statistics
+  app.get("/api/fhir/resources/filtered/statistics", async (req, res) => {
+    try {
+      // Get the backend filtering service
+      const { getValidationBackendFilteringService } = await import('../../../services/validation/features/validation-backend-filtering-service');
+      const filteringService = getValidationBackendFilteringService();
+      
+      // Initialize if not already done
+      await filteringService.initialize();
+
+      // Get available resource types
+      const availableResourceTypes = await filteringService.getAvailableResourceTypes();
+
+      // Get validation status statistics
+      const validationStatistics = await filteringService.getValidationStatusStatistics();
+
+      res.json({
+        success: true,
+        data: {
+          availableResourceTypes,
+          validationStatistics
+        }
+      });
+    } catch (error) {
+      console.error('[FHIR API] Error getting filtering statistics:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to get filtering statistics',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 }

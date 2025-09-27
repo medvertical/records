@@ -203,6 +203,22 @@ export default function ResourceList({
   };
 
   const getValidationStatus = (resource: any) => {
+    const resourceId = resource._dbId || resource.id;
+    const isValidating = validatingResourceIds.has(resourceId);
+    
+    // If currently validating, show as validating
+    if (isValidating) {
+      return 'validating';
+    }
+    
+    // Check if cache has been cleared - if so, treat as not validated
+    if (typeof window !== 'undefined' && (window as any).validatedResourcesCache) {
+      const cacheKey = `${resource.resourceType}/${resource.id}`;
+      if (!(window as any).validatedResourcesCache.has(cacheKey)) {
+        return 'not-validated';
+      }
+    }
+    
     // Check for enhanced validation results first
     const enhancedValidation = resource._enhancedValidationSummary;
     if (enhancedValidation) {
@@ -265,6 +281,19 @@ export default function ResourceList({
     const getValidationScore = () => {
       if (status === 'not-validated') {
         return 0; // Always show 0% for unvalidated resources
+      }
+      
+      if (status === 'validating') {
+        // Show progress percentage if available, otherwise show 0%
+        return progress?.progress || 0;
+      }
+      
+      // Check if cache has been cleared - if so, show 0%
+      if (typeof window !== 'undefined' && (window as any).validatedResourcesCache) {
+        const cacheKey = `${resource.resourceType}/${resource.id}`;
+        if (!(window as any).validatedResourcesCache.has(cacheKey)) {
+          return 0;
+        }
       }
       
       // Use enhanced validation score if available
