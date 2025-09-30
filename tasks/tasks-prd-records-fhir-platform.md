@@ -159,7 +159,7 @@
   - [x] 6.9 Empty, loading (skeleton), and error states; keep list/detail parity for counts/scores
   - [x] 6.10 Performance: p95 < 500ms for list/group queries; virtualize large lists; debounce filters
   - [x] 6.11 Accessibility: keyboard navigation, aria labels for filters/toggles/badges
-  - [ ] 6.12 Resource editor modal: JSON/form editor with syntax validation, save/cancel actions
+  - [x] 6.12 Resource editor modal: JSON/form editor with syntax validation, save/cancel actions
   - [x] 6.13 Error boundary: React error boundary with fallback UI and error reporting
 - [ ] 7.0 UI Resource Detail: per-aspect messages/signatures, same counting/score logic, navigate from groups
   - [ ] 7.1 Header with resource identity, aggregated score, per-aspect chips (enabled/disabled/validating) and timestamps

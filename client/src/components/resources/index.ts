@@ -9,6 +9,7 @@ export { default as ResourceViewer } from './resource-viewer';
 export { default as ResourceTreeViewer } from './resource-tree-viewer';
 export { ResourceListView } from './ResourceListView';
 export { VirtualizedResourceList } from './VirtualizedResourceList';
+export { ResourceEditor } from './ResourceEditor';
 
 // Validation components
 export { ValidationSummaryBadge } from './validation-summary-badge';
