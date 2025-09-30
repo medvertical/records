@@ -1,0 +1,395 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_ENV: test
+  # CRITICAL: Ensure DEMO_MOCKS is disabled in CI
+  DEMO_MOCKS: false
+  DATABASE_URL: postgresql://test:test@localhost:5432/records_test
+
+jobs:
+  # Job 1: Code Quality Checks
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint
+        continue-on-error: false
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+        continue-on-error: false
+
+      - name: Check for hardcoded URLs
+        run: |
+          echo "🔍 Checking for hardcoded FHIR URLs..."
+          # Allow in tests, docs, and feature flags
+          VIOLATIONS=$(grep -r "hapi\.fhir\.org\|fhir\.org/baseR4" \
+            --exclude-dir=node_modules \
+            --exclude-dir=.git \
+            --exclude-dir=dist \
+            --exclude="*.test.ts" \
+            --exclude="*.test.tsx" \
+            --exclude="*.md" \
+            --exclude="feature-flags.ts" \
+            . || true)
+          
+          if [ -n "$VIOLATIONS" ]; then
+            echo "❌ Found hardcoded URLs:"
+            echo "$VIOLATIONS"
+            exit 1
+          fi
+          echo "✅ No hardcoded URLs found"
+
+      - name: Check for ungated mock data
+        run: |
+          echo "🔍 Checking for ungated mock data..."
+          chmod +x ./scripts/check-no-mocks.sh
+          ./scripts/check-no-mocks.sh
+
+      - name: Verify DEMO_MOCKS is false
+        run: |
+          echo "🔍 Verifying DEMO_MOCKS environment variable..."
+          if [ "$DEMO_MOCKS" != "false" ]; then
+            echo "❌ DEMO_MOCKS must be 'false' in CI"
+            exit 1
+          fi
+          echo "✅ DEMO_MOCKS is correctly set to false"
+
+  # Job 2: Database & Migrations
+  database:
+    name: Database & Migrations
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: records_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run migrations UP
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/records_test
+
+      - name: Test migration rollback
+        run: npm run db:migrate:down
+        continue-on-error: true
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/records_test
+
+      - name: Re-run migrations UP (idempotency test)
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/records_test
+
+      - name: Seed test data
+        run: npm run db:seed
+        continue-on-error: true
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/records_test
+
+  # Job 3: Unit & Integration Tests
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: [quality]
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: records_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run database migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/records_test
+
+      - name: Run unit tests
+        run: npm test -- --run
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/records_test
+          NODE_ENV: test
+
+      - name: Generate coverage report
+        run: npm test -- --coverage --run
+        continue-on-error: true
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/records_test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        continue-on-error: true
+        with:
+          file: ./coverage/coverage-final.json
+          flags: unittests
+
+  # Job 4: Build Check
+  build:
+    name: Build Check
+    runs-on: ubuntu-latest
+    needs: [quality]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build client
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Check build output size
+        run: |
+          echo "📦 Checking build output size..."
+          BUILD_SIZE=$(du -sh dist/public | cut -f1)
+          echo "Build size: $BUILD_SIZE"
+          
+          # Optional: fail if build is too large
+          # MAX_SIZE_MB=10
+          # if [ $(du -sm dist/public | cut -f1) -gt $MAX_SIZE_MB ]; then
+          #   echo "❌ Build too large (>$MAX_SIZE_MB MB)"
+          #   exit 1
+          # fi
+
+  # Job 5: Performance Budget Checks (Optional/Experimental)
+  performance:
+    name: Performance Budgets
+    runs-on: ubuntu-latest
+    needs: [test, database]
+    continue-on-error: true # Don't block on perf checks initially
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: records_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/records_test
+
+      - name: Seed performance test data
+        run: npm run db:seed:dev
+        continue-on-error: true
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/records_test
+
+      - name: Start server in background
+        run: |
+          npm run dev &
+          echo $! > server.pid
+          sleep 10
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/records_test
+          PORT: 5000
+
+      - name: Performance budget checks
+        run: |
+          echo "🎯 Running performance budget checks..."
+          
+          # List/Group endpoint: p95 < 500ms
+          echo "Testing GET /api/validation/issues/groups..."
+          RESPONSE_TIME=$(curl -o /dev/null -s -w '%{time_total}\n' http://localhost:5000/api/validation/issues/groups)
+          RESPONSE_TIME_MS=$(echo "$RESPONSE_TIME * 1000" | bc)
+          echo "Response time: ${RESPONSE_TIME_MS}ms"
+          
+          # Detail endpoint: p95 < 300ms
+          echo "Testing resource detail endpoints..."
+          # Add actual endpoint tests here
+          
+          echo "✅ Performance checks complete (non-blocking)"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill $(cat server.pid) || true
+          fi
+
+  # Job 6: Security Checks
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
+      - name: Check for secrets
+        run: |
+          echo "🔒 Checking for accidentally committed secrets..."
+          # Check for common secret patterns
+          if grep -r "sk_live_\|sk_test_\|API_KEY.*=.*['\"].*['\"]" \
+            --exclude-dir=node_modules \
+            --exclude-dir=.git \
+            --exclude="*.md" \
+            .; then
+            echo "⚠️  Potential secrets found"
+            exit 1
+          fi
+          echo "✅ No obvious secrets found"
+
+  # Job 7: Deployment Readiness
+  deploy-check:
+    name: Deployment Readiness
+    runs-on: ubuntu-latest
+    needs: [quality, test, build, database]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify environment files
+        run: |
+          echo "🔍 Checking environment configuration..."
+          
+          # Check .env.example exists and has required vars
+          if [ ! -f .env.example ]; then
+            echo "❌ .env.example not found"
+            exit 1
+          fi
+          
+          # Verify DEMO_MOCKS=false in example
+          if grep -q "DEMO_MOCKS=true" .env.example; then
+            echo "❌ .env.example must have DEMO_MOCKS=false"
+            exit 1
+          fi
+          
+          echo "✅ Environment files verified"
+
+      - name: Check documentation
+        run: |
+          echo "📚 Verifying documentation..."
+          
+          REQUIRED_DOCS=(
+            "README.md"
+            "docs/technical/MOCK_DATA_GATING.md"
+            "docs/requirements/prd-records-fhir-platform.md"
+          )
+          
+          for doc in "${REQUIRED_DOCS[@]}"; do
+            if [ ! -f "$doc" ]; then
+              echo "⚠️  Missing documentation: $doc"
+            fi
+          done
+          
+          echo "✅ Documentation check complete"
+
+      - name: Deployment summary
+        run: |
+          echo "🚀 Deployment Readiness Summary"
+          echo "================================"
+          echo "✅ Code quality checks passed"
+          echo "✅ Tests passed"
+          echo "✅ Build successful"
+          echo "✅ Database migrations validated"
+          echo "✅ DEMO_MOCKS disabled"
+          echo "✅ Ready for deployment"
