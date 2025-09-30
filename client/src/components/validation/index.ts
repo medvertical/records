@@ -39,6 +39,8 @@ export { ValidationMessageList } from './ValidationMessageList';
 export type { ValidationMessage } from './ValidationMessageList';
 export { ValidationAspectTabs } from './ValidationAspectTabs';
 export type { AspectMessages } from './ValidationAspectTabs';
+export { SignatureBadge } from './SignatureBadge';
+export type { SignatureBadgeProps } from './SignatureBadge';
 
 // Settings components - Settings management UI
 export { ValidationSettingsAuditTrail } from './validation-settings-audit-trail';

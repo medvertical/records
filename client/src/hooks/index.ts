@@ -41,6 +41,10 @@ export { useValidationGroups, useValidationGroupMembers } from './use-validation
 export { useServerReactiveQueries, useActiveServerId, useServerQueryKey } from './use-server-reactive-queries';
 export { useAspectSettingsReactive, useAspectStyles } from './use-aspect-settings-reactive';
 
+// Navigation hooks
+export { useGroupNavigation } from './use-group-navigation';
+export type { GroupNavigationOptions } from './use-group-navigation';
+
 // Type exports
 export type { ServerStatus } from './use-server-data';
 export type { ValidationProgress } from './use-validation-polling';

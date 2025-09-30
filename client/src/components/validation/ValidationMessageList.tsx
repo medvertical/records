@@ -180,41 +180,47 @@ function MessageItem({
             </div>
           )}
 
-          {/* Signature */}
+          {/* Signature with Link Badge */}
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-gray-500 w-20">Signature:</span>
-            <div className="flex items-center gap-2 flex-1">
-              <code className="text-xs text-gray-600 font-mono break-all bg-gray-50 px-2 py-1 rounded flex-1">
+            <div className="flex items-center gap-2 flex-1 flex-wrap">
+              <code className="text-xs text-gray-600 font-mono break-all bg-gray-50 px-2 py-1 rounded flex-1 min-w-0">
                 {message.signature}
               </code>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2"
-                    onClick={handleCopySignature}
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Copy signature</TooltipContent>
-              </Tooltip>
-              {onSignatureClick && (
+              <div className="flex items-center gap-1 flex-shrink-0">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-6 px-2"
-                      onClick={() => onSignatureClick(message.signature)}
+                      onClick={handleCopySignature}
                     >
-                      <ExternalLink className="h-3 w-3" />
+                      <Copy className="h-3 w-3" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>View all resources with this issue</TooltipContent>
+                  <TooltipContent>Copy signature</TooltipContent>
                 </Tooltip>
-              )}
+                {onSignatureClick && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="h-6 px-2 gap-1"
+                        onClick={() => onSignatureClick(message.signature)}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        <span className="text-xs">View Group</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>View all resources with this signature</p>
+                      <p className="text-xs text-gray-400 mt-1">Opens group members view</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
             </div>
           </div>
 
