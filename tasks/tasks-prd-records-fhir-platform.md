@@ -153,14 +153,14 @@
   - [x] 6.3 Implement GroupList table (signature, aspect, severity, code, canonicalPath, totalResources, actions)
   - [x] 6.4 Implement GroupMembers view (paginated members; navigate to detail on click)
   - [x] 6.5 Implement ResourceList (table or virtualized grid) with ValidationStatusIndicator per resource
-  - [ ] 6.6 Implement Pagination and page-size controls; keep URL in sync (per-server namespace)
+  - [x] 6.6 Implement Pagination and page-size controls; keep URL in sync (per-server namespace)
   - [ ] 6.7 Immediate rebind on active server switch; invalidate and refetch using per-server keys
   - [ ] 6.8 Immediate UI recalculation on aspect settings change (disabled aspects greyed/excluded; show "Validating…")
-  - [ ] 6.9 Empty, loading (skeleton), and error states; keep list/detail parity for counts/scores
-  - [ ] 6.10 Performance: p95 < 500ms for list/group queries; virtualize large lists; debounce filters
-  - [ ] 6.11 Accessibility: keyboard navigation, aria labels for filters/toggles/badges
+  - [x] 6.9 Empty, loading (skeleton), and error states; keep list/detail parity for counts/scores
+  - [x] 6.10 Performance: p95 < 500ms for list/group queries; virtualize large lists; debounce filters
+  - [x] 6.11 Accessibility: keyboard navigation, aria labels for filters/toggles/badges
   - [ ] 6.12 Resource editor modal: JSON/form editor with syntax validation, save/cancel actions
-  - [ ] 6.13 Error boundary: React error boundary with fallback UI and error reporting
+  - [x] 6.13 Error boundary: React error boundary with fallback UI and error reporting
 - [ ] 7.0 UI Resource Detail: per-aspect messages/signatures, same counting/score logic, navigate from groups
   - [ ] 7.1 Header with resource identity, aggregated score, per-aspect chips (enabled/disabled/validating) and timestamps
   - [ ] 7.2 Per-aspect sections/tabs with MessageList (severity, code, canonicalPath, text, signature)
