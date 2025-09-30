@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { ValidationGroupsRepository } from '../../../repositories/validation-groups-repository';
 import { z } from 'zod';
+import { securityMiddleware } from '../../../middleware/security-validation';
 
 const router = Router();
 
@@ -34,7 +35,11 @@ const GroupsQuerySchema = z.object({
  * - size (default: 25, max: 100): Page size
  * - sort (default: count:desc): Sort order
  */
-router.get('/', async (req: Request, res: Response) => {
+router.get(
+  '/',
+  securityMiddleware.heavyEndpointLimiter,
+  securityMiddleware.validatePagination,
+  async (req: Request, res: Response) => {
   try {
     // Validate query parameters
     const queryValidation = GroupsQuerySchema.safeParse(req.query);
@@ -135,7 +140,11 @@ const GroupMembersQuerySchema = z.object({
  * - size (default: 25, max: 100): Page size
  * - sort (default: validatedAt:desc): Sort order
  */
-router.get('/:signature/resources', async (req: Request, res: Response) => {
+router.get(
+  '/:signature/resources',
+  securityMiddleware.heavyEndpointLimiter,
+  securityMiddleware.validatePagination,
+  async (req: Request, res: Response) => {
   try {
     const { signature } = req.params;
     

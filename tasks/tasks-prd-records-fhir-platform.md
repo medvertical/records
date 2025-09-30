@@ -201,10 +201,10 @@
   - [ ] 11.1 Metrics emission (latency p95, validation durations per aspect, cache hit rate)
   - [ ] 11.2 Health/readiness endpoints; include queue/batch status
   - [ ] 11.3 Dash-friendly logs with requestId/serverId context
-- [ ] 12.0 Security & validation: input validation, size limits, rate limits, reference scope
-  - [ ] 12.1 Validate incoming payloads (FHIR JSON), size limits, and types
-  - [ ] 12.2 Add simple rate-limits/guards for heavy endpoints
-  - [ ] 12.3 Enforce same-server reference scope unless explicitly allowed by settings
+- [x] 12.0 Security & validation: input validation, size limits, rate limits, reference scope
+  - [x] 12.1 Validate incoming payloads (FHIR JSON), size limits, and types
+  - [x] 12.2 Add simple rate-limits/guards for heavy endpoints
+  - [x] 12.3 Enforce same-server reference scope unless explicitly allowed by settings
 - [ ] 13.0 Testing strategy: unit/integration/e2e for groups, parity, queue, edit/batch-edit
   - [ ] 13.1 Unit: signature normalization, scoring, snapshot hash, settings reactivity
   - [ ] 13.2 Integration: groups/members/messages filters; edit/batch-edit; queue progress

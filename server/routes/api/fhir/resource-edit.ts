@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { validationQueue } from '../../../services/validation/queue/validation-queue-simple';
+import { securityMiddleware } from '../../../middleware/security-validation';
 
 const router = Router();
 
@@ -76,7 +77,11 @@ function validateFhirResource(resource: any): { valid: boolean; errors: string[]
  * - 422 Unprocessable Entity: Validation failed
  * - 500 Internal Server Error: Server error
  */
-router.put('/:resourceType/:id', async (req: Request, res: Response) => {
+router.put(
+  '/:resourceType/:id',
+  securityMiddleware.editEndpointLimiter,
+  securityMiddleware.validateFhirResource,
+  async (req: Request, res: Response) => {
   try {
     const { resourceType, id } = req.params;
     const resource = req.body;

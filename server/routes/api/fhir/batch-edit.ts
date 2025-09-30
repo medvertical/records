@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { validationQueue } from '../../../services/validation/queue/validation-queue-simple';
+import { securityMiddleware } from '../../../middleware/security-validation';
 
 const router = Router();
 
@@ -151,7 +152,11 @@ function applyPatchOperations(resource: any, operations: any[]): { resource: any
  *   results: Array<{ id, success, error?, beforeHash, afterHash, changed }>
  * }
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post(
+  '/',
+  securityMiddleware.batchEndpointLimiter,
+  securityMiddleware.validateBatchOperations,
+  async (req: Request, res: Response) => {
   try {
     // Validate request body
     const validation = BatchEditRequestSchema.safeParse(req.body);
