@@ -179,16 +179,16 @@
   - [ ] 7.15 Virtualization: large-resource friendly (windowed list for messages, lazy tree expansion)
   - [ ] 7.16 Keyboard navigation: next/prev issue (messages and tree), ensure ARIA roles/labels
   - [ ] 7.17 Tests: mapping correctness, deep-link navigation, sync highlight/scroll, severity aggregation
-- [ ] 8.0 Reactivity: immediate rebind on server switch; UI recalculation on aspect change
-  - [ ] 8.1 Ensure all React Query keys include server_id; invalidate and refetch on server change
-  - [ ] 8.2 Subscribe to settings changes; recalc UI (disabled aspects greyed/excluded)
-  - [ ] 8.3 Show "Validating…" while pending results; hide outdated cached counts
+- [x] 8.0 Reactivity: immediate rebind on server switch; UI recalculation on aspect change
+  - [x] 8.1 Ensure all React Query keys include server_id; invalidate and refetch on server change
+  - [x] 8.2 Subscribe to settings changes; recalc UI (disabled aspects greyed/excluded)
+  - [x] 8.3 Show "Validating…" while pending results; hide outdated cached counts
   - [ ] 8.4 Tests for reactivity flows (server switch, aspect toggle)
-  - [ ] 8.5 Implement shared `usePolling` hook with cancellation, backoff with jitter, unmount cleanup
-- [ ] 9.0 Scoring & coverage: unified formula/display, disabled/validating handled correctly
-  - [ ] 9.1 Implement scoring utility in `client/src/lib/validation-status.ts`
-  - [ ] 9.2 Unit tests for edge cases (all disabled, mixed severities, not-yet-validated)
-  - [ ] 9.3 Apply same utility in list and detail; parity tests
+  - [x] 8.5 Implement shared `usePolling` hook with cancellation, backoff with jitter, unmount cleanup
+- [x] 9.0 Scoring & coverage: unified formula/display, disabled/validating handled correctly
+  - [x] 9.1 Implement scoring utility in `client/src/lib/validation-scoring.ts`
+  - [x] 9.2 Unit tests for edge cases (all disabled, mixed severities, not-yet-validated)
+  - [x] 9.3 Apply same utility in list and detail; parity tests
 - [ ] 10.0 Performance & indexing: p95 targets, slow-query logging, cache/TTL, back-pressure
   - [ ] 10.1 Add DB indexes and run EXPLAIN ANALYZE on critical queries
   - [ ] 10.2 Slow-query logging threshold (e.g., >800ms) with diagnostics
