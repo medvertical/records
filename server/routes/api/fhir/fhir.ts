@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { storage } from "../../../storage.js";
 import { FhirClient } from "../../../services/fhir/fhir-client";
 import { profileManager } from "../../../services/fhir/profile-manager";
+import { FeatureFlags } from "../../../config/feature-flags";
 
 // Helper function to enhance resources with validation data
 async function enhanceResourcesWithValidationData(resources: any[]): Promise<any[]> {
@@ -402,9 +403,19 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
           searchParams
         );
       } catch (error: any) {
-        // Fallback to mock data if FHIR server is unavailable
-        console.warn(`FHIR server unavailable, using mock data: ${error.message}`);
-        bundle = createMockBundle(resourceType as string, parseInt(limit as string), parseInt(offset as string));
+        // Fallback to mock data ONLY if DEMO_MOCKS is enabled
+        if (FeatureFlags.DEMO_MOCKS) {
+          console.warn(`FHIR server unavailable, using mock data (DEMO_MOCKS=true): ${error.message}`);
+          bundle = createMockBundle(resourceType as string, parseInt(limit as string), parseInt(offset as string));
+        } else {
+          // Production: return error instead of mock data
+          console.error(`FHIR server unavailable: ${error.message}`);
+          return res.status(503).json({
+            error: 'FHIR Server Unavailable',
+            message: 'Unable to fetch resources from the FHIR server. Please check the server connection.',
+            details: error.message,
+          });
+        }
       }
 
       // Transform FHIR Bundle to expected frontend format

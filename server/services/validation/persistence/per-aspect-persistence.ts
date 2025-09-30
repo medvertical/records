@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import crypto from 'crypto';
 
 import {
@@ -163,27 +163,11 @@ export async function persistEngineResultPerAspect(params: {
         textTruncated: textNorm.truncated,
       });
 
-      // Upsert message group (basic)
-      const existing = await db
-        .select({ id: validationMessageGroups.id, total: validationMessageGroups.totalResources })
-        .from(validationMessageGroups)
-        .where(and(
-          eq(validationMessageGroups.serverId, serverId),
-          eq(validationMessageGroups.signature, signature),
-        ))
-        .limit(1);
-
-      if (existing[0]) {
-        await db
-          .update(validationMessageGroups)
-          .set({
-            totalResources: (existing[0].total ?? 0) + 1,
-            lastSeenAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(validationMessageGroups.id, existing[0].id));
-      } else {
-        await db.insert(validationMessageGroups).values({
+      // Upsert message group with atomic increment
+      // Try to insert; if exists (unique constraint on signature), update counter atomically
+      const insertResult = await db
+        .insert(validationMessageGroups)
+        .values({
           serverId,
           signature,
           signatureVersion: 1,
@@ -193,8 +177,17 @@ export async function persistEngineResultPerAspect(params: {
           canonicalPath: pathNorm.normalized,
           sampleText: issue.message,
           totalResources: 1,
-        });
-      }
+        })
+        .onConflictDoUpdate({
+          target: validationMessageGroups.signature,
+          set: {
+            // Atomic increment using SQL
+            totalResources: sql`${validationMessageGroups.totalResources} + 1`,
+            lastSeenAt: new Date(),
+            updatedAt: new Date(),
+          },
+        })
+        .returning({ id: validationMessageGroups.id });
     }
   }
 }

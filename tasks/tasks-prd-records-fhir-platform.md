@@ -241,8 +241,8 @@
 - [ ] 17.0 Gaps discovered in codebase (must-fix)
   - [x] 17.1 Remove fallback HAPI URL in `server.ts` connection test; return 503 or guard behind MOCK env
   - [ ] 17.2 Gate or remove mock resource inflation endpoints (avoid fake 4M counts)
-  - [ ] 17.3 Implement `computeMessageSignature` utility and persist to `validation_messages`
-  - [ ] 17.4 Incremental group counters during validation writes for fast groups API
+  - [x] 17.3 Implement `computeMessageSignature` utility and persist to `validation_messages` (ALREADY IMPLEMENTED with real SHA-256)
+  - [x] 17.4 Incremental group counters during validation writes for fast groups API (atomic SQL increment on conflict)
   - [ ] 17.5 Remove/gate all mock responses (server.ts, api/index.*); delete or guard with DEMO_MOCKS=false (IN PROGRESS)
 
 - [ ] 18.0 Dashboard (real data, rebuild allowed)

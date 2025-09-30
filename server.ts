@@ -22,10 +22,27 @@ app.use((req, res, next) => {
   }
 });
 
-// Mock data for when database is not available
+/**
+ * Helper function to return mock data or error based on DEMO_MOCKS flag
+ */
+function handleDatabaseUnavailable<T>(mockData: T, errorMessage: string, res: Response): void {
+  if (FeatureFlags.DEMO_MOCKS) {
+    console.warn(`[DEMO_MOCKS] ${errorMessage} - returning mock data`);
+    res.json(mockData);
+  } else {
+    console.error(`Database unavailable: ${errorMessage}`);
+    res.status(503).json({
+      error: 'Service Unavailable',
+      message: 'Database connection is unavailable. Please contact support.',
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+// Mock data for DEMO_MOCKS mode only
 const mockFhirServers = [
-  { id: 1, name: "HAPI Test Server", url: "http://hapi.fhir.org/baseR4", isActive: true },
-  { id: 2, name: "FHIR Test Server", url: "https://r4.smarthealthit.org", isActive: false }
+  { id: 1, name: "DEMO Server 1", url: "http://demo1.example.com/fhir", isActive: true },
+  { id: 2, name: "DEMO Server 2", url: "http://demo2.example.com/fhir", isActive: false }
 ];
 
 // Mock validation progress data (will be replaced by SSE implementation)
@@ -84,8 +101,7 @@ app.get("/api/validation/bulk/progress", async (req, res) => {
       startTime: new Date().toISOString()
     });
   } catch (error) {
-    console.log('Database not available, using mock validation progress');
-    res.json(defaultValidationProgress);
+    handleDatabaseUnavailable(defaultValidationProgress, 'Validation progress unavailable', res);
   }
 });
 
@@ -96,8 +112,7 @@ app.get("/api/validation/errors/recent", async (req, res) => {
     const errors = await storage.getRecentValidationErrors(parseInt(limit as string));
     res.json(errors);
   } catch (error) {
-    console.log('Database not available, using mock recent errors');
-    res.json(mockRecentErrors);
+    handleDatabaseUnavailable(mockRecentErrors, 'Recent errors unavailable', res);
   }
 });
 
