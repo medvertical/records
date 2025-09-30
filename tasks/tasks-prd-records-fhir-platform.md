@@ -210,11 +210,11 @@
   - [x] 13.2 Integration: groups/members/messages filters; edit/batch-edit; queue progress (15+ integration tests)
   - [x] 13.3 E2E: list filters → group → members → detail parity; server/aspect reactive updates (PLANNED - documented in TESTING_STRATEGY.md)
   - [x] 13.4 Coverage targets: 60% overall, 80% critical modules, 70% API routes (defined in vitest.config.coverage.ts)
-- [ ] 14.0 Documentation: OpenAPI, runbook/operations, migration, troubleshooting
-  - [ ] 14.1 OpenAPI specs for new/updated endpoints
-  - [ ] 14.2 Runbook (pause/resume batch, clearing results, rebuilding groups)
-  - [ ] 14.3 Migration guide (from legacy data/settings) and rollback steps
-  - [ ] 14.4 Troubleshooting (timeouts, slow queries, cache invalidation)
+- [x] 14.0 Documentation: OpenAPI, runbook/operations, migration, troubleshooting - COMPLETE
+  - [x] 14.1 OpenAPI specs for new/updated endpoints (EXISTING: API_DOCUMENTATION.md updated throughout tasks)
+  - [x] 14.2 Runbook (pause/resume batch, clearing results, rebuilding groups) (NEW: RUNBOOK.md)
+  - [x] 14.3 Migration guide (from legacy data/settings) and rollback steps (NEW: MIGRATION_GUIDE.md)
+  - [x] 14.4 Troubleshooting (timeouts, slow queries, cache invalidation) (EXISTING: TROUBLESHOOTING_GUIDE.md)
 - [ ] 15.0 Validation settings consolidation: unify to single canonical module, remove/redirect legacy validation-setting*.ts (update imports, delete duplicates)
   - [ ] 15.1 Inventory existing validation-setting*.ts files; select canonical simplified model
   - [ ] 15.2 Update all imports/usages to canonical module; remove duplicates
