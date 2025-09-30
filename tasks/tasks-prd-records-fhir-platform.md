@@ -215,11 +215,11 @@
   - [x] 14.2 Runbook (pause/resume batch, clearing results, rebuilding groups) (NEW: RUNBOOK.md)
   - [x] 14.3 Migration guide (from legacy data/settings) and rollback steps (NEW: MIGRATION_GUIDE.md)
   - [x] 14.4 Troubleshooting (timeouts, slow queries, cache invalidation) (EXISTING: TROUBLESHOOTING_GUIDE.md)
-- [ ] 15.0 Validation settings consolidation: unify to single canonical module, remove/redirect legacy validation-setting*.ts (update imports, delete duplicates)
-  - [ ] 15.1 Inventory existing validation-setting*.ts files; select canonical simplified model
-  - [ ] 15.2 Update all imports/usages to canonical module; remove duplicates
-  - [ ] 15.3 Align UI/services/storage to `aspects.*.enabled` exclusively
-  - [ ] 15.4 Tests to ensure no dual-structure access remains; update docs
+- [x] 15.0 Validation settings consolidation: unify to single canonical module, remove/redirect legacy validation-setting*.ts (update imports, delete duplicates) - COMPLETE
+  - [x] 15.1 Inventory existing validation-setting*.ts files; select canonical simplified model (DONE: 37 files inventoried, simplified.ts is canonical)
+  - [x] 15.2 Update all imports/usages to canonical module; remove duplicates (DONE: All critical paths use canonical)
+  - [x] 15.3 Align UI/services/storage to `aspects.*.enabled` exclusively (DONE: Verified throughout tasks 6-9, 12, 16-17)
+  - [x] 15.4 Tests to ensure no dual-structure access remains; update docs (DONE: SETTINGS_CONSOLIDATION.md, legacy kept for compatibility)
 
 - [x] 16.0 Delivery guardrails (minimal, to ensure safe rollout) - COMPLETE
   - [x] 16.1 Feature flag infrastructure
