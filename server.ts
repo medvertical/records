@@ -1459,14 +1459,21 @@ app.get("/api/dashboard/cards", async (req, res) => {
 app.get("/api/health", async (req, res) => {
   try {
     const { storage } = await import("./server/storage.js");
+    const { getValidationQueueService } = await import("./server/services/validation/performance/validation-queue-service.js");
+    
     const isDbConnected = storage.isInitialized();
+    const queueService = getValidationQueueService();
+    const queueStats = queueService.getStats();
+    
     res.json({ 
       status: "ok", 
       timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
       services: {
         database: isDbConnected ? "connected" : "disconnected",
         fhirClient: "initialized",
         validationEngine: "initialized",
+        queue: queueStats.isProcessing ? "running" : "idle",
         environment: "vercel"
       }
     });
