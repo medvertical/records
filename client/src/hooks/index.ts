@@ -49,6 +49,10 @@ export type { GroupNavigationOptions } from './use-group-navigation';
 export { useValidationScoring, useResourceValidationSummary } from './use-validation-scoring';
 export type { UseValidationScoringOptions, UseResourceValidationSummaryOptions } from './use-validation-scoring';
 
+// Resource action hooks
+export { useResourceActions } from './use-resource-actions';
+export type { UseResourceActionsOptions } from './use-resource-actions';
+
 // Type exports
 export type { ServerStatus } from './use-server-data';
 export type { ValidationProgress } from './use-validation-polling';

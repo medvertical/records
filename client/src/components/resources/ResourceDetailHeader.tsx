@@ -40,6 +40,8 @@ export interface ResourceDetailHeaderProps {
   onRevalidate?: () => void;
   onEdit?: () => void;
   isRevalidating?: boolean;
+  /** If true, shows action buttons inline in the header footer. If false, actions should be rendered separately */
+  showActions?: boolean;
 }
 
 // ============================================================================
@@ -186,6 +188,7 @@ export function ResourceDetailHeader({
   onRevalidate,
   onEdit,
   isRevalidating = false,
+  showActions = true,
 }: ResourceDetailHeaderProps) {
   // Calculate summary counts
   const summary = useMemo(() => {
@@ -331,40 +334,42 @@ export function ResourceDetailHeader({
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2">
-            {onRevalidate && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onRevalidate}
-                disabled={isRevalidating}
-                className="gap-2"
-              >
-                {isRevalidating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Revalidating...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="h-4 w-4" />
-                    Revalidate
-                  </>
-                )}
-              </Button>
-            )}
-            {onEdit && (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={onEdit}
-                className="gap-2"
-              >
-                <Edit className="h-4 w-4" />
-                Edit Resource
-              </Button>
-            )}
-          </div>
+          {showActions && (
+            <div className="flex items-center gap-2">
+              {onRevalidate && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onRevalidate}
+                  disabled={isRevalidating}
+                  className="gap-2"
+                >
+                  {isRevalidating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Revalidating...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4" />
+                      Revalidate
+                    </>
+                  )}
+                </Button>
+              )}
+              {onEdit && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={onEdit}
+                  className="gap-2"
+                >
+                  <Edit className="h-4 w-4" />
+                  Edit Resource
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

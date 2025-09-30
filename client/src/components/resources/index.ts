@@ -11,6 +11,7 @@ export { ResourceListView } from './ResourceListView';
 export { VirtualizedResourceList } from './VirtualizedResourceList';
 export { ResourceEditor } from './ResourceEditor';
 export { ResourceDetailHeader } from './ResourceDetailHeader';
+export { ResourceDetailActions } from './ResourceDetailActions';
 
 // Validation components
 export { ValidationSummaryBadge } from './validation-summary-badge';
