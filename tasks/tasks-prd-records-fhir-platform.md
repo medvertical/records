@@ -152,7 +152,7 @@
   - [x] 6.2 Add GroupMode toggle and integrate groups endpoint (list groups with counts, sample message, severity)
   - [x] 6.3 Implement GroupList table (signature, aspect, severity, code, canonicalPath, totalResources, actions)
   - [x] 6.4 Implement GroupMembers view (paginated members; navigate to detail on click)
-  - [ ] 6.5 Implement ResourceList (table or virtualized grid) with ValidationStatusIndicator per resource
+  - [x] 6.5 Implement ResourceList (table or virtualized grid) with ValidationStatusIndicator per resource
   - [ ] 6.6 Implement Pagination and page-size controls; keep URL in sync (per-server namespace)
   - [ ] 6.7 Immediate rebind on active server switch; invalidate and refetch using per-server keys
   - [ ] 6.8 Immediate UI recalculation on aspect settings change (disabled aspects greyed/excluded; show "Validating…")
