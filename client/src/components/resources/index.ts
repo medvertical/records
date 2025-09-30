@@ -10,6 +10,7 @@ export { default as ResourceTreeViewer } from './resource-tree-viewer';
 export { ResourceListView } from './ResourceListView';
 export { VirtualizedResourceList } from './VirtualizedResourceList';
 export { ResourceEditor } from './ResourceEditor';
+export { ResourceDetailHeader } from './ResourceDetailHeader';
 
 // Validation components
 export { ValidationSummaryBadge } from './validation-summary-badge';

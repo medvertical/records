@@ -162,7 +162,7 @@
   - [x] 6.12 Resource editor modal: JSON/form editor with syntax validation, save/cancel actions
   - [x] 6.13 Error boundary: React error boundary with fallback UI and error reporting
 - [ ] 7.0 UI Resource Detail: per-aspect messages/signatures, same counting/score logic, navigate from groups
-  - [ ] 7.1 Header with resource identity, aggregated score, per-aspect chips (enabled/disabled/validating) and timestamps
+  - [x] 7.1 Header with resource identity, aggregated score, per-aspect chips (enabled/disabled/validating) and timestamps
   - [ ] 7.2 Per-aspect sections/tabs with MessageList (severity, code, canonicalPath, text, signature)
   - [ ] 7.3 Signature badges link back to GroupMembers (deep-link with signature and resourceType)
   - [ ] 7.4 Use same score/coverage function as list; ensure parity of counts across aspects
