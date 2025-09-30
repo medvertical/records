@@ -30,6 +30,10 @@ export { ValidationCancellationRetry } from './validation-cancellation-retry';
 // Issue components - Individual issue display
 export { ValidationIssueCard } from './validation-issue-card';
 
+// Group components - Message grouping and members
+export { GroupList } from './GroupList';
+export { GroupMembers } from './GroupMembers';
+
 // Settings components - Settings management UI
 export { ValidationSettingsAuditTrail } from './validation-settings-audit-trail';
 export { ValidationSettingsDashboardDemo } from './validation-settings-dashboard-demo';

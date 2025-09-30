@@ -148,10 +148,10 @@
   - [x] 5.6 Tests for pause/resume/cancel, priority, retry/backoff logic
   - [x] 5.7 Align with `docs/technical/validation/API_DOCUMENTATION.md`
 - [ ] 6.0 UI Resource Browser: filters (aspect/severity/code/path/has-issues/unvalidated), group mode, parity
-  - [ ] 6.1 Build FiltersPanel (aspect multi-select, severity multi-select, code typeahead, path input, has-issues toggle, unvalidated toggle, resourceType selector)
-  - [ ] 6.2 Add GroupMode toggle and integrate groups endpoint (list groups with counts, sample message, severity)
-  - [ ] 6.3 Implement GroupList table (signature, aspect, severity, code, canonicalPath, totalResources, actions)
-  - [ ] 6.4 Implement GroupMembers view (paginated members; navigate to detail on click)
+  - [x] 6.1 Build FiltersPanel (aspect multi-select, severity multi-select, code typeahead, path input, has-issues toggle, unvalidated toggle, resourceType selector)
+  - [x] 6.2 Add GroupMode toggle and integrate groups endpoint (list groups with counts, sample message, severity)
+  - [x] 6.3 Implement GroupList table (signature, aspect, severity, code, canonicalPath, totalResources, actions)
+  - [x] 6.4 Implement GroupMembers view (paginated members; navigate to detail on click)
   - [ ] 6.5 Implement ResourceList (table or virtualized grid) with ValidationStatusIndicator per resource
   - [ ] 6.6 Implement Pagination and page-size controls; keep URL in sync (per-server namespace)
   - [ ] 6.7 Immediate rebind on active server switch; invalidate and refetch using per-server keys
