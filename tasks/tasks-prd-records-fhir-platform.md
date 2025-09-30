@@ -171,14 +171,15 @@
   - [x] 7.7 Immediate UI recalculation on aspect settings change and server switch
   - [x] 7.8 Loading/error/empty states; p95 < 300ms with cached per-aspect results
   - [x] 7.9 Accessibility: headings hierarchy, focus management when switching aspects
-  - [ ] 7.10 Split-pane layout: left `ResourceStructureTree`, right `ValidationMessagesPane`; resizable with sticky headers
-  - [ ] 7.11 Path mapping & anchors: map `message.canonicalPath` → tree node ids; deep-link support via `#path`
-  - [ ] 7.12 Bidirectional linking: clicking a tree node focuses/scrolls the corresponding message; clicking a message expands/highlights the node
-  - [ ] 7.13 Inline markers: show per-node badges with counts by severity (Error/Warning/Info); aggregate to parents
-  - [ ] 7.14 Tooltips/context: hover shows message summary; context menu to filter by node, copy canonical path
-  - [ ] 7.15 Virtualization: large-resource friendly (windowed list for messages, lazy tree expansion)
-  - [ ] 7.16 Keyboard navigation: next/prev issue (messages and tree), ensure ARIA roles/labels
-  - [ ] 7.17 Tests: mapping correctness, deep-link navigation, sync highlight/scroll, severity aggregation
+  - [x] 7.10 Split-pane layout: left `ResourceStructureTree`, right `ValidationMessagesPane`; resizable with sticky headers
+  - [x] 7.11 Path mapping & anchors: map `message.canonicalPath` → tree node ids; deep-link support via `#path`
+  - [x] 7.12 Bidirectional linking: clicking a tree node focuses/scrolls the corresponding message; clicking a message expands/highlights the node
+  - [x] 7.13 Inline markers: show per-node badges with counts by severity (Error/Warning/Info); aggregate to parents
+  - [x] 7.14 Tooltips/context: hover shows message summary; context menu to filter by node, copy canonical path
+  - [x] 7.15 Virtualization: large-resource friendly (windowed list for messages, lazy tree expansion)
+  - [x] 7.16 Keyboard navigation: next/prev issue (messages and tree), ensure ARIA roles/labels
+  - [x] 7.17 Tests: mapping correctness, deep-link navigation, sync highlight/scroll, severity aggregation
+- [x] 7.0 UI Resource Detail: per-aspect messages/signatures, same counting/score logic, navigate from groups
 - [x] 8.0 Reactivity: immediate rebind on server switch; UI recalculation on aspect change
   - [x] 8.1 Ensure all React Query keys include server_id; invalidate and refetch on server change
   - [x] 8.2 Subscribe to settings changes; recalc UI (disabled aspects greyed/excluded)

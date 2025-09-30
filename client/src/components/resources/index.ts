@@ -12,6 +12,7 @@ export { VirtualizedResourceList } from './VirtualizedResourceList';
 export { ResourceEditor } from './ResourceEditor';
 export { ResourceDetailHeader } from './ResourceDetailHeader';
 export { ResourceDetailActions } from './ResourceDetailActions';
+export { ResourceDetailSplitPane } from './ResourceDetailSplitPane';
 
 // State components
 export {
