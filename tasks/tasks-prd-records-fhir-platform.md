@@ -166,9 +166,9 @@
   - [x] 7.2 Per-aspect sections/tabs with MessageList (severity, code, canonicalPath, text, signature)
   - [x] 7.3 Signature badges link back to GroupMembers (deep-link with signature and resourceType)
   - [x] 7.4 Use same score/coverage function as list; ensure parity of counts across aspects
-  - [ ] 7.5 Show settings snapshot info (hash/time) and "Validating…" indicators while pending
+  - [x] 7.5 Show settings snapshot info (hash/time) and "Validating…" indicators while pending
   - [x] 7.6 Actions: Revalidate resource; Edit resource (opens editor) and enqueue revalidation on save
-  - [ ] 7.7 Immediate UI recalculation on aspect settings change and server switch
+  - [x] 7.7 Immediate UI recalculation on aspect settings change and server switch
   - [ ] 7.8 Loading/error/empty states; p95 < 300ms with cached per-aspect results
   - [ ] 7.9 Accessibility: headings hierarchy, focus management when switching aspects
   - [ ] 7.10 Split-pane layout: left `ResourceStructureTree`, right `ValidationMessagesPane`; resizable with sticky headers
