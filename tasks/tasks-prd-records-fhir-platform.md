@@ -123,14 +123,14 @@
   - [x] 2.5 Integration tests for filters (aspect, severity, code, path, has-issues)
   - [x] 2.6 OpenAPI documentation for endpoints and query params
   - [x] 2.7 Align with `docs/technical/validation/API_DOCUMENTATION.md` (contracts kept in sync)
-- [ ] 3.0 Edit & batch-edit APIs (If-Match, audit, guardrails) with enqueue revalidation
-  - [ ] 3.1 PUT /api/fhir/resources/:type/:id (If-Match, validate payload, persist)
-  - [ ] 3.2 POST /api/fhir/resources/batch-edit (operations schema, atomic per resource, partial failures)
-  - [ ] 3.3 Guardrails: max batch size, body-size limit, rate limiting hooks
-  - [ ] 3.4 Minimal audit trail (before/after hash, editedAt, editedBy, result)
-  - [ ] 3.5 Enqueue revalidation for edited resources (higher priority)
-  - [ ] 3.6 Integration tests incl. conflict 409 and validation errors 422
-  - [ ] 3.7 Align with `docs/technical/validation/API_DOCUMENTATION.md`
+- [x] 3.0 Edit & batch-edit APIs (If-Match, audit, guardrails) with enqueue revalidation
+  - [x] 3.1 PUT /api/fhir/resources/:type/:id (If-Match, validate payload, persist)
+  - [x] 3.2 POST /api/fhir/resources/batch-edit (operations schema, atomic per resource, partial failures)
+  - [x] 3.3 Guardrails: max batch size, body-size limit, rate limiting hooks
+  - [x] 3.4 Minimal audit trail (before/after hash, editedAt, editedBy, result)
+  - [x] 3.5 Enqueue revalidation for edited resources (higher priority)
+  - [x] 3.6 Integration tests incl. conflict 409 and validation errors 422
+  - [x] 3.7 Align with `docs/technical/validation/API_DOCUMENTATION.md`
 - [ ] 4.0 Validation engine: per-aspect persistence, settings snapshot, edit/batch hooks
   - [ ] 4.1 Persist per-aspect results and compute severity counts/score
   - [ ] 4.2 Compute normalized message signature (path/text rules) and store messages

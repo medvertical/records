@@ -319,6 +319,142 @@ Clear validation results and messages.
 
 ---
 
+### 6. Edit Resource
+
+Update a FHIR resource with optimistic concurrency control.
+
+**Endpoint:** `PUT /fhir/resources/:resourceType/:id`
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `resourceType` | string | Yes | FHIR resource type (e.g., "Patient", "Observation") |
+| `id` | string | Yes | FHIR resource ID |
+
+**Headers:**
+
+| Header | Type | Required | Description |
+|--------|------|----------|-------------|
+| `If-Match` | string | No | Version ID or ETag for conflict detection (recommended) |
+
+**Request Body:** Complete FHIR resource JSON
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "resourceType": "Patient",
+  "id": "patient-001",
+  "versionId": "2",
+  "beforeHash": "a1b2c3d4...",
+  "afterHash": "e5f6g7h8...",
+  "changed": true,
+  "queuedRevalidation": true,
+  "timestamp": "2025-09-30T14:30:00Z"
+}
+```
+
+**Status Codes:**
+
+- `200 OK`: Resource updated successfully
+- `400 Bad Request`: Invalid resource structure or type/ID mismatch
+- `404 Not Found`: Resource not found
+- `409 Conflict`: Version conflict (If-Match failed)
+- `422 Unprocessable Entity`: FHIR validation failed
+- `500 Internal Server Error`: Server error
+
+---
+
+### 7. Batch Edit Resources
+
+Apply JSON Patch operations to multiple resources.
+
+**Endpoint:** `POST /fhir/resources/batch-edit`
+
+**Request Body:**
+
+```json
+{
+  "resourceType": "Patient",
+  "filter": {
+    "ids": ["patient-001", "patient-002"],
+    "searchParams": { "gender": "female" }
+  },
+  "operations": [
+    {
+      "op": "replace",
+      "path": "/active",
+      "value": true
+    },
+    {
+      "op": "add",
+      "path": "/meta/tag",
+      "value": { "system": "http://example.org", "code": "updated" }
+    }
+  ],
+  "maxBatchSize": 100
+}
+```
+
+**Request Parameters:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `resourceType` | string | Yes | FHIR resource type |
+| `filter` | object | Yes | Filter criteria (ids or searchParams) |
+| `filter.ids` | string[] | No | Array of resource IDs |
+| `filter.searchParams` | object | No | FHIR search parameters |
+| `operations` | array | Yes | JSON Patch operations (RFC 6902) |
+| `maxBatchSize` | number | No | Max resources to edit (default: 100, max: 5000) |
+
+**Operations Schema:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `op` | string | Yes | Operation: `add`, `remove`, `replace`, `copy`, `move`, `test` |
+| `path` | string | Yes | JSON pointer path (e.g., "/name/0/family") |
+| `value` | any | No | Value for add/replace operations |
+| `from` | string | No | Source path for copy/move operations |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "matched": 50,
+  "modified": 48,
+  "failed": 2,
+  "results": [
+    {
+      "id": "patient-001",
+      "success": true,
+      "changed": true,
+      "beforeHash": "a1b2c3...",
+      "afterHash": "d4e5f6...",
+      "versionId": "3"
+    },
+    {
+      "id": "patient-002",
+      "success": false,
+      "error": "Patch operation failed",
+      "details": ["Path not found: /invalidField"]
+    }
+  ],
+  "queuedRevalidation": 48,
+  "timestamp": "2025-09-30T14:30:00Z"
+}
+```
+
+**Status Codes:**
+
+- `200 OK`: Batch operation completed (check results for individual success/failure)
+- `400 Bad Request`: Invalid request body or missing filter
+- `500 Internal Server Error`: Server error
+
+---
+
 ## Data Models
 
 ### ValidationMessageGroupDTO
@@ -454,6 +590,37 @@ GET /api/validation/issues/groups/a1b2c3d4e5f6.../resources?resourceType=Patient
 
 ```bash
 GET /api/validation/resources/Patient/patient-001/messages?serverId=1
+```
+
+### Example 4: Edit a single resource
+
+```bash
+PUT /api/fhir/resources/Patient/patient-001
+Headers:
+  If-Match: W/"1"
+  Content-Type: application/json
+Body:
+{
+  "resourceType": "Patient",
+  "id": "patient-001",
+  "name": [{ "family": "Smith", "given": ["John"] }],
+  "active": true
+}
+```
+
+### Example 5: Batch edit multiple patients
+
+```bash
+POST /api/fhir/resources/batch-edit
+Body:
+{
+  "resourceType": "Patient",
+  "filter": { "ids": ["patient-001", "patient-002", "patient-003"] },
+  "operations": [
+    { "op": "replace", "path": "/active", "value": true }
+  ],
+  "maxBatchSize": 100
+}
 ```
 
 ---

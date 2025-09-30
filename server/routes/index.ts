@@ -12,7 +12,7 @@ import {
   validationGroupsRoutes,
   resourceMessagesRoutes
 } from "./api/validation";
-import { setupFhirRoutes, setupProfileRoutes } from "./api/fhir";
+import { setupFhirRoutes, setupProfileRoutes, resourceEditRoutes, batchEditRoutes } from "./api/fhir";
 import { setupDashboardRoutes } from "./api/dashboard";
 import adminRoutes from "./api/admin/clear-validation-results";
 
@@ -38,6 +38,10 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   app.use('/api/validation/clear', validationClearRoutes);
   app.use('/api/validation/issues/groups', validationGroupsRoutes);
   app.use('/api/validation/resources', resourceMessagesRoutes);
+  
+  // FHIR resource edit routes
+  app.use('/api/fhir/resources/:resourceType/:id', resourceEditRoutes);
+  app.use('/api/fhir/resources/batch-edit', batchEditRoutes);
   
   // Admin routes
   app.use('/api/admin', adminRoutes);
