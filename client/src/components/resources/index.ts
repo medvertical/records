@@ -13,6 +13,22 @@ export { ResourceEditor } from './ResourceEditor';
 export { ResourceDetailHeader } from './ResourceDetailHeader';
 export { ResourceDetailActions } from './ResourceDetailActions';
 
+// State components
+export {
+  ResourceDetailLoadingSkeleton,
+  ValidationMessagesLoadingSkeleton,
+  ResourceDetailError,
+  ValidationError,
+  EmptyValidationMessages,
+  NoResourceSelected,
+  ValidationLoadingIndicator,
+} from './ResourceDetailStates';
+export type {
+  ResourceDetailErrorProps,
+  ValidationErrorProps,
+  EmptyValidationMessagesProps,
+} from './ResourceDetailStates';
+
 // Validation components
 export { ValidationSummaryBadge } from './validation-summary-badge';
 export { OptimizedValidationResults } from './optimized-validation-results';

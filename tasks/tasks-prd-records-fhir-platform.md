@@ -169,8 +169,8 @@
   - [x] 7.5 Show settings snapshot info (hash/time) and "Validating…" indicators while pending
   - [x] 7.6 Actions: Revalidate resource; Edit resource (opens editor) and enqueue revalidation on save
   - [x] 7.7 Immediate UI recalculation on aspect settings change and server switch
-  - [ ] 7.8 Loading/error/empty states; p95 < 300ms with cached per-aspect results
-  - [ ] 7.9 Accessibility: headings hierarchy, focus management when switching aspects
+  - [x] 7.8 Loading/error/empty states; p95 < 300ms with cached per-aspect results
+  - [x] 7.9 Accessibility: headings hierarchy, focus management when switching aspects
   - [ ] 7.10 Split-pane layout: left `ResourceStructureTree`, right `ValidationMessagesPane`; resizable with sticky headers
   - [ ] 7.11 Path mapping & anchors: map `message.canonicalPath` → tree node ids; deep-link support via `#path`
   - [ ] 7.12 Bidirectional linking: clicking a tree node focuses/scrolls the corresponding message; clicking a message expands/highlights the node

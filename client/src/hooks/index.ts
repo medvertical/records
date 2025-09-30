@@ -53,6 +53,10 @@ export type { UseValidationScoringOptions, UseResourceValidationSummaryOptions }
 export { useResourceActions } from './use-resource-actions';
 export type { UseResourceActionsOptions } from './use-resource-actions';
 
+// Performance tracking hooks
+export { usePerformanceTracking, useAsyncPerformanceTracking } from './use-performance-tracking';
+export type { PerformanceMetric, UsePerformanceTrackingOptions } from './use-performance-tracking';
+
 // Type exports
 export type { ServerStatus } from './use-server-data';
 export type { ValidationProgress } from './use-validation-polling';
