@@ -1,3 +1,5 @@
+import { validationEnginePerAspect, type ValidationSettingsSnapshot } from '../engine/validation-engine-per-aspect';
+
 /**
  * Simple Validation Queue Service
  * MVP implementation for enqueueing resources for revalidation
@@ -41,6 +43,13 @@ class SimpleValidationQueue {
     }
     
     console.log(`Enqueued ${item.resourceType}/${item.fhirId} for revalidation (priority: ${item.priority})`);
+    
+    // Start processing if not already processing
+    if (!this.processing) {
+      this.startProcessing().catch(err => {
+        console.error('Queue processing error:', err);
+      });
+    }
   }
   
   /**
@@ -48,6 +57,59 @@ class SimpleValidationQueue {
    */
   enqueueBatch(items: Omit<ValidationQueueItem, 'enqueuedAt'>[]): void {
     items.forEach(item => this.enqueue(item));
+  }
+  
+  /**
+   * Start processing queue (simple implementation)
+   */
+  private async startProcessing(): Promise<void> {
+    if (this.processing) return;
+    
+    this.processing = true;
+    
+    while (this.queue.length > 0) {
+      const item = this.queue.shift();
+      if (!item) break;
+      
+      try {
+        console.log(`Processing validation for ${item.resourceType}/${item.fhirId}`);
+        
+        // TODO: Fetch resource from FHIR server
+        // TODO: Get current settings
+        // For now, use mock settings
+        const mockSettings: ValidationSettingsSnapshot = {
+          aspects: {
+            structural: { enabled: true },
+            profile: { enabled: true },
+            terminology: { enabled: true },
+            reference: { enabled: true },
+            businessRule: { enabled: true },
+            metadata: { enabled: true },
+          },
+        };
+        
+        // TODO: Fetch actual resource
+        const mockResource = {
+          resourceType: item.resourceType,
+          id: item.fhirId,
+        };
+        
+        // Validate resource
+        await validationEnginePerAspect.validateResource(
+          item.serverId,
+          item.resourceType,
+          item.fhirId,
+          mockResource,
+          mockSettings
+        );
+        
+        console.log(`Completed validation for ${item.resourceType}/${item.fhirId}`);
+      } catch (error) {
+        console.error(`Failed to process ${item.resourceType}/${item.fhirId}:`, error);
+      }
+    }
+    
+    this.processing = false;
   }
   
   /**

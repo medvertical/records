@@ -236,36 +236,35 @@ export class ValidationEngine extends EventEmitter {
     const startTime = Date.now();
     
     try {
-      let issues: ValidationIssue[] = [];
-      
-      switch (aspect) {
-        case 'structural':
-          issues = await this.structuralValidator.validate(request.resource, request.resourceType);
-          break;
-        case 'profile':
-          issues = await this.profileValidator.validate(request.resource, request.resourceType, request.profileUrl);
-          break;
-        case 'terminology':
-          issues = await this.terminologyValidator.validate(request.resource, request.resourceType, this.terminologyClient);
-          break;
-        case 'reference':
-          issues = await this.referenceValidator.validate(request.resource, request.resourceType, this.fhirClient);
-          break;
-        case 'businessRule':
-          issues = await this.businessRuleValidator.validate(request.resource, request.resourceType, settings);
-          break;
-        case 'metadata':
-          issues = await this.metadataValidator.validate(request.resource, request.resourceType);
-          break;
-        default:
-          issues = [{
-            id: `unknown-aspect-${Date.now()}`,
-            aspect,
-            severity: 'error' as ValidationSeverity,
-            message: `Unknown validation aspect: ${aspect}`,
-            code: 'UNKNOWN_ASPECT'
-          }];
-      }
+      const timeoutMs = this.getAspectTimeoutMs(aspect, settings);
+      const issues: ValidationIssue[] = await Promise.race([
+        (async () => {
+          switch (aspect) {
+            case 'structural':
+              return await this.structuralValidator.validate(request.resource, request.resourceType);
+            case 'profile':
+              return await this.profileValidator.validate(request.resource, request.resourceType, request.profileUrl);
+            case 'terminology':
+              return await this.terminologyValidator.validate(request.resource, request.resourceType, this.terminologyClient);
+            case 'reference':
+              return await this.referenceValidator.validate(request.resource, request.resourceType, this.fhirClient);
+            case 'businessRule':
+              return await this.businessRuleValidator.validate(request.resource, request.resourceType, settings);
+            case 'metadata':
+              return await this.metadataValidator.validate(request.resource, request.resourceType);
+            default:
+              // Graceful degradation: skip unknown aspects
+              return [{
+                id: `aspect-unavailable-${Date.now()}`,
+                aspect,
+                severity: 'info' as ValidationSeverity,
+                message: `Aspect '${aspect}' not available; skipped`,
+                code: 'ASPECT_UNAVAILABLE'
+              }];
+          }
+        })(),
+        this.timeoutPromise(timeoutMs, aspect)
+      ]);
       
       return {
         aspect,
@@ -282,17 +281,64 @@ export class ValidationEngine extends EventEmitter {
       return {
         aspect,
         isValid: false,
-        issues: [{
-          id: `aspect-error-${Date.now()}`,
-          aspect,
-          severity: 'error' as ValidationSeverity,
-          message: `Aspect validation failed: ${errorMessage}`,
-          code: 'ASPECT_ERROR'
-        }],
+        issues: [this.mapErrorToIssue(aspect, errorMessage)],
         validationTime: Date.now() - startTime,
         status: 'failed'
       };
     }
+  }
+
+  // ------------------------------------------------------------------------
+  // Timeout and error mapping helpers
+  // ------------------------------------------------------------------------
+
+  private getAspectTimeoutMs(aspect: ValidationAspect, settings: ValidationSettings): number {
+    const defaults: Record<ValidationAspect, number> = {
+      structural: 5000,
+      profile: 45000,
+      terminology: 60000,
+      reference: 30000,
+      businessRule: 30000,
+      metadata: 5000,
+    } as const;
+
+    // Settings may carry per-aspect timeout; fall back to defaults
+    const configured = (settings as any)[aspect]?.timeoutMs;
+    return typeof configured === 'number' && configured > 0 ? configured : defaults[aspect];
+  }
+
+  private timeoutPromise(ms: number, aspect: ValidationAspect): Promise<never> {
+    return new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`Validation timeout after ${ms}ms for aspect: ${aspect}`)), ms);
+    });
+  }
+
+  private mapErrorToIssue(aspect: ValidationAspect, errorMessage: string): ValidationIssue {
+    if (errorMessage.toLowerCase().includes('timeout')) {
+      return {
+        id: `aspect-timeout-${Date.now()}`,
+        aspect,
+        severity: 'error' as ValidationSeverity,
+        message: `Validation timeout: ${errorMessage}`,
+        code: 'TIMEOUT'
+      };
+    }
+    if (errorMessage.includes('ECONN') || errorMessage.includes('ETIMEDOUT')) {
+      return {
+        id: `aspect-network-${Date.now()}`,
+        aspect,
+        severity: 'error' as ValidationSeverity,
+        message: `Network error during ${aspect} validation: ${errorMessage}`,
+        code: 'NETWORK_ERROR'
+      };
+    }
+    return {
+      id: `aspect-error-${Date.now()}`,
+      aspect,
+      severity: 'error' as ValidationSeverity,
+      message: `Aspect validation failed: ${errorMessage}`,
+      code: 'ASPECT_ERROR'
+    };
   }
 }
 

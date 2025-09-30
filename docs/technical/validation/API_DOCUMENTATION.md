@@ -284,7 +284,133 @@ Retrieve current batch validation progress.
 
 ---
 
-### 5. Clear Validation Data
+### 5. Queue Control Endpoints
+
+#### 5.1 Start Queue Processing
+
+Start processing the validation queue.
+
+**Endpoint:** `POST /validation/queue/start`
+
+**Response:**
+
+```json
+{
+  "message": "Queue processing started"
+}
+```
+
+**Status Codes:**
+
+- `200 OK`: Success
+- `500 Internal Server Error`: Server error
+
+---
+
+#### 5.2 Pause Queue Processing
+
+Pause the validation queue (no new items will be processed, but current processing items will complete).
+
+**Endpoint:** `POST /validation/queue/pause`
+
+**Response:**
+
+```json
+{
+  "message": "Queue processing paused"
+}
+```
+
+**Status Codes:**
+
+- `200 OK`: Success
+- `500 Internal Server Error`: Server error
+
+---
+
+#### 5.3 Resume Queue Processing
+
+Resume a paused validation queue.
+
+**Endpoint:** `POST /validation/queue/resume`
+
+**Response:**
+
+```json
+{
+  "message": "Queue processing resumed"
+}
+```
+
+**Status Codes:**
+
+- `200 OK`: Success
+- `500 Internal Server Error`: Server error
+
+---
+
+#### 5.4 Stop Queue Processing
+
+Stop the validation queue completely.
+
+**Endpoint:** `POST /validation/queue/stop`
+
+**Response:**
+
+```json
+{
+  "message": "Queue processing stopped"
+}
+```
+
+**Status Codes:**
+
+- `200 OK`: Success
+- `500 Internal Server Error`: Server error
+
+---
+
+#### 5.5 Get Queue Statistics
+
+Retrieve detailed queue statistics including ETA.
+
+**Endpoint:** `GET /validation/queue/stats`
+
+**Response:**
+
+```json
+{
+  "totalItems": 100,
+  "queuedItems": 45,
+  "processingItems": 3,
+  "completedItems": 48,
+  "failedItems": 4,
+  "cancelledItems": 0,
+  "averageProcessingTimeMs": 2500,
+  "queueSizeByPriority": {
+    "1": 10,
+    "2": 30,
+    "3": 5,
+    "4": 0
+  },
+  "itemsByType": {
+    "single_resource": 15,
+    "batch_resources": 30,
+    "full_server": 0,
+    "page_validation": 0
+  },
+  "etaSeconds": 300
+}
+```
+
+**Status Codes:**
+
+- `200 OK`: Success
+- `500 Internal Server Error`: Server error
+
+---
+
+### 6. Clear Validation Data
 
 Clear validation results and messages.
 
@@ -319,7 +445,7 @@ Clear validation results and messages.
 
 ---
 
-### 6. Edit Resource
+### 7. Edit Resource
 
 Update a FHIR resource with optimistic concurrency control.
 
@@ -367,7 +493,7 @@ Update a FHIR resource with optimistic concurrency control.
 
 ---
 
-### 7. Batch Edit Resources
+### 8. Batch Edit Resources
 
 Apply JSON Patch operations to multiple resources.
 

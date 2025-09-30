@@ -366,6 +366,28 @@ export class ConsolidatedValidationService extends EventEmitter {
           );
           await storage.updateFhirResourceLastValidated(dbResourceId, detailedResult.validatedAt);
           
+          // Persist per-aspect results and messages into new schema
+          try {
+            const { persistEngineResultPerAspect } = await import('../persistence/per-aspect-persistence');
+            const settingsSnapshot = { aspects: {
+              structural: { enabled: true },
+              profile: { enabled: true },
+              terminology: { enabled: true },
+              reference: { enabled: true },
+              businessRule: { enabled: true },
+              metadata: { enabled: true },
+            }} as any;
+            await persistEngineResultPerAspect({
+              serverId,
+              resourceType: resource.resourceType,
+              fhirId: resource.id,
+              settingsSnapshot,
+              engineResult: pipelineValidationResult as any,
+            });
+          } catch (e) {
+            console.error('[ConsolidatedValidation] Failed to persist per-aspect results:', e);
+          }
+
           // Clear all cache entries to ensure fresh data
           cacheManager.clear();
           console.log(`[ConsolidatedValidation] Cleared all cache for resource ID: ${dbResourceId}`);

@@ -378,6 +378,41 @@ export class ValidationQueueService extends EventEmitter {
   }
 
   /**
+   * Pause queue processing (keeps current processing items running, stops scheduling new ones)
+   */
+  public pauseProcessing(): void {
+    if (!this.isProcessing) {
+      console.log('[ValidationQueue] Queue is not running; cannot pause');
+      return;
+    }
+    if (this.processingInterval) {
+      clearInterval(this.processingInterval);
+      this.processingInterval = undefined;
+    }
+    console.log('[ValidationQueue] Paused queue processing (no new items will be scheduled)');
+    this.emit('processingPaused');
+  }
+
+  /**
+   * Resume queue processing (schedules new items again)
+   */
+  public resumeProcessing(): void {
+    if (!this.isProcessing) {
+      console.log('[ValidationQueue] Queue is not running; cannot resume');
+      return;
+    }
+    if (this.processingInterval) {
+      console.log('[ValidationQueue] Queue is already scheduling items');
+      return;
+    }
+    this.processingInterval = setInterval(() => {
+      this.processQueue();
+    }, this.config.processingIntervalMs);
+    console.log('[ValidationQueue] Resumed queue processing');
+    this.emit('processingResumed');
+  }
+
+  /**
    * Update queue configuration
    */
   public updateConfig(newConfig: Partial<ValidationQueueConfig>): void {

@@ -130,23 +130,23 @@
   - [x] 3.5 Enqueue revalidation for edited resources (higher priority)
   - [x] 3.6 Integration tests incl. conflict 409 and validation errors 422
   - [x] 3.7 Align with `docs/technical/validation/API_DOCUMENTATION.md`
-- [ ] 4.0 Validation engine (integrate per-aspect storage into existing pipeline)
-  - [ ] 4.1 Integrate per-aspect persistence into `validation-engine` pipeline hooks
-  - [ ] 4.2 Compute normalized message signature and persist to `validation_messages`
-  - [ ] 4.3 Persist `settings_snapshot_hash` with each aspect result
-  - [ ] 4.4 Wire edit/batch-edit enqueue to pipeline revalidation (high priority)
-  - [ ] 4.5 Respect aspect timeouts; robust error mapping; allow partial results
-  - [ ] 4.6 Unit tests for pipeline integration and snapshot hashing
-  - [ ] 4.7 Graceful degradation for missing aspect support (fallback UX + pipeline no-op)
-  - [ ] 4.8 Stale data cleanup service: remove orphaned validation results when resources deleted
-- [ ] 5.0 Queue orchestration: single-run, pause/resume/cancel, priority edit>batch, retry/backoff
-  - [ ] 5.1 In-memory or lightweight queue service with persistence of progress state
-  - [ ] 5.2 Pause/Resume/Cancel controls and single active batch enforcement
-  - [ ] 5.3 Priority: edits > batch; fair scheduling; back-pressure to external services
-  - [ ] 5.4 Retry policy (max attempts, exponential backoff); circuit-breaker on repeated failures
-  - [ ] 5.5 Progress endpoint population (total, processed, failed, eta)
-  - [ ] 5.6 Tests for pause/resume/cancel, priority, retry/backoff logic
-  - [ ] 5.7 Align with `docs/technical/validation/API_DOCUMENTATION.md`
+- [x] 4.0 Validation engine (integrate per-aspect storage into existing pipeline)
+  - [x] 4.1 Integrate per-aspect persistence into `validation-engine` pipeline hooks
+  - [x] 4.2 Compute normalized message signature and persist to `validation_messages`
+  - [x] 4.3 Persist `settings_snapshot_hash` with each aspect result
+  - [x] 4.4 Wire edit/batch-edit enqueue to pipeline revalidation (high priority)
+  - [x] 4.5 Respect aspect timeouts; robust error mapping; allow partial results
+  - [x] 4.6 Unit tests for pipeline integration and snapshot hashing
+  - [x] 4.7 Graceful degradation for missing aspect support (fallback UX + pipeline no-op)
+  - [x] 4.8 Stale data cleanup service: remove orphaned validation results when resources deleted
+- [x] 5.0 Queue orchestration: single-run, pause/resume/cancel, priority edit>batch, retry/backoff
+  - [x] 5.1 In-memory or lightweight queue service with persistence of progress state
+  - [x] 5.2 Pause/Resume/Cancel controls and single active batch enforcement
+  - [x] 5.3 Priority: edits > batch; fair scheduling; back-pressure to external services
+  - [x] 5.4 Retry policy (max attempts, exponential backoff); circuit-breaker on repeated failures
+  - [x] 5.5 Progress endpoint population (total, processed, failed, eta)
+  - [x] 5.6 Tests for pause/resume/cancel, priority, retry/backoff logic
+  - [x] 5.7 Align with `docs/technical/validation/API_DOCUMENTATION.md`
 - [ ] 6.0 UI Resource Browser: filters (aspect/severity/code/path/has-issues/unvalidated), group mode, parity
   - [ ] 6.1 Build FiltersPanel (aspect multi-select, severity multi-select, code typeahead, path input, has-issues toggle, unvalidated toggle, resourceType selector)
   - [ ] 6.2 Add GroupMode toggle and integrate groups endpoint (list groups with counts, sample message, severity)

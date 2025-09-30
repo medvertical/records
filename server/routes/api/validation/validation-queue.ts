@@ -24,12 +24,68 @@ export function setupValidationQueueRoutes(app: Express) {
     }
   });
 
-  // Queue Statistics
+  // Progress endpoint (PRD-compliant format)
+  app.get("/api/validation/progress", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      const stats = queueService.getStats();
+      const processingItems = queueService.getProcessingItems();
+      
+      // Determine overall state
+      let state: 'queued' | 'running' | 'paused' | 'completed' | 'failed' = 'completed';
+      if (stats.queuedItems > 0 && stats.processingItems === 0) {
+        state = 'queued';
+      } else if (stats.processingItems > 0) {
+        state = 'running';
+      } else if (stats.failedItems > 0 && stats.completedItems === 0 && stats.queuedItems === 0) {
+        state = 'failed';
+      }
+
+      // Calculate ETA
+      let etaSeconds: number | undefined;
+      if (stats.averageProcessingTimeMs > 0 && (stats.queuedItems + stats.processingItems) > 0) {
+        const remainingItems = stats.queuedItems + stats.processingItems;
+        const avgTimeSeconds = stats.averageProcessingTimeMs / 1000;
+        etaSeconds = Math.ceil(remainingItems * avgTimeSeconds);
+      }
+
+      // Find earliest startedAt from processing items
+      const startedAt = processingItems.length > 0 && processingItems[0].startedAt
+        ? processingItems[0].startedAt
+        : undefined;
+
+      res.json({
+        state,
+        total: stats.totalItems,
+        processed: stats.completedItems,
+        failed: stats.failedItems,
+        startedAt,
+        updatedAt: new Date(),
+        etaSeconds
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Queue Statistics with ETA calculation
   app.get("/api/validation/queue/stats", async (req, res) => {
     try {
       const queueService = getValidationQueueService();
-      const stats = await queueService.getQueueStats();
-      res.json(stats);
+      const stats = queueService.getStats();
+      
+      // Calculate ETA if there are items queued/processing and average time is available
+      let etaSeconds: number | undefined;
+      if (stats.averageProcessingTimeMs > 0 && (stats.queuedItems + stats.processingItems) > 0) {
+        const remainingItems = stats.queuedItems + stats.processingItems;
+        const avgTimeSeconds = stats.averageProcessingTimeMs / 1000;
+        etaSeconds = Math.ceil(remainingItems * avgTimeSeconds);
+      }
+
+      res.json({
+        ...stats,
+        etaSeconds
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -95,6 +151,28 @@ export function setupValidationQueueRoutes(app: Express) {
       const queueService = getValidationQueueService();
       await queueService.startProcessing();
       res.json({ message: "Queue processing started" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Pause Queue Processing
+  app.post("/api/validation/queue/pause", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      await queueService.pauseProcessing();
+      res.json({ message: "Queue processing paused" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Resume Queue Processing
+  app.post("/api/validation/queue/resume", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      await queueService.resumeProcessing();
+      res.json({ message: "Queue processing resumed" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
