@@ -165,7 +165,7 @@
   - [x] 7.1 Header with resource identity, aggregated score, per-aspect chips (enabled/disabled/validating) and timestamps
   - [x] 7.2 Per-aspect sections/tabs with MessageList (severity, code, canonicalPath, text, signature)
   - [x] 7.3 Signature badges link back to GroupMembers (deep-link with signature and resourceType)
-  - [ ] 7.4 Use same score/coverage function as list; ensure parity of counts across aspects
+  - [x] 7.4 Use same score/coverage function as list; ensure parity of counts across aspects
   - [ ] 7.5 Show settings snapshot info (hash/time) and "Validating…" indicators while pending
   - [ ] 7.6 Actions: Revalidate resource; Edit resource (opens editor) and enqueue revalidation on save
   - [ ] 7.7 Immediate UI recalculation on aspect settings change and server switch

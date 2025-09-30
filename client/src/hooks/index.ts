@@ -45,6 +45,10 @@ export { useAspectSettingsReactive, useAspectStyles } from './use-aspect-setting
 export { useGroupNavigation } from './use-group-navigation';
 export type { GroupNavigationOptions } from './use-group-navigation';
 
+// Validation scoring hooks
+export { useValidationScoring, useResourceValidationSummary } from './use-validation-scoring';
+export type { UseValidationScoringOptions, UseResourceValidationSummaryOptions } from './use-validation-scoring';
+
 // Type exports
 export type { ServerStatus } from './use-server-data';
 export type { ValidationProgress } from './use-validation-polling';
