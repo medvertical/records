@@ -184,7 +184,7 @@
   - [x] 8.1 Ensure all React Query keys include server_id; invalidate and refetch on server change
   - [x] 8.2 Subscribe to settings changes; recalc UI (disabled aspects greyed/excluded)
   - [x] 8.3 Show "Validating…" while pending results; hide outdated cached counts
-  - [ ] 8.4 Tests for reactivity flows (server switch, aspect toggle)
+  - [x] 8.4 Tests for reactivity flows (server switch, aspect toggle)
   - [x] 8.5 Implement shared `usePolling` hook with cancellation, backoff with jitter, unmount cleanup
 - [x] 9.0 Scoring & coverage: unified formula/display, disabled/validating handled correctly
   - [x] 9.1 Implement scoring utility in `client/src/lib/validation-scoring.ts`
