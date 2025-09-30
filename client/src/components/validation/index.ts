@@ -35,6 +35,10 @@ export { GroupList } from './GroupList';
 export { GroupMembers } from './GroupMembers';
 export { ValidationStatusIndicator } from './ValidationStatusIndicator';
 export type { ResourceValidationStatus, AspectValidationStatus } from './ValidationStatusIndicator';
+export { ValidationMessageList } from './ValidationMessageList';
+export type { ValidationMessage } from './ValidationMessageList';
+export { ValidationAspectTabs } from './ValidationAspectTabs';
+export type { AspectMessages } from './ValidationAspectTabs';
 
 // Settings components - Settings management UI
 export { ValidationSettingsAuditTrail } from './validation-settings-audit-trail';
