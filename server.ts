@@ -3,6 +3,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { serveStatic, log } from "./server/static";
 import { logger } from "./server/utils/logger.js";
+import { FeatureFlags, assertProductionSafety, logFeatureFlags } from "./server/config/feature-flags";
 
 const app = express();
 app.use(express.json());
@@ -1642,6 +1643,15 @@ app.get("/api/validation/health", (req, res) => {
 
 // Serve static files (must be after all API routes)
 serveStatic(app);
+
+// Validate production safety before starting server
+try {
+  assertProductionSafety();
+  logFeatureFlags();
+} catch (error) {
+  console.error('❌ Production Safety Check Failed:', error.message);
+  process.exit(1);
+}
 
 server.listen({
   port,

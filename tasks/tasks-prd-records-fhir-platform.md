@@ -239,11 +239,11 @@
   - [ ] 16.7 Ensure DEMO_MOCKS=false in env examples and CI; fail CI if DEMO_MOCKS=true
 
 - [ ] 17.0 Gaps discovered in codebase (must-fix)
-  - [ ] 17.1 Remove fallback HAPI URL in `server.ts` connection test; return 503 or guard behind MOCK env
+  - [x] 17.1 Remove fallback HAPI URL in `server.ts` connection test; return 503 or guard behind MOCK env
   - [ ] 17.2 Gate or remove mock resource inflation endpoints (avoid fake 4M counts)
   - [ ] 17.3 Implement `computeMessageSignature` utility and persist to `validation_messages`
   - [ ] 17.4 Incremental group counters during validation writes for fast groups API
-  - [ ] 17.5 Remove/gate all mock responses (server.ts, api/index.*); delete or guard with DEMO_MOCKS=false
+  - [ ] 17.5 Remove/gate all mock responses (server.ts, api/index.*); delete or guard with DEMO_MOCKS=false (IN PROGRESS)
 
 - [ ] 18.0 Dashboard (real data, rebuild allowed)
   - [ ] 18.1 Rebuild layout: KPI cards, charts, server status, validation controls
