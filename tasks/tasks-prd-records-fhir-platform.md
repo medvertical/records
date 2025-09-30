@@ -17,14 +17,13 @@
 - `server/repositories/settings-migration-repository.ts` - Legacy settings format migration utilities
 
 ### Validation Engine & Queue
-- `server/services/validation/engine/validation-engine.ts` - Per-aspect validation orchestration
+- `server/services/validation/core/validation-engine.ts` - Core 6-aspect validation engine
+- `server/services/validation/core/validation-pipeline.ts` - Pipeline orchestrator executing aspects
+- `server/services/validation/core/consolidated-validation-service.ts` - Unified API and storage adapter
+- `server/services/validation/performance/validation-queue-service.ts` - Queue service (processing, retries)
 - `server/services/validation/engine/aspect-validators/` - Individual aspect validation logic
 - `server/services/validation/engine/signature-service.ts` - Message signature computation and normalization
 - `server/services/validation/engine/aspect-fallback-handler.ts` - Graceful degradation when aspects unavailable
-- `server/services/validation/queue/validation-queue.ts` - MVP queue (single-run, pause/resume, cancel, priorities)
-- `server/services/validation/queue/queue-orchestrator.ts` - Batch validation coordination
-- `server/services/validation/queue/retry-service.ts` - Exponential backoff and circuit breaker
-- `server/services/validation/validation-service.ts` - Main validation service integration
 - `server/services/validation/stale-data-cleanup-service.ts` - Cleanup orphaned validation results
 
 ### API Endpoints
@@ -131,14 +130,14 @@
   - [x] 3.5 Enqueue revalidation for edited resources (higher priority)
   - [x] 3.6 Integration tests incl. conflict 409 and validation errors 422
   - [x] 3.7 Align with `docs/technical/validation/API_DOCUMENTATION.md`
-- [ ] 4.0 Validation engine: per-aspect persistence, settings snapshot, edit/batch hooks
-  - [ ] 4.1 Persist per-aspect results and compute severity counts/score
-  - [ ] 4.2 Compute normalized message signature (path/text rules) and store messages
-  - [ ] 4.3 Store settings_snapshot_hash with each aspect result
-  - [ ] 4.4 Hook: on edit/batch-edit enqueue targeted revalidation
-  - [ ] 4.5 Respect aspect timeouts; robust error mapping; partial results allowed
-  - [ ] 4.6 Unit tests for per-aspect flows and snapshot hashing
-  - [ ] 4.7 Graceful degradation: handle FHIR servers missing aspect support with fallback UX
+- [ ] 4.0 Validation engine (integrate per-aspect storage into existing pipeline)
+  - [ ] 4.1 Integrate per-aspect persistence into `validation-engine` pipeline hooks
+  - [ ] 4.2 Compute normalized message signature and persist to `validation_messages`
+  - [ ] 4.3 Persist `settings_snapshot_hash` with each aspect result
+  - [ ] 4.4 Wire edit/batch-edit enqueue to pipeline revalidation (high priority)
+  - [ ] 4.5 Respect aspect timeouts; robust error mapping; allow partial results
+  - [ ] 4.6 Unit tests for pipeline integration and snapshot hashing
+  - [ ] 4.7 Graceful degradation for missing aspect support (fallback UX + pipeline no-op)
   - [ ] 4.8 Stale data cleanup service: remove orphaned validation results when resources deleted
 - [ ] 5.0 Queue orchestration: single-run, pause/resume/cancel, priority edit>batch, retry/backoff
   - [ ] 5.1 In-memory or lightweight queue service with persistence of progress state
@@ -333,7 +332,7 @@ This task list has been enhanced based on comprehensive analysis. Key improvemen
 ### 3. **Execution Order Refinement**
 - **Reorganized into 6 logical phases** with clear rationale
 - **Moved security (12.0) earlier** to inform API design
-- **Moved scoring (9.0) and reactivity (8.0) before UI** to provide needed primitives
+- **Keep pipeline-centric flow**: integrate storage into existing pipeline/engine instead of parallel engine
 - **Split finalization** into discrete steps (testing → docs → guardrails → DoD)
 - **Added phase descriptions** for clarity (Risk Mitigation, Backend Foundation, etc.)
 
