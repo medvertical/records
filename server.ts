@@ -193,16 +193,15 @@ app.get("/api/fhir/connection/test", async (req, res) => {
       responseTime: result.responseTime || (Date.now() - startTime)
     });
   } catch (error: any) {
-    console.log('FHIR connection test failed, using mock data');
-    res.json({
-      connected: true,
-      version: "R4",
-      url: "http://hapi.fhir.org/baseR4",
-      serverName: "HAPI Test Server",
-      error: null,
-      errorType: null,
-      statusCode: null,
-      message: "Mock connection (database unavailable)",
+    console.warn('FHIR connection test failed', { error: error?.message });
+    res.status(503).json({
+      connected: false,
+      version: null,
+      url: null,
+      serverName: null,
+      error: 'Active FHIR server connection failed',
+      errorType: 'server_unavailable',
+      statusCode: 503,
       timestamp: new Date().toISOString(),
       responseTime: Date.now() - startTime
     });

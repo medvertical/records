@@ -700,12 +700,12 @@ export class DatabaseStorage implements IStorage {
       informationCount: number;
       score: number;
     }> = {
-      structural: { enabled: settings.structural?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      profile: { enabled: settings.profile?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      terminology: { enabled: settings.terminology?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      reference: { enabled: settings.reference?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      businessRule: { enabled: settings.businessRule?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      metadata: { enabled: settings.metadata?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 }
+      structural: { enabled: settings.aspects?.structural?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      profile: { enabled: settings.aspects?.profile?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      terminology: { enabled: settings.aspects?.terminology?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      reference: { enabled: settings.aspects?.reference?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      businessRule: { enabled: settings.aspects?.businessRule?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      metadata: { enabled: settings.aspects?.metadata?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 }
     };
 
     // Aggregate issues by aspect from all validation results
@@ -762,12 +762,12 @@ export class DatabaseStorage implements IStorage {
   private reEvaluateValidationResult(result: any, settings: any): { isValid: boolean; errorCount: number; warningCount: number } {
     // Check if ALL validation aspects are disabled
     const allAspectsDisabled = 
-      settings?.structural?.enabled !== true &&
-      settings?.profile?.enabled !== true &&
-      settings?.terminology?.enabled !== true &&
-      settings?.reference?.enabled !== true &&
-      settings?.businessRule?.enabled !== true &&
-      settings?.metadata?.enabled !== true;
+      settings?.aspects?.structural?.enabled !== true &&
+      settings?.aspects?.profile?.enabled !== true &&
+      settings?.aspects?.terminology?.enabled !== true &&
+      settings?.aspects?.reference?.enabled !== true &&
+      settings?.aspects?.businessRule?.enabled !== true &&
+      settings?.aspects?.metadata?.enabled !== true;
 
     if (allAspectsDisabled) {
       // If all aspects are disabled, consider everything valid
@@ -784,18 +784,18 @@ export class DatabaseStorage implements IStorage {
       // Check if this aspect is enabled in settings
       switch (aspect) {
         case 'structural':
-          return settings?.structural?.enabled === true;
+          return settings?.aspects?.structural?.enabled === true;
         case 'profile':
-          return settings?.profile?.enabled === true;
+          return settings?.aspects?.profile?.enabled === true;
         case 'terminology':
-          return settings?.terminology?.enabled === true;
+          return settings?.aspects?.terminology?.enabled === true;
         case 'reference':
-          return settings?.reference?.enabled === true;
+          return settings?.aspects?.reference?.enabled === true;
         case 'business-rule':
         case 'businessRule':
-          return settings?.businessRule?.enabled === true;
+          return settings?.aspects?.businessRule?.enabled === true;
         case 'metadata':
-          return settings?.metadata?.enabled === true;
+          return settings?.aspects?.metadata?.enabled === true;
         default:
           return true; // Include unknown aspects
       }

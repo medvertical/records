@@ -119,8 +119,8 @@ export function useValidationSSE(hasActiveServer: boolean = true) {
     // Sync immediately
     syncWithApi();
     
-    // Then sync every 5 seconds
-    syncIntervalRef.current = setInterval(syncWithApi, 5000);
+    // Then sync every 30 seconds
+    syncIntervalRef.current = setInterval(syncWithApi, 30000);
   }, [syncWithApi]);
 
   const stopApiSync = useCallback(() => {

@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -65,6 +66,7 @@ interface ResourceListProps {
   validationProgress?: Map<number, ValidationProgress>; // Track validation progress per resource
   availableResourceTypes?: string[]; // Available resource types when none is selected
   noResourceTypeMessage?: string; // Message to show when no resource type is selected
+  isLoading?: boolean; // Whether the resource list is loading
 }
 
 export default function ResourceList({
@@ -76,7 +78,8 @@ export default function ResourceList({
   validatingResourceIds = new Set(),
   validationProgress = new Map(),
   availableResourceTypes = [],
-  noResourceTypeMessage,
+  noResourceTypeMessage = "Please select a resource type to view resources.",
+  isLoading = false
 }: ResourceListProps) {
   // Fetch current validation settings for UI filtering
   const { data: validationSettingsData } = useQuery({
@@ -128,7 +131,7 @@ export default function ResourceList({
             errorCount: 0,
             warningCount: 0,
             informationCount: 0,
-            validationScore: 100,
+            validationScore: 100, // Disabled aspects don't count against the score
             passed: true,
             enabled: false
           };
@@ -201,6 +204,39 @@ export default function ResourceList({
         return resource.id || 'Resource';
     }
   };
+
+  const renderResourceCardSkeleton = (index: number) => (
+    <div key={`skeleton-${index}`} className="mb-4 last:mb-0">
+      <Card className="border-dashed border-gray-300 bg-gray-50/50">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4 flex-1 min-w-0">
+              <div className="flex-shrink-0">
+                <Skeleton className="h-3 w-3 rounded-full" />
+              </div>
+              
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center space-x-3 mb-1">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-48 mb-1" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-4 ml-6">
+              <div className="flex items-center space-x-2">
+                <Skeleton className="h-6 w-16 rounded-full" />
+                <Skeleton className="h-8 w-8 rounded-full" />
+              </div>
+              <Skeleton className="h-4 w-4" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 
   const getValidationStatus = (resource: any) => {
     const resourceId = resource._dbId || resource.id;
@@ -367,8 +403,32 @@ export default function ResourceList({
                 />
               </TooltipTrigger>
               <TooltipContent>
-                <p>Validation Score: {validationScore}%</p>
-                <p>Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
+                <div className="space-y-2">
+                  <div>
+                    <p className="font-medium">Validation Score: {validationScore}%</p>
+                    <p className="text-sm text-gray-500">Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
+                  </div>
+                  {filteredSummary?.aspectBreakdown && (
+                    <div className="border-t pt-2">
+                      <p className="text-sm font-medium mb-1">Aspect Breakdown:</p>
+                      <div className="space-y-1 text-xs">
+                        {Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
+                          <div key={aspect} className="flex justify-between items-center">
+                            <span className="capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}:</span>
+                            <div className="flex items-center gap-2">
+                              {data.enabled === false && <span className="text-gray-400">(Disabled)</span>}
+                              <span className={`font-medium ${data.validationScore === 100 ? 'text-green-600' : data.validationScore >= 80 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                {data.validationScore}%
+                              </span>
+                              {data.errorCount > 0 && <span className="text-red-500">({data.errorCount} errors)</span>}
+                              {data.warningCount > 0 && <span className="text-yellow-500">({data.warningCount} warnings)</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -418,8 +478,32 @@ export default function ResourceList({
                 />
               </TooltipTrigger>
               <TooltipContent>
-                <p>Validation Score: {validationScore}%</p>
-                <p>Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
+                <div className="space-y-2">
+                  <div>
+                    <p className="font-medium">Validation Score: {validationScore}%</p>
+                    <p className="text-sm text-gray-500">Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
+                  </div>
+                  {filteredSummary?.aspectBreakdown && (
+                    <div className="border-t pt-2">
+                      <p className="text-sm font-medium mb-1">Aspect Breakdown:</p>
+                      <div className="space-y-1 text-xs">
+                        {Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
+                          <div key={aspect} className="flex justify-between items-center">
+                            <span className="capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}:</span>
+                            <div className="flex items-center gap-2">
+                              {data.enabled === false && <span className="text-gray-400">(Disabled)</span>}
+                              <span className={`font-medium ${data.validationScore === 100 ? 'text-green-600' : data.validationScore >= 80 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                {data.validationScore}%
+                              </span>
+                              {data.errorCount > 0 && <span className="text-red-500">({data.errorCount} errors)</span>}
+                              {data.warningCount > 0 && <span className="text-yellow-500">({data.warningCount} warnings)</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -439,8 +523,32 @@ export default function ResourceList({
                 />
               </TooltipTrigger>
               <TooltipContent>
-                <p>Validation Score: {validationScore}%</p>
-                <p>Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
+                <div className="space-y-2">
+                  <div>
+                    <p className="font-medium">Validation Score: {validationScore}%</p>
+                    <p className="text-sm text-gray-500">Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
+                  </div>
+                  {filteredSummary?.aspectBreakdown && (
+                    <div className="border-t pt-2">
+                      <p className="text-sm font-medium mb-1">Aspect Breakdown:</p>
+                      <div className="space-y-1 text-xs">
+                        {Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
+                          <div key={aspect} className="flex justify-between items-center">
+                            <span className="capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}:</span>
+                            <div className="flex items-center gap-2">
+                              {data.enabled === false && <span className="text-gray-400">(Disabled)</span>}
+                              <span className={`font-medium ${data.validationScore === 100 ? 'text-green-600' : data.validationScore >= 80 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                {data.validationScore}%
+                              </span>
+                              {data.errorCount > 0 && <span className="text-red-500">({data.errorCount} errors)</span>}
+                              {data.warningCount > 0 && <span className="text-yellow-500">({data.warningCount} warnings)</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -504,6 +612,13 @@ export default function ResourceList({
         {resources.length > 0 ? (
           resources.map((resource, index) => {
             const validationStatus = getValidationStatus(resource);
+            const resourceId = resource._dbId || resource.id;
+            const isValidating = validatingResourceIds.has(resourceId);
+            
+            // Show skeleton for resources that are being validated
+            if (isValidating) {
+              return renderResourceCardSkeleton(index);
+            }
             
             return (
               <div key={resource.id || `${resource.resourceType}-${index}`} className="mb-4 last:mb-0">
@@ -605,14 +720,28 @@ export default function ResourceList({
       {/* Pagination Footer */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center space-x-2 pt-4">
-          <Button
-            variant="outline"
-            onClick={() => onPageChange(0)}
-            disabled={currentPage === 0}
-            className="hidden sm:inline-flex"
-          >
-            First
-          </Button>
+          {isLoading ? (
+            <div className="flex items-center space-x-2">
+              <Skeleton className="h-9 w-16 hidden sm:block" />
+              <Skeleton className="h-9 w-20" />
+              <Skeleton className="h-9 w-8" />
+              <Skeleton className="h-9 w-8" />
+              <Skeleton className="h-9 w-8" />
+              <Skeleton className="h-9 w-8" />
+              <Skeleton className="h-9 w-8" />
+              <Skeleton className="h-9 w-16" />
+              <Skeleton className="h-9 w-12 hidden sm:block" />
+            </div>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => onPageChange(0)}
+                disabled={currentPage === 0}
+                className="hidden sm:inline-flex"
+              >
+                First
+              </Button>
           <Button
             variant="outline"
             onClick={() => onPageChange(currentPage - 1)}
@@ -645,14 +774,16 @@ export default function ResourceList({
             <span className="hidden sm:inline">Next</span>
             <ChevronRight className="h-4 w-4 sm:ml-1" />
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => onPageChange(totalPages - 1)}
-            disabled={currentPage >= totalPages - 1}
-            className="hidden sm:inline-flex"
-          >
-            Last
-          </Button>
+              <Button
+                variant="outline"
+                onClick={() => onPageChange(totalPages - 1)}
+                disabled={currentPage >= totalPages - 1}
+                className="hidden sm:inline-flex"
+              >
+                Last
+              </Button>
+            </>
+          )}
         </div>
       )}
     </div>

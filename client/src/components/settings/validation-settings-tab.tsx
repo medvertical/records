@@ -29,12 +29,14 @@ import {
 // ============================================================================
 
 interface ValidationSettings {
-  structural: { enabled: boolean; severity: 'error' | 'warning' | 'information' };
-  profile: { enabled: boolean; severity: 'warning' | 'information' };
-  terminology: { enabled: boolean; severity: 'warning' | 'information' };
-  reference: { enabled: boolean; severity: 'error' | 'warning' | 'information' };
-  businessRule: { enabled: boolean; severity: 'error' | 'warning' | 'information' };
-  metadata: { enabled: boolean; severity: 'error' | 'warning' | 'information' };
+  aspects: {
+    structural: { enabled: boolean; severity: 'error' | 'warning' | 'information' };
+    profile: { enabled: boolean; severity: 'warning' | 'information' };
+    terminology: { enabled: boolean; severity: 'warning' | 'information' };
+    reference: { enabled: boolean; severity: 'error' | 'warning' | 'information' };
+    businessRule: { enabled: boolean; severity: 'error' | 'warning' | 'information' };
+    metadata: { enabled: boolean; severity: 'error' | 'warning' | 'information' };
+  };
   strictMode: boolean;
   maxConcurrentValidations: number;
   timeoutMs: number;
@@ -54,12 +56,14 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
   
   // State management
   const [validationSettings, setValidationSettings] = useState<ValidationSettings>({
-    structural: { enabled: true, severity: 'error' },
-    profile: { enabled: true, severity: 'warning' },
-    terminology: { enabled: true, severity: 'warning' },
-    reference: { enabled: true, severity: 'error' },
-    businessRule: { enabled: true, severity: 'error' },
-    metadata: { enabled: true, severity: 'error' },
+    aspects: {
+      structural: { enabled: true, severity: 'error' },
+      profile: { enabled: true, severity: 'warning' },
+      terminology: { enabled: true, severity: 'warning' },
+      reference: { enabled: true, severity: 'error' },
+      businessRule: { enabled: true, severity: 'error' },
+      metadata: { enabled: true, severity: 'error' }
+    },
     strictMode: false,
     maxConcurrentValidations: 8,
     timeoutMs: 30000,
@@ -108,12 +112,15 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
   // Settings Updates
   // ========================================================================
 
-  const updateValidationAspect = (aspect: keyof ValidationSettings, field: string, value: any) => {
+  const updateValidationAspect = (aspect: keyof ValidationSettings['aspects'], field: string, value: any) => {
     setValidationSettings(prev => ({
       ...prev,
-      [aspect]: {
-        ...prev[aspect],
-        [field]: value
+      aspects: {
+        ...prev.aspects,
+        [aspect]: {
+          ...prev.aspects[aspect],
+          [field]: value
+        }
       }
     }));
   };
@@ -188,12 +195,14 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
 
   const resetToDefaults = () => {
     setValidationSettings({
-      structural: { enabled: true, severity: 'error' },
-      profile: { enabled: true, severity: 'warning' },
-      terminology: { enabled: true, severity: 'warning' },
-      reference: { enabled: true, severity: 'error' },
-      businessRule: { enabled: true, severity: 'error' },
-      metadata: { enabled: true, severity: 'error' },
+      aspects: {
+        structural: { enabled: true, severity: 'error' },
+        profile: { enabled: true, severity: 'warning' },
+        terminology: { enabled: true, severity: 'warning' },
+        reference: { enabled: true, severity: 'error' },
+        businessRule: { enabled: true, severity: 'error' },
+        metadata: { enabled: true, severity: 'error' }
+      },
       strictMode: false,
       maxConcurrentValidations: 8,
       timeoutMs: 30000,
@@ -229,12 +238,12 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
   };
 
   const renderValidationAspect = (
-    aspect: keyof ValidationSettings,
+    aspect: keyof ValidationSettings['aspects'],
     title: string,
     description: string,
     icon: React.ReactNode
   ) => {
-    const aspectSettings = validationSettings[aspect] as any;
+    const aspectSettings = validationSettings.aspects[aspect] as any;
     
     return (
       <Card key={aspect}>

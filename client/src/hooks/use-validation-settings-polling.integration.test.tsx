@@ -519,7 +519,7 @@ describe('useValidationSettingsPolling Integration Tests', () => {
     it('should respect custom polling intervals', async () => {
       const { result } = renderHookWithProviders(() => 
         useValidationSettingsPolling({
-          pollingInterval: 5000, // 5 seconds
+          pollingInterval: 30000, // 30 seconds
           enabled: true,
           showNotifications: false,
           invalidateCache: false
@@ -533,7 +533,7 @@ describe('useValidationSettingsPolling Integration Tests', () => {
 
       const initialCallTime = Date.now();
 
-      // Wait for next poll (should be around 5 seconds)
+      // Wait for next poll (should be around 30 seconds)
       await new Promise(resolve => setTimeout(resolve, 5100));
 
       const nextCallTime = Date.now();

@@ -404,10 +404,10 @@ export class ValidationSettingsService extends EventEmitter {
   }
 
   /**
-   * Get current validation settings
+   * Get current validation settings (alias for getActiveSettings for consistency)
    */
   async getCurrentSettings(): Promise<ValidationSettings> {
-    return this.coreService.getSettings();
+    return this.getActiveSettings();
   }
 
   /**

@@ -105,8 +105,8 @@ export class ConsolidatedValidationService extends EventEmitter {
   private setupSettingsEventListeners(): void {
     // Listen for settings changes and automatically reload configuration
     this.settingsService.on('settingsChanged', (event) => {
-      console.log('[ConsolidatedValidation] Settings changed, clearing cache and reloading configuration');
-      this.clearSettingsCache();
+      console.log('[ConsolidatedValidation] Settings changed, clearing ALL caches and reloading configuration');
+      this.clearCaches(); // Clear all caches, not just settings cache
       this.loadValidationSettings().catch(error => {
         console.error('[ConsolidatedValidation] Failed to reload settings after change:', error);
       });
@@ -114,8 +114,8 @@ export class ConsolidatedValidationService extends EventEmitter {
 
     // Listen for settings activation
     this.settingsService.on('settingsActivated', (event) => {
-      console.log('[ConsolidatedValidation] Settings activated, reloading configuration');
-      this.clearSettingsCache();
+      console.log('[ConsolidatedValidation] Settings activated, clearing ALL caches and reloading configuration');
+      this.clearCaches(); // Clear all caches, not just settings cache
       this.loadValidationSettings().catch(error => {
         console.error('[ConsolidatedValidation] Failed to reload settings after activation:', error);
       });
@@ -207,8 +207,8 @@ export class ConsolidatedValidationService extends EventEmitter {
 
   /**
    * Validate a single resource with smart caching and timestamp-based invalidation
-   * ALWAYS performs ALL validation categories when saving to database
-   * Display filtering happens at the API layer
+   * Respects validation settings to determine which aspects to run
+   * Only runs validation aspects that are enabled in current settings
    */
   async validateResource(
     resource: any,
@@ -303,6 +303,12 @@ export class ConsolidatedValidationService extends EventEmitter {
       : this.shouldRevalidateResource(dbResource, forceRevalidation, skipUnchanged);
 
     if (needsRevalidation) {
+      // Get current validation settings to determine which aspects to run
+      const currentSettings = await this.getCurrentSettings();
+      if (!currentSettings) {
+        throw new Error('Failed to load validation settings');
+      }
+
       const requestContext = options.requestContext || {};
       const pipelineRequest: ValidationPipelineRequest = {
         resources: [
@@ -311,7 +317,7 @@ export class ConsolidatedValidationService extends EventEmitter {
             resourceType: resource.resourceType,
             resourceId: resource.id,
             profileUrl: undefined,
-            settings: options.validationSettingsOverride,
+            settings: options.validationSettingsOverride || currentSettings, // Use current settings if no override
           } as any,
         ],
         context: {
@@ -801,12 +807,19 @@ export class ConsolidatedValidationService extends EventEmitter {
     
     console.log(`[ConsolidatedValidation] Resource type filtering: ${filterStatistics.totalResources} total, ${filterStatistics.filteredResources} to validate, ${filterStatistics.totalResources - filterStatistics.filteredResources} filtered out`);
 
+    // Get current validation settings to determine which aspects to run
+    const currentSettings = await this.getCurrentSettings();
+    if (!currentSettings) {
+      throw new Error('Failed to load validation settings');
+    }
+
     // Create validation requests for filtered resources only
     const validationRequests = filteredResources.map(resource => ({
       resource,
       resourceType: resource.resourceType,
       resourceId: resource.id,
       profileUrl: undefined,
+      settings: currentSettings, // Use current settings for each resource
     })) as any[];
 
     // Execute batch validation using pipeline

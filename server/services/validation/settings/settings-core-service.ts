@@ -212,23 +212,25 @@ export class ValidationSettingsCoreService extends EventEmitter {
     try {
       const currentSettings = await this.getActiveSettings();
       
-      // Validate the update
-      const validationResult = await this.validateSettings(update);
-      if (!validationResult.isValid) {
-        const validationError = createValidationError(
-          'Settings validation failed',
-          { operation: 'updateSettings', validationErrors: validationResult.errors }
-        );
-        
-        this.errorLogger.logError(validationError, 'updateSettings');
-        throw validationError;
-      }
-
       // Merge with current settings
       const updatedSettings = normalizeValidationSettings({
         ...currentSettings,
-        ...update
+        ...update.settings
       });
+
+      // Validate the updated settings (only if validation is enabled)
+      if (update.validate !== false) {
+        const validationResult = await this.validateSettings(updatedSettings);
+        if (!validationResult.isValid) {
+          const validationError = createValidationError(
+            'Settings validation failed',
+            { operation: 'updateSettings', validationErrors: validationResult.errors }
+          );
+          
+          this.errorLogger.logError(validationError, 'updateSettings');
+          throw validationError;
+        }
+      }
 
       // Save to database
       const savedRecord = await this.repository.updateActive(updatedSettings);

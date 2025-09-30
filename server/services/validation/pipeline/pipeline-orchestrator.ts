@@ -173,7 +173,7 @@ export class PipelineOrchestrator extends EventEmitter {
             resource: resourceRequest.resource,
             resourceType: resourceRequest.resourceType,
             profileUrl: resourceRequest.profileUrl,
-            settings: settings // Include settings in the request
+            settings: resourceRequest.settings || settings // Use resource-specific settings if available, fallback to global settings
           };
 
           // Validate the resource

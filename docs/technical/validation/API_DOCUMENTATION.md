@@ -1,532 +1,188 @@
-# FHIR Validation API Documentation
+# Validation API Documentation
+
+**Version:** 2.0 (Per-Aspect Validation)  
+**Last Updated:** September 30, 2025
 
 ## Overview
 
-This document provides comprehensive API documentation for the FHIR validation system, including endpoints, request/response formats, authentication, and usage examples.
+This document describes the REST API endpoints for the Records FHIR Validation Platform's per-aspect validation system. All endpoints support pagination, filtering, and sorting as described in the PRD.
 
-## Table of Contents
+## Base URL
 
-1. [Authentication](#authentication)
-2. [Base URLs and Versioning](#base-urls-and-versioning)
-3. [Validation Endpoints](#validation-endpoints)
-4. [FHIR Version Support Endpoints](#fhir-version-support-endpoints)
-5. [Settings Endpoints](#settings-endpoints)
-6. [Health Check Endpoints](#health-check-endpoints)
-7. [Metrics Endpoints](#metrics-endpoints)
-8. [Error Handling](#error-handling)
-9. [Rate Limiting](#rate-limiting)
-10. [WebSocket/SSE Endpoints](#websocketsse-endpoints)
-11. [Usage Examples](#usage-examples)
+```
+http://localhost:5000/api
+```
 
 ## Authentication
 
-### JWT Authentication
+Currently, no authentication is required. Future versions will implement server-scoped authentication.
 
-The API uses JWT (JSON Web Tokens) for authentication. Include the token in the Authorization header:
+---
 
-```http
-Authorization: Bearer <your-jwt-token>
-```
+## Endpoints
 
-### API Key Authentication
+### 1. Get Validation Issue Groups
 
-For service-to-service communication, API keys can be used:
+Retrieve validation message groups for same-message filtering and triage.
 
-```http
-X-API-Key: <your-api-key>
-```
-
-### Authentication Endpoints
-
-#### Login
-
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "username": "your-username",
-  "password": "your-password"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "expiresIn": "24h",
-    "user": {
-      "id": "user-123",
-      "username": "your-username",
-      "role": "admin"
-    }
-  }
-}
-```
-
-#### Refresh Token
-
-```http
-POST /api/auth/refresh
-Authorization: Bearer <your-jwt-token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "expiresIn": "24h"
-  }
-}
-```
-
-## Base URLs and Versioning
-
-### Base URL
-
-```
-Production: https://api.records-platform.com/v1
-Development: http://localhost:3000/api/v1
-```
-
-### API Versioning
-
-The API uses URL path versioning:
-- `v1`: Current stable version
-- `v2`: Next version (in development)
-
-## Validation Endpoints
-
-### Validate Single Resource
-
-Validate a single FHIR resource:
-
-```http
-POST /api/v1/validation/validate
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "resource": {
-    "resourceType": "Patient",
-    "id": "patient-001",
-    "name": [{
-      "family": "Smith",
-      "given": ["John"]
-    }],
-    "gender": "male",
-    "birthDate": "1990-01-01"
-  },
-  "options": {
-    "aspects": ["structural", "profile", "terminology"],
-    "strict": false,
-    "includeWarnings": true
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "resourceType": "Patient",
-    "resourceId": "patient-001",
-    "isValid": true,
-    "score": 95,
-    "issues": [
-      {
-        "id": "issue-001",
-        "severity": "warning",
-        "message": "Patient name should include at least one given name",
-        "path": "Patient.name[0].given",
-        "aspect": "business-rule"
-      }
-    ],
-    "aspects": [
-      {
-        "name": "structural",
-        "score": 100,
-        "issues": [],
-        "validated": true
-      },
-      {
-        "name": "profile",
-        "score": 100,
-        "issues": [],
-        "validated": true
-      },
-      {
-        "name": "terminology",
-        "score": 85,
-        "issues": [
-          {
-            "id": "term-001",
-            "severity": "warning",
-            "message": "Gender code 'male' is valid but consider using 'http://hl7.org/fhir/administrative-gender'",
-            "path": "Patient.gender"
-          }
-        ],
-        "validated": true
-      }
-    ],
-    "performance": {
-      "totalTimeMs": 150,
-      "aspectTimes": {
-        "structural": 25,
-        "profile": 30,
-        "terminology": 95
-      }
-    },
-    "validatedAt": "2024-01-15T10:30:00Z"
-  }
-}
-```
-
-### Validate Multiple Resources
-
-Validate multiple FHIR resources in batch:
-
-```http
-POST /api/v1/validation/validate/batch
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "resources": [
-    {
-      "resourceType": "Patient",
-      "id": "patient-001",
-      "name": [{"family": "Smith", "given": ["John"]}]
-    },
-    {
-      "resourceType": "Observation",
-      "id": "obs-001",
-      "status": "final",
-      "code": {"coding": [{"system": "http://loinc.org", "code": "33747-0"}]}
-    }
-  ],
-  "options": {
-    "aspects": ["structural", "profile"],
-    "concurrent": true,
-    "maxConcurrent": 5
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "results": [
-      {
-        "resourceType": "Patient",
-        "resourceId": "patient-001",
-        "isValid": true,
-        "score": 95,
-        "issues": [],
-        "aspects": [...],
-        "performance": {...}
-      },
-      {
-        "resourceType": "Observation",
-        "resourceId": "obs-001",
-        "isValid": false,
-        "score": 60,
-        "issues": [...],
-        "aspects": [...],
-        "performance": {...}
-      }
-    ],
-    "summary": {
-      "totalResources": 2,
-      "validResources": 1,
-      "invalidResources": 1,
-      "averageScore": 77.5,
-      "totalTimeMs": 300
-    }
-  }
-}
-```
-
-### Get Validation Results
-
-Retrieve previously stored validation results:
-
-```http
-GET /api/v1/validation/results/{resourceId}
-Authorization: Bearer <token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "resourceType": "Patient",
-    "resourceId": "patient-001",
-    "isValid": true,
-    "score": 95,
-    "issues": [...],
-    "aspects": [...],
-    "performance": {...},
-    "validatedAt": "2024-01-15T10:30:00Z",
-    "cached": false
-  }
-}
-```
-
-### List Validation Results
-
-List validation results with filtering and pagination:
-
-```http
-GET /api/v1/validation/results?resourceType=Patient&scoreMin=80&limit=10&offset=0
-Authorization: Bearer <token>
-```
+**Endpoint:** `GET /validation/issues/groups`
 
 **Query Parameters:**
-- `resourceType`: Filter by resource type
-- `scoreMin`: Minimum validation score
-- `scoreMax`: Maximum validation score
-- `isValid`: Filter by validation status (true/false)
-- `aspect`: Filter by validation aspect
-- `limit`: Number of results per page (default: 20, max: 100)
-- `offset`: Number of results to skip (default: 0)
-- `sortBy`: Sort field (score, validatedAt, resourceType)
-- `sortOrder`: Sort order (asc, desc)
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `serverId` | integer | No | Active server | Filter by FHIR server ID |
+| `aspect` | string | No | - | Filter by validation aspect (`structural`, `profile`, `terminology`, `reference`, `businessRule`, `metadata`) |
+| `severity` | string | No | - | Filter by severity (`error`, `warning`, `information`) |
+| `code` | string | No | - | Filter by error code |
+| `path` | string | No | - | Filter by canonical path (partial match) |
+| `resourceType` | string | No | - | Filter by resource type |
+| `page` | integer | No | 1 | Page number (1-indexed) |
+| `size` | integer | No | 25 | Page size (max: 100) |
+| `sort` | string | No | `count:desc` | Sort order (`count:desc`, `count:asc`, `severity:desc`, `severity:asc`) |
 
 **Response:**
+
 ```json
 {
   "success": true,
-  "data": {
-    "results": [
-      {
-        "resourceType": "Patient",
-        "resourceId": "patient-001",
-        "isValid": true,
-        "score": 95,
-        "validatedAt": "2024-01-15T10:30:00Z"
-      }
-    ],
-    "pagination": {
-      "total": 150,
-      "limit": 10,
-      "offset": 0,
-      "hasMore": true
-    },
-    "filters": {
+  "data": [
+    {
+      "signature": "a1b2c3d4e5f6...", 
+      "aspect": "structural",
+      "severity": "error",
+      "code": "required",
+      "canonicalPath": "patient.name",
+      "sampleMessage": "Patient.name: minimum required = 1, but only found 0",
+      "totalResources": 42,
+      "firstSeenAt": "2025-09-30T10:15:30Z",
+      "lastSeenAt": "2025-09-30T14:22:45Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "size": 25,
+    "total": 100,
+    "totalPages": 4,
+    "hasNext": true,
+    "hasPrevious": false
+  },
+  "filters": {
+    "serverId": 1,
+    "aspect": null,
+    "severity": null,
+    "code": null,
+    "path": null,
+    "resourceType": null
+  },
+  "sort": "count:desc",
+  "timestamp": "2025-09-30T14:30:00Z"
+}
+```
+
+**Status Codes:**
+
+- `200 OK`: Success
+- `400 Bad Request`: Invalid query parameters
+- `500 Internal Server Error`: Server error
+
+---
+
+### 2. Get Group Members
+
+Retrieve resources that have a specific validation message (by signature).
+
+**Endpoint:** `GET /validation/issues/groups/:signature/resources`
+
+**Path Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `signature` | string | Yes | Message signature (SHA-256 hash) |
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `serverId` | integer | No | Active server | Filter by FHIR server ID |
+| `resourceType` | string | No | - | Filter by resource type |
+| `page` | integer | No | 1 | Page number (1-indexed) |
+| `size` | integer | No | 25 | Page size (max: 100) |
+| `sort` | string | No | `validatedAt:desc` | Sort order (`validatedAt:desc`, `validatedAt:asc`) |
+
+**Response:**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
       "resourceType": "Patient",
-      "scoreMin": 80
-    }
-  }
-}
-```
-
-## FHIR Version Support Endpoints
-
-### Version Detection
-
-#### Detect FHIR Version
-
-Detect the FHIR version of a resource:
-
-```http
-POST /api/v1/validation/detect-version
-Content-Type: application/json
-
-{
-  "resource": {
-    "resourceType": "Patient",
-    "id": "patient-001",
-    "meta": {
-      "profile": ["http://hl7.org/fhir/r5/StructureDefinition/Patient"]
-    }
-  }
-}
-```
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "fhirVersion": "R5",
-    "confidence": 0.95,
-    "detectionMethod": "profile-analysis",
-    "details": {
-      "profileIndicators": ["r5"],
-      "featureIndicators": ["contained-resources"],
-      "metadataIndicators": []
-    }
-  }
-}
-```
-
-### Version-Specific Validation
-
-#### Validate R4 Resource
-
-Validate a resource against FHIR R4 specifications:
-
-```http
-POST /api/v1/validation/validate-r4
-Content-Type: application/json
-
-{
-  "resource": {
-    "resourceType": "Patient",
-    "id": "patient-r4-001",
-    "name": [
-      {
-        "use": "official",
-        "family": "Smith",
-        "given": ["John"]
-      }
-    ],
-    "gender": "male",
-    "birthDate": "1990-01-01"
-  }
-}
-```
-
-#### Validate R5 Resource
-
-Validate a resource against FHIR R5 specifications:
-
-```http
-POST /api/v1/validation/validate-r5
-Content-Type: application/json
-
-{
-  "resource": {
-    "resourceType": "Patient",
-    "id": "patient-r5-001",
-    "meta": {
-      "profile": ["http://hl7.org/fhir/r5/StructureDefinition/Patient"]
-    },
-    "name": [
-      {
-        "use": "official",
-        "family": "Johnson",
-        "given": ["Jane"]
-      }
-    ],
-    "gender": "female",
-    "birthDate": "1985-05-15",
-    "contained": [
-      {
-        "resourceType": "Organization",
-        "id": "org-001",
-        "name": "Test Organization"
-      }
-    ]
-  }
-}
-```
-
-#### Validate R6 Resource
-
-Validate a resource against FHIR R6 specifications:
-
-```http
-POST /api/v1/validation/validate-r6
-Content-Type: application/json
-
-{
-  "resource": {
-    "resourceType": "Patient",
-    "id": "patient-r6-001",
-    "meta": {
-      "profile": ["http://hl7.org/fhir/r6/StructureDefinition/Patient"],
-      "versionId": "2",
-      "security": [
+      "fhirId": "patient-001",
+      "validatedAt": "2025-09-30T14:22:45Z",
+      "perAspect": [
         {
-          "system": "http://terminology.hl7.org/CodeSystem/v3-Confidentiality",
-          "code": "R"
+          "aspect": "structural",
+          "isValid": false,
+          "errorCount": 1,
+          "warningCount": 0,
+          "informationCount": 0
+        },
+        {
+          "aspect": "profile",
+          "isValid": true,
+          "errorCount": 0,
+          "warningCount": 0,
+          "informationCount": 1
         }
       ]
-    },
-    "name": [
-      {
-        "use": "official",
-        "family": "Williams",
-        "given": ["Robert"]
-      }
-    ],
-    "gender": "other",
-    "birthDate": "1992-12-25"
-  }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "size": 25,
+    "total": 42,
+    "totalPages": 2,
+    "hasNext": true,
+    "hasPrevious": false
+  },
+  "filters": {
+    "serverId": 1,
+    "signature": "a1b2c3d4e5f6...",
+    "resourceType": null
+  },
+  "sort": "validatedAt:desc",
+  "timestamp": "2025-09-30T14:30:00Z"
 }
 ```
 
-### Terminology Validation by Version
+**Status Codes:**
 
-#### Validate Code Against R4 Ontoserver
+- `200 OK`: Success
+- `400 Bad Request`: Invalid parameters
+- `404 Not Found`: Signature not found
+- `500 Internal Server Error`: Server error
 
-```http
-POST /api/v1/validation/terminology/r4/validate-code
-Content-Type: application/json
+---
 
-{
-  "code": "male",
-  "system": "http://hl7.org/fhir/administrative-gender",
-  "valueSet": "http://hl7.org/fhir/ValueSet/administrative-gender"
-}
-```
+### 3. Get Resource Messages
 
-#### Validate Code Against R5 Ontoserver
+Retrieve all validation messages for a specific resource.
 
-```http
-POST /api/v1/validation/terminology/r5/validate-code
-Content-Type: application/json
+**Endpoint:** `GET /validation/resources/:resourceType/:id/messages`
 
-{
-  "code": "365873007",
-  "system": "http://snomed.info/sct",
-  "valueSet": "http://snomed.info/sct?fhir_vs=isa/365873007"
-}
-```
+**Path Parameters:**
 
-#### Validate Code Against R6 Ontoserver
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `resourceType` | string | Yes | FHIR resource type (e.g., "Patient", "Observation") |
+| `id` | string | Yes | FHIR resource ID |
 
-```http
-POST /api/v1/validation/terminology/r6/validate-code
-Content-Type: application/json
+**Query Parameters:**
 
-{
-  "code": "365873007",
-  "system": "http://snomed.info/sct",
-  "valueSet": "http://snomed.info/sct?fhir_vs=isa/365873007"
-}
-```
-
-### Ontoserver Connectivity
-
-#### Test R4 Ontoserver Connectivity
-
-```http
-GET /api/v1/validation/terminology/r4/test-connectivity
-```
-
-#### Test R5 Ontoserver Connectivity
-
-```http
-GET /api/v1/validation/terminology/r5/test-connectivity
-```
-
-#### Test R6 Ontoserver Connectivity
-
-```http
-GET /api/v1/validation/terminology/r6/test-connectivity
-```
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `serverId` | integer | No | Active server | Filter by FHIR server ID |
 
 **Response:**
 
@@ -534,739 +190,291 @@ GET /api/v1/validation/terminology/r6/test-connectivity
 {
   "success": true,
   "data": {
-    "ontoserverVersion": "R5",
-    "fhirVersion": "5.0.0",
-    "responseTime": 245,
-    "capabilities": {
-      "terminology": true,
-      "validation": true,
-      "expansion": true
-    }
-  }
-}
-```
-
-### Cross-Version Compatibility
-
-#### Validate Resource Across All Versions
-
-```http
-POST /api/v1/validation/validate-cross-version
-Content-Type: application/json
-
-{
-  "resource": {
+    "serverId": 1,
     "resourceType": "Patient",
-    "id": "patient-compat-001",
-    "name": [
+    "fhirId": "patient-001",
+    "aspects": [
       {
-        "use": "official",
-        "family": "Compatibility",
-        "given": ["Test"]
-      }
-    ]
-  },
-  "versions": ["R4", "R5", "R6"]
-}
-```
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "data": {
-    "results": {
-      "R4": {
-        "valid": true,
-        "issues": [],
-        "score": 100
-      },
-      "R5": {
-        "valid": true,
-        "issues": [],
-        "score": 100
-      },
-      "R6": {
-        "valid": true,
-        "issues": [],
-        "score": 100
-      }
-    },
-    "compatibility": "full",
-    "recommendedVersion": "R4"
-  }
-}
-```
-
-## Settings Endpoints
-
-### Get Validation Settings
-
-Retrieve current validation settings:
-
-```http
-GET /api/v1/validation/settings
-Authorization: Bearer <token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "enabled": true,
-    "aspects": {
-      "structural": {
-        "enabled": true,
-        "strict": false
-      },
-      "profile": {
-        "enabled": true,
-        "strict": true
-      },
-      "terminology": {
-        "enabled": true,
-        "strict": false,
-        "ontoserverUrl": "https://r4.ontoserver.csiro.au/fhir"
-      },
-      "reference": {
-        "enabled": true,
-        "strict": false,
-        "firelyUrl": "https://server.fire.ly/R4"
-      },
-      "businessRule": {
-        "enabled": true,
-        "strict": false
-      },
-      "metadata": {
-        "enabled": true,
-        "strict": false
-      }
-    },
-    "scoring": {
-      "errorPenalty": 10,
-      "warningPenalty": 5,
-      "infoPenalty": 1,
-      "maxScore": 100,
-      "minScore": 0
-    },
-    "performance": {
-      "timeout": 5000,
-      "retryAttempts": 3,
-      "retryDelay": 1000,
-      "batchSize": 10,
-      "maxConcurrent": 5
-    },
-    "updatedAt": "2024-01-15T10:00:00Z"
-  }
-}
-```
-
-### Update Validation Settings
-
-Update validation settings:
-
-```http
-PUT /api/v1/validation/settings
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "aspects": {
-    "structural": {
-      "enabled": true,
-      "strict": false
-    },
-    "terminology": {
-      "enabled": true,
-      "strict": true,
-      "ontoserverUrl": "https://r4.ontoserver.csiro.au/fhir"
-    }
-  },
-  "scoring": {
-    "errorPenalty": 15,
-    "warningPenalty": 8
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "enabled": true,
-    "aspects": {...},
-    "scoring": {
-      "errorPenalty": 15,
-      "warningPenalty": 8,
-      "infoPenalty": 1,
-      "maxScore": 100,
-      "minScore": 0
-    },
-    "performance": {...},
-    "updatedAt": "2024-01-15T10:30:00Z"
-  }
-}
-```
-
-### Reset Validation Settings
-
-Reset validation settings to defaults:
-
-```http
-POST /api/v1/validation/settings/reset
-Authorization: Bearer <token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "message": "Validation settings reset to defaults",
-    "settings": {
-      "enabled": true,
-      "aspects": {...},
-      "scoring": {...},
-      "performance": {...}
-    }
-  }
-}
-```
-
-## Health Check Endpoints
-
-### System Health Check
-
-Check overall system health:
-
-```http
-GET /api/v1/health
-```
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "services": {
-    "database": {
-      "status": "healthy",
-      "responseTime": 5,
-      "lastChecked": "2024-01-15T10:30:00Z"
-    },
-    "ontoserver": {
-      "status": "healthy",
-      "responseTime": 150,
-      "lastChecked": "2024-01-15T10:30:00Z",
-      "version": "R4"
-    },
-    "firely": {
-      "status": "healthy",
-      "responseTime": 200,
-      "lastChecked": "2024-01-15T10:30:00Z",
-      "version": "R4"
-    },
-    "cache": {
-      "status": "healthy",
-      "hitRate": 85.5,
-      "size": 1250,
-      "lastChecked": "2024-01-15T10:30:00Z"
-    }
-  },
-  "performance": {
-    "memory": {
-      "used": 256,
-      "total": 512,
-      "unit": "MB"
-    },
-    "uptime": 86400,
-    "cpu": {
-      "usage": 25.5,
-      "unit": "percent"
-    }
-  }
-}
-```
-
-### Readiness Check
-
-Check if the service is ready to accept requests:
-
-```http
-GET /api/v1/health/ready
-```
-
-**Response:**
-```json
-{
-  "status": "ready",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "checks": {
-    "database": "ready",
-    "externalServices": "ready",
-    "cache": "ready"
-  }
-}
-```
-
-### Liveness Check
-
-Check if the service is alive:
-
-```http
-GET /api/v1/health/live
-```
-
-**Response:**
-```json
-{
-  "status": "alive",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "uptime": 86400
-}
-```
-
-## Metrics Endpoints
-
-### Get Performance Metrics
-
-Retrieve performance metrics:
-
-```http
-GET /api/v1/metrics
-Authorization: Bearer <token>
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "validation": {
-      "totalValidations": 15420,
-      "averageTime": 150,
-      "errorRate": 0.02,
-      "throughput": 25.5,
-      "last24Hours": {
-        "validations": 1250,
-        "averageScore": 87.5,
-        "topIssues": [
+        "aspect": "structural",
+        "isValid": false,
+        "errorCount": 1,
+        "warningCount": 0,
+        "informationCount": 0,
+        "score": 0,
+        "validatedAt": "2025-09-30T14:22:45Z",
+        "messages": [
           {
-            "message": "Missing required field",
-            "count": 45,
-            "percentage": 3.6
+            "id": 123,
+            "severity": "error",
+            "code": "required",
+            "canonicalPath": "patient.name",
+            "text": "Patient.name: minimum required = 1, but only found 0",
+            "signature": "a1b2c3d4e5f6...",
+            "createdAt": "2025-09-30T14:22:45Z"
+          }
+        ]
+      },
+      {
+        "aspect": "profile",
+        "isValid": true,
+        "errorCount": 0,
+        "warningCount": 0,
+        "informationCount": 1,
+        "score": 100,
+        "validatedAt": "2025-09-30T14:22:45Z",
+        "messages": [
+          {
+            "id": 124,
+            "severity": "information",
+            "code": null,
+            "canonicalPath": "patient.meta.profile",
+            "text": "Resource validates against US Core Patient profile",
+            "signature": "b2c3d4e5f6...",
+            "createdAt": "2025-09-30T14:22:45Z"
           }
         ]
       }
-    },
-    "cache": {
-      "hitRate": 85.5,
-      "missRate": 14.5,
-      "size": 1250,
-      "memoryUsage": 45.2
-    },
-    "external": {
-      "ontoserver": {
-        "totalCalls": 5420,
-        "averageResponseTime": 150,
-        "errorRate": 0.01,
-        "successRate": 99.9
-      },
-      "firely": {
-        "totalCalls": 3210,
-        "averageResponseTime": 200,
-        "errorRate": 0.02,
-        "successRate": 98.8
-      }
-    },
-    "performance": {
-      "memory": {
-        "used": 256,
-        "total": 512,
-        "unit": "MB"
-      },
-      "cpu": {
-        "usage": 25.5,
-        "unit": "percent"
-      }
-    }
-  }
+    ]
+  },
+  "timestamp": "2025-09-30T14:30:00Z"
 }
 ```
 
-### Get Cache Statistics
+**Status Codes:**
 
-Retrieve cache performance statistics:
+- `200 OK`: Success
+- `400 Bad Request`: Invalid parameters
+- `404 Not Found`: Resource not found or not yet validated
+- `500 Internal Server Error`: Server error
 
-```http
-GET /api/v1/metrics/cache
-Authorization: Bearer <token>
-```
+---
+
+### 4. Get Validation Progress
+
+Retrieve current batch validation progress.
+
+**Endpoint:** `GET /validation/progress`
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `serverId` | integer | No | Active server | Filter by FHIR server ID |
 
 **Response:**
+
+```json
+{
+  "state": "running",
+  "total": 1000,
+  "processed": 450,
+  "failed": 12,
+  "startedAt": "2025-09-30T14:00:00Z",
+  "updatedAt": "2025-09-30T14:30:00Z",
+  "etaSeconds": 1200,
+  "resourcesPerSecond": 3.75
+}
+```
+
+**Status Codes:**
+
+- `200 OK`: Success
+- `404 Not Found`: No active batch validation
+- `500 Internal Server Error`: Server error
+
+---
+
+### 5. Clear Validation Data
+
+Clear validation results and messages.
+
+**Endpoint:** `DELETE /validation/clear`
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `serverId` | integer | No | - | Clear data for specific server |
+| `mode` | string | No | `all` | Clear mode (`all`, `per-aspect`, `legacy`) |
+
+**Response:**
+
 ```json
 {
   "success": true,
-  "data": {
-    "global": {
-      "hits": 12540,
-      "misses": 2160,
-      "hitRate": 85.3,
-      "totalSize": 1250,
-      "memoryUsage": 45.2
-    },
-    "codeSystem": {
-      "hits": 5420,
-      "misses": 580,
-      "hitRate": 90.3,
-      "size": 500,
-      "ttl": 1800000
-    },
-    "valueSet": {
-      "hits": 4320,
-      "misses": 680,
-      "hitRate": 86.4,
-      "size": 750,
-      "ttl": 900000
-    },
-    "validationResults": {
-      "hits": 2800,
-      "misses": 900,
-      "hitRate": 75.7,
-      "size": 1000,
-      "ttl": 3600000
-    }
-  }
+  "cleared": {
+    "results": 1234,
+    "messages": 5678,
+    "groups": 42
+  },
+  "timestamp": "2025-09-30T14:30:00Z"
 }
 ```
 
+**Status Codes:**
+
+- `200 OK`: Success
+- `400 Bad Request`: Invalid parameters
+- `500 Internal Server Error`: Server error
+
+---
+
+## Data Models
+
+### ValidationMessageGroupDTO
+
+```typescript
+interface ValidationMessageGroupDTO {
+  signature: string;              // SHA-256 hash of message components
+  aspect: ValidationAspect;        // structural | profile | terminology | reference | businessRule | metadata
+  severity: ValidationSeverity;    // error | warning | information
+  code?: string;                   // Error code (optional)
+  canonicalPath: string;           // Normalized FHIR path (no array indices)
+  sampleMessage: string;           // First message text as sample
+  totalResources: number;          // Count of unique resources with this message
+  firstSeenAt: Date;               // First detection timestamp
+  lastSeenAt: Date;                // Last detection timestamp
+}
+```
+
+### ValidationGroupMemberDTO
+
+```typescript
+interface ValidationGroupMemberDTO {
+  resourceType: string;
+  fhirId: string;
+  validatedAt: Date;
+  perAspect: {
+    aspect: ValidationAspect;
+    isValid: boolean;
+    errorCount: number;
+    warningCount: number;
+    informationCount: number;
+  }[];
+}
+```
+
+### ResourceMessagesDTO
+
+```typescript
+interface ResourceMessagesDTO {
+  serverId: number;
+  resourceType: string;
+  fhirId: string;
+  aspects: {
+    aspect: ValidationAspect;
+    isValid: boolean;
+    errorCount: number;
+    warningCount: number;
+    informationCount: number;
+    score: number;
+    validatedAt: Date;
+    messages: {
+      id: number;
+      severity: ValidationSeverity;
+      code?: string;
+      canonicalPath: string;
+      text: string;
+      signature: string;
+      createdAt: Date;
+    }[];
+  }[];
+}
+```
+
+---
+
 ## Error Handling
 
-### Error Response Format
-
-All API errors follow a consistent format:
+All endpoints follow a consistent error response format:
 
 ```json
 {
   "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Resource validation failed",
-    "details": "The provided FHIR resource is invalid",
-    "timestamp": "2024-01-15T10:30:00Z",
-    "requestId": "req-12345"
-  }
+  "error": "Brief error description",
+  "message": "Detailed error message",
+  "details": [] // Optional: validation errors or additional context
 }
 ```
-
-### HTTP Status Codes
-
-- `200 OK`: Request successful
-- `201 Created`: Resource created successfully
-- `400 Bad Request`: Invalid request data
-- `401 Unauthorized`: Authentication required
-- `403 Forbidden`: Insufficient permissions
-- `404 Not Found`: Resource not found
-- `422 Unprocessable Entity`: Validation failed
-- `429 Too Many Requests`: Rate limit exceeded
-- `500 Internal Server Error`: Server error
-- `502 Bad Gateway`: External service error
-- `503 Service Unavailable`: Service temporarily unavailable
 
 ### Common Error Codes
 
-- `VALIDATION_ERROR`: Resource validation failed
-- `EXTERNAL_SERVICE_ERROR`: External service unavailable
-- `CONFIGURATION_ERROR`: Invalid configuration
-- `AUTHENTICATION_ERROR`: Authentication failed
-- `AUTHORIZATION_ERROR`: Insufficient permissions
-- `RATE_LIMIT_ERROR`: Rate limit exceeded
-- `TIMEOUT_ERROR`: Request timeout
-- `DATABASE_ERROR`: Database operation failed
+- `400 Bad Request`: Invalid query parameters or request body
+- `404 Not Found`: Resource or signature not found
+- `500 Internal Server Error`: Unexpected server error
+- `503 Service Unavailable`: Service temporarily unavailable
 
-## Rate Limiting
+---
 
-### Rate Limit Headers
+## Performance Targets
 
-Rate limiting information is included in response headers:
+| Endpoint | Target p95 Latency | Notes |
+|----------|-------------------|-------|
+| GET /validation/issues/groups | < 500ms | With 25K-250K resources |
+| GET /validation/issues/groups/:signature/resources | < 500ms | Paginated results |
+| GET /validation/resources/:type/:id/messages | < 300ms | Cached per-aspect results |
+| GET /validation/progress | < 100ms | Lightweight state query |
 
-```http
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1642248000
-X-RateLimit-Window: 900000
-```
+---
 
-### Rate Limit Exceeded Response
+## Signature Computation
 
-When rate limit is exceeded:
-
-```http
-HTTP/1.1 429 Too Many Requests
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 0
-X-RateLimit-Reset: 1642248000
-
-{
-  "success": false,
-  "error": {
-    "code": "RATE_LIMIT_ERROR",
-    "message": "Rate limit exceeded",
-    "details": "You have exceeded the rate limit of 100 requests per 15 minutes",
-    "retryAfter": 300
-  }
-}
-```
-
-## WebSocket/SSE Endpoints
-
-### Server-Sent Events for Real-time Updates
-
-Subscribe to real-time validation updates:
-
-```http
-GET /api/v1/validation/events
-Authorization: Bearer <token>
-Accept: text/event-stream
-```
-
-**Event Types:**
-
-#### Validation Completed
+Message signatures are computed using SHA-256 hash of normalized components:
 
 ```
-event: validation-completed
-data: {
-  "resourceId": "patient-001",
-  "resourceType": "Patient",
-  "score": 95,
-  "isValid": true,
-  "issues": [...],
-  "timestamp": "2024-01-15T10:30:00Z"
-}
+signature = SHA-256(aspect + '|' + severity + '|' + (code||'') + '|' + canonicalPath + '|' + (ruleId||'') + '|' + normalizedText)
 ```
 
-#### Validation Error
+**Normalization Rules:**
 
-```
-event: validation-error
-data: {
-  "resourceId": "patient-001",
-  "error": "External service timeout",
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
+- **Canonical Path**: Remove array indices, lowercase, remove whitespace, max 256 chars
+- **Normalized Text**: Trim, collapse whitespace, lowercase, remove control chars, max 512 chars
+- **Severity**: Lowercase
+- **Code & RuleId**: Trim (if present)
 
-#### Validation Progress
+**Stability:** Signatures are stable as long as normalization rules remain unchanged. Rule changes are versioned via `signature_version` field.
 
-```
-event: validation-progress
-data: {
-  "totalResources": 100,
-  "processedResources": 45,
-  "currentResource": "patient-045",
-  "estimatedTimeRemaining": 120,
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
+---
 
-### WebSocket Connection
+## Examples
 
-For bidirectional communication:
-
-```javascript
-const ws = new WebSocket('wss://api.records-platform.com/v1/validation/ws', {
-  headers: {
-    'Authorization': 'Bearer <token>'
-  }
-});
-
-ws.onopen = () => {
-  console.log('WebSocket connected');
-  
-  // Subscribe to validation updates
-  ws.send(JSON.stringify({
-    type: 'subscribe',
-    channel: 'validation-updates',
-    resourceIds: ['patient-001', 'patient-002']
-  }));
-};
-
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Received:', data);
-};
-
-ws.onclose = () => {
-  console.log('WebSocket disconnected');
-};
-```
-
-## Usage Examples
-
-### JavaScript/Node.js
-
-```javascript
-const axios = require('axios');
-
-const validationClient = {
-  baseURL: 'https://api.records-platform.com/v1',
-  token: 'your-jwt-token',
-  
-  async validateResource(resource, options = {}) {
-    const response = await axios.post(`${this.baseURL}/validation/validate`, {
-      resource,
-      options
-    }, {
-      headers: {
-        'Authorization': `Bearer ${this.token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    return response.data;
-  },
-  
-  async getValidationResults(resourceId) {
-    const response = await axios.get(`${this.baseURL}/validation/results/${resourceId}`, {
-      headers: {
-        'Authorization': `Bearer ${this.token}`
-      }
-    });
-    
-    return response.data;
-  },
-  
-  async getSettings() {
-    const response = await axios.get(`${this.baseURL}/validation/settings`, {
-      headers: {
-        'Authorization': `Bearer ${this.token}`
-      }
-    });
-    
-    return response.data;
-  }
-};
-
-// Usage
-const patient = {
-  resourceType: 'Patient',
-  id: 'patient-001',
-  name: [{ family: 'Smith', given: ['John'] }],
-  gender: 'male'
-};
-
-validationClient.validateResource(patient)
-  .then(result => console.log('Validation result:', result))
-  .catch(error => console.error('Validation error:', error));
-```
-
-### Python
-
-```python
-import requests
-import json
-
-class ValidationClient:
-    def __init__(self, base_url, token):
-        self.base_url = base_url
-        self.headers = {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json'
-        }
-    
-    def validate_resource(self, resource, options=None):
-        url = f"{self.base_url}/validation/validate"
-        payload = {
-            'resource': resource,
-            'options': options or {}
-        }
-        
-        response = requests.post(url, json=payload, headers=self.headers)
-        response.raise_for_status()
-        return response.json()
-    
-    def get_validation_results(self, resource_id):
-        url = f"{self.base_url}/validation/results/{resource_id}"
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-        return response.json()
-    
-    def get_settings(self):
-        url = f"{self.base_url}/validation/settings"
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-        return response.json()
-
-# Usage
-client = ValidationClient('https://api.records-platform.com/v1', 'your-jwt-token')
-
-patient = {
-    'resourceType': 'Patient',
-    'id': 'patient-001',
-    'name': [{'family': 'Smith', 'given': ['John']}],
-    'gender': 'male'
-}
-
-try:
-    result = client.validate_resource(patient)
-    print('Validation result:', json.dumps(result, indent=2))
-except requests.exceptions.RequestException as e:
-    print('Validation error:', e)
-```
-
-### cURL Examples
-
-#### Validate a Patient Resource
+### Example 1: Get all structural errors
 
 ```bash
-curl -X POST "https://api.records-platform.com/v1/validation/validate" \
-  -H "Authorization: Bearer your-jwt-token" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "resource": {
-      "resourceType": "Patient",
-      "id": "patient-001",
-      "name": [{"family": "Smith", "given": ["John"]}],
-      "gender": "male",
-      "birthDate": "1990-01-01"
-    },
-    "options": {
-      "aspects": ["structural", "profile", "terminology"],
-      "strict": false
-    }
-  }'
+GET /api/validation/issues/groups?aspect=structural&severity=error&sort=count:desc&page=1&size=25
 ```
 
-#### Get Validation Settings
+### Example 2: Get resources with a specific message
 
 ```bash
-curl -X GET "https://api.records-platform.com/v1/validation/settings" \
-  -H "Authorization: Bearer your-jwt-token"
+GET /api/validation/issues/groups/a1b2c3d4e5f6.../resources?resourceType=Patient&page=1&size=25
 ```
 
-#### Get Health Status
+### Example 3: Get all messages for a patient
 
 ```bash
-curl -X GET "https://api.records-platform.com/v1/health"
+GET /api/validation/resources/Patient/patient-001/messages?serverId=1
 ```
 
-## Conclusion
+---
 
-This API documentation provides comprehensive information for integrating with the FHIR validation system. The API is designed to be RESTful, consistent, and easy to use, with proper error handling, authentication, and real-time capabilities.
+## Changelog
 
-Key features of the API:
+### Version 2.0 (2025-09-30)
+- Added per-aspect validation endpoints
+- Added signature-based message grouping
+- Added pagination and filtering support
+- Added consistent error handling
 
-- **RESTful Design**: Consistent HTTP methods and status codes
-- **Authentication**: JWT and API key support
-- **Real-time Updates**: WebSocket and SSE support
-- **Comprehensive Error Handling**: Detailed error responses
-- **Rate Limiting**: Built-in protection against abuse
-- **Health Monitoring**: Extensive health check endpoints
-- **Performance Metrics**: Detailed performance and usage statistics
-- **Flexible Validation**: Configurable validation aspects and options
+### Version 1.0 (2025-09-15)
+- Initial API documentation
+- Basic validation endpoints
 
-For additional support or questions about the API, please refer to the troubleshooting guide or contact the development team.
+---
+
+## Related Documentation
+
+- [PRD: Records FHIR Platform](../../requirements/prd-records-fhir-platform.md)
+- [Validation Architecture](./VALIDATION_ARCHITECTURE.md)
+- [Configuration Guide](./CONFIGURATION_GUIDE.md)
+- [Troubleshooting Guide](./TROUBLESHOOTING_GUIDE.md)

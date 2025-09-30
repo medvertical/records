@@ -401,7 +401,7 @@ function SidebarContent({
                       }}
                     >
                         <span>{item.label}</span>
-                        {resourceCounts && resourceCounts[item.resourceType] ? (
+                        {resourceCounts && resourceCounts[item.resourceType] !== undefined ? (
                           <span className={cn(
                             "text-xs font-medium",
                             isSelected 

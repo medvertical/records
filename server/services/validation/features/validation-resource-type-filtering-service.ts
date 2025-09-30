@@ -33,7 +33,7 @@ export interface ResourceTypeStatistics {
   latestOnlyCount: number;
 }
 
-class ValidationResourceTypeFilteringService extends EventEmitter {
+export class ValidationResourceTypeFilteringService extends EventEmitter {
   private settingsService: ReturnType<typeof getValidationSettingsService>;
   private currentFilter: ResourceTypeFilter | null = null;
   private isInitialized = false;
@@ -52,7 +52,7 @@ class ValidationResourceTypeFilteringService extends EventEmitter {
 
   private async updateFilterFromSettings(): Promise<void> {
     try {
-      const settings = await this.settingsService.getSettings();
+      const settings = await this.settingsService.getCurrentSettings();
       const resourceTypesConfig = settings.resourceTypes;
 
       this.currentFilter = {

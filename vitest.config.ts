@@ -25,7 +25,7 @@ export default defineConfig({
       'server/routes/**/*.test.*',
       'server/storage.test.ts',
       'server/utils/**/*.test.*',
-      'server/services/fhir/**/*.test.*',
+      // 'server/services/fhir/**/*.test.*', // Temporarily allow FHIR client tests
       'server/services/dashboard/**/*.test.*',
       'server/services/cache/**/*.test.*',
       'server/tests/**/*.test.*',

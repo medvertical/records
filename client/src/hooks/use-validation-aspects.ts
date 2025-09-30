@@ -247,7 +247,7 @@ export function useValidationAspectsForResource(
 
   const {
     enablePolling = false,
-    pollingInterval = 5000,
+    pollingInterval = 30000,
   } = options;
 
   // Query key for resource-specific aspect data

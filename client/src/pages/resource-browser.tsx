@@ -7,7 +7,8 @@ import ResourceSearch from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Loader2, Play, Settings } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Loader2, Play, Settings, TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 // Simple client-side cache to track validated resources
 const validatedResourcesCache = new Set<string>();
@@ -57,11 +58,12 @@ export default function ResourceBrowser() {
   const [validationProgress, setValidationProgress] = useState<Map<number, any>>(new Map());
   const [hasValidatedCurrentPage, setHasValidatedCurrentPage] = useState(false);
   const [cacheCleared, setCacheCleared] = useState(false);
+  const [validationDebounceTimer, setValidationDebounceTimer] = useState<NodeJS.Timeout | null>(null);
   const queryClient = useQueryClient();
 
   // Use validation settings polling to detect changes and refresh resource list
   const { lastChange, isPolling, error: pollingError } = useValidationSettingsPolling({
-    pollingInterval: 5000, // Poll every 5 seconds
+    pollingInterval: 30000, // Poll every 30 seconds (reduced from 5 seconds)
     enabled: true,
     showNotifications: false, // Don't show toast notifications in resource browser
     invalidateCache: true, // Invalidate cache when settings change
@@ -71,10 +73,15 @@ export default function ResourceBrowser() {
   useEffect(() => {
     if (lastChange) {
       console.log('[ResourceBrowser] Validation settings changed, refreshing resource list');
-      // Reset validation flag when settings change to allow re-validation with new settings
-      setHasValidatedCurrentPage(false);
-      // Invalidate resource queries to refresh with new validation settings
-      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+      // Only invalidate if settings actually changed (not just polling)
+      if (lastChange.type === 'validation_settings_updated') {
+        // Reset validation flag when settings change to allow re-validation with new settings
+        setHasValidatedCurrentPage(false);
+        // Invalidate resource queries to refresh with new validation settings
+        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+        // Clear validation cache to force revalidation with new settings
+        validatedResourcesCache.clear();
+      }
     }
   }, [lastChange, queryClient]);
 
@@ -260,11 +267,13 @@ export default function ResourceBrowser() {
 
   const { data: resourcesData, isLoading, error } = useQuery<ResourcesResponse>({
     queryKey: ["/api/fhir/resources", { resourceType, search: searchQuery, page, location }],
-    // Only fetch resources when there's an active server
+    // Only fetch resources when there's an active server (resourceType can be empty for "all types")
     enabled: !!stableActiveServer,
-    staleTime: 30 * 1000, // 30 seconds - resources can change more frequently
+    staleTime: 2 * 60 * 1000, // 2 minutes - resources don't change that frequently
+    gcTime: 5 * 60 * 1000, // 5 minutes - keep in cache longer
     refetchInterval: false, // Don't auto-refetch
     refetchOnWindowFocus: false, // Don't refetch on window focus
+    refetchOnMount: false, // Don't refetch on component mount if data is fresh
     queryFn: async ({ queryKey }) => {
       const [url, params] = queryKey as [string, { resourceType?: string; search?: string; page: number; location: string }];
       const searchParams = new URLSearchParams();
@@ -371,16 +380,17 @@ export default function ResourceBrowser() {
         resourceIds.forEach(id => {
           const current = updated.get(id);
           if (current && currentAspectIndex < totalAspects) {
-            // More gradual progress increase
+            // More gradual progress increase with better distribution
             const baseProgress = (currentAspectIndex / totalAspects) * 100;
             const aspectProgress = (1 / totalAspects) * 100;
-            const progress = Math.min(baseProgress + (aspectProgress * 0.3), 95); // Cap at 95% until completion
+            // Don't cap at 95% - let it go to 99% and stay there until completion
+            const progress = Math.min(baseProgress + (aspectProgress * 0.4), 99);
             
             const completedAspects = aspects.slice(0, currentAspectIndex);
             
             updated.set(id, {
               ...current,
-              progress: Math.min(progress, 95), // Don't show 100% until actually complete
+              progress: Math.min(progress, 99), // Don't show 100% until actually complete
               currentAspect: currentAspectIndex < totalAspects ? `Validating ${aspects[currentAspectIndex]}...` : 'Completing...',
               completedAspects: completedAspects
             });
@@ -399,9 +409,15 @@ export default function ResourceBrowser() {
       });
 
       currentAspectIndex++;
-    }, 800); // Slower updates for more realistic feel
+    }, 600); // Faster updates to prevent hanging
 
-    return updateInterval;
+    // Don't timeout the progress simulation - let the actual validation control completion
+    // The progress simulation will continue until validation actually completes or fails
+
+    // Return cleanup function
+    return () => {
+      clearInterval(updateInterval);
+    };
   }, []);
 
   // Function to validate resources on the current page
@@ -418,7 +434,7 @@ export default function ResourceBrowser() {
     setValidatingResourceIds(new Set(resourceIds));
     
     // Start progress simulation
-    const progressInterval = simulateValidationProgress(resourceIds);
+    const progressCleanup = simulateValidationProgress(resourceIds);
     
     try {
       console.log('[ResourceBrowser] Starting validation for current page resources:', {
@@ -427,26 +443,81 @@ export default function ResourceBrowser() {
         page
       });
 
-      // Use the validate-by-ids endpoint for more efficient validation
-      const response = await fetch('/api/validation/validate-by-ids', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          // Always send the resources array with database IDs
-          resources: resourcesData.resources.map((resource: any) => ({
-            ...resource,
-            _dbId: resource._dbId || resource.id // Ensure _dbId is available
-          }))
-        })
-      });
+      // Batch validation requests to avoid payload size limits
+      const batchSize = 10; // Process 10 resources per batch
+      const allResults = [];
+      const totalBatches = Math.ceil(resourcesData.resources.length / batchSize);
+      
+      for (let i = 0; i < resourcesData.resources.length; i += batchSize) {
+        const batch = resourcesData.resources.slice(i, i + batchSize);
+        const batchNumber = Math.floor(i/batchSize) + 1;
+        console.log(`[ResourceBrowser] Processing validation batch ${batchNumber}/${totalBatches} (${batch.length} resources)`);
+        
+        // Update progress to show current batch being processed
+        setValidationProgress(prev => {
+          const updated = new Map(prev);
+          resourceIds.forEach(id => {
+            const current = updated.get(id);
+            if (current) {
+              const batchProgress = (batchNumber / totalBatches) * 100;
+              updated.set(id, {
+                ...current,
+                progress: Math.min(batchProgress, 99),
+                currentAspect: `Processing batch ${batchNumber}/${totalBatches}...`
+              });
+            }
+          });
+          return updated;
+        });
+        
+        // Create a timeout promise for the fetch request
+        const fetchWithTimeout = (url: string, options: any, timeoutMs: number = 120000) => {
+          return Promise.race([
+            fetch(url, options),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error(`Request timeout after ${timeoutMs}ms`)), timeoutMs)
+            )
+          ]);
+        };
 
-      if (!response.ok) {
-        throw new Error(`Validation failed: ${response.status} ${response.statusText}`);
+        const response = await fetchWithTimeout('/api/validation/validate-by-ids', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            // Always send the resources array with database IDs
+            resources: batch.map((resource: any) => ({
+              ...resource,
+              _dbId: resource._dbId || resource.id // Ensure _dbId is available
+            }))
+          })
+        }, 120000); // 2 minute timeout per batch
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`[ResourceBrowser] Validation batch failed: ${response.status} ${response.statusText}`, errorText);
+          // Continue with other batches even if one fails
+          continue;
+        }
+
+        const batchResult = await response.json();
+        console.log(`[ResourceBrowser] Validation batch ${batchNumber} completed:`, {
+          success: batchResult.success,
+          validatedCount: batchResult.validatedCount,
+          requestedCount: batchResult.requestedCount
+        });
+        allResults.push(...(batchResult.detailedResults || []));
       }
 
-      const result = await response.json();
+      // Combine all batch results
+      const result = {
+        success: true,
+        validatedCount: allResults.length,
+        requestedCount: resourcesData.resources.length,
+        message: `Successfully validated ${allResults.length} out of ${resourcesData.resources.length} resources`,
+        detailedResults: allResults
+      };
       
       console.log('[ResourceBrowser] Validation completed:', {
         validatedCount: result.validatedCount,
@@ -462,7 +533,9 @@ export default function ResourceBrowser() {
       }
 
       // Clear the progress simulation and show completion
-      clearInterval(progressInterval);
+      if (progressCleanup) {
+        progressCleanup();
+      }
       
       // Show completion state briefly before clearing
       setValidationProgress(prev => {
@@ -494,7 +567,9 @@ export default function ResourceBrowser() {
     } catch (error) {
       console.error('[ResourceBrowser] Validation error:', error);
       // Clear progress on error
-      clearInterval(progressInterval);
+      if (progressCleanup) {
+        progressCleanup();
+      }
       setValidationProgress(new Map());
       // You could add a toast notification here for user feedback
     } finally {
@@ -502,6 +577,21 @@ export default function ResourceBrowser() {
       setValidatingResourceIds(new Set()); // Clear validating state
     }
   }, [resourcesData, resourceType, page, queryClient, simulateValidationProgress]);
+
+  // Debounced validation function to prevent rapid successive calls
+  const debouncedValidateUnvalidatedResources = useCallback((delay: number = 1000) => {
+    // Clear existing timer
+    if (validationDebounceTimer) {
+      clearTimeout(validationDebounceTimer);
+    }
+    
+    // Set new timer
+    const timer = setTimeout(() => {
+      validateUnvalidatedResources();
+    }, delay);
+    
+    setValidationDebounceTimer(timer);
+  }, [validationDebounceTimer]);
 
   // Function to check if resources need validation and validate them automatically
   const validateUnvalidatedResources = useCallback(async () => {
@@ -523,7 +613,18 @@ export default function ResourceBrowser() {
       const hasValidationData = validationSummary?.lastValidated;
       
       if (hasValidationData) {
-        console.log(`[ResourceBrowser] Resource ${resource.id} already validated (lastValidated: ${validationSummary.lastValidated})`);
+        // Check if validation is recent enough (within last 5 minutes)
+        const lastValidated = new Date(validationSummary.lastValidated);
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const isRecent = lastValidated > fiveMinutesAgo;
+        
+        if (isRecent) {
+          console.log(`[ResourceBrowser] Resource ${resource.id} recently validated (${validationSummary.lastValidated}), skipping`);
+          return false;
+        } else {
+          console.log(`[ResourceBrowser] Resource ${resource.id} validation is stale (${validationSummary.lastValidated}), needs revalidation`);
+          return true;
+        }
       }
       
       return !hasValidationData;
@@ -543,32 +644,50 @@ export default function ResourceBrowser() {
     setValidatingResourceIds(new Set(resourceIds));
 
     // Start progress simulation for background validation
-    const progressInterval = simulateValidationProgress(resourceIds);
+    const progressCleanup = simulateValidationProgress(resourceIds);
 
-    // Use the new validate-by-ids endpoint for more efficient validation
+    // Use the new validate-by-ids endpoint with batching for background validation
     try {
-      const response = await fetch('/api/validation/validate-by-ids', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          // Always send the resources array with database IDs
-          resources: unvalidatedResources.map((resource: any) => ({
-            ...resource,
-            _dbId: resource._dbId || resource.id // Ensure _dbId is available
-          }))
-        })
-      });
+      // Batch background validation requests to avoid payload size limits
+      const batchSize = 10; // Process 10 resources per batch
+      const allResults = [];
+      
+      for (let i = 0; i < unvalidatedResources.length; i += batchSize) {
+        const batch = unvalidatedResources.slice(i, i + batchSize);
+        console.log(`[ResourceBrowser] Processing background validation batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(unvalidatedResources.length/batchSize)} (${batch.length} resources)`);
+        
+        const response = await fetch('/api/validation/validate-by-ids', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            // Always send the resources array with database IDs
+            resources: batch.map((resource: any) => ({
+              ...resource,
+              _dbId: resource._dbId || resource.id // Ensure _dbId is available
+            }))
+          })
+        });
 
-      if (!response.ok) {
-        console.warn('[ResourceBrowser] Background validation failed:', response.status, response.statusText);
-        clearInterval(progressInterval);
-        setValidationProgress(new Map());
-        return;
+        if (!response.ok) {
+          console.warn(`[ResourceBrowser] Background validation batch failed: ${response.status} ${response.statusText}`);
+          // Continue with other batches even if one fails
+          continue;
+        }
+
+        const batchResult = await response.json();
+        allResults.push(...(batchResult.detailedResults || []));
       }
 
-      const result = await response.json();
+      // Combine all batch results
+      const result = {
+        success: true,
+        validatedCount: allResults.length,
+        requestedCount: unvalidatedResources.length,
+        message: `Successfully validated ${allResults.length} out of ${unvalidatedResources.length} resources`,
+        detailedResults: allResults
+      };
       
       console.log('[ResourceBrowser] Background validation completed:', {
         validatedCount: result.validatedCount,
@@ -586,7 +705,9 @@ export default function ResourceBrowser() {
       }
 
       // Clear the progress simulation and show completion
-      clearInterval(progressInterval);
+      if (progressCleanup) {
+        progressCleanup();
+      }
       
       // Show completion state briefly before clearing
       setValidationProgress(prev => {
@@ -617,7 +738,9 @@ export default function ResourceBrowser() {
 
     } catch (error) {
       console.warn('[ResourceBrowser] Background validation error:', error);
-      clearInterval(progressInterval);
+      if (progressCleanup) {
+        progressCleanup();
+      }
       setValidationProgress(new Map());
       // Don't show error to user for background validation
     } finally {
@@ -647,18 +770,23 @@ export default function ResourceBrowser() {
     }
   }, [resourcesData?.resources]);
 
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (validationDebounceTimer) {
+        clearTimeout(validationDebounceTimer);
+      }
+    };
+  }, [validationDebounceTimer]);
+
   // Auto-validate resources when they're loaded (controlled from Settings page)
   useEffect(() => {
     if (resourcesData?.resources && resourcesData.resources.length > 0 && !hasValidatedCurrentPage) {
-      // Add a small delay to avoid interfering with the initial page load
-      const timeoutId = setTimeout(() => {
-        validateUnvalidatedResources();
-        setHasValidatedCurrentPage(true);
-      }, 1000);
-
-      return () => clearTimeout(timeoutId);
+      // Use debounced validation to prevent rapid successive calls
+      debouncedValidateUnvalidatedResources(1500); // 1.5 second delay
+      setHasValidatedCurrentPage(true);
     }
-  }, [resourcesData?.resources?.length, resourceType, page, hasValidatedCurrentPage]); // Remove validateUnvalidatedResources from deps to prevent loop
+  }, [resourcesData?.resources?.length, resourceType, page, hasValidatedCurrentPage, debouncedValidateUnvalidatedResources]);
 
   return (
     <div className="p-6 h-full overflow-y-auto">
@@ -676,33 +804,226 @@ export default function ResourceBrowser() {
           {/* Validation Controls */}
           {resourcesData?.resources && resourcesData.resources.length > 0 && (
             <div className="flex items-center space-x-4 lg:ml-4">
-              {/* Validation Status Indicator */}
+              {/* Enhanced Validation Summary */}
               {(() => {
                 const totalResources = resourcesData.resources.length;
                 const validatedResources = resourcesData.resources.filter((resource: any) => 
                   resource._validationSummary?.lastValidated
-                ).length;
-                const unvalidatedResources = totalResources - validatedResources;
+                );
+                const unvalidatedResources = totalResources - validatedResources.length;
+                
+                // Calculate detailed statistics from validation results
+                let totalErrors = 0;
+                let totalWarnings = 0;
+                let totalInformation = 0;
+                let validResources = 0;
+                let averageScore = 0;
+                
+                // Aspect breakdown statistics (using server-side normalized keys)
+                const aspectStats = {
+                  structural: { errors: 0, warnings: 0, info: 0, total: 0, score: 0 },
+                  profile: { errors: 0, warnings: 0, info: 0, total: 0, score: 0 },
+                  terminology: { errors: 0, warnings: 0, info: 0, total: 0, score: 0 },
+                  reference: { errors: 0, warnings: 0, info: 0, total: 0, score: 0 },
+                  'business-rule': { errors: 0, warnings: 0, info: 0, total: 0, score: 0 },
+                  metadata: { errors: 0, warnings: 0, info: 0, total: 0, score: 0 }
+                };
+                
+                validatedResources.forEach((resource: any) => {
+                  const summary = resource._validationSummary;
+                  if (summary) {
+                    // Aggregate total counts with null safety
+                    totalErrors += summary.errorCount || 0;
+                    totalWarnings += summary.warningCount || 0;
+                    totalInformation += summary.informationCount || 0;
+                    
+                    // Count valid resources (no errors or warnings)
+                    if (summary.isValid && !summary.hasErrors && !summary.hasWarnings) {
+                      validResources++;
+                    }
+                    
+                    // Aggregate validation scores
+                    averageScore += summary.validationScore || 0;
+                    
+                    // Aggregate aspect breakdown statistics with enhanced error handling
+                    if (summary.aspectBreakdown && typeof summary.aspectBreakdown === 'object') {
+                      Object.keys(aspectStats).forEach(aspect => {
+                        const aspectData = summary.aspectBreakdown[aspect];
+                        if (aspectData && typeof aspectData === 'object') {
+                          // Ensure counts are numbers and handle null/undefined
+                          aspectStats[aspect].errors += Number(aspectData.errorCount) || 0;
+                          aspectStats[aspect].warnings += Number(aspectData.warningCount) || 0;
+                          aspectStats[aspect].info += Number(aspectData.informationCount) || 0;
+                          aspectStats[aspect].total += 1;
+                          aspectStats[aspect].score += Number(aspectData.validationScore) || 0;
+                        }
+                      });
+                    }
+                  }
+                });
+                
+                averageScore = validatedResources.length > 0 ? Math.round(averageScore / validatedResources.length) : 0;
+                
+                // Calculate overall trend based on validation quality
+                const totalIssues = totalErrors + totalWarnings + totalInformation;
+                const avgIssuesPerResource = validatedResources.length > 0 ? totalIssues / validatedResources.length : 0;
+                const overallTrend = avgIssuesPerResource === 0 ? 'excellent' : 
+                                   avgIssuesPerResource <= 1 ? 'good' : 
+                                   avgIssuesPerResource <= 3 ? 'stable' : 'declining';
+                
+                // Additional statistics
+                const invalidResources = validatedResources.length - validResources;
+                const validationCoverage = totalResources > 0 ? Math.round((validatedResources.length / totalResources) * 100) : 0;
+                
+                // Calculate average aspect scores and trends
+                Object.keys(aspectStats).forEach(aspect => {
+                  if (aspectStats[aspect].total > 0) {
+                    aspectStats[aspect].score = Math.round(aspectStats[aspect].score / aspectStats[aspect].total);
+                    
+                    // Simple trend calculation based on issue counts
+                    // More issues = declining trend, fewer issues = improving trend
+                    const totalIssues = aspectStats[aspect].errors + aspectStats[aspect].warnings + aspectStats[aspect].info;
+                    const avgIssuesPerResource = totalIssues / aspectStats[aspect].total;
+                    
+                    if (avgIssuesPerResource === 0) {
+                      aspectStats[aspect].trend = 'excellent';
+                    } else if (avgIssuesPerResource <= 1) {
+                      aspectStats[aspect].trend = 'good';
+                    } else if (avgIssuesPerResource <= 3) {
+                      aspectStats[aspect].trend = 'stable';
+                    } else {
+                      aspectStats[aspect].trend = 'declining';
+                    }
+                  }
+                });
                 
                 return (
-                  <div className="text-sm text-muted-foreground">
-                    {validatedResources > 0 && (
-                      <span className="text-green-600">
-                        {validatedResources} validated
-                      </span>
-                    )}
-                    {validatedResources > 0 && unvalidatedResources > 0 && (
-                      <span className="mx-2">•</span>
-                    )}
-                    {unvalidatedResources > 0 && (
-                      <span className="text-orange-600">
-                        {unvalidatedResources} need validation
-                      </span>
-                    )}
-                    {validatedResources === totalResources && unvalidatedResources === 0 && (
-                      <span className="text-green-600">
-                        All {totalResources} validated
-                      </span>
+                  <div className="text-sm text-muted-foreground space-y-1">
+                    {/* Resource Count Summary */}
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{totalResources} total</span>
+                      {validatedResources.length > 0 && (
+                        <>
+                          <span className="text-green-600">
+                            {validatedResources.length} validated
+                          </span>
+                          {unvalidatedResources > 0 && (
+                            <span className="text-orange-600">
+                              • {unvalidatedResources} pending
+                            </span>
+                          )}
+                          <span className="text-gray-500">
+                            ({validationCoverage}% coverage)
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    
+                    {/* Validation Quality Summary */}
+                    {validatedResources.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3 text-xs">
+                          <span className="text-green-600">
+                            ✓ {validResources} valid
+                          </span>
+                          {invalidResources > 0 && (
+                            <span className="text-red-600">
+                              ✗ {invalidResources} invalid
+                            </span>
+                          )}
+                          {totalErrors > 0 && (
+                            <span className="text-red-600">
+                              ⚠ {totalErrors} errors
+                            </span>
+                          )}
+                          {totalWarnings > 0 && (
+                            <span className="text-yellow-600">
+                              ⚡ {totalWarnings} warnings
+                            </span>
+                          )}
+                          {totalInformation > 0 && (
+                            <span className="text-blue-600">
+                              ℹ {totalInformation} info
+                            </span>
+                          )}
+                          <div className="flex items-center gap-1">
+                            {overallTrend === 'excellent' && <TrendingUp className="h-3 w-3 text-green-500" />}
+                            {overallTrend === 'good' && <TrendingUp className="h-3 w-3 text-green-400" />}
+                            {overallTrend === 'stable' && <Minus className="h-3 w-3 text-gray-400" />}
+                            {overallTrend === 'declining' && <TrendingDown className="h-3 w-3 text-red-400" />}
+                            <span className="text-gray-600">
+                              Avg: {averageScore}%
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Aspect Breakdown */}
+                        {validatedResources.length > 0 && (
+                          <div className="grid grid-cols-2 gap-1 text-xs">
+                            {Object.entries(aspectStats).map(([aspect, stats]) => {
+                              if (stats.total === 0) return null;
+                              const aspectName = aspect.replace(/-/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, str => str.toUpperCase());
+                              const hasIssues = stats.errors > 0 || stats.warnings > 0;
+                              const scoreColor = stats.score >= 90 ? 'text-green-600' : stats.score >= 70 ? 'text-yellow-600' : 'text-red-600';
+                              
+                              // Trend indicator
+                              const getTrendIcon = (trend: string) => {
+                                switch (trend) {
+                                  case 'excellent': return <TrendingUp className="h-3 w-3 text-green-500" />;
+                                  case 'good': return <TrendingUp className="h-3 w-3 text-green-400" />;
+                                  case 'stable': return <Minus className="h-3 w-3 text-gray-400" />;
+                                  case 'declining': return <TrendingDown className="h-3 w-3 text-red-400" />;
+                                  default: return <Minus className="h-3 w-3 text-gray-400" />;
+                                }
+                              };
+                              
+                              const getTrendColor = (trend: string) => {
+                                switch (trend) {
+                                  case 'excellent': return 'text-green-600';
+                                  case 'good': return 'text-green-500';
+                                  case 'stable': return 'text-gray-500';
+                                  case 'declining': return 'text-red-500';
+                                  default: return 'text-gray-500';
+                                }
+                              };
+                              
+                              return (
+                                <Tooltip key={aspect}>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center justify-between cursor-help">
+                                      <span className="text-gray-600">{aspectName}:</span>
+                                      <div className="flex items-center gap-1">
+                                        {getTrendIcon(stats.trend)}
+                                        <span className={scoreColor}>{stats.score}%</span>
+                                        {hasIssues && (
+                                          <span className="text-gray-400">
+                                            ({stats.errors > 0 && `${stats.errors}E`}{stats.warnings > 0 && `${stats.warnings}W`})
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <div className="space-y-1">
+                                      <p className="font-medium">{aspectName} Validation</p>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm">Score: {stats.score}%</span>
+                                        <span className={`text-xs ${getTrendColor(stats.trend)}`}>
+                                          ({stats.trend})
+                                        </span>
+                                      </div>
+                                      {stats.errors > 0 && <p className="text-sm text-red-500">Errors: {stats.errors}</p>}
+                                      {stats.warnings > 0 && <p className="text-sm text-yellow-500">Warnings: {stats.warnings}</p>}
+                                      {stats.info > 0 && <p className="text-sm text-blue-500">Info: {stats.info}</p>}
+                                      <p className="text-xs text-gray-400">Resources: {stats.total}</p>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 );
@@ -733,9 +1054,37 @@ export default function ResourceBrowser() {
 
         
         {isLoading ? (
-          <div className="space-y-6">
-            {[1, 2, 3, 4, 5].map(i => (
-              <Skeleton key={i} className="h-20 rounded-lg" />
+          <div className="space-y-4">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(i => (
+              <div key={i} className="border rounded-lg p-4 bg-white shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4 flex-1 min-w-0">
+                    {/* Resource type icon skeleton */}
+                    <Skeleton className="h-10 w-10 rounded-lg" />
+                    
+                    {/* Resource details skeleton */}
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Skeleton className="h-5 w-16" /> {/* Resource type */}
+                        <Skeleton className="h-4 w-20" /> {/* Resource ID */}
+                      </div>
+                      <div className="space-y-1">
+                        <Skeleton className="h-4 w-48" /> {/* Resource name/description */}
+                        <Skeleton className="h-3 w-32" /> {/* Last updated */}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Validation status skeleton */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-6 w-16 rounded-full" /> {/* Validation badge */}
+                      <Skeleton className="h-8 w-8 rounded-full" /> {/* Progress circle */}
+                    </div>
+                    <Skeleton className="h-4 w-4" /> {/* Chevron */}
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         ) : (
@@ -747,6 +1096,7 @@ export default function ResourceBrowser() {
             validatingResourceIds={validatingResourceIds}
             validationProgress={validationProgress}
             availableResourceTypes={resourcesData?.availableResourceTypes}
+            isLoading={isLoading}
             noResourceTypeMessage={resourcesData?.message}
           />
         )}

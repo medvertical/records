@@ -204,10 +204,34 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
   app.get("/api/validation/settings", async (req, res) => {
     try {
       const settingsService = getValidationSettingsService();
-      const settings = await settingsService.getCurrentSettings();
+      const settings = await settingsService.getActiveSettings();
       res.json(settings);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Validation settings load error:', error);
+      
+      // Categorize errors and provide appropriate responses
+      if (error.message.includes('database') || error.message.includes('connection')) {
+        return res.status(503).json({ 
+          error: 'Database Error',
+          message: 'Unable to load settings due to database issues. Please try again later.',
+          code: 'DATABASE_ERROR'
+        });
+      }
+      
+      if (error.message.includes('not found') || error.message.includes('not initialized')) {
+        return res.status(404).json({ 
+          error: 'Settings Not Found',
+          message: 'Validation settings could not be found or loaded',
+          code: 'SETTINGS_NOT_FOUND'
+        });
+      }
+      
+      // Generic server error
+      res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: 'An unexpected error occurred while loading settings',
+        code: 'INTERNAL_ERROR'
+      });
     }
   });
 
@@ -215,10 +239,74 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
     try {
       const settingsService = getValidationSettingsService();
       const update: ValidationSettingsUpdate = req.body;
+      
+      // Validate request body
+      if (!update || typeof update !== 'object') {
+        return res.status(400).json({ 
+          error: 'Invalid request body',
+          message: 'Request body must be a valid ValidationSettingsUpdate object',
+          code: 'INVALID_REQUEST_BODY'
+        });
+      }
+
+      if (!update.settings || typeof update.settings !== 'object') {
+        return res.status(400).json({ 
+          error: 'Missing settings',
+          message: 'Settings object is required in the request body',
+          code: 'MISSING_SETTINGS'
+        });
+      }
+
+      // Validate that settings contains at least one valid validation setting
+      const validSettingKeys = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata', 'server', 'performance'];
+      const hasValidSettings = validSettingKeys.some(key => key in update.settings);
+      
+      if (!hasValidSettings && Object.keys(update.settings).length > 0) {
+        return res.status(400).json({ 
+          error: 'Invalid settings content',
+          message: 'Settings object must contain valid validation settings (structural, profile, terminology, reference, businessRule, metadata, server, or performance)',
+          code: 'INVALID_SETTINGS_CONTENT',
+          validKeys: validSettingKeys
+        });
+      }
+
       const result = await settingsService.updateSettings(update);
       res.json(result);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Validation settings update error:', error);
+      
+      // Categorize errors and provide appropriate responses
+      if (error.message.includes('Validation failed')) {
+        return res.status(400).json({ 
+          error: 'Validation Error',
+          message: error.message,
+          code: 'VALIDATION_ERROR',
+          details: error.validationErrors || []
+        });
+      }
+      
+      if (error.message.includes('not found')) {
+        return res.status(404).json({ 
+          error: 'Settings Not Found',
+          message: 'The requested settings could not be found',
+          code: 'SETTINGS_NOT_FOUND'
+        });
+      }
+      
+      if (error.message.includes('database') || error.message.includes('connection')) {
+        return res.status(503).json({ 
+          error: 'Database Error',
+          message: 'Unable to save settings due to database issues. Please try again later.',
+          code: 'DATABASE_ERROR'
+        });
+      }
+      
+      // Generic server error
+      res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: 'An unexpected error occurred while updating settings',
+        code: 'INTERNAL_ERROR'
+      });
     }
   });
 

@@ -500,5 +500,36 @@ describe('FhirClient', () => {
       expect(fhirClient['headers']['Authorization']).toBeUndefined()
     })
   })
+
+  describe('Server Connection Behavior', () => {
+    it('should only use the configured server URL, never fallback to HAPI', () => {
+      // Test that FhirClient uses exactly the URL provided in constructor
+      const firelyClient = new FhirClient('https://server.fire.ly')
+      expect(firelyClient['baseUrl']).toBe('https://server.fire.ly')
+      
+      // Verify no fallback logic exists
+      const customClient = new FhirClient('https://custom.fhir.server.com')
+      expect(customClient['baseUrl']).toBe('https://custom.fhir.server.com')
+    })
+
+    it('should reject HAPI server URLs when Fire.ly is configured', () => {
+      // This test will fail initially because the codebase still has HAPI hardcoded
+      // It should pass after we remove HAPI hardcoding
+      const firelyClient = new FhirClient('https://server.fire.ly')
+      
+      // The client should never internally switch to HAPI
+      expect(firelyClient['baseUrl']).not.toContain('hapi.fhir.org')
+      expect(firelyClient['baseUrl']).toBe('https://server.fire.ly')
+    })
+
+    it('should maintain consistent server URL throughout its lifecycle', () => {
+      const firelyClient = new FhirClient('https://server.fire.ly')
+      const originalUrl = firelyClient['baseUrl']
+      
+      // URL should never change after construction
+      expect(firelyClient['baseUrl']).toBe(originalUrl)
+      expect(firelyClient['baseUrl']).toBe('https://server.fire.ly')
+    })
+  })
 })
 

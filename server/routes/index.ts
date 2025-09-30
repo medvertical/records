@@ -4,7 +4,14 @@ import { ConsolidatedValidationService } from "../services/validation";
 import { DashboardService } from "../services/dashboard/dashboard-service";
 
 // Import route modules
-import { setupValidationRoutes, setupValidationQueueRoutes, setupValidationSettingsRoutes } from "./api/validation";
+import { 
+  setupValidationRoutes, 
+  setupValidationQueueRoutes, 
+  setupValidationSettingsRoutes, 
+  validationClearRoutes,
+  validationGroupsRoutes,
+  resourceMessagesRoutes
+} from "./api/validation";
 import { setupFhirRoutes, setupProfileRoutes } from "./api/fhir";
 import { setupDashboardRoutes } from "./api/dashboard";
 import adminRoutes from "./api/admin/clear-validation-results";
@@ -27,52 +34,12 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   setupValidationSettingsRoutes(app);
   setupValidationQueueRoutes(app);
   
+  // Validation API routes
+  app.use('/api/validation/clear', validationClearRoutes);
+  app.use('/api/validation/issues/groups', validationGroupsRoutes);
+  app.use('/api/validation/resources', resourceMessagesRoutes);
+  
   // Admin routes
   app.use('/api/admin', adminRoutes);
 }
 
-export async function registerRoutes(app: Express) {
-  // Create services with error handling
-  let fhirClient, consolidatedValidationService, dashboardService, storage;
-  
-  try {
-    // Import storage first
-    const storageModule = await import('../storage');
-    storage = storageModule.storage;
-    
-    // Get the active FHIR server from database
-    const activeServer = await storage.getActiveFhirServer();
-    const serverUrl = activeServer?.url || 'https://hapi.fhir.org/baseR4';
-    console.log(`[Routes] Using FHIR server: ${serverUrl}`);
-    fhirClient = new FhirClient(serverUrl);
-  } catch (error) {
-    console.warn('FHIR client creation failed:', error.message);
-    fhirClient = null;
-    storage = null;
-  }
-  
-  try {
-    consolidatedValidationService = new ConsolidatedValidationService();
-  } catch (error) {
-    console.warn('Consolidated validation service creation failed:', error.message);
-    consolidatedValidationService = null;
-  }
-  
-  try {
-    if (storage) {
-      dashboardService = new DashboardService(fhirClient, storage);
-    } else {
-      console.warn('Dashboard service creation skipped: storage not available');
-      dashboardService = null;
-    }
-  } catch (error) {
-    console.warn('Dashboard service creation failed:', error.message);
-    dashboardService = null;
-  }
-
-  // Setup all routes
-  setupAllRoutes(app, fhirClient, consolidatedValidationService, dashboardService);
-
-  // Return the Express app itself for server startup
-  return app;
-}

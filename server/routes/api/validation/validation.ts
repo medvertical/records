@@ -246,7 +246,31 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
       const settings = await settingsService.getCurrentSettings();
       res.json(settings);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Validation settings load error:', error);
+      
+      // Categorize errors and provide appropriate responses
+      if (error.message.includes('database') || error.message.includes('connection')) {
+        return res.status(503).json({ 
+          error: 'Database Error',
+          message: 'Unable to load settings due to database issues. Please try again later.',
+          code: 'DATABASE_ERROR'
+        });
+      }
+      
+      if (error.message.includes('not found') || error.message.includes('not initialized')) {
+        return res.status(404).json({ 
+          error: 'Settings Not Found',
+          message: 'Validation settings could not be found or loaded',
+          code: 'SETTINGS_NOT_FOUND'
+        });
+      }
+      
+      // Generic server error
+      res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: 'An unexpected error occurred while loading settings',
+        code: 'INTERNAL_ERROR'
+      });
     }
   });
 
@@ -254,10 +278,74 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
     try {
       const settingsService = getValidationSettingsService();
       const update: ValidationSettingsUpdate = req.body;
+      
+      // Validate request body
+      if (!update || typeof update !== 'object') {
+        return res.status(400).json({ 
+          error: 'Invalid request body',
+          message: 'Request body must be a valid ValidationSettingsUpdate object',
+          code: 'INVALID_REQUEST_BODY'
+        });
+      }
+
+      if (!update.settings || typeof update.settings !== 'object') {
+        return res.status(400).json({ 
+          error: 'Missing settings',
+          message: 'Settings object is required in the request body',
+          code: 'MISSING_SETTINGS'
+        });
+      }
+
+      // Validate that settings contains at least one valid validation setting
+      const validSettingKeys = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata', 'server', 'performance'];
+      const hasValidSettings = validSettingKeys.some(key => key in update.settings);
+      
+      if (!hasValidSettings && Object.keys(update.settings).length > 0) {
+        return res.status(400).json({ 
+          error: 'Invalid settings content',
+          message: 'Settings object must contain valid validation settings (structural, profile, terminology, reference, businessRule, metadata, server, or performance)',
+          code: 'INVALID_SETTINGS_CONTENT',
+          validKeys: validSettingKeys
+        });
+      }
+
       const result = await settingsService.updateSettings(update);
       res.json(result);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Validation settings update error:', error);
+      
+      // Categorize errors and provide appropriate responses
+      if (error.message.includes('Validation failed')) {
+        return res.status(400).json({ 
+          error: 'Validation Error',
+          message: error.message,
+          code: 'VALIDATION_ERROR',
+          details: error.validationErrors || []
+        });
+      }
+      
+      if (error.message.includes('not found')) {
+        return res.status(404).json({ 
+          error: 'Settings Not Found',
+          message: 'The requested settings could not be found',
+          code: 'SETTINGS_NOT_FOUND'
+        });
+      }
+      
+      if (error.message.includes('database') || error.message.includes('connection')) {
+        return res.status(503).json({ 
+          error: 'Database Error',
+          message: 'Unable to save settings due to database issues. Please try again later.',
+          code: 'DATABASE_ERROR'
+        });
+      }
+      
+      // Generic server error
+      res.status(500).json({ 
+        error: 'Internal Server Error',
+        message: 'An unexpected error occurred while updating settings',
+        code: 'INTERNAL_ERROR'
+      });
     }
   });
 
@@ -559,51 +647,92 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
       if (resources && Array.isArray(resources) && resources.length > 0) {
         console.log(`[ValidationAPI] Validating ${resources.length} mixed resources by resource objects`);
         
-        const validationService = new ConsolidatedValidationService();
-        let validatedCount = 0;
-        const detailedResults = [];
+        // Validate batch size (1-200 resources per batch)
+        if (resources.length < 1) {
+          return res.status(400).json({ 
+            success: false,
+            message: "Batch size too small. At least 1 resource required for batch validation." 
+          });
+        }
         
-        for (const resource of resources) {
-          try {
-            if (resource && resource.resourceType) {
-              // Ensure the resource has an ID - use the resourceId from the database if available
-              const resourceToValidate = {
-                ...resource,
-                id: resource.id || resource.resourceId || resource._dbId
-              };
-              
-              if (resourceToValidate.id) {
-                // Validate the resource directly and get detailed results
-                const { detailedResult } = await validationService.validateResource(resourceToValidate, true, true);
+        if (resources.length > 200) {
+          return res.status(400).json({ 
+            success: false,
+            message: "Batch size too large. Maximum 200 resources allowed per batch." 
+          });
+        }
+        
+        const validationService = new ConsolidatedValidationService();
+        
+        // Process resources in parallel batches for better performance
+        const batchSize = 10; // Process 10 resources concurrently
+        const detailedResults = [];
+        let validatedCount = 0;
+        
+        for (let i = 0; i < resources.length; i += batchSize) {
+          const batch = resources.slice(i, i + batchSize);
+          console.log(`[ValidationAPI] Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(resources.length/batchSize)} (${batch.length} resources)`);
+          
+          // Process batch in parallel
+          const batchPromises = batch.map(async (resource) => {
+            try {
+              if (resource && resource.resourceType) {
+                // Ensure the resource has an ID - use the resourceId from the database if available
+                const resourceToValidate = {
+                  ...resource,
+                  id: resource.id || resource.resourceId || resource._dbId
+                };
                 
-                detailedResults.push({
-                  resourceId: resourceToValidate.id,
-                  resourceType: resource.resourceType,
-                  resourceIdentifier: resourceToValidate.id,
-                  detailedResult
-                });
-                
-                validatedCount++;
-                console.log(`[ValidationAPI] Successfully validated ${resource.resourceType} resource ${resourceToValidate.id}`);
-              } else {
-                console.warn(`[ValidationAPI] Skipping resource without ID:`, resource);
-                detailedResults.push({
-                  resourceId: null,
-                  resourceType: resource.resourceType,
-                  resourceIdentifier: null,
-                  error: "Resource missing ID"
-                });
+                if (resourceToValidate.id) {
+                  // Get current validation settings to pass to validation
+                  const currentSettings = await validationService.getCurrentSettings();
+                  
+                  // Validate the resource directly and get detailed results with timeout
+                  const validationPromise = validationService.validateResource(resourceToValidate, true, true, 0, {
+                    validationSettingsOverride: currentSettings
+                  });
+                  const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('Validation timeout after 2 minutes')), 120000);
+                  });
+                  
+                  const { detailedResult } = await Promise.race([validationPromise, timeoutPromise]);
+                  
+                  return {
+                    resourceId: resourceToValidate.id,
+                    resourceType: resource.resourceType,
+                    resourceIdentifier: resourceToValidate.id,
+                    detailedResult
+                  };
+                } else {
+                  console.warn(`[ValidationAPI] Skipping resource without ID:`, resource);
+                  return {
+                    resourceId: null,
+                    resourceType: resource.resourceType,
+                    resourceIdentifier: null,
+                    error: "Resource missing ID"
+                  };
+                }
               }
+            } catch (error) {
+              console.warn(`[ValidationAPI] Failed to validate ${resource.resourceType} resource:`, error.message);
+              return {
+                resourceId: resource.id || resource.resourceId || resource._dbId,
+                resourceType: resource.resourceType,
+                resourceIdentifier: resource.id || resource.resourceId || resource._dbId,
+                error: error.message
+              };
             }
-          } catch (error) {
-            console.warn(`[ValidationAPI] Failed to validate ${resource.resourceType} resource:`, error.message);
-            detailedResults.push({
-              resourceId: resource.id || resource.resourceId || resource._dbId,
-              resourceType: resource.resourceType,
-              resourceIdentifier: resource.id || resource.resourceId || resource._dbId,
-              error: error.message
-            });
-          }
+          });
+          
+          // Wait for batch to complete
+          const batchResults = await Promise.all(batchPromises);
+          detailedResults.push(...batchResults);
+          
+          // Count successful validations
+          const batchValidatedCount = batchResults.filter(result => result.detailedResult && !result.error).length;
+          validatedCount += batchValidatedCount;
+          
+          console.log(`[ValidationAPI] Batch completed: ${batchValidatedCount}/${batch.length} resources validated successfully`);
         }
         
         return res.json({
@@ -624,6 +753,21 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
         return res.status(400).json({ message: "Resource type is required" });
       }
 
+      // Validate batch size (1-200 resources per batch)
+      if (resourceIds.length < 1) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Batch size too small. At least 1 resource required for batch validation." 
+        });
+      }
+      
+      if (resourceIds.length > 200) {
+        return res.status(400).json({ 
+          success: false,
+          message: "Batch size too large. Maximum 200 resources allowed per batch." 
+        });
+      }
+
       console.log(`[ValidationAPI] Validating ${resourceIds.length} ${resourceType} resources by IDs:`, resourceIds);
 
       // Get validation service
@@ -631,55 +775,88 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
       
       // Get FHIR client to fetch resources
       const { FhirClient } = await import("../../../services/fhir/fhir-client");
-      const fhirClient = new FhirClient('https://hapi.fhir.org/baseR4');
+      const activeServer = await storage.getActiveFhirServer();
       
-      // Validate each resource and collect detailed results
-      let validatedCount = 0;
+      if (!activeServer) {
+        return res.status(500).json({ 
+          success: false, 
+          error: 'No active FHIR server configured' 
+        });
+      }
+      
+      const fhirClient = new FhirClient(activeServer.url);
+      
+      // Process resources in parallel batches for better performance
+      const batchSize = 10; // Process 10 resources concurrently
       const detailedResults = [];
+      let validatedCount = 0;
       
-      for (const resourceId of resourceIds) {
-        try {
-          // First, get the resource from the database to get the actual FHIR resource data
-          const dbResource = await storage.getFhirResourceById(resourceId);
-          
-          if (dbResource && dbResource.data) {
-            console.log(`[ValidationAPI] Found resource in database: ID=${dbResource.id}, ResourceID=${dbResource.resourceId}, Type=${dbResource.resourceType}`);
-            // Validate the resource using the data from the database
-            // Pass the database resource ID so validation results can be saved properly
-            const resourceToValidate = {
-              ...dbResource.data,
-              _dbId: dbResource.id // Add database ID to the resource
-            };
-            const { detailedResult } = await validationService.validateResource(resourceToValidate, true, true);
-            console.log(`[ValidationAPI] Validation result:`, detailedResult);
+      for (let i = 0; i < resourceIds.length; i += batchSize) {
+        const batch = resourceIds.slice(i, i + batchSize);
+        console.log(`[ValidationAPI] Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(resourceIds.length/batchSize)} (${batch.length} resources)`);
+        
+        // Process batch in parallel
+        const batchPromises = batch.map(async (resourceId) => {
+          try {
+            // First, get the resource from the database to get the actual FHIR resource data
+            const dbResource = await storage.getFhirResourceById(resourceId);
             
-            detailedResults.push({
-              resourceId: dbResource.id,
-              resourceType: dbResource.resourceType,
-              resourceIdentifier: dbResource.resourceId,
-              detailedResult
-            });
-            
-            validatedCount++;
-            console.log(`[ValidationAPI] Successfully validated ${resourceType} resource ${dbResource.resourceId} (DB ID: ${resourceId})`);
-          } else {
-            console.warn(`[ValidationAPI] Resource with database ID ${resourceId} not found in database`);
-            detailedResults.push({
+            if (dbResource && dbResource.data) {
+              console.log(`[ValidationAPI] Found resource in database: ID=${dbResource.id}, ResourceID=${dbResource.resourceId}, Type=${dbResource.resourceType}`);
+              // Validate the resource using the data from the database
+              // Pass the database resource ID so validation results can be saved properly
+              const resourceToValidate = {
+                ...dbResource.data,
+                _dbId: dbResource.id // Add database ID to the resource
+              };
+              // Get current validation settings to pass to validation
+              const currentSettings = await validationService.getCurrentSettings();
+              
+              // Add timeout to individual validation calls (2 minutes per resource)
+              const validationPromise = validationService.validateResource(resourceToValidate, true, true, 0, {
+                validationSettingsOverride: currentSettings
+              });
+              const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Validation timeout after 2 minutes')), 120000);
+              });
+              
+              const { detailedResult } = await Promise.race([validationPromise, timeoutPromise]);
+              
+              return {
+                resourceId: dbResource.id,
+                resourceType: dbResource.resourceType,
+                resourceIdentifier: dbResource.resourceId,
+                detailedResult
+              };
+            } else {
+              console.warn(`[ValidationAPI] Resource with database ID ${resourceId} not found in database`);
+              return {
+                resourceId,
+                resourceType,
+                resourceIdentifier: null,
+                error: "Resource not found in database"
+              };
+            }
+          } catch (error) {
+            console.warn(`[ValidationAPI] Failed to validate resource with database ID ${resourceId}:`, error.message);
+            return {
               resourceId,
               resourceType,
               resourceIdentifier: null,
-              error: "Resource not found in database"
-            });
+              error: error.message
+            };
           }
-        } catch (error) {
-          console.warn(`[ValidationAPI] Failed to validate resource with database ID ${resourceId}:`, error.message);
-          detailedResults.push({
-            resourceId,
-            resourceType,
-            resourceIdentifier: null,
-            error: error.message
-          });
-        }
+        });
+        
+        // Wait for batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        detailedResults.push(...batchResults);
+        
+        // Count successful validations
+        const batchValidatedCount = batchResults.filter(result => result.detailedResult && !result.error).length;
+        validatedCount += batchValidatedCount;
+        
+        console.log(`[ValidationAPI] Batch completed: ${batchValidatedCount}/${batch.length} resources validated successfully`);
       }
 
       res.json({

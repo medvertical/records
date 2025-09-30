@@ -8,6 +8,10 @@ async function enhanceResourcesWithValidationData(resources: any[]): Promise<any
   console.log(`[FHIR API] enhanceResourcesWithValidationData called with ${resources.length} resources`);
   const enhancedResources = [];
   
+  // OPTIMIZATION: Batch database operations instead of sequential
+  const activeServer = await storage.getActiveFhirServer();
+  console.log(`[FHIR API] Active server:`, activeServer);
+  
   for (const resource of resources) {
     try {
       // Try to find the resource in our database
@@ -18,9 +22,6 @@ async function enhanceResourcesWithValidationData(resources: any[]): Promise<any
       // If resource doesn't exist in database, create it
       if (!dbResource) {
         try {
-          // Get active server ID
-          const activeServer = await storage.getActiveFhirServer();
-          console.log(`[FHIR API] Active server:`, activeServer);
           if (activeServer) {
             // Create resource in database
             const resourceData = {
@@ -334,74 +335,51 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
     try {
       const { resourceType, limit = 50, offset = 0, search } = req.query;
       
-      // If no resource type is specified, fetch resources from all common types
-      if (!resourceType) {
+    // If no resource type is specified, fetch from all common resource types (expensive but requested)
+    if (!resourceType) {
+      console.log('[FHIR API] No resource type specified, fetching from all common resource types');
+      
+      const commonResourceTypes = [
+        'Patient', 'Observation', 'Encounter', 'Condition', 'Procedure',
+        'Medication', 'MedicationRequest', 'DiagnosticReport', 'Organization',
+        'Practitioner', 'Location', 'Appointment', 'AllergyIntolerance'
+      ];
+      
+      const allResources = [];
+      let totalCount = 0;
+      
+      for (const type of commonResourceTypes) {
         try {
-          console.log('[FHIR API] Fetching resources from all types...');
+          const searchParams: Record<string, string | number> = {
+            _count: Math.min(parseInt(limit as string), 10), // Limit per type to avoid huge responses
+            _total: 'accurate'
+          };
           
-          // Get resources from common resource types
-          const commonResourceTypes = [
-            "Patient", "Observation", "Encounter", "Condition", "DiagnosticReport",
-            "Medication", "MedicationRequest", "Procedure", "AllergyIntolerance",
-            "Immunization", "DocumentReference", "Organization", "Practitioner"
-          ];
-          
-          const allResources = [];
-          let totalCount = 0;
-          
-          // Fetch a few resources from each type
-          const resourcesPerType = Math.max(1, Math.floor(parseInt(limit as string) / commonResourceTypes.length));
-          
-          for (const type of commonResourceTypes) {
-            try {
-              const searchParams: Record<string, string | number> = {
-                _count: resourcesPerType,
-                _total: 'accurate'
-              };
-              
-              if (search) {
-                searchParams._content = search as string;
-              }
-              
-              const bundle = await fhirClient.searchResources(type, searchParams);
-              
-              if (bundle.entry) {
-                const typeResources = bundle.entry.map(entry => entry.resource);
-                allResources.push(...typeResources);
-                totalCount += bundle.total || typeResources.length;
-              }
-            } catch (error) {
-              console.warn(`[FHIR API] Failed to fetch ${type} resources:`, error.message);
-              // Continue with other types even if one fails
-            }
+          if (parseInt(offset as string) > 0) {
+            searchParams._offset = Math.floor(parseInt(offset as string) / commonResourceTypes.length);
           }
           
-          // Shuffle the resources to mix them up
-          const shuffledResources = allResources.sort(() => Math.random() - 0.5);
+          const bundle = await fhirClient.searchResources(type, searchParams);
+          const resources = bundle.entry?.map(entry => entry.resource) || [];
           
-          // Limit to requested count
-          const limitedResources = shuffledResources.slice(0, parseInt(limit as string));
-          
-          console.log(`[FHIR API] Fetched ${limitedResources.length} resources from all types (total available: ${totalCount})`);
-          
-          // Enhance resources with validation data
-          const enhancedResources = await enhanceResourcesWithValidationData(limitedResources);
-          
-          return res.json({
-            resources: enhancedResources,
-            total: totalCount,
-            message: `Showing ${enhancedResources.length} resources from all types`,
-            resourceType: "All"
-          });
+          allResources.push(...resources);
+          totalCount += bundle.total || 0;
           
         } catch (error: any) {
-          console.error('[FHIR API] Error fetching all resources:', error);
-          return res.status(500).json({ 
-            message: "Failed to fetch resources from all types",
-            error: error.message 
-          });
+          console.warn(`Failed to fetch ${type} resources:`, error.message);
         }
       }
+      
+      // Enhance all resources with validation data
+      const enhancedResources = await enhanceResourcesWithValidationData(allResources);
+      
+      return res.json({
+        resources: enhancedResources,
+        total: totalCount,
+        message: `Fetched from ${commonResourceTypes.length} resource types`,
+        resourceType: "All Types"
+      });
+    }
 
       let bundle;
       try {

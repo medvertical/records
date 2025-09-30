@@ -15,14 +15,40 @@ declare global {
   var dashboardService: DashboardService | undefined;
 }
 
-export function setupRoutes(app: Express): Server {
+async function initializeServices(): Promise<void> {
+  try {
+    // Import storage first
+    const storageModule = await import('./storage');
+    const storageInstance = storageModule.storage;
+    
+    // Get the active FHIR server from database
+    const activeServer = await storageInstance.getActiveFhirServer();
+    
+    if (!activeServer) {
+      throw new Error('No active FHIR server configured. Please configure a FHIR server in the settings.');
+    }
+    
+    const serverUrl = activeServer.url;
+    console.log(`[Routes] Using FHIR server from database: ${serverUrl}`);
+    console.log(`[Routes] Active server from DB:`, activeServer);
+    fhirClient = new FhirClient(serverUrl);
+    
+    // Initialize dashboard service after fhirClient is available
+    dashboardService = new DashboardService(fhirClient, storageInstance);
+    global.dashboardService = dashboardService;
+  } catch (error: any) {
+    console.warn('FHIR client creation failed:', error.message);
+    fhirClient = null;
+    throw error;
+  }
+}
+
+export async function setupRoutes(app: Express): Promise<Server> {
   // Initialize services
-  fhirClient = new FhirClient("https://hapi.fhir.org/baseR4"); // Default FHIR server
   consolidatedValidationService = getConsolidatedValidationService();
-  dashboardService = new DashboardService(fhirClient, storage);
-  
-  // Make dashboard service globally available
-  global.dashboardService = dashboardService;
+
+  // Initialize database and FHIR client first
+  await initializeServices();
 
   // Setup all routes using modular structure
   setupAllRoutes(app, fhirClient, consolidatedValidationService, dashboardService);

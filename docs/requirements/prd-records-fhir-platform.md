@@ -22,12 +22,15 @@
 
 The platform aims to achieve the following objectives:
 
-1. **Comprehensive FHIR Validation:** Provide complete validation coverage for all 146+ FHIR resource types across R4 and R5 specifications
-2. **Enterprise Scale Performance:** Handle 800K+ resources efficiently with sub-second dashboard loading and intelligent caching
-3. **Progress Monitoring:** Offer validation progress tracking with polling-based updates for MVP simplicity
-4. **Multi-Server Management:** Support connection to and validation across multiple FHIR servers simultaneously
-5. **Consolidated Validation Engine:** Implement unified 6-aspect validation (Structural, Profile, Terminology, Reference, Business Rules, Metadata) with simplified settings and normalized results
-6. **User Experience:** Deliver intuitive dashboard with modern UI/UX for complex healthcare data management
+1. **Comprehensive FHIR Validation:** Validation coverage for 146+ FHIR resource types (baseline R4), with unified 6-aspect validation (Structural, Profile, Terminology, Reference, Business Rules, Metadata)
+2. **Per-Aspect Result Storage:** Persist validation results per aspect to enable accurate list/detail parity and reliable reuse across operations
+3. **Same-Message Filtering/Grouping:** Enable fast filtering and grouping of resources by identical validation messages (signature-based) for rapid triage
+4. **Automatic + Batch Validation:** Validate resources automatically when browsed and via background batch runs, saving results in the same per-aspect format
+5. **Deterministic Invalidation:** When validation settings change, invalidate all existing validation results and revalidate; UI reflects disabled aspects clearly while revalidation is pending
+6. **Enterprise Scale Performance:** Handle 25K–250K+ resources with responsive list/detail and grouping queries, supported by caching and indexing
+7. **Progress Monitoring:** Provide polling-based progress updates with simple operational semantics
+8. **User Experience:** Deliver an intuitive browser, detail, and dashboard with clear parity and status indicators
+9. **In-Place Remediation:** Allow single and batch resource edits with immediate revalidation to fix errors/warnings
 
 ---
 
@@ -42,6 +45,8 @@ The platform aims to achieve the following objectives:
 - **As a** compliance officer, **I can** run comprehensive validation across all resource types **so that** I can ensure FHIR compliance
 - **As a** quality assurance professional, **I can** monitor validation progress with periodic updates **so that** I can track completion status
 - **As a** developer, **I can** validate individual resources **so that** I can test specific implementations
+*- **As a** validator, **I can** filter and group resources by the same validation message **so that** I can quickly identify systemic issues and affected records*
+*- **As a** user, **I can** rely on list and detail views showing consistent validation counts and scores **so that** I can trust results*
 
 ### Dashboard & Analytics
 - **As a** manager, **I can** view validation statistics and trends **so that** I can assess data quality over time
@@ -68,6 +73,7 @@ The platform aims to achieve the following objectives:
    - Store server credentials and authentication settings
    - Manage active server selection
    - Server health monitoring and status display
+   - Active server switch reactivity: all views (resource browser, detail, dashboard, counts, validation queries) immediately bind to the newly selected server; client and server caches are namespaced per server (e.g., cache keys include `serverId`) to prevent cross‑server bleed
 
 ### 4.2 Resource Discovery & Management
 3. **Comprehensive Resource Discovery**
@@ -81,6 +87,8 @@ The platform aims to achieve the following objectives:
    - Search resources by ID, content, or metadata
    - Resource detail viewing with JSON formatting
    - Resource tree viewer for complex nested structures
+   - Resource editing (single) with immediate revalidation on save
+   - Batch selection and batch editing of resources with queued revalidation after apply
 
 ### 4.3 Validation Engine
 5. **Multi-Aspect Validation System**
@@ -90,6 +98,11 @@ The platform aims to achieve the following objectives:
    - **Reference Validation:** Resource reference integrity checking
    - **Business Rule Validation:** Cross-field logic and business constraints
    - **Metadata Validation:** Version, timestamp, and metadata compliance
+   - Per-aspect processing and storage for: Structural, Profile, Terminology, Reference, Business Rules, Metadata
+   - Automatic validation on browse: when a resource page is loaded, page resources are validated and results persisted per aspect
+   - Batch validation runs in the background (dashboard control) and stores results in the same per-aspect format as single validations
+   - Settings changes invalidate all existing validation results; the system revalidates resources; UI shows clear “Validating…” state and disabled-aspect treatment
+   - Views react immediately to settings changes: the UI recalculates visibility and aggregations (e.g., disabled aspects greyed/excluded) while background revalidation updates persisted results
 
 6. **Simplified Validation Configuration**
    - Unified validation settings with 6-aspect configuration
@@ -100,16 +113,17 @@ The platform aims to achieve the following objectives:
 
 ### 4.4 Real-time Validation Processing
 7. **Batch Validation Operations**
-   - Bulk validation across entire server datasets
-   - Background processing with progress tracking
-   - Pause/resume functionality for long-running validations
-   - Intelligent re-validation based on resource timestamps
+   - Bulk validation across server datasets
+   - Background processing with progress tracking and clear status indicators
+   - Safe concurrency and back-pressure to protect the connected FHIR server
+   - Pause/Resume controls available on the Validation Engine card in the Dashboard
+   - MVP constraint: only one active batch validation at a time (single-run). Architectural note: future versions may support multiple batch validations in parallel (out of MVP scope)
 
 8. **Progress Updates (MVP - Polling-based)**
-   - Polling-based validation progress updates (configurable interval)
-   - Periodic dashboard statistics refresh
-   - Batch validation result updates
+   - Polling-based updates (defaults: 30s) for validation progress, settings, and dashboard statistics
+   - Batch validation result updates propagated via polling and cache refresh
    - Progress persistence across browser sessions
+   - Post-edit revalidation: edits (single or batch) enqueue affected resources for revalidation; UI reflects pending → updated states
 
 ### 4.5 Dashboard & Analytics
 9. **Comprehensive Dashboard**
@@ -123,6 +137,73 @@ The platform aims to achieve the following objectives:
     - Validation trend analysis over time
     - Resource quality scoring and metrics
     - Export capabilities for validation reports
+ 
+### 4.8 Issue Filtering & Grouping (New)
+11. **Same-Message Grouping**
+    - Group resources by identical validation message signature: aspect + severity + code + normalized path + ruleId (optional) + normalized text
+    - Endpoints to list groups, fetch group members (paginated), and navigate to resource detail with the message highlighted
+12. **List/Detail Parity**
+    - The list’s coverage/score and counts must match the detail view for the same resource and aspect set
+    - Disabled aspects are greyed/clearly indicated and excluded from score aggregation
+
+### 4.9 API Contracts (MVP)
+1. `GET /api/validation/issues/groups`
+   - Query: `aspect?`, `severity?`, `code?`, `path?`, `resourceType?`, `page=1`, `size=25`, `sort=count:desc|severity:desc`
+   - Returns: `[{ signature, aspect, severity, code, canonicalPath, totalResources, sampleMessage }]`
+2. `GET /api/validation/issues/groups/:signature/resources`
+   - Query: `resourceType?`, `page=1`, `size=25`, `sort=validatedAt:desc`
+   - Returns: `[{ resourceType, fhirId, validatedAt, perAspect: { aspect, isValid, errorCount, warningCount } }]`
+3. `GET /api/validation/resources/:resourceType/:id/messages`
+   - Returns: `{ resourceType, fhirId, aspects: [{ aspect, messages: [{ severity, code, canonicalPath, text, signature, timestamp }] }] }`
+4. `GET /api/validation/progress`
+   - Returns current batch state: `{ state: queued|running|paused|completed|failed, total, processed, failed, startedAt, updatedAt, etaSeconds? }`
+5. `PUT /api/fhir/resources/:resourceType/:id`
+   - Headers: `If-Match: <versionId|ETag>` (optional but recommended)
+   - Body: full FHIR resource JSON; server validates and persists; enqueues revalidation of this resource
+   - Returns: `{ success: true, versionId, queuedRevalidation: true }`
+6. `POST /api/fhir/resources/batch-edit`
+   - Body: `{ resourceType, filter: { query... }, operations: [{ op: replace|remove|add, path, value? }] }`
+   - Server applies operations to matching resources (atomic per resource), audits before/after hash, enqueues revalidation; Returns: `{ matched, modified, failed }`
+
+### 4.10 Scoring & Coverage Rules (MVP)
+- Per-aspect score default: `isValid ? 100 : max(0, 100 - 100 * (errorCount > 0 ? 1 : 0) - 50 * warningBuckets)` (simple binary for errors; warnings reduce but do not zero). Exact formula can be replaced later; list/detail must share the same function.
+- Aggregated resource score = average of enabled aspects’ scores.
+- Disabled aspects are excluded from aggregation and shown greyed/disabled.
+- Not-yet-validated aspects render as "Validating…" and are excluded from score until result is present; coverage indicator reflects only validated enabled aspects.
+
+### 4.11 Edit & Batch-Edit Verhalten (Konflikte & Audit)
+- Konflikterkennung: Client sendet `If-Match: <versionId|ETag>`; bei Mismatch → `409 Conflict`.
+- Validierung: Eingehende Ressourcen werden syntaktisch geprüft (FHIR JSON), Größe begrenzt (konfigurierbar), Feld‑Whitelists optional.
+- Audit (minimal): pro Resource `before_hash`, `after_hash`, `editedAt`, `editedBy` (System/Benutzer), Ergebnis (success/failed, reason).
+- Revalidierung: Single‑Edits sofort in Queue; Batch‑Edits enqueue pro Resource (atomic pro Resource, partieller Erfolg erlaubt). Priorität über Batch‑Validierung.
+
+### 4.12 Signatur‑Normalisierung (Same‑Message Grouping, MVP)
+- Eingabeparameter der Signatur: `aspect | severity | code | canonicalPath | ruleId? | normalizedText`.
+- Normalisierungsregeln:
+  - `severity`: lowercase (`ERROR` → `error`).
+  - `canonicalPath`:
+    - FHIR‑Pfad normalisieren, Array‑Indizes entfernen (z. B. `entry[3].item[0].code` → `entry.item.code`).
+    - Mehrfache Trennzeichen reduzieren, führende/trailing Punkte entfernen.
+    - Lowercase, Whitespace entfernen.
+    - Maximale Länge 256 Zeichen (ansonsten rechts abschneiden, separat im Datensatz `path_truncated=true`).
+  - `normalizedText`:
+    - Trim, Whitespace‑Kollaps (alle Sequenzen → ein Leerzeichen), Lowercase.
+    - Steuerzeichen entfernen; maximale Länge 512 Zeichen (ansonsten rechts abschneiden, Flag `text_truncated=true`).
+  - `code` und `ruleId` unverändert (außer Trim), falls vorhanden.
+- Hash‑Bildung: `signature = SHA‑256(aspect + '|' + severity + '|' + (code||'') + '|' + canonicalPath + '|' + (ruleId||'') + '|' + normalizedText)` (hex‑String).
+- Stabilitätsgarantie: Solange diese Regeln unverändert bleiben, ist die Signatur stabil. Regeländerungen werden versioniert (z. B. `signature_version`).
+
+### 4.13 Queue‑Policy & Timeouts (MVP Defaults)
+- Priorität: Edit‑/Batch‑Edit‑Revalidierungen > reguläre Batch‑Validierung.
+- Concurrency: bis zu 8 gleichzeitige Validierungsjobs (konfigurierbar), Back‑pressure bei externen 429/Timeouts.
+- Retry: bis zu 2 Retries pro fehlgeschlagenem Job, Exponential Backoff (Basis 1s, Max 30s), Abbruch bei Client‑Fehlern (4xx außer 429).
+- Pause/Resume: über Dashboard steuerbar; MVP erlaubt nur einen aktiven Batch‑Run (Single‑Run); Resume setzt Queue an gleicher Stelle fort.
+- Timeouts (Defaults, konfigurierbar):
+  - Terminology: 60s
+  - Profile: 45s
+  - Reference: 30s
+  - Externe HTTP‑Aufrufe: 15–60s je nach Dienst; Circuit‑Breaker bei anhaltenden Fehlern.
+- Schutzlimits: maximale Batch‑Edit‑Größe (z. B. 5.000 Ressourcen) und Request‑Body‑Size limitiert; Rate‑Limit pro Serververbindung durch Concurrency geregelt.
 
 ### 4.6 Profile Management
 11. **Profile Installation & Management**
@@ -211,8 +292,9 @@ The MVP (Minimum Viable Product) version prioritizes simplicity, reliability, an
 - **Better Error Handling:** Polling failures are easier to recover from than connection drops
 
 ### 7.2 Polling Implementation Details
-- **Configurable Intervals:** Polling frequency can be adjusted based on validation progress (e.g., every 2-5 seconds during active validation)
-- **Smart Polling:** Reduce polling frequency when validation is idle or completed
+- **Default Intervals:** 30 seconds for settings, results, and dashboard statistics (configurable)
+- **Configurable Intervals:** Polling frequency can be adjusted based on validation progress
+- **Smart Polling (Optional):** Reduce polling frequency when validation is idle or completed
 - **Progress Persistence:** Validation progress is stored in database and retrieved on each poll
 - **Graceful Degradation:** System continues to function even if polling temporarily fails
 - **Resource Efficiency:** Polling only occurs when validation is active or recently completed
@@ -235,11 +317,29 @@ The polling-based approach provides a clear upgrade path to real-time features:
 - **State Management:** TanStack Query for server state and React hooks for local state
 - **Validation Engine:** Consolidated validation service with unified 6-aspect validation and simplified settings
 
+### 8.1.1 Validation Data Model (MVP Extensions)
+- Per-aspect validation results persisted with timestamps, counts, and scores
+- Normalized validation messages (aspect, severity, code, canonical path, text) with a stable signature for grouping
+- Indexes on (server, signature), (server, aspect, severity), and (server, resource identity) to support filtering and grouping
+
+### 8.1.2 Cross-Server Resource Identity (Simple & Secure)
+- Server registry (table) stores each connected FHIR server with a generated immutable `server_id` and a `server_fingerprint` derived from the normalized base URL (e.g., lowercase, trimmed, trailing slash removed). Recommended: `server_fingerprint = SHA-256(normalized_base_url)`.
+- The canonical FHIR resource identity is strictly scoped by server: `(server_id, resource_type, fhir_id)`.
+- A derived, stable identity string may be used in logs/keys: `fhir_identity = `${server_id}:${resource_type}:${fhir_id}``.
+- For collision-resistant joins across components, an opaque UID can be computed: `resource_uid = SHA-256(server_fingerprint + '|' + resource_type + '|' + fhir_id)`. This avoids accidental cross-server conflation while remaining stable and non-reversible beyond the input tuple.
+- All validation data (`validation_results`, `validation_messages`, groups) include `server_id` and the triple `(resource_type, fhir_id)`; all queries and caches are namespaced by `server_id`.
+- Security/consistency rules:
+  - Never treat equal `fhir_id` across different servers as the same resource.
+  - When resolving references, ensure the reference’s base (if absolute) matches the active `server_id` (or is explicitly allowed by settings) before dereferencing.
+  - Client cache keys and React Query keys must include `server_id` to prevent cross-server data bleed.
+
 ### 8.2 Performance Optimizations
 - **Intelligent Caching:** 5-minute resource count caching for dashboard performance
 - **Batch Processing:** Concurrent request handling with rate limiting (8 concurrent requests)
 - **Background Processing:** Non-blocking validation operations with progress tracking
 - **Memory Management:** Efficient resource handling for large datasets (800K+ resources)
+ - **Signature Caching:** Cache group counts/signatures for fast “same-message” queries
+ - **Indexes:** Ensure per-aspect and message-signature queries meet p95 latency targets (<500ms list/group)
 
 ### 8.3 External Integrations
 - **FHIR Servers:** RESTful API integration with automatic version detection
@@ -259,8 +359,10 @@ The polling-based approach provides a clear upgrade path to real-time features:
 
 ### 9.1 Performance Metrics
 - **Dashboard Load Time:** Sub-second loading with cached data
-- **Validation Throughput:** Efficient processing of 800K+ resources
-- **Server Response Time:** Fast API responses with intelligent caching
+- **List/Group Query Latency:** p95 < 500ms for filtered list and message-group queries on 25K–250K resources
+- **Detail Load Time:** p95 < 300ms with cached per-aspect results
+- **Validation Throughput:** Efficient processing with safe concurrency and back-pressure
+- **Server Response Time:** Fast API responses with intelligent caching and indexes
 - **Memory Usage:** Efficient resource utilization for large datasets
 
 ### 9.2 User Experience Metrics
@@ -268,6 +370,8 @@ The polling-based approach provides a clear upgrade path to real-time features:
 - **Error Recovery Rate:** Successful recovery from validation errors
 - **User Engagement:** Dashboard usage and validation operation frequency
 - **Feature Adoption:** Usage of advanced features like profile management
+ - **Parity Confidence:** 100% consistency between list and detail per-aspect counts and scores
+ - **Triage Efficiency:** Users can identify and navigate top same-message groups within 2 clicks
 
 ### 9.3 Data Quality Metrics
 - **Validation Coverage:** Percentage of server resources successfully validated

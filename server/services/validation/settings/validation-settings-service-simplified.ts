@@ -88,22 +88,22 @@ export class ValidationSettingsService extends EventEmitter {
       // Get current settings
       const currentSettings = await this.getCurrentSettings();
       
-      // Merge with update
+      // Merge with update - settings are at top level, not nested
       const updatedSettings: ValidationSettings = {
         ...currentSettings,
-        aspects: { ...currentSettings.aspects, ...update.aspects },
-        server: { ...currentSettings.server, ...update.server },
-        performance: { ...currentSettings.performance, ...update.performance }
+        ...update.settings
       };
       
-      // Validate the updated settings
-      const validation = this.validateSettings(updatedSettings);
-      if (!validation.isValid) {
-        throw new Error(`Validation failed: ${validation.errors.join(', ')}`);
+      // Validate the updated settings (only if validation is enabled)
+      if (update.validate !== false) {
+        const validation = this.validateSettings(updatedSettings);
+        if (!validation.isValid) {
+          throw new Error(`Validation failed: ${validation.errors.join(', ')}`);
+        }
       }
       
       // Save to database
-      const savedSettings = await this.repository.updateSettings(updatedSettings);
+      const savedSettings = await this.repository.createOrUpdate(updatedSettings);
       
       // Update cache
       this.currentSettings = savedSettings;
@@ -112,10 +112,10 @@ export class ValidationSettingsService extends EventEmitter {
       // Emit event
       this.emit('settingsChanged', {
         type: 'updated',
-        data: savedSettings
+        data: this.currentSettings
       });
       
-      return savedSettings;
+      return this.currentSettings;
     } catch (error) {
       this.emit('updateError', error);
       throw error;
@@ -266,17 +266,17 @@ export class ValidationSettingsService extends EventEmitter {
     await this.ensureInitialized();
     
     const defaultSettings = { ...DEFAULT_VALIDATION_SETTINGS };
-    const result = await this.repository.updateSettings(defaultSettings);
+    const result = await this.repository.createOrUpdate(defaultSettings);
     
     this.currentSettings = result;
     this.lastCacheTime = Date.now();
     
     this.emit('settingsChanged', {
       type: 'reset',
-      data: result
+      data: this.currentSettings
     });
     
-    return result;
+    return this.currentSettings;
   }
 
   /**
@@ -298,7 +298,7 @@ export class ValidationSettingsService extends EventEmitter {
             metadata: { enabled: true, severity: 'error' }
           },
           server: {
-            url: 'https://hapi.fhir.org/baseR4',
+            url: 'https://server.fire.ly',
             timeout: 30000,
             retries: 3
           },
@@ -322,7 +322,7 @@ export class ValidationSettingsService extends EventEmitter {
             metadata: { enabled: false, severity: 'info' }
           },
           server: {
-            url: 'https://hapi.fhir.org/baseR4',
+            url: 'https://server.fire.ly',
             timeout: 30000,
             retries: 3
           },
@@ -348,17 +348,17 @@ export class ValidationSettingsService extends EventEmitter {
       throw new Error(`Preset '${presetId}' not found`);
     }
     
-    const result = await this.repository.updateSettings(preset.settings);
+    const result = await this.repository.createOrUpdate(preset.settings);
     
     this.currentSettings = result;
     this.lastCacheTime = Date.now();
     
     this.emit('settingsChanged', {
       type: 'presetApplied',
-      data: { presetId, settings: result }
+      data: { presetId, settings: this.currentSettings }
     });
     
-    return result;
+    return this.currentSettings;
   }
 
   /**

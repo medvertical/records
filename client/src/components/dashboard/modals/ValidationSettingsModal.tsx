@@ -27,12 +27,14 @@ interface ValidationSettingsModalProps {
 }
 
 interface ValidationSettings {
-  structural: { enabled: boolean; severity: string; timeoutMs: number };
-  profile: { enabled: boolean; severity: string; timeoutMs: number };
-  terminology: { enabled: boolean; severity: string; timeoutMs: number };
-  reference: { enabled: boolean; severity: string; timeoutMs: number };
-  businessRule: { enabled: boolean; severity: string; timeoutMs: number };
-  metadata: { enabled: boolean; severity: string; timeoutMs: number };
+  aspects: {
+    structural: { enabled: boolean; severity: string; timeoutMs: number };
+    profile: { enabled: boolean; severity: string; timeoutMs: number };
+    terminology: { enabled: boolean; severity: string; timeoutMs: number };
+    reference: { enabled: boolean; severity: string; timeoutMs: number };
+    businessRule: { enabled: boolean; severity: string; timeoutMs: number };
+    metadata: { enabled: boolean; severity: string; timeoutMs: number };
+  };
   batchProcessingSettings: {
     defaultBatchSize: number;
     maxBatchSize: number;
@@ -147,9 +149,12 @@ export const ValidationSettingsModal: React.FC<ValidationSettingsModalProps> = (
     
     setLocalSettings({
       ...localSettings,
-      [aspectKey]: {
-        ...localSettings[aspectKey as keyof ValidationSettings],
-        enabled: !localSettings[aspectKey as keyof ValidationSettings].enabled
+      aspects: {
+        ...localSettings.aspects,
+        [aspectKey]: {
+          ...localSettings.aspects[aspectKey as keyof ValidationSettings['aspects']],
+          enabled: !localSettings.aspects[aspectKey as keyof ValidationSettings['aspects']].enabled
+        }
       }
     });
   };
@@ -188,7 +193,7 @@ export const ValidationSettingsModal: React.FC<ValidationSettingsModalProps> = (
   };
 
   const enabledAspects = localSettings ? 
-    Object.values(localSettings).filter((aspect: any) => aspect?.enabled === true).length : 0;
+    Object.values(localSettings.aspects).filter((aspect: any) => aspect?.enabled === true).length : 0;
 
   if (isLoading || !localSettings) {
     return (
@@ -233,7 +238,7 @@ export const ValidationSettingsModal: React.FC<ValidationSettingsModalProps> = (
             <CardContent className="space-y-4">
               {validationAspects.map((aspect) => {
                 const IconComponent = aspect.icon;
-                const aspectSettings = localSettings[aspect.key as keyof ValidationSettings];
+                const aspectSettings = localSettings.aspects[aspect.key as keyof ValidationSettings['aspects']];
                 const isEnabled = aspectSettings?.enabled || false;
 
                 return (

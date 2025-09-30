@@ -49,7 +49,7 @@ export interface ValidationSettingsPollingState {
 
 export function useValidationSettingsPolling(options: ValidationSettingsPollingOptions = {}) {
   const {
-    pollingInterval = 5000, // 5 seconds
+    pollingInterval = 30000, // 30 seconds
     enabled = true,
     showNotifications = true,
     invalidateCache = true

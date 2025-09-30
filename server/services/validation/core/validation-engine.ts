@@ -77,6 +77,12 @@ export class ValidationEngine extends EventEmitter {
       
       console.log(`[ValidationEngine] Validation settings:`, JSON.stringify(settings, null, 2));
       console.log(`[ValidationEngine] Requested aspects:`, Array.from(aspectsToExecute));
+      console.log(`[ValidationEngine] ALL_VALIDATION_ASPECTS:`, ALL_VALIDATION_ASPECTS);
+      console.log(`[ValidationEngine] aspectsToExecute vs ALL_VALIDATION_ASPECTS:`, {
+        aspectsToExecute: Array.from(aspectsToExecute),
+        allAspects: Array.from(ALL_VALIDATION_ASPECTS),
+        same: Array.from(aspectsToExecute).length === Array.from(ALL_VALIDATION_ASPECTS).length
+      });
       
       // Initialize result
       const result: ValidationResult = {
@@ -91,8 +97,8 @@ export class ValidationEngine extends EventEmitter {
 
       const aspectResults: ValidationAspectResult[] = [];
 
-      for (const aspect of ALL_VALIDATION_ASPECTS) {
-        // Always execute all aspects - UI will filter results based on settings
+      for (const aspect of aspectsToExecute) {
+        // Only execute aspects that are enabled in settings
         const aspectResult = await this.validateAspect(request, aspect, settings);
         aspectResults.push(aspectResult);
         result.issues.push(...aspectResult.issues);
@@ -176,9 +182,22 @@ export class ValidationEngine extends EventEmitter {
     settings: ValidationSettings,
     requested?: (ValidationAspect | string)[] | null
   ): Set<ValidationAspect> {
-    // Always return all aspects - engine always performs all 6 aspects
-    // UI will filter results based on settings
-    return new Set(ALL_VALIDATION_ASPECTS);
+    // Only return aspects that are enabled in settings
+    const enabledAspects = new Set<ValidationAspect>();
+    
+    if (settings.structural?.enabled) enabledAspects.add('structural');
+    if (settings.profile?.enabled) enabledAspects.add('profile');
+    if (settings.terminology?.enabled) enabledAspects.add('terminology');
+    if (settings.reference?.enabled) enabledAspects.add('reference');
+    if (settings.businessRule?.enabled) enabledAspects.add('businessRule');
+    if (settings.metadata?.enabled) enabledAspects.add('metadata');
+    
+      console.log(`[ValidationEngine] resolveRequestedAspects: enabled aspects =`, Array.from(enabledAspects));
+      console.log(`[ValidationEngine] ===== CRITICAL DEBUG =====`);
+      console.log(`[ValidationEngine] Settings received:`, JSON.stringify(settings, null, 2));
+      console.log(`[ValidationEngine] Enabled aspects:`, Array.from(enabledAspects));
+      console.log(`[ValidationEngine] =========================`);
+      return enabledAspects;
   }
 
 

@@ -51,7 +51,7 @@ export function useValidationResults(
 ): ValidationResultsState & ValidationResultsActions {
   const {
     enablePolling = false,
-    pollingInterval = 5000,
+    pollingInterval = 30000,
     showLoading = true
   } = options;
 
@@ -156,7 +156,7 @@ export function useValidationResultsBatch(
 
   const {
     enablePolling = false,
-    pollingInterval = 5000,
+    pollingInterval = 30000,
     showLoading = true
   } = options;
 

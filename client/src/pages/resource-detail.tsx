@@ -21,7 +21,7 @@ export default function ResourceDetail() {
   
   // Use validation settings polling to detect changes and refresh resource detail
   const { lastChange } = useValidationSettingsPolling({
-    pollingInterval: 5000, // Poll every 5 seconds
+    pollingInterval: 30000, // Poll every 30 seconds
     enabled: true,
     showNotifications: false, // Don't show toast notifications in resource detail
     invalidateCache: true, // Invalidate cache when settings change
@@ -139,19 +139,19 @@ export default function ResourceDetail() {
       const aspect = issue.aspect || 'structural';
       switch (aspect) {
         case 'structural':
-          return currentSettings?.structural?.enabled !== false;
+          return currentSettings?.aspects?.structural?.enabled !== false;
         case 'profile':
-          return currentSettings?.profile?.enabled !== false;
+          return currentSettings?.aspects?.profile?.enabled !== false;
         case 'terminology':
-          return currentSettings?.terminology?.enabled !== false;
+          return currentSettings?.aspects?.terminology?.enabled !== false;
         case 'reference':
-          return currentSettings?.reference?.enabled !== false;
+          return currentSettings?.aspects?.reference?.enabled !== false;
         case 'businessRule':
-          return currentSettings?.businessRule?.enabled !== false;
+          return currentSettings?.aspects?.businessRule?.enabled !== false;
         case 'metadata':
-          return currentSettings?.metadata?.enabled !== false;
+          return currentSettings?.aspects?.metadata?.enabled !== false;
         default:
-          return currentSettings?.structural?.enabled !== false; // Default to structural
+          return currentSettings?.aspects?.structural?.enabled !== false; // Default to structural
       }
     });
     
@@ -168,12 +168,12 @@ export default function ResourceDetail() {
     
     // Calculate aspect-specific breakdowns
     const aspectBreakdown = {
-      structural: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.structural?.enabled !== false },
-      profile: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.profile?.enabled !== false },
-      terminology: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.terminology?.enabled !== false },
-      reference: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.reference?.enabled !== false },
-      businessRule: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.businessRule?.enabled !== false },
-      metadata: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.metadata?.enabled !== false }
+      structural: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.aspects?.structural?.enabled !== false },
+      profile: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.aspects?.profile?.enabled !== false },
+      terminology: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.aspects?.terminology?.enabled !== false },
+      reference: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.aspects?.reference?.enabled !== false },
+      businessRule: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.aspects?.businessRule?.enabled !== false },
+      metadata: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.aspects?.metadata?.enabled !== false }
     };
     
     // Count issues by aspect

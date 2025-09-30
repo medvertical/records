@@ -262,14 +262,18 @@ export class FhirClient {
       // Always set format to json
       searchParams.set('_format', 'json');
 
+      const url = `${this.baseUrl}/${resourceType}?${searchParams.toString()}`;
+      console.log(`[FhirClient] Calling URL: ${url}`);
+      
       const response: AxiosResponse<FhirBundle> = await axios.get(
-        `${this.baseUrl}/${resourceType}?${searchParams.toString()}`,
+        url,
         { 
           headers: this.headers,
           timeout: 8000 // 8 second timeout for faster response
         }
       );
 
+      console.log(`[FhirClient] Response total: ${response.data.total}, entry count: ${response.data.entry?.length || 0}`);
       return response.data;
     } catch (error: any) {
       if (error.response?.data?.resourceType === 'OperationOutcome') {
@@ -723,30 +727,25 @@ export class FhirClient {
       
       const counts: Record<string, number> = {};
       
-      // Get counts for common resource types with timeout and concurrency limit
-      const concurrencyLimit = 3; // Process 3 resource types at a time
-      for (let i = 0; i < commonResourceTypes.length; i += concurrencyLimit) {
-        const batch = commonResourceTypes.slice(i, i + concurrencyLimit);
-        
-        const batchPromises = batch.map(async (resourceType) => {
-          try {
-            // Add timeout to individual requests
-            const timeoutPromise = new Promise<number>((_, reject) => {
-              setTimeout(() => reject(new Error('Request timeout')), 5000); // 5 second timeout
-            });
-            
-            const countPromise = this.getResourceCount(resourceType);
-            const count = await Promise.race([countPromise, timeoutPromise]);
-            
-            counts[resourceType] = count;
-            console.log(`[FhirClient] ${resourceType}: ${count}`);
-          } catch (error) {
-            console.warn(`[FhirClient] Failed to get count for ${resourceType}:`, error.message);
+      // Use simpler approach - just get counts directly without complex batching
+      for (const resourceType of commonResourceTypes) {
+        try {
+          console.log(`[FhirClient] Getting count for ${resourceType}...`);
+          
+          // Use the same approach as the working resource fetch
+          const response = await this.searchResources(resourceType, { _count: '1', _total: 'accurate' });
+          
+          if (response.total !== undefined && response.total !== null) {
+            counts[resourceType] = response.total;
+            console.log(`[FhirClient] ${resourceType}: ${response.total}`);
+          } else {
+            console.warn(`[FhirClient] No total available for ${resourceType}`);
             counts[resourceType] = 0;
           }
-        });
-        
-        await Promise.all(batchPromises);
+        } catch (error) {
+          console.warn(`[FhirClient] Failed to get count for ${resourceType}:`, error.message);
+          counts[resourceType] = 0;
+        }
       }
       
       console.log(`[FhirClient] Completed resource counts for ${Object.keys(counts).length} resource types`);

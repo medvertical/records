@@ -185,12 +185,33 @@ export function ValidationAspectsDropdown({ className }: ValidationAspectsDropdo
       const response = await fetch('/api/validation/settings');
       if (response.ok) {
         const data = await response.json();
-        if (data.settings) {
-          setValidationSettings(data.settings);
-        }
+        // API returns settings directly, not wrapped in a 'settings' property
+        setValidationSettings(data);
+      } else {
+        // Handle GET request errors
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to load validation settings:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        
+        // Show user-friendly error for GET failures
+        toast({
+          title: "Settings Load Error",
+          description: "Failed to load validation settings. Some features may not work correctly.",
+          variant: "destructive",
+          duration: 5000,
+        });
       }
     } catch (error) {
       console.error('Failed to load validation settings:', error);
+      toast({
+        title: "Connection Error",
+        description: "Unable to connect to the server. Please check your connection and try again.",
+        variant: "destructive",
+        duration: 5000,
+      });
     }
   };
 
@@ -199,12 +220,19 @@ export function ValidationAspectsDropdown({ className }: ValidationAspectsDropdo
     try {
       const updatedSettings = { ...validationSettings, ...updates };
       
+      // API expects ValidationSettingsUpdate format with 'settings' property
+      const updatePayload = {
+        settings: updatedSettings,
+        validate: true,
+        createNewVersion: false
+      };
+      
       const response = await fetch('/api/validation/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(updatedSettings),
+        body: JSON.stringify(updatePayload),
       });
 
       if (response.ok) {
@@ -214,14 +242,67 @@ export function ValidationAspectsDropdown({ className }: ValidationAspectsDropdo
           description: "Validation aspects have been updated successfully.",
         });
       } else {
-        throw new Error('Failed to update validation settings');
+        // Parse error response for better error handling
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(JSON.stringify({
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData.error || 'Unknown Error',
+          message: errorData.message || 'Failed to update validation settings',
+          code: errorData.code || 'UNKNOWN_ERROR',
+          details: errorData.details || []
+        }));
       }
     } catch (error) {
       console.error('Failed to update validation settings:', error);
+      
+      let errorMessage = "Failed to update validation settings. Please try again.";
+      let errorTitle = "Update Failed";
+      
+      try {
+        const errorInfo = JSON.parse(error.message);
+        
+        // Handle specific error types
+        switch (errorInfo.code) {
+          case 'VALIDATION_ERROR':
+            errorTitle = "Validation Error";
+            errorMessage = `Settings validation failed: ${errorInfo.message}`;
+            if (errorInfo.details && errorInfo.details.length > 0) {
+              errorMessage += `\n\nIssues found:\n• ${errorInfo.details.join('\n• ')}`;
+            }
+            break;
+          case 'SETTINGS_NOT_FOUND':
+            errorTitle = "Settings Not Found";
+            errorMessage = "The validation settings could not be found. Please refresh the page and try again.";
+            break;
+          case 'DATABASE_ERROR':
+            errorTitle = "Database Error";
+            errorMessage = "Unable to save settings due to database issues. Please try again in a moment.";
+            break;
+          case 'INVALID_REQUEST_BODY':
+          case 'MISSING_SETTINGS':
+          case 'INVALID_SETTINGS_CONTENT':
+            errorTitle = "Invalid Request";
+            errorMessage = "The request was invalid. Please refresh the page and try again.";
+            break;
+          case 'INTERNAL_ERROR':
+            errorTitle = "Server Error";
+            errorMessage = "An unexpected server error occurred. Please try again later.";
+            break;
+          default:
+            errorMessage = errorInfo.message || errorMessage;
+            break;
+        }
+      } catch (parseError) {
+        // If we can't parse the error, use the original error message
+        errorMessage = error.message || errorMessage;
+      }
+      
       toast({
-        title: "Update Failed",
-        description: "Failed to update validation settings. Please try again.",
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive",
+        duration: 8000, // Show error for longer
       });
     } finally {
       setIsLoading(false);
