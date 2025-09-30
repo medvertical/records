@@ -35,6 +35,11 @@ export { useValidationConfidence } from './use-validation-confidence';
 export { useValidationQualityMetrics } from './use-validation-quality-metrics';
 export { useValidationControls } from './use-validation-controls';
 export { useValidationControls as useValidationControlsSimple } from './use-validation-controls-simple';
+export { useValidationGroups, useValidationGroupMembers } from './use-validation-groups';
+
+// Reactive hooks for server and settings changes
+export { useServerReactiveQueries, useActiveServerId, useServerQueryKey } from './use-server-reactive-queries';
+export { useAspectSettingsReactive, useAspectStyles } from './use-aspect-settings-reactive';
 
 // Type exports
 export type { ServerStatus } from './use-server-data';
