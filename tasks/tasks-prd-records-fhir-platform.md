@@ -245,18 +245,18 @@
   - [x] 17.4 Incremental group counters during validation writes for fast groups API (atomic SQL increment)
   - [x] 17.5 Remove/gate all mock responses (PARTIAL: 3/15 fully gated, infrastructure ready, documented in MOCK_DATA_GATING.md)
 
-- [ ] 18.0 Dashboard (real data, rebuild allowed)
-  - [ ] 18.1 Rebuild layout: KPI cards, charts, server status, validation controls
-  - [ ] 18.2 Implement `ValidationEngineCard` (start, pause, resume, cancel, stop; progress %, ETA, items/sec)
-  - [ ] 18.3 Selectors: resource types to validate, batch size, max concurrency (persisted)
-  - [ ] 18.4 Wire to real endpoints: queue start/stop/pause/resume/cancel and progress; no mocks
-  - [ ] 18.5 Live updates: polling-only (configurable interval), no SSE/WebSockets
-  - [ ] 18.6 Server switch rebind: card and KPIs update immediately to active server
-  - [ ] 18.7 Performance budgets: p95 dashboard queries < 400ms; slow-query logging enabled
-  - [ ] 18.8 Tests: unit (card state machine), integration (queue endpoints), E2E (happy path)
-  - [ ] 18.9 Accessibility: card buttons keyboardable, ARIA live region for progress
-  - [ ] 18.10 Align with `docs/technical/validation/API_DOCUMENTATION.md`
-  - [ ] 18.11 Use shared `usePolling` hook from 8.5 (cancellation, backoff with jitter, unmount cleanup)
+- [x] 18.0 Dashboard (real data, rebuild allowed)
+  - [x] 18.1 Rebuild layout: KPI cards, charts, server status, validation controls
+  - [x] 18.2 Implement `ValidationEngineCard` (start, pause, resume, cancel, stop; progress %, ETA, items/sec)
+  - [x] 18.3 Selectors: resource types to validate, batch size, max concurrency (persisted)
+  - [x] 18.4 Wire to real endpoints: queue start/stop/pause/resume/cancel and progress; no mocks
+  - [x] 18.5 Live updates: polling-only (configurable interval), no SSE/WebSockets
+  - [x] 18.6 Server switch rebind: card and KPIs update immediately to active server
+  - [x] 18.7 Performance budgets: p95 dashboard queries < 400ms; slow-query logging enabled
+  - [x] 18.8 Tests: unit (card state machine), integration (queue endpoints), E2E (happy path)
+  - [x] 18.9 Accessibility: card buttons keyboardable, ARIA live region for progress
+  - [x] 18.10 Align with `docs/technical/validation/API_DOCUMENTATION.md`
+  - [x] 18.11 Use shared `usePolling` hook from 8.5 (cancellation, backoff with jitter, unmount cleanup)
 
 - [ ] 19.0 Settings (Records-focused, working, no mocks)
   - [ ] 19.1 Settings view: per-aspect toggles and severity; show snapshot hash/time
