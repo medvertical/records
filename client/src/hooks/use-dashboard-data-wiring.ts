@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect } from 'react';
 import { useDashboardData } from './use-dashboard-data';
 import { useValidationPolling } from './use-validation-polling';
 import { useServerData } from './use-server-data';
@@ -235,6 +235,18 @@ export function useDashboardDataWiring(
   const refreshResourceBreakdown = useThrottledCallback(() => {
     refetchDashboard();
   }, 1000);
+
+  // Auto-start validation polling when enabled
+  useEffect(() => {
+    const hasActiveServer = activeServer !== null;
+    if (enableRealTimeUpdates && enabled && hasActiveServer) {
+      console.log('[DashboardDataWiring] Starting validation polling');
+      startPolling();
+    } else {
+      console.log('[DashboardDataWiring] Stopping validation polling');
+      stopPolling();
+    }
+  }, [enableRealTimeUpdates, enabled, activeServer, startPolling, stopPolling]);
 
   const refreshAll = useThrottledCallback(() => {
     refetchDashboard();
