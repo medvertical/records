@@ -225,12 +225,12 @@ jobs:
           #   exit 1
           # fi
 
-  # Job 5: Performance Budget Checks (Optional/Experimental)
+  # Job 5: Performance Budget Checks
   performance:
     name: Performance Budgets
     runs-on: ubuntu-latest
     needs: [test, database]
-    continue-on-error: true # Don't block on perf checks initially
+    continue-on-error: false # Performance budgets are required
     
     services:
       postgres:
@@ -282,19 +282,9 @@ jobs:
 
       - name: Performance budget checks
         run: |
-          echo "🎯 Running performance budget checks..."
-          
-          # List/Group endpoint: p95 < 500ms
-          echo "Testing GET /api/validation/issues/groups..."
-          RESPONSE_TIME=$(curl -o /dev/null -s -w '%{time_total}\n' http://localhost:5000/api/validation/issues/groups)
-          RESPONSE_TIME_MS=$(echo "$RESPONSE_TIME * 1000" | bc)
-          echo "Response time: ${RESPONSE_TIME_MS}ms"
-          
-          # Detail endpoint: p95 < 300ms
-          echo "Testing resource detail endpoints..."
-          # Add actual endpoint tests here
-          
-          echo "✅ Performance checks complete (non-blocking)"
+          echo "🎯 Running comprehensive performance budget checks..."
+          chmod +x ./scripts/performance-budget-check.sh
+          ./scripts/performance-budget-check.sh http://localhost:5000
 
       - name: Cleanup
         if: always()

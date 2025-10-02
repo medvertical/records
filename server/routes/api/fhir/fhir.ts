@@ -3,6 +3,13 @@ import { storage } from "../../../storage.js";
 import { FhirClient } from "../../../services/fhir/fhir-client";
 import { profileManager } from "../../../services/fhir/profile-manager";
 import { FeatureFlags } from "../../../config/feature-flags";
+import { serverActivationService } from "../../../services/server-activation-service";
+
+// Helper function to get the current FHIR client from server activation service
+function getCurrentFhirClient(fhirClient: FhirClient): FhirClient {
+  const currentClient = serverActivationService.getFhirClient();
+  return currentClient || fhirClient;
+}
 
 // Helper function to enhance resources with validation data
 async function enhanceResourcesWithValidationData(resources: any[]): Promise<any[]> {
@@ -230,7 +237,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
   app.get("/api/fhir/connection/test", async (req, res) => {
     try {
       const { url, auth } = req.query;
-      const result = await fhirClient.testConnection(url as string, auth as any);
+      // Get the current FHIR client (may have been updated due to server activation)
+      const currentFhirClient = getCurrentFhirClient(fhirClient);
+      const result = await currentFhirClient.testConnection(url as string, auth as any);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -240,7 +249,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
   app.get("/api/fhir/connection/test-custom", async (req, res) => {
     try {
       const { url, auth } = req.query;
-      const result = await fhirClient.testConnection(url as string, auth as any);
+      // Get the current FHIR client (may have been updated due to server activation)
+      const currentFhirClient = getCurrentFhirClient(fhirClient);
+      const result = await currentFhirClient.testConnection(url as string, auth as any);
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -258,7 +269,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       // If resourceType is provided, use it directly
       if (resourceType) {
         try {
-          const resource = await fhirClient.getResource(resourceType as string, id);
+          // Get the current FHIR client (may have been updated due to server activation)
+          const currentFhirClient = getCurrentFhirClient(fhirClient);
+          const resource = await currentFhirClient.getResource(resourceType as string, id);
           
           if (!resource) {
             return res.status(404).json({ 
@@ -298,7 +311,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       for (const type of commonTypes) {
         try {
           console.log(`[FHIR API] Trying to fetch ${type}/${id}`);
-          const resource = await fhirClient.getResource(type, id);
+          // Get the current FHIR client (may have been updated due to server activation)
+          const currentFhirClient = getCurrentFhirClient(fhirClient);
+          const resource = await currentFhirClient.getResource(type, id);
           
           if (resource) {
             console.log(`[FHIR API] Successfully fetched ${type} resource ${id}`);
@@ -360,7 +375,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
             searchParams._offset = Math.floor(parseInt(offset as string) / commonResourceTypes.length);
           }
           
-          const bundle = await fhirClient.searchResources(type, searchParams);
+          // Get the current FHIR client (may have been updated due to server activation)
+          const currentFhirClient = getCurrentFhirClient(fhirClient);
+          const bundle = await currentFhirClient.searchResources(type, searchParams);
           const resources = bundle.entry?.map(entry => entry.resource) || [];
           
           allResources.push(...resources);
@@ -398,7 +415,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
           searchParams._offset = parseInt(offset as string);
         }
         
-        bundle = await fhirClient.searchResources(
+        // Get the current FHIR client (may have been updated due to server activation)
+        const currentFhirClient = getCurrentFhirClient(fhirClient);
+        bundle = await currentFhirClient.searchResources(
           resourceType as string,
           searchParams
         );
@@ -450,7 +469,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
   // FHIR Resource Types
   app.get("/api/fhir/resource-types", async (req, res) => {
     try {
-      const resourceTypes = await fhirClient.getResourceTypes();
+      // Get the current FHIR client (may have been updated due to server activation)
+      const currentFhirClient = getCurrentFhirClient(fhirClient);
+      const resourceTypes = await currentFhirClient.getResourceTypes();
       res.json(resourceTypes);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -460,12 +481,15 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
   // FHIR Resource Counts
   app.get("/api/fhir/resource-counts", async (req, res) => {
     try {
+      // Get the current FHIR client (may have been updated due to server activation)
+      const currentFhirClient = getCurrentFhirClient(fhirClient);
+      
       // Add timeout to the entire operation
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('Request timeout')), 15000); // 15 second timeout
       });
       
-      const countsPromise = fhirClient.getResourceCounts();
+      const countsPromise = currentFhirClient.getResourceCounts();
       const counts = await Promise.race([countsPromise, timeoutPromise]) as Record<string, number>;
       
       // Transform the counts into the expected format
@@ -513,7 +537,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       const { resourceType } = req.params;
       const { limit = 50, offset = 0, search } = req.query;
       
-      const resources = await fhirClient.searchResources(
+      // Get the current FHIR client (may have been updated due to server activation)
+      const currentFhirClient = getCurrentFhirClient(fhirClient);
+      const resources = await currentFhirClient.searchResources(
         resourceType,
         search as string,
         parseInt(limit as string),
@@ -529,7 +555,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
   app.get("/api/fhir/:resourceType/:id", async (req, res) => {
     try {
       const { resourceType, id } = req.params;
-      const resource = await fhirClient.getResource(resourceType, id);
+      // Get the current FHIR client (may have been updated due to server activation)
+      const currentFhirClient = getCurrentFhirClient(fhirClient);
+      const resource = await currentFhirClient.getResource(resourceType, id);
       res.json(resource);
     } catch (error: any) {
       res.status(500).json({ message: error.message });

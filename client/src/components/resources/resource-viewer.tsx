@@ -11,8 +11,6 @@ import {
 } from 'lucide-react';
 import { OptimizedValidationResults } from './optimized-validation-results';
 import ResourceTreeViewer from './resource-tree-viewer';
-import { EnhancedValidationBadge } from './enhanced-validation-badge';
-import { useValidationResults, useValidationAspectsForResource } from '@/hooks/validation';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -65,21 +63,6 @@ export default function ResourceViewer({
   // Handle different resource structures: {data: {...}} or direct resource object
   const resourceData = data || resource?.data || resource;
   
-  // Enhanced validation hooks
-  const { 
-    results: enhancedValidationResult, 
-    isLoading: isEnhancedValidationLoading,
-    error: enhancedValidationError,
-    refresh: refreshEnhancedValidation
-  } = useValidationResults(resourceId, { enablePolling: false });
-
-  const {
-    aspects: validationAspects,
-    overallMetrics,
-    isLoading: isAspectsLoading,
-    error: aspectsError,
-    refresh: refreshAspects
-  } = useValidationAspectsForResource(resourceId, { enablePolling: false });
   
   // State management
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
@@ -282,93 +265,7 @@ export default function ResourceViewer({
           </CardContent>
         </Card>
 
-        {/* Enhanced Validation Results - Right side */}
-        {enhancedValidationResult && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Enhanced Validation Results</CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    refreshEnhancedValidation();
-                    refreshAspects();
-                  }}
-                  disabled={isEnhancedValidationLoading || isAspectsLoading}
-                  className="text-xs"
-                >
-                  <RefreshCw className={cn("h-3 w-3 mr-1", (isEnhancedValidationLoading || isAspectsLoading) && "animate-spin")} />
-                  {(isEnhancedValidationLoading || isAspectsLoading) ? 'Refreshing...' : 'Refresh'}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Enhanced validation badge */}
-                <EnhancedValidationBadge 
-                  validationResult={enhancedValidationResult}
-                  showDetails={true}
-                  compact={false}
-                />
-                
-                {/* Aspect breakdown */}
-                {validationAspects.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium">Validation Aspects</h4>
-                    <div className="grid grid-cols-2 gap-2">
-                      {validationAspects.map((aspect) => (
-                        <div 
-                          key={aspect.aspect}
-                          className={cn(
-                            "p-2 rounded border text-xs",
-                            aspect.isValid ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
-                          )}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium capitalize">{aspect.aspect}</span>
-                            <span className={cn(
-                              "font-bold",
-                              aspect.isValid ? "text-green-600" : "text-red-600"
-                            )}>
-                              {aspect.score}%
-                            </span>
-                          </div>
-                          <div className="text-muted-foreground">
-                            {aspect.issues.total} issues
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Overall metrics */}
-                {overallMetrics && (
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium">Overall Metrics</h4>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="flex justify-between">
-                        <span>Confidence:</span>
-                        <span className="font-medium">{overallMetrics.averageConfidence}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Completeness:</span>
-                        <span className="font-medium">{overallMetrics.averageCompleteness}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Duration:</span>
-                        <span className="font-medium">{overallMetrics.totalDurationMs}ms</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Validation Messages - Right side */}
+        {/* Validation Messages - Right side (replacing Enhanced Validation Results) */}
         {validationResult && validationIssues.length > 0 && (
           <Card>
             <CardHeader>
@@ -400,6 +297,7 @@ export default function ResourceViewer({
             </CardContent>
           </Card>
         )}
+
         
         {/* Show validation loading or error in right column if no validation results */}
         {!validationResult && (isValidating || validationError) && (

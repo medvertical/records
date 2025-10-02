@@ -33,6 +33,20 @@
 - [x] Filter results <1s for 10K+ resources (achieved <100ms)
 - [x] UI updates <200ms (achieved <50ms)
 
+### ✅ **Performance Budget Verification**
+- [x] List/Group endpoints: P95 < 500ms
+  - [x] `/api/validation/issues/groups`
+  - [x] `/api/validation/results`
+- [x] Detail endpoints: P95 < 300ms
+  - [x] `/api/fhir/{resourceType}`
+  - [x] `/api/validation/results/{id}`
+- [x] Dashboard endpoints: P95 < 400ms
+  - [x] `/api/dashboard/stats`
+  - [x] `/api/dashboard/cards`
+  - [x] `/api/dashboard/combined`
+- [x] Performance budget checks passing in CI
+- [x] Performance monitoring scripts available
+
 ## 🔧 Production Configuration
 
 ### **Environment Variables**

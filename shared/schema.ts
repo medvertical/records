@@ -128,6 +128,7 @@ export const dashboardCards = pgTable("dashboard_cards", {
 
 export const validationSettings = pgTable("validation_settings", {
   id: serial("id").primaryKey(),
+  serverId: integer("server_id").references(() => fhirServers.id),
   version: integer("version").notNull().default(1),
   settings: jsonb("settings").notNull(),
   isActive: boolean("is_active").default(true),

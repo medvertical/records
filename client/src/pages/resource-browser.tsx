@@ -63,7 +63,7 @@ export default function ResourceBrowser() {
 
   // Use validation settings polling to detect changes and refresh resource list
   const { lastChange, isPolling, error: pollingError } = useValidationSettingsPolling({
-    pollingInterval: 30000, // Poll every 30 seconds (reduced from 5 seconds)
+    pollingInterval: 60000, // Poll every 60 seconds (reduced frequency)
     enabled: true,
     showNotifications: false, // Don't show toast notifications in resource browser
     invalidateCache: true, // Invalidate cache when settings change
@@ -73,15 +73,12 @@ export default function ResourceBrowser() {
   useEffect(() => {
     if (lastChange) {
       console.log('[ResourceBrowser] Validation settings changed, refreshing resource list');
-      // Only invalidate if settings actually changed (not just polling)
-      if (lastChange.type === 'validation_settings_updated') {
-        // Reset validation flag when settings change to allow re-validation with new settings
-        setHasValidatedCurrentPage(false);
-        // Invalidate resource queries to refresh with new validation settings
-        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
-        // Clear validation cache to force revalidation with new settings
-        validatedResourcesCache.clear();
-      }
+      // Reset validation flag when settings change to allow re-validation with new settings
+      setHasValidatedCurrentPage(false);
+      // Invalidate resource queries to refresh with new validation settings
+      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+      // Clear validation cache to force revalidation with new settings
+      validatedResourcesCache.clear();
     }
   }, [lastChange, queryClient]);
 

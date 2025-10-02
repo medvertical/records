@@ -2,6 +2,83 @@ import type { Express } from "express";
 import { getValidationQueueService, ValidationPriority, getIndividualResourceProgressService, getValidationCancellationRetryService } from "../../../services/validation";
 
 export function setupValidationQueueRoutes(app: Express) {
+  // Start validation
+  app.post("/api/validation/start", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      const { batchSize, resourceTypes } = req.body;
+      
+      const queueId = await queueService.addToQueue({
+        resourceTypes: resourceTypes || [],
+        validationAspects: ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'],
+        config: { batchSize: batchSize || 100 },
+        priority: ValidationPriority.NORMAL
+      });
+      
+      res.json({ 
+        message: "Validation started",
+        queueId
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Pause validation
+  app.post("/api/validation/pause", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      await queueService.pauseQueue();
+      
+      res.json({ 
+        message: "Validation paused"
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Resume validation
+  app.post("/api/validation/resume", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      await queueService.resumeQueue();
+      
+      res.json({ 
+        message: "Validation resumed"
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Stop validation
+  app.post("/api/validation/stop", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      await queueService.stopQueue();
+      
+      res.json({ 
+        message: "Validation stopped"
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Cancel validation
+  app.post("/api/validation/cancel", async (req, res) => {
+    try {
+      const queueService = getValidationQueueService();
+      await queueService.cancelQueue();
+      
+      res.json({ 
+        message: "Validation cancelled"
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
   // Validation Queue Management
   app.post("/api/validation/bulk/start-queue", async (req, res) => {
     try {

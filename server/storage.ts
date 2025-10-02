@@ -29,7 +29,7 @@ import { eq, desc, and, gt, lt, sql, getTableColumns } from "drizzle-orm";
 import { queryOptimizer } from "./utils/query-optimizer.js";
 import { logger } from "./utils/logger.js";
 import { cacheManager, CACHE_TAGS } from "./utils/cache-manager.js";
-import { getValidationSettingsService } from "./services/validation/validation-settings-service.js";
+import { getValidationSettingsService } from "./services/validation/settings/validation-settings-service-simplified.js";
 
 export interface IStorage {
   // FHIR Servers
@@ -619,7 +619,7 @@ export class DatabaseStorage implements IStorage {
     
     // Get current validation settings
     const settingsService = getValidationSettingsService();
-    const validationSettingsData = await settingsService.getActiveSettings();
+    const validationSettingsData = await settingsService.getCurrentSettings();
     const settings = validationSettingsData || {
       structural: { enabled: true, severity: 'error' as const },
       profile: { enabled: true, severity: 'warning' as const },

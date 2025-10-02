@@ -63,9 +63,9 @@ export class ValidationSettingsService extends EventEmitter {
   }
 
   /**
-   * Get current validation settings
+   * Get current validation settings for a specific server
    */
-  async getCurrentSettings(): Promise<ValidationSettings> {
+  async getCurrentSettings(serverId?: number): Promise<ValidationSettings> {
     await this.ensureInitialized();
     
     // Check cache
@@ -74,19 +74,36 @@ export class ValidationSettingsService extends EventEmitter {
     }
     
     // Load from database
-    await this.loadCurrentSettings();
+    await this.loadCurrentSettings(serverId);
     return this.currentSettings!;
   }
 
   /**
-   * Update validation settings
+   * Get current validation settings with snapshot information for a specific server
    */
-  async updateSettings(update: ValidationSettingsUpdate): Promise<ValidationSettings> {
+  async getCurrentSettingsWithSnapshot(serverId?: number): Promise<ValidationSettings & { snapshotHash: string; snapshotTime: Date }> {
+    await this.ensureInitialized();
+    
+    const settings = await this.getCurrentSettings(serverId);
+    const snapshotHash = this.computeSettingsSnapshotHash(settings);
+    const snapshotTime = new Date();
+    
+    return {
+      ...settings,
+      snapshotHash,
+      snapshotTime
+    };
+  }
+
+  /**
+   * Update validation settings for a specific server
+   */
+  async updateSettings(update: ValidationSettingsUpdate & { serverId?: number }): Promise<ValidationSettings> {
     await this.ensureInitialized();
     
     try {
-      // Get current settings
-      const currentSettings = await this.getCurrentSettings();
+      // Get current settings for the server
+      const currentSettings = await this.getCurrentSettings(update.serverId);
       
       // Merge with update - settings are at top level, not nested
       const updatedSettings: ValidationSettings = {
@@ -103,7 +120,7 @@ export class ValidationSettingsService extends EventEmitter {
       }
       
       // Save to database
-      const savedSettings = await this.repository.createOrUpdate(updatedSettings);
+      const savedSettings = await this.repository.createOrUpdate(updatedSettings, update.serverId);
       
       // Update cache
       this.currentSettings = savedSettings;
@@ -112,6 +129,7 @@ export class ValidationSettingsService extends EventEmitter {
       // Emit event
       this.emit('settingsChanged', {
         type: 'updated',
+        serverId: update.serverId,
         data: this.currentSettings
       });
       
@@ -249,6 +267,17 @@ export class ValidationSettingsService extends EventEmitter {
       
       if (settings.performance.batchSize < 1) {
         errors.push('Batch size must be at least 1');
+      }
+    }
+    
+    // Check records configuration
+    if (settings.records) {
+      if (settings.records.maxReferenceDepth < 1) {
+        errors.push('Maximum reference depth must be at least 1');
+      }
+      
+      if (settings.records.maxReferenceDepth > 10) {
+        warnings.push('Maximum reference depth greater than 10 may impact performance');
       }
     }
     
@@ -429,9 +458,9 @@ export class ValidationSettingsService extends EventEmitter {
     }
   }
 
-  private async loadCurrentSettings(): Promise<void> {
+  private async loadCurrentSettings(serverId?: number): Promise<void> {
     try {
-      const settings = await this.repository.getActiveSettings();
+      const settings = await this.repository.getActiveSettings(serverId);
       this.currentSettings = settings || { ...DEFAULT_VALIDATION_SETTINGS };
       this.lastCacheTime = Date.now();
     } catch (error) {
@@ -453,6 +482,13 @@ export class ValidationSettingsService extends EventEmitter {
     } catch {
       return false;
     }
+  }
+
+  private computeSettingsSnapshotHash(settings: ValidationSettings): string {
+    // Create a deterministic hash of the settings for snapshot identification
+    const crypto = require('crypto');
+    const settingsString = JSON.stringify(settings, Object.keys(settings).sort());
+    return crypto.createHash('sha256').update(settingsString).digest('hex').substring(0, 16);
   }
 }
 
@@ -487,7 +523,9 @@ export async function initializeValidationSettingsService(): Promise<ValidationS
  */
 export async function shutdownValidationSettingsService(): Promise<void> {
   if (settingsServiceInstance) {
-    await settingsServiceInstance.shutdown();
+    // Clear cache and remove all listeners
+    settingsServiceInstance.clearCache();
+    settingsServiceInstance.removeAllListeners();
     settingsServiceInstance = null;
   }
 }

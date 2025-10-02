@@ -5,8 +5,8 @@
  */
 
 import { EventEmitter } from 'events';
-import { getValidationSettingsService } from '../validation-settings-service';
-import type { ValidationSettings } from '@shared/validation-settings';
+import { getValidationSettingsService } from '../settings/validation-settings-service-simplified';
+import type { ValidationSettings } from '@shared/validation-settings-simplified';
 import { ValidationPipelineConfig } from './pipeline-types';
 
 // ============================================================================
@@ -112,28 +112,19 @@ export class PipelineConfig extends EventEmitter {
     const configUpdates: Partial<ValidationPipelineConfig> = {};
 
     // Update max concurrent validations from settings
-    if (settings.maxConcurrentValidations !== undefined) {
-      configUpdates.maxConcurrentValidations = settings.maxConcurrentValidations;
+    if (settings.performance?.maxConcurrent !== undefined) {
+      configUpdates.maxConcurrentValidations = settings.performance.maxConcurrent;
     }
 
     // Update timeout from settings
-    if (settings.timeoutMs !== undefined) {
-      configUpdates.defaultTimeoutMs = settings.timeoutMs;
+    if (settings.server?.timeout !== undefined) {
+      configUpdates.defaultTimeoutMs = settings.server.timeout;
     }
 
-    // Update parallel processing based on settings
-    if (settings.enableParallelProcessing !== undefined) {
-      configUpdates.enableParallelProcessing = settings.enableParallelProcessing;
-    }
-
-    // Update caching based on settings
-    if (settings.enableCaching !== undefined) {
-      configUpdates.enableResultCaching = settings.enableCaching;
-    }
-
-    if (settings.cacheTtlMs !== undefined) {
-      configUpdates.cacheTtlMs = settings.cacheTtlMs;
-    }
+    // Always enable parallel processing and caching for simplified settings
+    configUpdates.enableParallelProcessing = true;
+    configUpdates.enableResultCaching = true;
+    configUpdates.cacheTtlMs = 300000; // Default 5 minutes
 
     // Only update if there are actual changes
     if (Object.keys(configUpdates).length > 0) {
@@ -146,29 +137,22 @@ export class PipelineConfig extends EventEmitter {
    */
   async getSettingsAwareConfig(): Promise<ValidationPipelineConfig> {
     try {
-      const settings = await this.settingsService.getActiveSettings();
+      const settings = await this.settingsService.getCurrentSettings();
       const settingsAwareConfig = { ...this.config };
 
       // Override with settings values
-      if (settings.maxConcurrentValidations !== undefined) {
-        settingsAwareConfig.maxConcurrentValidations = settings.maxConcurrentValidations;
+      if (settings.performance?.maxConcurrent !== undefined) {
+        settingsAwareConfig.maxConcurrentValidations = settings.performance.maxConcurrent;
       }
 
-      if (settings.timeoutMs !== undefined) {
-        settingsAwareConfig.defaultTimeoutMs = settings.timeoutMs;
+      if (settings.server?.timeout !== undefined) {
+        settingsAwareConfig.defaultTimeoutMs = settings.server.timeout;
       }
 
-      if (settings.enableParallelProcessing !== undefined) {
-        settingsAwareConfig.enableParallelProcessing = settings.enableParallelProcessing;
-      }
-
-      if (settings.enableCaching !== undefined) {
-        settingsAwareConfig.enableResultCaching = settings.enableCaching;
-      }
-
-      if (settings.cacheTtlMs !== undefined) {
-        settingsAwareConfig.cacheTtlMs = settings.cacheTtlMs;
-      }
+      // Always enable parallel processing and caching for simplified settings
+      settingsAwareConfig.enableParallelProcessing = true;
+      settingsAwareConfig.enableResultCaching = true;
+      settingsAwareConfig.cacheTtlMs = 300000; // Default 5 minutes
 
       return settingsAwareConfig;
     } catch (error) {

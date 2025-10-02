@@ -42,6 +42,22 @@ export class DashboardService {
   }
 
   /**
+   * Update the FHIR client (used when active server changes)
+   */
+  updateFhirClient(newFhirClient: FhirClient): void {
+    if (!newFhirClient) {
+      throw new Error('New FhirClient is required');
+    }
+    
+    logger.info('[DashboardService] Updating FHIR client for server activation');
+    this.fhirClient = newFhirClient;
+    
+    // Clear all cached data since it's now from a different server
+    cacheManager.clear();
+    logger.info('[DashboardService] Cleared cache due to FHIR client update');
+  }
+
+  /**
    * Get FHIR Server Statistics - Only data from the actual FHIR server
    */
   async getFhirServerStats(): Promise<FhirServerStats> {

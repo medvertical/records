@@ -14,7 +14,7 @@ import type {
   ValidationSettingsUpdate,
   ValidationSettingsValidationResult,
   ValidationSettingsPreset
-} from '@shared/validation-settings';
+} from '@shared/validation-settings-simplified';
 
 // ============================================================================
 // Types and Interfaces

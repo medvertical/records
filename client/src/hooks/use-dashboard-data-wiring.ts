@@ -75,7 +75,7 @@ export function useDashboardDataWiring(
 ): DashboardDataWiring {
   const {
     enableRealTimeUpdates = true,
-    refetchInterval = 30000, // 30 seconds
+    refetchInterval = 60000, // 60 seconds (reduced frequency)
     enabled = true,
   } = options;
 

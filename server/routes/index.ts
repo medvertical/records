@@ -14,6 +14,7 @@ import {
 } from "./api/validation";
 import { setupFhirRoutes, setupProfileRoutes, resourceEditRoutes, batchEditRoutes } from "./api/fhir";
 import { setupDashboardRoutes } from "./api/dashboard";
+import { setupServerRoutes } from "./api/servers";
 import adminRoutes from "./api/admin/clear-validation-results";
 
 export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, consolidatedValidationService: ConsolidatedValidationService | null, dashboardService: DashboardService | null) {
@@ -33,6 +34,7 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   setupProfileRoutes(app);
   setupValidationSettingsRoutes(app);
   setupValidationQueueRoutes(app);
+  setupServerRoutes(app);
   
   // Validation API routes
   app.use('/api/validation/clear', validationClearRoutes);

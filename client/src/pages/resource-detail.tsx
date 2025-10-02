@@ -21,7 +21,7 @@ export default function ResourceDetail() {
   
   // Use validation settings polling to detect changes and refresh resource detail
   const { lastChange } = useValidationSettingsPolling({
-    pollingInterval: 30000, // Poll every 30 seconds
+    pollingInterval: 60000, // Poll every 60 seconds (reduced frequency)
     enabled: true,
     showNotifications: false, // Don't show toast notifications in resource detail
     invalidateCache: true, // Invalidate cache when settings change

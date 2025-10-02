@@ -5,6 +5,7 @@
 import { storage } from '../../../storage';
 import { ValidationPerformanceService } from '../performance/validation-performance-service.js';
 import { ValidationErrorService } from './validation-error-service.js';
+import { FeatureFlags } from '../../../config/feature-flags.js';
 
 export interface ValidationRun {
   id: string;
@@ -224,7 +225,12 @@ export class ValidationComparisonService {
   async getValidationRun(runId: string): Promise<ValidationRun | null> {
     try {
       // In real implementation, this would fetch from database
-      // For now, return mock data
+      if (!FeatureFlags.DEMO_MOCKS) {
+        // Production: return null or implement real database query
+        return null;
+      }
+      
+      // Demo mode: return mock data
       return {
         id: runId,
         startTime: new Date(Date.now() - 3600000), // 1 hour ago

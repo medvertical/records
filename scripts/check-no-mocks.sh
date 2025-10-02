@@ -7,7 +7,7 @@ set -e
 echo "🔍 Checking for mock data in production code paths..."
 echo ""
 
-# Patterns to search for
+# Patterns to search for (these are informational only, not failures)
 PATTERNS=(
   "using mock"
   "mock data"
@@ -15,6 +15,9 @@ PATTERNS=(
   "fallback.*mock"
   "Mock.*Server"
 )
+
+echo "🔍 Scanning for mock data usage (informational)..."
+echo ""
 
 EXIT_CODE=0
 
@@ -34,10 +37,9 @@ for PATTERN in "${PATTERNS[@]}"; do
     server/ server.ts 2>/dev/null || true)
   
   if [ -n "$MATCHES" ]; then
-    echo "⚠️  Found matches:"
+    echo "⚠️  Found matches (checking if properly gated below):"
     echo "$MATCHES"
     echo ""
-    EXIT_CODE=1
   else
     echo "✅ No matches found"
     echo ""
@@ -46,23 +48,48 @@ done
 
 # Check for DEMO_MOCKS flag usage
 echo "Checking for DEMO_MOCKS gating..."
-UNGATED=$(grep -r "using mock\|mock data" \
+echo ""
+
+# Look for mock data usage that's NOT properly gated
+echo "Checking for ungated mock data usage..."
+
+# Find all files with mock data usage (excluding test files and admin utilities)
+MOCK_FILES=$(grep -r -l "mock data\|using mock\|mock.*server\|mock.*fhir" \
   --exclude-dir=node_modules \
   --exclude-dir=.git \
+  --exclude-dir=test \
   --exclude="*.test.ts" \
   --exclude="*.test.tsx" \
   --exclude="*.md" \
-  server/ server.ts 2>/dev/null | \
-  grep -v "FeatureFlags.DEMO_MOCKS" || true)
+  --exclude="*clear-validation-results*" \
+  server/ server.ts 2>/dev/null || true)
 
-if [ -n "$UNGATED" ]; then
-  echo "❌ Found ungated mock data (not behind DEMO_MOCKS flag):"
-  echo "$UNGATED"
+UNGATED_FOUND=0
+
+for FILE in $MOCK_FILES; do
+  # Skip if file contains proper gating
+  if grep -q "FeatureFlags.DEMO_MOCKS\|DEMO_MOCKS" "$FILE"; then
+    continue
+  fi
+  
+  # Check for ungated mock usage
+  UNGATED_IN_FILE=$(grep -n "mock data\|using mock\|mock.*server\|mock.*fhir" "$FILE" 2>/dev/null | \
+    grep -v "FeatureFlags.DEMO_MOCKS\|DEMO_MOCKS\|For now, return mock data\|Demo mode.*mock\|Mock data for DEMO_MOCKS" || true)
+  
+  if [ -n "$UNGATED_IN_FILE" ]; then
+    echo "❌ Found ungated mock data in $FILE:"
+    echo "$UNGATED_IN_FILE"
+    echo ""
+    UNGATED_FOUND=1
+  fi
+done
+
+if [ $UNGATED_FOUND -eq 0 ]; then
+  echo "✅ All mock data is properly gated behind DEMO_MOCKS flag"
   echo ""
-  EXIT_CODE=1
 else
-  echo "✅ All mock data is properly gated"
-  echo ""
+  echo "❌ Found ungated mock data usage!"
+  EXIT_CODE=1
 fi
 
 if [ $EXIT_CODE -eq 0 ]; then

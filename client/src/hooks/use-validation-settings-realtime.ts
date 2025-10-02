@@ -11,7 +11,7 @@ import { useToast } from './use-toast';
 import { useValidationSSE } from './use-validation-sse';
 import { useValidationSettingsPolling } from './use-validation-settings-polling';
 import { useSystemSettings } from './use-system-settings';
-import type { ValidationSettings } from '@shared/validation-settings';
+import type { ValidationSettings } from '@shared/validation-settings-simplified';
 
 export type RealTimeMode = 'sse' | 'polling' | 'auto';
 

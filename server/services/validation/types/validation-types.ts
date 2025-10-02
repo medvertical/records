@@ -5,7 +5,7 @@
  * It extends the shared types with server-specific functionality.
  */
 
-import type { ValidationSettings, ValidationAspect, ValidationSeverity } from '@shared/validation-settings';
+import type { ValidationSettings, ValidationAspect, ValidationSeverity } from '@shared/validation-settings-simplified';
 import type { ValidationResult, ValidationIssue } from '@shared/types/validation';
 
 // Re-export shared types for convenience

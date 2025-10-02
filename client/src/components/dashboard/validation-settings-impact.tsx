@@ -16,7 +16,8 @@ import {
   Info,
   BarChart3
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 interface ValidationSettingsImpactProps {
   validationStats?: any;
@@ -29,17 +30,40 @@ export function ValidationSettingsImpact({
   isLoading = false, 
   error = null 
 }: ValidationSettingsImpactProps) {
+  const queryClient = useQueryClient();
   
   // Fetch current validation settings
   const { data: validationSettings } = useQuery({
     queryKey: ['validation-settings'],
     queryFn: async () => {
       const response = await fetch('/api/validation/settings');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch validation settings: ${response.statusText}`);
+      }
       const data = await response.json();
-      return data.settings;
+      // API returns settings directly, not wrapped in a 'settings' property
+      if (!data || typeof data !== 'object') {
+        console.warn('[ValidationSettingsImpact] Invalid validation settings data received:', data);
+        return {};
+      }
+      return data;
     },
     refetchInterval: 5000 // Refresh every 5 seconds to show real-time updates
   });
+
+  // Listen for settings changes to trigger immediate UI updates
+  useEffect(() => {
+    const handleSettingsChanged = (event: CustomEvent) => {
+      console.log('[ValidationSettingsImpact] Settings changed, invalidating cache');
+      queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+    };
+
+    window.addEventListener('settingsChanged', handleSettingsChanged as EventListener);
+
+    return () => {
+      window.removeEventListener('settingsChanged', handleSettingsChanged as EventListener);
+    };
+  }, [queryClient]);
 
   if (isLoading) {
     return (

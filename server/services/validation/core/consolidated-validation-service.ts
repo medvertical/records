@@ -15,7 +15,7 @@ import { createHash } from 'crypto';
 import { storage } from '../../../storage';
 import { getValidationEngine } from './validation-engine';
 import { getValidationPipeline } from './validation-pipeline';
-import { getValidationSettingsService } from '../settings/validation-settings-service';
+import { getValidationSettingsService } from '../settings/validation-settings-service-simplified';
 import { getValidationResourceTypeFilteringService } from '../features/validation-resource-type-filtering-service';
 import { cacheManager } from '../../../utils/cache-manager';
 import type {
@@ -24,7 +24,7 @@ import type {
   InsertValidationResult,
   ValidationResult as StoredValidationResult,
 } from '@shared/schema';
-import type { ValidationSettings } from '@shared/validation-settings';
+import type { ValidationSettings } from '@shared/validation-settings-simplified';
 import type {
   ValidationPipelineRequest,
   ValidationPipelineConfig,
@@ -140,18 +140,18 @@ export class ConsolidatedValidationService extends EventEmitter {
     }
     
     try {
-      const settings = await this.settingsService.getActiveSettings();
+      const settings = await this.settingsService.getCurrentSettings();
       if (settings) {
         this.cachedSettings = settings;
         this.settingsCacheTime = now;
         
         // Update pipeline configuration based on settings
         this.pipeline.updateConfig({
-          maxConcurrentValidations: settings.maxConcurrentValidations || 10,
-          defaultTimeoutMs: settings.timeoutMs || 300000,
-          enableParallelProcessing: settings.enableParallelProcessing !== false,
-          enableResultCaching: settings.enableCaching !== false,
-          cacheTtlMs: settings.cacheTtlMs || 300000
+          maxConcurrentValidations: settings.performance?.maxConcurrent || 10,
+          defaultTimeoutMs: settings.server?.timeout || 300000,
+          enableParallelProcessing: true, // Always enable parallel processing
+          enableResultCaching: true, // Always enable result caching
+          cacheTtlMs: 300000 // Default cache TTL
         });
 
         this.emit('settingsLoaded', { settings });
@@ -186,7 +186,7 @@ export class ConsolidatedValidationService extends EventEmitter {
    */
   async isSettingsServiceHealthy(): Promise<boolean> {
     try {
-      await this.settingsService.getActiveSettings();
+      await this.settingsService.getCurrentSettings();
       return true;
     } catch (error) {
       return false;

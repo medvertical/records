@@ -18,7 +18,20 @@ export function setupValidationSettingsRoutes(app: Express) {
   app.get("/api/validation/settings", async (req, res) => {
     try {
       const settingsService = getValidationSettingsService();
-      const settings = await settingsService.getCurrentSettings();
+      const serverId = req.query.serverId ? parseInt(req.query.serverId as string) : undefined;
+      const settings = await settingsService.getCurrentSettings(serverId);
+      res.json(settings);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get Current Validation Settings with Snapshot Info
+  app.get("/api/validation/settings/snapshot", async (req, res) => {
+    try {
+      const settingsService = getValidationSettingsService();
+      const serverId = req.query.serverId ? parseInt(req.query.serverId as string) : undefined;
+      const settings = await settingsService.getCurrentSettingsWithSnapshot(serverId);
       res.json(settings);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -29,8 +42,9 @@ export function setupValidationSettingsRoutes(app: Express) {
   app.put("/api/validation/settings", async (req, res) => {
     try {
       const settingsService = getValidationSettingsService();
-      const update: ValidationSettingsUpdate = req.body;
-      const result = await settingsService.updateSettings(update);
+      const update: ValidationSettingsUpdate & { serverId?: number } = req.body;
+      const serverId = req.query.serverId ? parseInt(req.query.serverId as string) : update.serverId;
+      const result = await settingsService.updateSettings({ ...update, serverId });
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });

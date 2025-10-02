@@ -20,33 +20,11 @@ import {
   X
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { ValidationSettings } from '@shared/validation-settings-simplified';
 
 interface ValidationSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-}
-
-interface ValidationSettings {
-  aspects: {
-    structural: { enabled: boolean; severity: string; timeoutMs: number };
-    profile: { enabled: boolean; severity: string; timeoutMs: number };
-    terminology: { enabled: boolean; severity: string; timeoutMs: number };
-    reference: { enabled: boolean; severity: string; timeoutMs: number };
-    businessRule: { enabled: boolean; severity: string; timeoutMs: number };
-    metadata: { enabled: boolean; severity: string; timeoutMs: number };
-  };
-  batchProcessingSettings: {
-    defaultBatchSize: number;
-    maxBatchSize: number;
-    minBatchSize: number;
-    useAdaptiveBatchSizing: boolean;
-    pauseBetweenBatches: boolean;
-  };
-  resourceTypeFilterSettings: {
-    enabled: boolean;
-    mode: string;
-    resourceTypes: string[];
-  };
 }
 
 const validationAspects = [
@@ -111,8 +89,16 @@ export const ValidationSettingsModal: React.FC<ValidationSettingsModalProps> = (
     queryKey: ['validation-settings'],
     queryFn: async () => {
       const response = await fetch('/api/validation/settings');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch validation settings: ${response.statusText}`);
+      }
       const data = await response.json();
-      return data.settings;
+      // API returns settings directly, not wrapped in a 'settings' property
+      if (!data || typeof data !== 'object') {
+        console.warn('[ValidationSettingsModal] Invalid validation settings data received:', data);
+        return {};
+      }
+      return data;
     },
     enabled: isOpen
   });
@@ -137,10 +123,10 @@ export const ValidationSettingsModal: React.FC<ValidationSettingsModalProps> = (
   useEffect(() => {
     if (settingsData) {
       setLocalSettings(settingsData);
-      setBatchSize(settingsData.batchProcessingSettings?.defaultBatchSize || 200);
-      setAdaptiveSizing(settingsData.batchProcessingSettings?.useAdaptiveBatchSizing || false);
-      setPauseBetweenBatches(settingsData.batchProcessingSettings?.pauseBetweenBatches || false);
-      setResourceFilterEnabled(settingsData.resourceTypeFilterSettings?.enabled || false);
+      setBatchSize(settingsData.performance?.batchSize || 200);
+      setAdaptiveSizing(false); // Not available in canonical settings
+      setPauseBetweenBatches(false); // Not available in canonical settings
+      setResourceFilterEnabled(settingsData.resourceTypes?.enabled || false);
     }
   }, [settingsData]);
 
@@ -172,14 +158,12 @@ export const ValidationSettingsModal: React.FC<ValidationSettingsModalProps> = (
       isActive: true, // Force activation of updated settings
       version: (settingsData.version || 0) + 1, // Increment version
       updatedAt: new Date(), // Set current timestamp
-      batchProcessingSettings: {
-        ...settingsData.batchProcessingSettings,
-        defaultBatchSize: batchSize,
-        useAdaptiveBatchSizing: adaptiveSizing,
-        pauseBetweenBatches: pauseBetweenBatches
+      performance: {
+        ...settingsData.performance,
+        batchSize: batchSize,
       },
-      resourceTypeFilterSettings: {
-        ...settingsData.resourceTypeFilterSettings,
+      resourceTypes: {
+        ...settingsData.resourceTypes,
         enabled: resourceFilterEnabled
       }
     };

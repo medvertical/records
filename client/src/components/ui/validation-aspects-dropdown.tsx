@@ -28,7 +28,7 @@ import {
   X
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { ValidationSettings, BatchProcessingConfig, ResourceTypeFilterConfig } from "@/../../shared/validation-settings";
+import type { ValidationSettings } from "@/../../shared/validation-settings-simplified";
 
 interface ValidationAspectsDropdownProps {
   className?: string;

@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Shield, Settings } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface ValidationAspectsPanelProps {
   className?: string;
@@ -17,6 +17,8 @@ interface ValidationAspectsPanelProps {
 export const ValidationAspectsPanel: React.FC<ValidationAspectsPanelProps> = ({
   className,
 }) => {
+  const queryClient = useQueryClient();
+
   // Fetch validation settings to get the current aspects
   const { data: settingsData, isLoading, error } = useQuery({
     queryKey: ['validation-settings'],
@@ -28,13 +30,31 @@ export const ValidationAspectsPanel: React.FC<ValidationAspectsPanelProps> = ({
       const data = await response.json();
       // API returns settings directly, not wrapped in a 'settings' property
       // Ensure we always return a valid object to prevent TanStack Query undefined error
-      return data || {};
+      if (!data || typeof data !== 'object') {
+        console.warn('[ValidationAspectsPanel] Invalid validation settings data received:', data);
+        return {};
+      }
+      return data;
     },
-    refetchInterval: 10000, // Refresh every 10 seconds (reduced frequency)
-    staleTime: 5000, // Consider data stale after 5 seconds
+    refetchInterval: 30000, // Refresh every 30 seconds (reduced frequency)
+    staleTime: 15000, // Consider data stale after 15 seconds
     retry: 3, // Retry failed requests up to 3 times
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000) // Exponential backoff
   });
+
+  // Listen for settings changes to trigger immediate UI updates
+  useEffect(() => {
+    const handleSettingsChanged = (event: CustomEvent) => {
+      console.log('[ValidationAspectsPanel] Settings changed, invalidating cache');
+      queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+    };
+
+    window.addEventListener('settingsChanged', handleSettingsChanged as EventListener);
+
+    return () => {
+      window.removeEventListener('settingsChanged', handleSettingsChanged as EventListener);
+    };
+  }, [queryClient]);
 
   // Transform settings data to aspects format
   const aspects = settingsData ? [

@@ -13,6 +13,24 @@ vi.mock('./use-toast', () => ({
   })
 }));
 
+// Mock the shared polling hook
+vi.mock('./use-polling', () => ({
+  usePolling: () => ({
+    isPolling: false,
+    failureCount: 0,
+    currentInterval: 30000,
+    lastSuccess: null,
+    lastError: null,
+    isPaused: false,
+    start: vi.fn(),
+    stop: vi.fn(),
+    pause: vi.fn(),
+    resume: vi.fn(),
+    reset: vi.fn(),
+    poll: vi.fn()
+  })
+}));
+
 // Mock EventTarget for custom events
 global.EventTarget = class MockEventTarget {
   addEventListener = vi.fn();

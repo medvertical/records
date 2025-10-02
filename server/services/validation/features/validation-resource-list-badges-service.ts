@@ -10,6 +10,7 @@ import { getValidationSettingsService } from '../settings';
 import { getValidationResultFilteringService } from './validation-result-filtering-service';
 import { getValidationScoreCalculationService } from './validation-score-calculation-service';
 import { getValidationRealtimeNotificationService } from './validation-realtime-notification-service';
+import { FeatureFlags } from '../../../config/feature-flags.js';
 import type { ValidationSettings } from '@shared/validation-settings-simplified';
 
 export interface ResourceValidationBadge {
@@ -145,8 +146,14 @@ export class ValidationResourceListBadgesService extends EventEmitter {
    */
   private async loadResourceListBadges(): Promise<void> {
     try {
-      // This would typically fetch from storage, but for now we'll create mock data
-      // In a real implementation, this would query the database for validation results
+      if (!FeatureFlags.DEMO_MOCKS) {
+        // Production: implement real database query
+        // For now, return empty badges
+        this.currentBadges.clear();
+        return;
+      }
+      
+      // Demo mode: create mock data
       const mockBadges = await this.generateMockBadges();
       
       // Clear current badges and add new ones

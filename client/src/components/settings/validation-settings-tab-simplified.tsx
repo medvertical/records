@@ -15,6 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
+import { useActiveServer } from '@/hooks/use-active-server';
 import { 
   Settings, 
   CheckCircle, 
@@ -39,7 +40,7 @@ import {
 
 interface ValidationAspectConfig {
   enabled: boolean;
-  severity: 'error' | 'warning' | 'information';
+  severity: 'error' | 'warning' | 'info';
 }
 
 interface ServerConfig {
@@ -62,6 +63,16 @@ interface ValidationSettings {
     maxConcurrent: number;
     batchSize: number;
   };
+  records: {
+    validateExternalReferences: boolean;
+    strictReferenceTypeChecking: boolean;
+    strictMode: boolean;
+    validateReferenceIntegrity: boolean;
+    allowBrokenReferences: boolean;
+    maxReferenceDepth: number;
+  };
+  snapshotHash?: string;
+  snapshotTime?: string;
 }
 
 interface ValidationSettingsTabProps {
@@ -74,6 +85,19 @@ interface ValidationSettingsTabProps {
 
 export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTabProps) {
   const { toast } = useToast();
+  
+  // Use the active server hook for proper server management
+  const {
+    activeServer,
+    servers,
+    isLoading: serverLoading,
+    switchServer,
+    isSwitching
+  } = useActiveServer({
+    enablePolling: true,
+    showLoading: false,
+    showNotifications: false
+  });
   
   // State management
   const [validationSettings, setValidationSettings] = useState<ValidationSettings>({
@@ -93,6 +117,14 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
     performance: {
       maxConcurrent: 8,
       batchSize: 100
+    },
+    records: {
+      validateExternalReferences: true,
+      strictReferenceTypeChecking: true,
+      strictMode: false,
+      validateReferenceIntegrity: true,
+      allowBrokenReferences: false,
+      maxReferenceDepth: 3
     }
   });
 
@@ -100,10 +132,17 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
   const [isSaving, setIsSaving] = useState(false);
   const [testResults, setTestResults] = useState<any>(null);
 
-  // Load settings on mount
+  // Load settings on mount and when active server changes
   useEffect(() => {
     loadValidationSettings();
   }, []);
+
+  // Reload settings when active server changes to get server-specific settings
+  useEffect(() => {
+    if (activeServer) {
+      loadValidationSettings();
+    }
+  }, [activeServer]);
 
   // Notify parent of changes
   useEffect(() => {
@@ -117,7 +156,13 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
   const loadValidationSettings = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('/api/validation/settings');
+      // Include serverId in the request to get server-specific settings
+      const serverId = activeServer?.id;
+      const url = serverId 
+        ? `/api/validation/settings/snapshot?serverId=${serverId}`
+        : '/api/validation/settings/snapshot';
+        
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         setValidationSettings(data);
@@ -131,6 +176,29 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const activateServer = async (serverId: string) => {
+    try {
+      await switchServer(serverId);
+      
+      // Trigger app-wide rebind by dispatching a custom event
+      window.dispatchEvent(new CustomEvent('serverActivated', { 
+        detail: { serverId, timestamp: Date.now() } 
+      }));
+      
+      toast({
+        title: "Success",
+        description: "Server activated successfully. App-wide rebind triggered.",
+      });
+    } catch (error) {
+      console.error('Failed to activate server:', error);
+      toast({
+        title: "Error",
+        description: "Failed to activate server",
+        variant: "destructive",
+      });
     }
   };
 
@@ -171,22 +239,89 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
     }));
   };
 
+  const updateRecordsSetting = (field: keyof ValidationSettings['records'], value: any) => {
+    setValidationSettings(prev => ({
+      ...prev,
+      records: {
+        ...prev.records,
+        [field]: value
+      }
+    }));
+  };
+
   const saveValidationSettings = async () => {
     setIsSaving(true);
     try {
-      const response = await fetch('/api/validation/settings', {
-        method: 'PUT',
+      // First, validate the settings
+      const validationResponse = await fetch('/api/validation/settings/validate', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(validationSettings),
       });
 
+      if (!validationResponse.ok) {
+        throw new Error('Settings validation failed');
+      }
+
+      const validationResult = await validationResponse.json();
+      if (!validationResult.isValid) {
+        toast({
+          title: "Validation Failed",
+          description: `Settings validation failed: ${validationResult.errors.join(', ')}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // If validation passed, save the settings
+      const serverId = activeServer?.id;
+      const url = serverId 
+        ? `/api/validation/settings?serverId=${serverId}`
+        : '/api/validation/settings';
+        
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          settings: validationSettings,
+          serverId: serverId,
+          validate: true
+        }),
+      });
+
       if (response.ok) {
+        // Emit settingsChanged event for immediate UI recalculation
+        window.dispatchEvent(new CustomEvent('settingsChanged', { 
+          detail: { 
+            settings: validationSettings, 
+            timestamp: Date.now(),
+            validationResult 
+          } 
+        }));
+
+        // Reload settings to get updated snapshot info
+        await loadValidationSettings();
+
         toast({
           title: "Success",
-          description: "Validation settings saved successfully",
+          description: "Validation settings saved and applied successfully",
         });
+        
+        // Add success indicator for E2E tests
+        const successElement = document.createElement('div');
+        successElement.setAttribute('data-testid', 'settings-saved-success');
+        successElement.setAttribute('data-testid', 'settings-saved-message');
+        successElement.textContent = 'Settings saved successfully';
+        document.body.appendChild(successElement);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+          document.body.removeChild(successElement);
+        }, 3000);
       } else {
         throw new Error('Failed to save settings');
       }
@@ -276,7 +411,7 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
     switch (severity) {
       case 'error': return <XCircle className="h-4 w-4 text-red-500" />;
       case 'warning': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-      case 'information': return <Info className="h-4 w-4 text-blue-500" />;
+      case 'info': return <Info className="h-4 w-4 text-blue-500" />;
       default: return <Info className="h-4 w-4 text-gray-500" />;
     }
   };
@@ -285,7 +420,7 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
     const variants = {
       error: 'destructive' as const,
       warning: 'secondary' as const,
-      information: 'outline' as const
+      info: 'outline' as const
     };
     
     return (
@@ -321,6 +456,7 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
               id={`${aspect}-enabled`}
               checked={aspectSettings.enabled}
               onCheckedChange={(checked) => updateAspectSetting(aspect, 'enabled', checked)}
+              data-testid={`${aspect}-validation-toggle`}
             />
           </div>
           
@@ -330,6 +466,7 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
               <Select
                 value={aspectSettings.severity}
                 onValueChange={(value) => updateAspectSetting(aspect, 'severity', value)}
+                data-testid={`${aspect}-severity-select`}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -347,9 +484,9 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
                       Warning
                     </div>
                   </SelectItem>
-                  <SelectItem value="information">
+                  <SelectItem value="info">
                     <div className="flex items-center gap-2">
-                      {getSeverityIcon('information')}
+                      {getSeverityIcon('info')}
                       Information
                     </div>
                   </SelectItem>
@@ -404,6 +541,99 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
           </CardContent>
         </Card>
       )}
+
+      {/* Settings Snapshot Info */}
+      {validationSettings.snapshotHash && (
+        <Card className="border-gray-200 bg-gray-50/50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-gray-900">
+              <Database className="h-5 w-5" />
+              Settings Snapshot
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Snapshot Hash</Label>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {validationSettings.snapshotHash}
+                  </Badge>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">Last Updated</Label>
+                <div className="text-sm text-muted-foreground">
+                  {validationSettings.snapshotTime ? new Date(validationSettings.snapshotTime).toLocaleString() : 'Unknown'}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Active Server Management */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Server className="h-5 w-5" />
+            Active Server Management
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {activeServer ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 border border-green-200 bg-green-50 rounded-lg">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <span className="font-medium text-green-900">Active Server</span>
+                  </div>
+                  <div className="text-sm text-green-700">
+                    <div className="font-medium">{activeServer.name}</div>
+                    <div className="text-xs font-mono">{activeServer.url}</div>
+                  </div>
+                </div>
+                <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
+                  Active
+                </Badge>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Switch to Different Server</Label>
+                <div className="space-y-2">
+                  {servers
+                    .filter(server => !server.isActive)
+                    .map(server => (
+                      <div key={server.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                        <div className="space-y-1">
+                          <div className="font-medium">{server.name}</div>
+                          <div className="text-sm text-muted-foreground font-mono">{server.url}</div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => activateServer(server.id)}
+                          disabled={isSwitching}
+                        >
+                          {isSwitching ? 'Activating...' : 'Activate'}
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <AlertTriangle className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
+              <p className="text-muted-foreground">No active server configured</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Please configure and activate a FHIR server to enable validation
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Validation Aspects */}
       <div className="space-y-4">
@@ -587,9 +817,118 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
         </CardContent>
       </Card>
 
+      {/* Records-Specific Options */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Records-Specific Options
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="validate-external-refs">Validate External References</Label>
+                <p className="text-sm text-muted-foreground">
+                  Check references to resources outside the current server
+                </p>
+              </div>
+              <Switch
+                id="validate-external-refs"
+                checked={validationSettings.records.validateExternalReferences}
+                onCheckedChange={(checked) => updateRecordsSetting('validateExternalReferences', checked)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="strict-reference-type">Strict Reference Type Checking</Label>
+                <p className="text-sm text-muted-foreground">
+                  Enforce strict type checking for resource references
+                </p>
+              </div>
+              <Switch
+                id="strict-reference-type"
+                checked={validationSettings.records.strictReferenceTypeChecking}
+                onCheckedChange={(checked) => updateRecordsSetting('strictReferenceTypeChecking', checked)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="strict-mode">Strict Mode</Label>
+                <p className="text-sm text-muted-foreground">
+                  Enable strict validation mode with all rules enforced
+                </p>
+              </div>
+              <Switch
+                id="strict-mode"
+                checked={validationSettings.records.strictMode}
+                onCheckedChange={(checked) => updateRecordsSetting('strictMode', checked)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="validate-reference-integrity">Validate Reference Integrity</Label>
+                <p className="text-sm text-muted-foreground">
+                  Check if referenced resources actually exist
+                </p>
+              </div>
+              <Switch
+                id="validate-reference-integrity"
+                checked={validationSettings.records.validateReferenceIntegrity}
+                onCheckedChange={(checked) => updateRecordsSetting('validateReferenceIntegrity', checked)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="allow-broken-refs">Allow Broken References</Label>
+                <p className="text-sm text-muted-foreground">
+                  Allow broken references in validation results
+                </p>
+              </div>
+              <Switch
+                id="allow-broken-refs"
+                checked={validationSettings.records.allowBrokenReferences}
+                onCheckedChange={(checked) => updateRecordsSetting('allowBrokenReferences', checked)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="max-reference-depth">Maximum Reference Depth</Label>
+              <Select
+                value={validationSettings.records.maxReferenceDepth.toString()}
+                onValueChange={(value) => updateRecordsSetting('maxReferenceDepth', parseInt(value))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 level</SelectItem>
+                  <SelectItem value="2">2 levels</SelectItem>
+                  <SelectItem value="3">3 levels</SelectItem>
+                  <SelectItem value="5">5 levels</SelectItem>
+                  <SelectItem value="10">10 levels</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground">
+                Maximum depth for reference traversal during validation
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Save Button */}
       <div className="flex justify-end">
-        <Button onClick={saveValidationSettings} disabled={isSaving}>
+        <Button 
+          onClick={saveValidationSettings} 
+          disabled={isSaving}
+          data-testid="save-validation-settings"
+        >
           {isSaving ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />

@@ -65,8 +65,17 @@ fi
 echo "✅ No hardcoded DEMO_MOCKS=true"
 echo ""
 
-# Check 5: Secrets
-echo "5️⃣  Checking for accidentally committed secrets..."
+# Check 5: Mock data gating
+echo "5️⃣  Checking for properly gated mock data..."
+if ! bash scripts/check-no-mocks.sh; then
+  echo "❌ Mock data check failed. All mock data must be gated behind DEMO_MOCKS flag."
+  exit 1
+fi
+echo "✅ Mock data properly gated"
+echo ""
+
+# Check 6: Secrets
+echo "6️⃣  Checking for accidentally committed secrets..."
 SECRETS=$(grep -r "sk_live_\|sk_test_\|password.*=.*['\"].*['\"]" \
   --exclude-dir=node_modules \
   --exclude-dir=.git \
@@ -82,6 +91,25 @@ if [ -n "$SECRETS" ]; then
   # Don't fail, just warn
 fi
 echo "✅ Secret check complete"
+echo ""
+
+# Check 7: Performance budgets (optional in pre-commit)
+echo "7️⃣  Performance budget check (optional)..."
+if command -v curl >/dev/null 2>&1 && command -v bc >/dev/null 2>&1; then
+  # Check if server is running locally
+  if curl -s http://localhost:5000/api/health >/dev/null 2>&1; then
+    echo "Local server detected, running performance budget check..."
+    if bash scripts/performance-budget-check.sh http://localhost:5000; then
+      echo "✅ Performance budgets met"
+    else
+      echo "⚠️  Performance budgets exceeded (non-blocking in pre-commit)"
+    fi
+  else
+    echo "ℹ️  No local server running, skipping performance check"
+  fi
+else
+  echo "ℹ️  Missing curl or bc, skipping performance check"
+fi
 echo ""
 
 echo "✅ All pre-commit checks passed!"

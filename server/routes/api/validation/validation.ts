@@ -157,17 +157,19 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
     try {
       // Get progress from consolidated service
       const progressService = getIndividualResourceProgressService();
-      const progress = await progressService.getOverallProgress();
+      const progressStats = progressService.getProgressStats();
+      const activeProgress = progressService.getActiveProgress();
       
       // Combine with global state for backward compatibility
       const combinedProgress = {
         ...globalValidationState,
-        ...progress,
+        ...progressStats,
+        activeProgress,
         // Ensure we have the latest progress data
-        processedResources: progress.processedResources || globalValidationState.processedResources,
-        totalResources: progress.totalResources || globalValidationState.totalResources,
-        errors: progress.errors || globalValidationState.errors,
-        warnings: progress.warnings || globalValidationState.warnings
+        processedResources: progressStats.totalResources || globalValidationState.processedResources,
+        totalResources: progressStats.totalResources || globalValidationState.totalResources,
+        errors: progressStats.failedResources || globalValidationState.errors,
+        warnings: progressStats.failedResources || globalValidationState.warnings
       };
       
       res.json(combinedProgress);
@@ -224,7 +226,7 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
     try {
       // Use consolidated service for stop operations
       const cancellationService = getValidationCancellationRetryService();
-      await cancellationService.cancelValidation();
+      await cancellationService.cancelAllOperations('bulk-validation', 'user-requested');
       
       globalValidationState.isRunning = false;
       globalValidationState.isPaused = false;
@@ -914,7 +916,7 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
   app.get("/api/validation/results/:resourceId", async (req, res) => {
     try {
       const { resourceId } = req.params;
-      const { limit = 10 } = req.query;
+      const { limit = 10, applySettingsFilter = 'true' } = req.query;
       
       // Get the FHIR resource to obtain FHIR identity information
       const fhirResource = await storage.getFhirResourceById(parseInt(resourceId));
@@ -937,13 +939,138 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
         parseInt(resourceId)
       );
       
+      // Apply settings filter for list/detail parity if requested
+      let processedResults = results;
+      if (applySettingsFilter === 'true') {
+        // Get current validation settings
+        const settingsService = getValidationSettingsService();
+        const validationSettingsData = await settingsService.getCurrentSettings();
+        const settings = validationSettingsData || {
+          structural: { enabled: true, severity: 'error' as const },
+          profile: { enabled: true, severity: 'warning' as const },
+          terminology: { enabled: true, severity: 'warning' as const },
+          reference: { enabled: true, severity: 'error' as const },
+          businessRule: { enabled: true, severity: 'warning' as const },
+          metadata: { enabled: true, severity: 'info' as const }
+        };
+        
+        // Apply the same filtering logic as dashboard aggregation
+        processedResults = results.map(result => {
+          const reEvaluated = (storage as any).reEvaluateValidationResult(result, settings);
+          
+          // Filter issues based on current settings
+          const filteredIssues = (result.issues || []).filter((issue: any) => {
+            const aspect = issue.aspect || issue.category || 'structural';
+            
+            switch (aspect) {
+              case 'structural':
+                return settings.aspects?.structural?.enabled === true;
+              case 'profile':
+                return settings.aspects?.profile?.enabled === true;
+              case 'terminology':
+                return settings.aspects?.terminology?.enabled === true;
+              case 'reference':
+                return settings.aspects?.reference?.enabled === true;
+              case 'business-rule':
+              case 'businessRule':
+                return settings.aspects?.businessRule?.enabled === true;
+              case 'metadata':
+                return settings.aspects?.metadata?.enabled === true;
+              default:
+                return true;
+            }
+          });
+          
+          // Recalculate scores and counts based on filtered issues
+          let errorCount = 0;
+          let warningCount = 0;
+          let informationCount = 0;
+          
+          filteredIssues.forEach((issue: any) => {
+            const severity = issue.severity || 'error';
+            if (severity === 'error' || severity === 'fatal') {
+              errorCount++;
+            } else if (severity === 'warning') {
+              warningCount++;
+            } else if (severity === 'info' || severity === 'information') {
+              informationCount++;
+            }
+          });
+          
+          // Calculate score (same logic as dashboard)
+          let score = 100;
+          score -= errorCount * 15;    // Error issues: -15 points each
+          score -= warningCount * 5;   // Warning issues: -5 points each
+          score -= informationCount * 1; // Information issues: -1 point each
+          score = Math.max(0, Math.min(100, score));
+          
+          return {
+            ...result,
+            issues: filteredIssues,
+            isValid: reEvaluated.isValid,
+            errorCount,
+            warningCount,
+            informationCount,
+            // Update aspect results if they exist
+            aspectResults: result.aspectResults ? {
+              ...result.aspectResults,
+              // Update each aspect result with filtered data
+              structural: result.aspectResults.structural ? {
+                ...result.aspectResults.structural,
+                score: result.aspectResults.structural.score,
+                issues: result.aspectResults.structural.issues || []
+              } : undefined,
+              profile: result.aspectResults.profile ? {
+                ...result.aspectResults.profile,
+                score: result.aspectResults.profile.score,
+                issues: result.aspectResults.profile.issues || []
+              } : undefined,
+              terminology: result.aspectResults.terminology ? {
+                ...result.aspectResults.terminology,
+                score: result.aspectResults.terminology.score,
+                issues: result.aspectResults.terminology.issues || []
+              } : undefined,
+              reference: result.aspectResults.reference ? {
+                ...result.aspectResults.reference,
+                score: result.aspectResults.reference.score,
+                issues: result.aspectResults.reference.issues || []
+              } : undefined,
+              businessRule: result.aspectResults.businessRule ? {
+                ...result.aspectResults.businessRule,
+                score: result.aspectResults.businessRule.score,
+                issues: result.aspectResults.businessRule.issues || []
+              } : undefined,
+              metadata: result.aspectResults.metadata ? {
+                ...result.aspectResults.metadata,
+                score: result.aspectResults.metadata.score,
+                issues: result.aspectResults.metadata.issues || []
+              } : undefined
+            } : undefined,
+            // Update summary with recalculated values
+            summary: {
+              totalIssues: filteredIssues.length,
+              errorCount,
+              warningCount,
+              informationCount,
+              score,
+              issueCountByAspect: filteredIssues.reduce((acc: Record<string, number>, issue: any) => {
+                const aspect = issue.aspect || issue.category || 'structural';
+                acc[aspect] = (acc[aspect] || 0) + 1;
+                return acc;
+              }, {})
+            }
+          };
+        });
+      }
+      
       // Limit results if requested
-      const limitedResults = results.slice(0, parseInt(limit as string));
+      const limitedResults = processedResults.slice(0, parseInt(limit as string));
       
       res.json({
         success: true,
         data: limitedResults,
-        total: results.length
+        total: processedResults.length,
+        appliedSettingsFilter: applySettingsFilter === 'true'
       });
     } catch (error) {
       console.error('[Validation API] Error getting validation results for resource:', error);
@@ -958,7 +1085,7 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
   // POST /api/validation/results/batch - Get validation results for multiple resources
   app.post("/api/validation/results/batch", async (req, res) => {
     try {
-      const { resourceIds, limit = 10 } = req.body;
+      const { resourceIds, limit = 10, applySettingsFilter = true } = req.body;
       
       if (!Array.isArray(resourceIds)) {
         return res.status(400).json({
@@ -970,6 +1097,21 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
       // Get active server for FHIR identity
       const activeServer = await storage.getActiveFhirServer();
       const serverId = activeServer?.id || 1;
+      
+      // Get current validation settings for filtering if needed
+      let settings = null;
+      if (applySettingsFilter) {
+        const settingsService = getValidationSettingsService();
+        const validationSettingsData = await settingsService.getCurrentSettings();
+        settings = validationSettingsData || {
+          structural: { enabled: true, severity: 'error' as const },
+          profile: { enabled: true, severity: 'warning' as const },
+          terminology: { enabled: true, severity: 'warning' as const },
+          reference: { enabled: true, severity: 'error' as const },
+          businessRule: { enabled: true, severity: 'warning' as const },
+          metadata: { enabled: true, severity: 'info' as const }
+        };
+      }
       
       const results = await Promise.all(
         resourceIds.map(async (resourceId: number) => {
@@ -991,16 +1133,92 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
             resourceId
           );
           
+          // Apply settings filter if requested (same logic as single resource endpoint)
+          let processedResults = resourceResults;
+          if (applySettingsFilter && settings) {
+            processedResults = resourceResults.map(result => {
+              const reEvaluated = (storage as any).reEvaluateValidationResult(result, settings);
+              
+              // Filter issues based on current settings
+              const filteredIssues = (result.issues || []).filter((issue: any) => {
+                const aspect = issue.aspect || issue.category || 'structural';
+                
+                switch (aspect) {
+                  case 'structural':
+                    return settings.aspects?.structural?.enabled === true;
+                  case 'profile':
+                    return settings.aspects?.profile?.enabled === true;
+                  case 'terminology':
+                    return settings.aspects?.terminology?.enabled === true;
+                  case 'reference':
+                    return settings.aspects?.reference?.enabled === true;
+                  case 'business-rule':
+                  case 'businessRule':
+                    return settings.aspects?.businessRule?.enabled === true;
+                  case 'metadata':
+                    return settings.aspects?.metadata?.enabled === true;
+                  default:
+                    return true;
+                }
+              });
+              
+              // Recalculate scores and counts based on filtered issues
+              let errorCount = 0;
+              let warningCount = 0;
+              let informationCount = 0;
+              
+              filteredIssues.forEach((issue: any) => {
+                const severity = issue.severity || 'error';
+                if (severity === 'error' || severity === 'fatal') {
+                  errorCount++;
+                } else if (severity === 'warning') {
+                  warningCount++;
+                } else if (severity === 'info' || severity === 'information') {
+                  informationCount++;
+                }
+              });
+              
+              // Calculate score (same logic as dashboard)
+              let score = 100;
+              score -= errorCount * 15;    // Error issues: -15 points each
+              score -= warningCount * 5;   // Warning issues: -5 points each
+              score -= informationCount * 1; // Information issues: -1 point each
+              score = Math.max(0, Math.min(100, score));
+              
+              return {
+                ...result,
+                issues: filteredIssues,
+                isValid: reEvaluated.isValid,
+                errorCount,
+                warningCount,
+                informationCount,
+                summary: {
+                  totalIssues: filteredIssues.length,
+                  errorCount,
+                  warningCount,
+                  informationCount,
+                  score,
+                  issueCountByAspect: filteredIssues.reduce((acc: Record<string, number>, issue: any) => {
+                    const aspect = issue.aspect || issue.category || 'structural';
+                    acc[aspect] = (acc[aspect] || 0) + 1;
+                    return acc;
+                  }, {})
+                }
+              };
+            });
+          }
+          
           return {
             resourceId,
-            results: resourceResults.slice(0, parseInt(limit as string))
+            results: processedResults.slice(0, parseInt(limit as string))
           };
         })
       );
       
       res.json({
         success: true,
-        data: results
+        data: results,
+        appliedSettingsFilter: applySettingsFilter
       });
     } catch (error) {
       console.error('[Validation API] Error getting batch validation results:', error);

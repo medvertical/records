@@ -15,8 +15,9 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { ValidationStats } from '@shared/types/dashboard';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ValidationAspectBreakdownChart } from './validation-aspect-breakdown-chart';
+import { useEffect } from 'react';
 
 interface ValidationStatsCardProps {
   data?: ValidationStats | null;
@@ -31,16 +32,40 @@ export function ValidationStatsCard({
   error = null, 
   lastUpdated 
 }: ValidationStatsCardProps) {
+  const queryClient = useQueryClient();
+  
   // Fetch current validation settings for aspect indicators
   const { data: validationSettings } = useQuery({
     queryKey: ['validation-settings'],
     queryFn: async () => {
       const response = await fetch('/api/validation/settings');
+      if (!response.ok) {
+        throw new Error(`Failed to fetch validation settings: ${response.statusText}`);
+      }
       const data = await response.json();
-      return data.settings;
+      // API returns settings directly, not wrapped in a 'settings' property
+      if (!data || typeof data !== 'object') {
+        console.warn('[ValidationStatsCard] Invalid validation settings data received:', data);
+        return {};
+      }
+      return data;
     },
     refetchInterval: 5000 // Refresh every 5 seconds to show real-time updates
   });
+
+  // Listen for settings changes to trigger immediate UI updates
+  useEffect(() => {
+    const handleSettingsChanged = (event: CustomEvent) => {
+      console.log('[ValidationStatsCard] Settings changed, invalidating cache');
+      queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+    };
+
+    window.addEventListener('settingsChanged', handleSettingsChanged as EventListener);
+
+    return () => {
+      window.removeEventListener('settingsChanged', handleSettingsChanged as EventListener);
+    };
+  }, [queryClient]);
 
   // Only show loading state if we truly have no data and are actively loading
   // Don't show loading during refetches when we have previous data

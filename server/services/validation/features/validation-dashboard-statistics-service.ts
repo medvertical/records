@@ -10,6 +10,7 @@ import { getValidationSettingsService } from '../settings';
 import { getValidationResultFilteringService } from './validation-result-filtering-service';
 import { getValidationScoreCalculationService } from './validation-score-calculation-service';
 import { getValidationRealtimeNotificationService } from './validation-realtime-notification-service';
+import { FeatureFlags } from '../../../config/feature-flags.js';
 import type { ValidationSettings } from '@shared/validation-settings-simplified';
 
 export interface DashboardStatistics {
@@ -145,8 +146,25 @@ export class ValidationDashboardStatisticsService extends EventEmitter {
    */
   private async loadDashboardStatistics(): Promise<void> {
     try {
-      // This would typically fetch from storage, but for now we'll create mock data
-      // In a real implementation, this would query the database for validation results
+      if (!FeatureFlags.DEMO_MOCKS) {
+        // Production: implement real database query
+        // For now, return empty statistics
+        this.currentStatistics = {
+          overview: {
+            totalResources: 0,
+            validResources: 0,
+            invalidResources: 0,
+            validationRate: 0,
+            averageScore: 0
+          },
+          aspects: {},
+          trends: [],
+          recommendations: []
+        };
+        return;
+      }
+      
+      // Demo mode: create mock data
       const mockStatistics = await this.generateMockStatistics();
       this.currentStatistics = mockStatistics;
       

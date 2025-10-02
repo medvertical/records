@@ -5,7 +5,7 @@
  */
 
 import type { ValidationResult } from '../types/validation-types';
-import type { ValidationAspect } from '@shared/validation-settings';
+import type { ValidationAspect } from '@shared/validation-settings-simplified';
 import { PipelineSummary, PipelinePerformance, MemoryUsage, ConcurrencyStats } from './pipeline-types';
 
 // ============================================================================

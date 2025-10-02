@@ -11,7 +11,7 @@ import { BatchProcessor } from '../pipeline/batch-processor';
 import { PipelineConfig } from '../pipeline/pipeline-config';
 import { PipelineCalculator } from '../pipeline/pipeline-calculator';
 import type { ValidationRequest, ValidationResult } from '../types/validation-types';
-import type { ValidationSettings } from '@shared/validation-settings';
+import type { ValidationSettings } from '@shared/validation-settings-simplified';
 import { 
   ValidationPipelineConfig, 
   ValidationPipelineRequest, 

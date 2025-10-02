@@ -137,10 +137,27 @@ export default function ResourceList({
           };
         } else {
           // Include counts from enabled aspects
-          filteredErrorCount += filteredBreakdown[aspect].errorCount || 0;
-          filteredWarningCount += filteredBreakdown[aspect].warningCount || 0;
-          filteredInfoCount += filteredBreakdown[aspect].informationCount || 0;
-          filteredTotalIssues += filteredBreakdown[aspect].issueCount || 0;
+          // For old validation results that have all aspects marked as "skipped" but should be enabled,
+          // we need to check if the aspect was actually executed or just skipped due to the old bug
+          const aspectResult = filteredBreakdown[aspect];
+          const wasActuallyExecuted = aspectResult.status === 'executed' || 
+                                     (aspectResult.status === 'skipped' && aspectResult.reason !== 'Aspect result unavailable');
+          
+          if (wasActuallyExecuted) {
+            filteredErrorCount += aspectResult.errorCount || 0;
+            filteredWarningCount += aspectResult.warningCount || 0;
+            filteredInfoCount += aspectResult.informationCount || 0;
+            filteredTotalIssues += aspectResult.issueCount || 0;
+          } else {
+            // This aspect was skipped due to the old validation engine bug
+            // Don't include it in the filtered counts, but mark it as enabled for future validations
+            filteredBreakdown[aspect] = {
+              ...aspectResult,
+              enabled: true,
+              status: 'skipped',
+              reason: 'Previously skipped due to validation engine bug - will be validated on next run'
+            };
+          }
         }
       });
 
@@ -247,14 +264,6 @@ export default function ResourceList({
       return 'validating';
     }
     
-    // Check if cache has been cleared - if so, treat as not validated
-    if (typeof window !== 'undefined' && (window as any).validatedResourcesCache) {
-      const cacheKey = `${resource.resourceType}/${resource.id}`;
-      if (!(window as any).validatedResourcesCache.has(cacheKey)) {
-        return 'not-validated';
-      }
-    }
-    
     // Check for enhanced validation results first
     const enhancedValidation = resource._enhancedValidationSummary;
     if (enhancedValidation) {
@@ -282,6 +291,18 @@ export default function ResourceList({
     // If no filtered summary, return not-validated
     if (!filteredSummary) {
       return 'not-validated';
+    }
+    
+    // Check if this is an old validation result where all aspects were skipped due to the validation engine bug
+    if (validationSummary.aspectBreakdown) {
+      const allAspectsSkipped = Object.values(validationSummary.aspectBreakdown).every((aspect: any) => 
+        aspect.status === 'skipped' && aspect.reason === 'Aspect result unavailable'
+      );
+      
+      if (allAspectsSkipped) {
+        // This is an old validation result that should be treated as not validated
+        return 'not-validated';
+      }
     }
     
     if (filteredSummary.hasErrors) {
@@ -322,14 +343,6 @@ export default function ResourceList({
       if (status === 'validating') {
         // Show progress percentage if available, otherwise show 0%
         return progress?.progress || 0;
-      }
-      
-      // Check if cache has been cleared - if so, show 0%
-      if (typeof window !== 'undefined' && (window as any).validatedResourcesCache) {
-        const cacheKey = `${resource.resourceType}/${resource.id}`;
-        if (!(window as any).validatedResourcesCache.has(cacheKey)) {
-          return 0;
-        }
       }
       
       // Use enhanced validation score if available

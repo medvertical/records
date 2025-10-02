@@ -12,14 +12,14 @@ import { TerminologyValidator } from '../engine/terminology-validator';
 import { ReferenceValidator } from '../engine/reference-validator';
 import { BusinessRuleValidator } from '../engine/business-rule-validator';
 import { MetadataValidator } from '../engine/metadata-validator';
-import { getValidationSettingsService } from '../settings/validation-settings-service';
+import { getValidationSettingsService } from '../settings/validation-settings-service-simplified';
 import { FhirClient } from '../../fhir/fhir-client';
 import { TerminologyClient } from '../../fhir/terminology-client';
 import type {
   ValidationSettings,
   ValidationAspect,
   ValidationSeverity
-} from '@shared/validation-settings';
+} from '@shared/validation-settings-simplified';
 import type {
   ValidationRequest,
   ValidationAspectResult,
@@ -185,19 +185,42 @@ export class ValidationEngine extends EventEmitter {
     // Only return aspects that are enabled in settings
     const enabledAspects = new Set<ValidationAspect>();
     
-    if (settings.structural?.enabled) enabledAspects.add('structural');
-    if (settings.profile?.enabled) enabledAspects.add('profile');
-    if (settings.terminology?.enabled) enabledAspects.add('terminology');
-    if (settings.reference?.enabled) enabledAspects.add('reference');
-    if (settings.businessRule?.enabled) enabledAspects.add('businessRule');
-    if (settings.metadata?.enabled) enabledAspects.add('metadata');
+    console.log(`[ValidationEngine] resolveRequestedAspects: settings.aspects =`, settings.aspects);
+    console.log(`[ValidationEngine] resolveRequestedAspects: settings.aspects?.structural =`, settings.aspects?.structural);
+    console.log(`[ValidationEngine] resolveRequestedAspects: settings.aspects?.structural?.enabled =`, settings.aspects?.structural?.enabled);
     
-      console.log(`[ValidationEngine] resolveRequestedAspects: enabled aspects =`, Array.from(enabledAspects));
-      console.log(`[ValidationEngine] ===== CRITICAL DEBUG =====`);
-      console.log(`[ValidationEngine] Settings received:`, JSON.stringify(settings, null, 2));
-      console.log(`[ValidationEngine] Enabled aspects:`, Array.from(enabledAspects));
-      console.log(`[ValidationEngine] =========================`);
-      return enabledAspects;
+    // Check the correct settings structure: settings.aspects.{aspect}.enabled
+    if (settings.aspects?.structural?.enabled) {
+      console.log(`[ValidationEngine] Adding structural aspect`);
+      enabledAspects.add('structural');
+    }
+    if (settings.aspects?.profile?.enabled) {
+      console.log(`[ValidationEngine] Adding profile aspect`);
+      enabledAspects.add('profile');
+    }
+    if (settings.aspects?.terminology?.enabled) {
+      console.log(`[ValidationEngine] Adding terminology aspect`);
+      enabledAspects.add('terminology');
+    }
+    if (settings.aspects?.reference?.enabled) {
+      console.log(`[ValidationEngine] Adding reference aspect`);
+      enabledAspects.add('reference');
+    }
+    if (settings.aspects?.businessRule?.enabled) {
+      console.log(`[ValidationEngine] Adding businessRule aspect`);
+      enabledAspects.add('businessRule');
+    }
+    if (settings.aspects?.metadata?.enabled) {
+      console.log(`[ValidationEngine] Adding metadata aspect`);
+      enabledAspects.add('metadata');
+    }
+    
+    console.log(`[ValidationEngine] resolveRequestedAspects: enabled aspects =`, Array.from(enabledAspects));
+    console.log(`[ValidationEngine] ===== CRITICAL DEBUG =====`);
+    console.log(`[ValidationEngine] Settings received:`, JSON.stringify(settings, null, 2));
+    console.log(`[ValidationEngine] Enabled aspects:`, Array.from(enabledAspects));
+    console.log(`[ValidationEngine] =========================`);
+    return enabledAspects;
   }
 
 

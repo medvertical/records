@@ -28,9 +28,25 @@ export const ValidationControlPanel: React.FC<ValidationControlPanelProps> = ({
 
   const handleStart = async () => {
     try {
-      const response = await fetch('/api/validation/bulk/start', { method: 'POST' });
+      const response = await fetch('/api/validation/bulk/start', { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          resourceTypes: ['Patient', 'Observation', 'Encounter', 'Condition', 'AllergyIntolerance'],
+          validationAspects: ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'],
+          config: {
+            batchSize: 50,
+            maxConcurrent: 5
+          }
+        })
+      });
       if (response.ok) {
         refreshStatus();
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to start validation:', errorData.message);
       }
     } catch (error) {
       console.error('Failed to start validation:', error);
@@ -39,9 +55,17 @@ export const ValidationControlPanel: React.FC<ValidationControlPanelProps> = ({
 
   const handleStop = async () => {
     try {
-      const response = await fetch('/api/validation/bulk/stop', { method: 'POST' });
+      const response = await fetch('/api/validation/bulk/stop', { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
       if (response.ok) {
         refreshStatus();
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to stop validation:', errorData.message);
       }
     } catch (error) {
       console.error('Failed to stop validation:', error);
@@ -50,9 +74,17 @@ export const ValidationControlPanel: React.FC<ValidationControlPanelProps> = ({
 
   const handlePause = async () => {
     try {
-      const response = await fetch('/api/validation/bulk/pause', { method: 'POST' });
+      const response = await fetch('/api/validation/bulk/pause', { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
       if (response.ok) {
         refreshStatus();
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to pause validation:', errorData.message);
       }
     } catch (error) {
       console.error('Failed to pause validation:', error);
@@ -61,9 +93,17 @@ export const ValidationControlPanel: React.FC<ValidationControlPanelProps> = ({
 
   const handleResume = async () => {
     try {
-      const response = await fetch('/api/validation/bulk/resume', { method: 'POST' });
+      const response = await fetch('/api/validation/bulk/resume', { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
       if (response.ok) {
         refreshStatus();
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to resume validation:', errorData.message);
       }
     } catch (error) {
       console.error('Failed to resume validation:', error);

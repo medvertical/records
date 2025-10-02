@@ -5,7 +5,7 @@
  */
 
 import type { ValidationRequest, ValidationResult } from '../types/validation-types';
-import type { ValidationAspect } from '@shared/validation-settings';
+import type { ValidationAspect } from '@shared/validation-settings-simplified';
 
 // ============================================================================
 // Configuration Types

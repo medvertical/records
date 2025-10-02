@@ -6,9 +6,9 @@
 
 import { EventEmitter } from 'events';
 import { getValidationEngine } from '../core/validation-engine';
-import { getValidationSettingsService } from '../settings/validation-settings-service';
+import { getValidationSettingsService } from '../settings/validation-settings-service-simplified';
 import type { ValidationRequest, ValidationResult } from '../types/validation-types';
-import type { ValidationSettings } from '@shared/validation-settings';
+import type { ValidationSettings } from '@shared/validation-settings-simplified';
 import { ValidationPipelineConfig, ValidationPipelineRequest, ValidationPipelineResult, PipelineTimestamps } from './pipeline-types';
 
 // ============================================================================
@@ -125,7 +125,7 @@ export class PipelineOrchestrator extends EventEmitter {
       // Get validation settings with fallback
       let settings: ValidationSettings;
       try {
-        settings = await this.settingsService.getActiveSettings();
+        settings = await this.settingsService.getCurrentSettings();
       } catch (error) {
         console.warn('[ValidationPipeline] Failed to load settings, using defaults:', error instanceof Error ? error.message : error);
         // Use default settings when database is unavailable

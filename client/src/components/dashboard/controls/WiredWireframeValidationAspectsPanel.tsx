@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { WireframeValidationAspectsPanel } from './WireframeValidationAspectsPanel';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface WiredWireframeValidationAspectsPanelProps {
   className?: string;
@@ -12,6 +12,8 @@ interface WiredWireframeValidationAspectsPanelProps {
 export const WiredWireframeValidationAspectsPanel: React.FC<WiredWireframeValidationAspectsPanelProps> = ({
   className,
 }) => {
+  const queryClient = useQueryClient();
+  
   // Fetch validation settings to get the current aspects
   const { data: settingsData, isLoading, error } = useQuery({
     queryKey: ['validation-settings'],
@@ -30,6 +32,20 @@ export const WiredWireframeValidationAspectsPanel: React.FC<WiredWireframeValida
     retry: 3, // Retry failed requests up to 3 times
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000) // Exponential backoff
   });
+
+  // Listen for settings changes to trigger immediate UI updates
+  useEffect(() => {
+    const handleSettingsChanged = (event: CustomEvent) => {
+      console.log('[WiredWireframeValidationAspectsPanel] Settings changed, invalidating cache');
+      queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+    };
+
+    window.addEventListener('settingsChanged', handleSettingsChanged as EventListener);
+
+    return () => {
+      window.removeEventListener('settingsChanged', handleSettingsChanged as EventListener);
+    };
+  }, [queryClient]);
 
   // Transform settings data to aspects format
   const aspects = settingsData ? [

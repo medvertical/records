@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { getValidationSettingsService } from "../../../services/validation/settings/validation-settings-service";
+import { getValidationSettingsService } from "../../../services/validation/settings/validation-settings-service-simplified";
 import type { ValidationSettings, ValidationSettingsUpdate } from "@shared/validation-settings.js";
 import { BUILT_IN_PRESETS } from "@shared/validation-settings.js";
 
@@ -8,7 +8,7 @@ export function setupValidationSettingsRoutes(app: Express) {
   app.get("/api/validation/settings", async (req, res) => {
     try {
       const settingsService = getValidationSettingsService();
-      const settings = await settingsService.getActiveSettings();
+      const settings = await settingsService.getCurrentSettings();
       res.json(settings);
     } catch (error: any) {
       res.status(500).json({ message: error.message });

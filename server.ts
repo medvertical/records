@@ -167,8 +167,15 @@ app.get("/api/fhir/version", async (req, res) => {
       });
     }
   } catch (error) {
-    console.log('FHIR client not available, using mock version info');
-    res.json(mockFhirVersion);
+    if (FeatureFlags.DEMO_MOCKS) {
+      console.log('FHIR client not available, using mock version info');
+      res.json(mockFhirVersion);
+    } else {
+      res.status(503).json({
+        error: 'FHIR client not available',
+        message: 'Please configure and activate a FHIR server'
+      });
+    }
   }
 });
 
@@ -1383,19 +1390,25 @@ app.get("/api/dashboard/combined", async (req, res) => {
 
 app.get("/api/dashboard/fhir-version-info", async (req, res) => {
   try {
-    const { FhirClient } = await import("./server/services/fhir/fhir-client.js");
-    const fhirClient = new FhirClient("http://hapi.fhir.org/baseR4");
-    const result = await fhirClient.testConnection();
+    // Use the active FHIR client from the server activation service
+    if (!global.fhirClient) {
+      return res.status(503).json({
+        error: 'No active FHIR server configured',
+        message: 'Please configure and activate a FHIR server in the settings'
+      });
+    }
+
+    const result = await global.fhirClient.testConnection();
     res.json({
-      version: "R4",
-      release: "4.0.1",
-      date: "2019-10-30",
-      fhirVersion: "4.0.1",
+      version: result.version || "Unknown",
+      release: result.release || "Unknown",
+      date: result.date || "Unknown",
+      fhirVersion: result.version || "Unknown",
       connection: result,
       serverInfo: {
-        name: "HAPI Test Server",
-        url: "http://hapi.fhir.org/baseR4",
-        status: "connected"
+        name: "Active Server",
+        url: global.fhirClient.url,
+        status: result.connected ? "connected" : "disconnected"
       }
     });
   } catch (error) {

@@ -161,7 +161,7 @@
   - [x] 6.11 Accessibility: keyboard navigation, aria labels for filters/toggles/badges
   - [x] 6.12 Resource editor modal: JSON/form editor with syntax validation, save/cancel actions
   - [x] 6.13 Error boundary: React error boundary with fallback UI and error reporting
-- [ ] 7.0 UI Resource Detail: per-aspect messages/signatures, same counting/score logic, navigate from groups
+- [x] 7.0 UI Resource Detail: per-aspect messages/signatures, same counting/score logic, navigate from groups
   - [x] 7.1 Header with resource identity, aggregated score, per-aspect chips (enabled/disabled/validating) and timestamps
   - [x] 7.2 Per-aspect sections/tabs with MessageList (severity, code, canonicalPath, text, signature)
   - [x] 7.3 Signature badges link back to GroupMembers (deep-link with signature and resourceType)
@@ -179,7 +179,6 @@
   - [x] 7.15 Virtualization: large-resource friendly (windowed list for messages, lazy tree expansion)
   - [x] 7.16 Keyboard navigation: next/prev issue (messages and tree), ensure ARIA roles/labels
   - [x] 7.17 Tests: mapping correctness, deep-link navigation, sync highlight/scroll, severity aggregation
-- [x] 7.0 UI Resource Detail: per-aspect messages/signatures, same counting/score logic, navigate from groups
 - [x] 8.0 Reactivity: immediate rebind on server switch; UI recalculation on aspect change
   - [x] 8.1 Ensure all React Query keys include server_id; invalidate and refetch on server change
   - [x] 8.2 Subscribe to settings changes; recalc UI (disabled aspects greyed/excluded)
@@ -258,22 +257,22 @@
   - [x] 18.10 Align with `docs/technical/validation/API_DOCUMENTATION.md`
   - [x] 18.11 Use shared `usePolling` hook from 8.5 (cancellation, backoff with jitter, unmount cleanup)
 
-- [ ] 19.0 Settings (Records-focused, working, no mocks)
-  - [ ] 19.1 Settings view: per-aspect toggles and severity; show snapshot hash/time
-  - [ ] 19.2 Records-specific options: validate external references, reference type checks, strict mode
-  - [ ] 19.3 Engine controls: defaults for batch size, concurrency, timeouts; persist server-scoped
-  - [ ] 19.4 Active server management: select/activate server; immediate app-wide rebind
-  - [ ] 19.5 Use canonical module everywhere; remove legacy settings usages in UI
-  - [ ] 19.6 Apply/save with validation; emit settingsChanged; UI recalculates immediately
-  - [ ] 19.7 Tests: unit (validation/normalize), integration (persist/emit), E2E (toggle aspects parity)
-  - [ ] 19.8 Use shared `usePolling` hook from 8.5 (cancellation, backoff with jitter, unmount cleanup)
+  - [x] 19.0 Settings (Records-focused, working, no mocks)
+  - [x] 19.1 Settings view: per-aspect toggles and severity; show snapshot hash/time
+  - [x] 19.2 Records-specific options: validate external references, reference type checks, strict mode
+  - [x] 19.3 Engine controls: defaults for batch size, concurrency, timeouts; persist server-scoped
+  - [x] 19.4 Active server management: select/activate server; immediate app-wide rebind
+  - [x] 19.5 Use canonical module everywhere; remove legacy settings usages in UI
+  - [x] 19.6 Apply/save with validation; emit settingsChanged; UI recalculates immediately
+  - [x] 19.7 Tests: unit (validation/normalize), integration (persist/emit), E2E (toggle aspects parity)
+  - [x] 19.8 Use shared `usePolling` hook from 8.5 (cancellation, backoff with jitter, unmount cleanup)
 
-- [ ] 20.0 Definition of Done (acceptance criteria)
-  - [ ] 20.1 Counts parity with active server (resource counts, types) within the same query
-  - [ ] 20.2 List/detail parity for scores, severity counts, coverage across aspects
-  - [ ] 20.3 Active-server-only: no hardcoded URLs; server switch rebinding is immediate
-  - [ ] 20.4 No mocks in dev/prod; DEMO_MOCKS=false; CI check passes
-  - [ ] 20.5 Performance budgets met: list/group p95 < 500ms; detail p95 < 300ms; dashboard p95 < 400ms
+- [x] 20.0 Definition of Done (acceptance criteria)
+  - [x] 20.1 Counts parity with active server (resource counts, types) within the same query
+  - [x] 20.2 List/detail parity for scores, severity counts, coverage across aspects
+  - [x] 20.3 Active-server-only: no hardcoded URLs; server switch rebinding is immediate
+  - [x] 20.4 No mocks in dev/prod; DEMO_MOCKS=false; CI check passes
+  - [x] 20.5 Performance budgets met: list/group p95 < 500ms; detail p95 < 300ms; dashboard p95 < 400ms
 
 
 ## Execution Order

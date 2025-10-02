@@ -69,7 +69,7 @@ export interface UseValidationPollingOptions {
 export function useValidationPolling(options: UseValidationPollingOptions = {}): ValidationPollingState & ValidationPollingActions {
   const {
     enabled = true, // Default to enabled for live updates
-    pollInterval = 3000, // Poll every 3 seconds for live updates
+    pollInterval = 10000, // Poll every 10 seconds (reduced from 3 seconds)
     hasActiveServer = true
   } = options;
 
@@ -88,6 +88,10 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
   const maxRetries = 5;
   const retryDelayRef = useRef(1000); // Start with 1 second delay
   const maxRetryDelay = 30000; // Max 30 seconds delay
+  
+  // Store functions in refs to avoid dependency issues
+  const startPollingRef = useRef<() => void>();
+  const stopPollingRef = useRef<() => void>();
 
   // Fetch validation progress from API with enhanced error handling
   const fetchValidationProgress = useCallback(async (): Promise<ValidationProgress | null> => {
@@ -173,6 +177,7 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
       return;
     }
 
+    // Only log when actually starting (not on every call)
     console.log('[ValidationPolling] Starting validation progress polling');
     isPollingRef.current = true;
     setConnectionState('connecting');
@@ -189,7 +194,10 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
         setConnectionState('connected');
         setIsConnected(true);
         setLastConnectedAt(new Date());
-        console.log('[ValidationPolling] Connected successfully');
+        // Only log connection success once per session
+        if (!isConnected) {
+          console.log('[ValidationPolling] Connected successfully');
+        }
         
         // Reset retry state on successful connection
         retryCountRef.current = 0;
@@ -260,27 +268,69 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
         clearInterval(pollingIntervalRef.current);
       }
 
-      // Determine polling frequency based on current status
+      // Start with default interval - will be adjusted based on actual status from API
       let currentInterval = pollInterval;
-      if (validationStatus === 'idle' || validationStatus === 'completed') {
-        // Reduce frequency when idle (every 10 seconds)
-        currentInterval = 10000;
-      } else if (validationStatus === 'running' || validationStatus === 'paused') {
-        // High frequency when active (every 3 seconds)
-        currentInterval = 3000;
-      }
 
-      pollingIntervalRef.current = setInterval(poll, currentInterval);
-      console.log(`[ValidationPolling] Set polling interval to ${currentInterval}ms for status: ${validationStatus}`);
+      pollingIntervalRef.current = setInterval(async () => {
+        try {
+          const progressData = await fetchValidationProgress();
+          if (progressData) {
+            setProgress(progressData);
+            setValidationStatus(progressData.status);
+            setLastError(null);
+            retryCountRef.current = 0;
+            
+            // Adjust interval based on actual status
+            let newInterval = pollInterval;
+            if (progressData.status === 'idle' || progressData.status === 'completed') {
+              newInterval = 10000; // 10 seconds when idle
+            } else if (progressData.status === 'running' || progressData.status === 'paused') {
+              newInterval = 3000; // 3 seconds when active
+            }
+            
+            // Update interval if it changed
+            if (newInterval !== currentInterval) {
+              currentInterval = newInterval;
+              clearInterval(pollingIntervalRef.current);
+              pollingIntervalRef.current = setInterval(arguments.callee, newInterval);
+              console.log(`[ValidationPolling] Adjusted polling interval to ${newInterval}ms for status: ${progressData.status}`);
+            }
+          } else {
+            setProgress(null);
+            setValidationStatus('idle');
+            setLastError(null);
+          }
+        } catch (error) {
+          console.error('[ValidationPolling] Polling error:', error);
+          
+          // Handle AbortError gracefully (this is normal during component cleanup)
+          if (error instanceof Error && (error.name === 'AbortError' || error.message?.includes('aborted'))) {
+            console.log('[ValidationPolling] Request aborted - component cleanup in progress');
+            return;
+          }
+          
+          retryCountRef.current++;
+          if (retryCountRef.current >= maxRetries) {
+            setLastError(error instanceof Error ? error.message : 'Failed to fetch validation progress');
+            setIsConnected(false);
+            stopPolling();
+          }
+        }
+      }, currentInterval);
+      
+      console.log(`[ValidationPolling] Set polling interval to ${currentInterval}ms`);
     };
 
     // Set up initial polling
     setupSmartPolling();
-  }, [enabled, hasActiveServer, pollInterval, fetchValidationProgress, validationStatus]);
+  }, [enabled, hasActiveServer, pollInterval, fetchValidationProgress]);
 
   // Stop polling
   const stopPolling = useCallback(() => {
-    console.log('[ValidationPolling] Stopping validation progress polling');
+    // Only log when actually stopping (not on every call)
+    if (isPollingRef.current) {
+      console.log('[ValidationPolling] Stopping validation progress polling');
+    }
     isPollingRef.current = false;
     setConnectionState('disconnected');
     setIsConnected(false);
@@ -336,15 +386,21 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
   // Auto-start polling when conditions are met
   useEffect(() => {
     if (enabled && hasActiveServer && !isPollingRef.current) {
-      startPolling();
+      startPollingRef.current?.();
     } else if ((!enabled || !hasActiveServer) && isPollingRef.current) {
-      stopPolling();
+      stopPollingRef.current?.();
     }
 
     return () => {
-      stopPolling();
+      stopPollingRef.current?.();
     };
-  }, [enabled, hasActiveServer]); // Removed startPolling and stopPolling dependencies to prevent infinite loops
+  }, [enabled, hasActiveServer]); // Only depend on the actual state values
+
+  // Update function refs whenever functions change
+  useEffect(() => {
+    startPollingRef.current = startPolling;
+    stopPollingRef.current = stopPolling;
+  }, [startPolling, stopPolling]);
 
   // Fetch current server on mount
   useEffect(() => {
@@ -353,56 +409,8 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
     }
   }, [hasActiveServer]); // Removed fetchCurrentServer dependency
 
-  // Adjust polling frequency based on validation status
-  useEffect(() => {
-    if (isPollingRef.current && pollingIntervalRef.current) {
-      // Clear existing interval
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-      
-      // Set new interval based on current status
-      let newInterval = pollInterval;
-      if (validationStatus === 'idle' || validationStatus === 'completed') {
-        newInterval = 10000; // 10 seconds when idle
-      } else if (validationStatus === 'running' || validationStatus === 'paused') {
-        newInterval = 3000; // 3 seconds when active
-      }
-      
-      // Set up new interval
-      pollingIntervalRef.current = setInterval(async () => {
-        try {
-          const progressData = await fetchValidationProgress();
-          if (progressData) {
-            setProgress(progressData);
-            setValidationStatus(progressData.status);
-            setLastError(null);
-            retryCountRef.current = 0;
-          } else {
-            setProgress(null);
-            setValidationStatus('idle');
-            setLastError(null);
-          }
-        } catch (error) {
-          console.error('[ValidationPolling] Polling error:', error);
-          
-          // Handle AbortError gracefully (this is normal during component cleanup)
-          if (error instanceof Error && (error.name === 'AbortError' || error.message?.includes('aborted'))) {
-            console.log('[ValidationPolling] Request aborted - component cleanup in progress');
-            return;
-          }
-          
-          retryCountRef.current++;
-          if (retryCountRef.current >= maxRetries) {
-            setLastError(error instanceof Error ? error.message : 'Failed to fetch validation progress');
-            setIsConnected(false);
-            stopPolling();
-          }
-        }
-      }, newInterval);
-      
-      console.log(`[ValidationPolling] Adjusted polling interval to ${newInterval}ms for status: ${validationStatus}`);
-    }
-  }, [validationStatus, pollInterval]); // Removed fetchValidationProgress and stopPolling dependencies
+  // Note: Polling interval management is now handled within the startPolling function
+  // to avoid infinite re-render loops
 
   // Cleanup on unmount
   useEffect(() => {

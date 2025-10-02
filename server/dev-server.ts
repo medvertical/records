@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes/index.js";
+import { setupAllRoutes } from "./routes/index.js";
 
 const app = express();
 app.use(express.json());
@@ -37,7 +37,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  await registerRoutes(app);
+  // Initialize services properly
+  const { setupRoutes } = await import('./routes.js');
+  await setupRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

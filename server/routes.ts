@@ -5,14 +5,17 @@ import { FhirClient } from "./services/fhir/fhir-client";
 import { getConsolidatedValidationService, ConsolidatedValidationService } from "./services/validation";
 import { DashboardService } from "./services/dashboard/dashboard-service";
 import { setupAllRoutes } from "./routes/index.js";
+import { serverActivationService } from "./services/server-activation-service";
 
 let fhirClient: FhirClient;
 let consolidatedValidationService: ConsolidatedValidationService;
 let dashboardService: DashboardService;
 
-// Make dashboard service available globally for validation settings service
+// Make services available globally
 declare global {
+  var fhirClient: FhirClient | undefined;
   var dashboardService: DashboardService | undefined;
+  var serverActivationEmitter: any;
 }
 
 async function initializeServices(): Promise<void> {
@@ -32,6 +35,12 @@ async function initializeServices(): Promise<void> {
     console.log(`[Routes] Using FHIR server from database: ${serverUrl}`);
     console.log(`[Routes] Active server from DB:`, activeServer);
     fhirClient = new FhirClient(serverUrl);
+    
+    // Make FHIR client available globally
+    global.fhirClient = fhirClient;
+    
+    // Register FHIR client with server activation service for dynamic updates
+    serverActivationService.setFhirClient(fhirClient);
     
     // Initialize dashboard service after fhirClient is available
     dashboardService = new DashboardService(fhirClient, storageInstance);

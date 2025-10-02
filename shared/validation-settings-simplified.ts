@@ -14,7 +14,7 @@ export interface ValidationAspectConfig {
   enabled: boolean;
   
   /** Severity level for issues found by this aspect */
-  severity: 'error' | 'warning' | 'information';
+  severity: 'error' | 'warning' | 'info';
 }
 
 // ============================================================================
@@ -81,6 +81,22 @@ export interface ValidationSettings {
     /** Whether to validate only the latest version of each resource */
     latestOnly: boolean;
   };
+
+  /** Records-specific validation options */
+  records: {
+    /** Whether to validate external references (references to resources outside the current server) */
+    validateExternalReferences: boolean;
+    /** Whether to perform strict reference type checking */
+    strictReferenceTypeChecking: boolean;
+    /** Whether to enable strict mode (all validation rules enforced) */
+    strictMode: boolean;
+    /** Whether to validate reference integrity (check if referenced resources exist) */
+    validateReferenceIntegrity: boolean;
+    /** Whether to allow broken references in validation results */
+    allowBrokenReferences: boolean;
+    /** Maximum depth for reference traversal */
+    maxReferenceDepth: number;
+  };
 }
 
 // ============================================================================
@@ -128,6 +144,14 @@ export const DEFAULT_VALIDATION_SETTINGS: ValidationSettings = {
     includedTypes: [],
     excludedTypes: [],
     latestOnly: false
+  },
+  records: {
+    validateExternalReferences: true,
+    strictReferenceTypeChecking: true,
+    strictMode: false,
+    validateReferenceIntegrity: true,
+    allowBrokenReferences: false,
+    maxReferenceDepth: 3
   }
 };
 
@@ -141,6 +165,7 @@ export interface ValidationSettingsUpdate {
   server?: Partial<ValidationSettings['server']>;
   performance?: Partial<ValidationSettings['performance']>;
   resourceTypes?: Partial<ValidationSettings['resourceTypes']>;
+  records?: Partial<ValidationSettings['records']>;
 }
 
 // ============================================================================
@@ -186,12 +211,22 @@ export const BUILT_IN_PRESETS: ValidationSettingsPreset[] = [
     description: 'All validation aspects enabled with error severity',
     isBuiltIn: true,
     settings: {
-      structural: { enabled: true, severity: 'error' },
-      profile: { enabled: true, severity: 'error' },
-      terminology: { enabled: true, severity: 'error' },
-      reference: { enabled: true, severity: 'error' },
-      businessRule: { enabled: true, severity: 'error' },
-      metadata: { enabled: true, severity: 'error' }
+      aspects: {
+        structural: { enabled: true, severity: 'error' },
+        profile: { enabled: true, severity: 'error' },
+        terminology: { enabled: true, severity: 'error' },
+        reference: { enabled: true, severity: 'error' },
+        businessRule: { enabled: true, severity: 'error' },
+        metadata: { enabled: true, severity: 'error' }
+      },
+      records: {
+        validateExternalReferences: true,
+        strictReferenceTypeChecking: true,
+        strictMode: true,
+        validateReferenceIntegrity: true,
+        allowBrokenReferences: false,
+        maxReferenceDepth: 5
+      }
     }
   },
   {
@@ -200,12 +235,22 @@ export const BUILT_IN_PRESETS: ValidationSettingsPreset[] = [
     description: 'All validation aspects enabled with warning severity',
     isBuiltIn: true,
     settings: {
-      structural: { enabled: true, severity: 'warning' },
-      profile: { enabled: true, severity: 'warning' },
-      terminology: { enabled: true, severity: 'warning' },
-      reference: { enabled: true, severity: 'warning' },
-      businessRule: { enabled: true, severity: 'warning' },
-      metadata: { enabled: true, severity: 'warning' }
+      aspects: {
+        structural: { enabled: true, severity: 'warning' },
+        profile: { enabled: true, severity: 'warning' },
+        terminology: { enabled: true, severity: 'warning' },
+        reference: { enabled: true, severity: 'warning' },
+        businessRule: { enabled: true, severity: 'warning' },
+        metadata: { enabled: true, severity: 'warning' }
+      },
+      records: {
+        validateExternalReferences: false,
+        strictReferenceTypeChecking: false,
+        strictMode: false,
+        validateReferenceIntegrity: false,
+        allowBrokenReferences: true,
+        maxReferenceDepth: 1
+      }
     }
   },
   {
@@ -214,12 +259,22 @@ export const BUILT_IN_PRESETS: ValidationSettingsPreset[] = [
     description: 'Only structural and reference validation enabled',
     isBuiltIn: true,
     settings: {
-      structural: { enabled: true, severity: 'error' },
-      profile: { enabled: false, severity: 'warning' },
-      terminology: { enabled: false, severity: 'warning' },
-      reference: { enabled: true, severity: 'error' },
-      businessRule: { enabled: false, severity: 'warning' },
-      metadata: { enabled: false, severity: 'information' }
+      aspects: {
+        structural: { enabled: true, severity: 'error' },
+        profile: { enabled: false, severity: 'warning' },
+        terminology: { enabled: false, severity: 'warning' },
+        reference: { enabled: true, severity: 'error' },
+        businessRule: { enabled: false, severity: 'warning' },
+        metadata: { enabled: false, severity: 'info' }
+      },
+      records: {
+        validateExternalReferences: false,
+        strictReferenceTypeChecking: true,
+        strictMode: false,
+        validateReferenceIntegrity: true,
+        allowBrokenReferences: true,
+        maxReferenceDepth: 2
+      }
     }
   }
 ];
@@ -339,4 +394,4 @@ export type CommonFhirResourceType = typeof COMMON_FHIR_RESOURCE_TYPES[number];
 // ============================================================================
 
 export type ValidationAspect = 'structural' | 'profile' | 'terminology' | 'reference' | 'businessRule' | 'metadata';
-export type ValidationSeverity = 'error' | 'warning' | 'information';
+export type ValidationSeverity = 'error' | 'warning' | 'info';

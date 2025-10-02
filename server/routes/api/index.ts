@@ -9,3 +9,6 @@ export * from './fhir';
 
 // Dashboard API routes
 export * from './dashboard';
+
+// Server management API routes
+export * from './servers';
