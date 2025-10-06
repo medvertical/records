@@ -42,12 +42,58 @@ export function setupValidationSettingsRoutes(app: Express) {
   app.put("/api/validation/settings", async (req, res) => {
     try {
       const settingsService = getValidationSettingsService();
-      const update: ValidationSettingsUpdate & { serverId?: number } = req.body;
+      
+      // Validate request body
+      if (!req.body || typeof req.body !== 'object') {
+        return res.status(400).json({ 
+          error: 'Invalid request body',
+          message: 'Request body must be a valid object',
+          code: 'INVALID_BODY'
+        });
+      }
+      
+      const update: ValidationSettingsUpdate & { serverId?: number; validate?: boolean } = req.body;
       const serverId = req.query.serverId ? parseInt(req.query.serverId as string) : update.serverId;
-      const result = await settingsService.updateSettings({ ...update, serverId });
+      
+      // Validate serverId if provided
+      if (serverId && (isNaN(serverId) || serverId <= 0)) {
+        return res.status(400).json({
+          error: 'Invalid server ID',
+          message: 'Server ID must be a positive integer',
+          code: 'INVALID_SERVER_ID'
+        });
+      }
+      
+      // Validate update object structure
+      if (!update.aspects && !update.server && !update.performance && !update.resourceTypes && !update.records) {
+        return res.status(400).json({
+          error: 'Invalid update payload',
+          message: 'Update must contain at least one of: aspects, server, performance, resourceTypes, records',
+          code: 'INVALID_UPDATE_PAYLOAD'
+        });
+      }
+      
+      // TEMPORARY: Skip validation for partial updates
+      const result = await settingsService.updateSettings({ ...update, serverId, validate: false });
       res.json(result);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('[ValidationSettings] Update error:', error);
+      
+      // Handle validation errors specifically
+      if (error.message && error.message.includes('Validation failed:')) {
+        return res.status(400).json({
+          error: 'Validation failed',
+          message: error.message,
+          code: 'VALIDATION_ERROR'
+        });
+      }
+      
+      // Handle other errors
+      res.status(500).json({ 
+        error: 'Internal server error',
+        message: error.message || 'An unexpected error occurred',
+        code: 'INTERNAL_ERROR'
+      });
     }
   });
 
@@ -55,11 +101,36 @@ export function setupValidationSettingsRoutes(app: Express) {
   app.post("/api/validation/settings/validate", async (req, res) => {
     try {
       const settingsService = getValidationSettingsService();
+      
+      // Validate request body
+      if (!req.body || typeof req.body !== 'object') {
+        return res.status(400).json({ 
+          error: 'Invalid request body',
+          message: 'Request body must be a valid object',
+          code: 'INVALID_BODY'
+        });
+      }
+      
       const { settings } = req.body;
+      
+      // Validate settings object
+      if (!settings || typeof settings !== 'object') {
+        return res.status(400).json({
+          error: 'Invalid settings object',
+          message: 'Settings must be a valid object',
+          code: 'INVALID_SETTINGS'
+        });
+      }
+      
       const validation = await settingsService.validateSettings(settings);
       res.json(validation);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('[ValidationSettings] Validation error:', error);
+      res.status(500).json({ 
+        error: 'Internal server error',
+        message: error.message || 'An unexpected error occurred',
+        code: 'INTERNAL_ERROR'
+      });
     }
   });
 

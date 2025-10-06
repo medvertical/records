@@ -12,3 +12,7 @@ export * from './dashboard';
 
 // Server management API routes
 export * from './servers';
+
+// Performance monitoring API routes
+export { default as performanceRoutes } from './performance';
+

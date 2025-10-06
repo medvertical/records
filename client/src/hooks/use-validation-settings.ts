@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from './use-toast';
 import { useSettingsChangeListener } from './use-settings-notifications';
+import { useServerScopedQueryKey } from '../lib/server-scoping';
 import type {
   ValidationSettings,
   ValidationSettingsUpdate,
@@ -100,6 +101,7 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
   } = options;
 
   const queryClient = useQueryClient();
+  const validationSettingsQueryKey = useServerScopedQueryKey(['validation-settings']);
 
   const { toast } = useToast();
   
@@ -110,7 +112,7 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
       console.log('[ValidationSettings] Settings changed via SSE:', event);
       if (enableRealTimeSync) {
         // Invalidate React Query cache
-        queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+        queryClient.invalidateQueries({ queryKey: validationSettingsQueryKey });
         
         // Reload settings if this affects the current settings
         if (event.settingsId === settings?.id || event.changeType === 'activated') {
@@ -130,7 +132,7 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
       console.log('[ValidationSettings] Settings activated via SSE:', event);
       if (enableRealTimeSync) {
         // Invalidate React Query cache
-        queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+        queryClient.invalidateQueries({ queryKey: validationSettingsQueryKey });
         
         // Reload settings
         await loadSettingsFromAPI();
@@ -148,7 +150,7 @@ export function useValidationSettings(options: UseValidationSettingsOptions = {}
       console.log('[ValidationSettings] Cache invalidated via SSE:', event);
       if (enableCaching) {
         // Clear React Query cache
-        queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
+        queryClient.invalidateQueries({ queryKey: validationSettingsQueryKey });
         
         // Clear local cache
         setSettings(null);

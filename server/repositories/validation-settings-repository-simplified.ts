@@ -13,6 +13,19 @@ import type {
 } from '@shared/validation-settings-simplified';
 
 // ============================================================================
+// Backup Types and Interfaces
+// ============================================================================
+
+export interface ValidationSettingsBackup {
+  id: string;
+  serverId: number;
+  settings: ValidationSettings;
+  timestamp: Date;
+  version: string;
+  description?: string;
+}
+
+// ============================================================================
 // Types and Interfaces
 // ============================================================================
 
@@ -331,6 +344,200 @@ export class ValidationSettingsRepository {
   // ========================================================================
   // Private Methods
   // ========================================================================
+
+  /**
+   * Delete validation settings for a specific server
+   */
+  async deleteSettingsForServer(serverId: number): Promise<void> {
+    try {
+      await db.delete(validationSettings)
+        .where(eq(validationSettings.serverId, serverId));
+      
+      console.log(`[ValidationSettingsRepository] Deleted settings for server: ${serverId}`);
+    } catch (error) {
+      console.error(`[ValidationSettingsRepository] Error deleting settings for server:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if settings exist for a server
+   */
+  async hasSettings(serverId: number): Promise<boolean> {
+    try {
+      const result = await db.select({ id: validationSettings.id })
+        .from(validationSettings)
+        .where(eq(validationSettings.serverId, serverId))
+        .limit(1);
+      
+      return result.length > 0;
+    } catch (error) {
+      console.error(`[ValidationSettingsRepository] Error checking settings existence:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get last modified timestamp for settings
+   */
+  async getLastModified(serverId: number): Promise<Date | null> {
+    try {
+      const result = await db.select({ updatedAt: validationSettings.updatedAt })
+        .from(validationSettings)
+        .where(eq(validationSettings.serverId, serverId))
+        .orderBy(desc(validationSettings.updatedAt))
+        .limit(1);
+      
+      return result.length > 0 ? result[0].updatedAt : null;
+    } catch (error) {
+      console.error(`[ValidationSettingsRepository] Error getting last modified:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Save backup (stored in settings table with special backup flag)
+   */
+  async saveBackup(backup: ValidationSettingsBackup): Promise<void> {
+    try {
+      // For now, we'll store backups in the same table with a special naming convention
+      // In a production system, you might want a separate backups table
+      const backupSettings = {
+        ...backup.settings,
+        _backup: {
+          id: backup.id,
+          timestamp: backup.timestamp,
+          version: backup.version,
+          description: backup.description
+        }
+      };
+
+      await db.insert(validationSettings)
+        .values({
+          serverId: backup.serverId,
+          settings: backupSettings as any,
+          isActive: false, // Backups are never active
+          createdAt: backup.timestamp,
+          updatedAt: backup.timestamp
+        });
+      
+      console.log(`[ValidationSettingsRepository] Saved backup: ${backup.id}`);
+    } catch (error) {
+      console.error(`[ValidationSettingsRepository] Error saving backup:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get backup by ID
+   */
+  async getBackup(backupId: string): Promise<ValidationSettingsBackup | null> {
+    try {
+      const result = await db.select()
+        .from(validationSettings)
+        .where(
+          and(
+            sql`${validationSettings.settings}->'_backup'->>'id' = ${backupId}`,
+            eq(validationSettings.isActive, false)
+          )
+        )
+        .limit(1);
+      
+      if (result.length === 0) {
+        return null;
+      }
+
+      const record = result[0];
+      const backupData = (record.settings as any)._backup;
+      
+      return {
+        id: backupData.id,
+        serverId: record.serverId!,
+        settings: record.settings as ValidationSettings,
+        timestamp: backupData.timestamp,
+        version: backupData.version,
+        description: backupData.description
+      };
+    } catch (error) {
+      console.error(`[ValidationSettingsRepository] Error getting backup:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all backups for a server
+   */
+  async getBackups(serverId: number): Promise<ValidationSettingsBackup[]> {
+    try {
+      const result = await db.select()
+        .from(validationSettings)
+        .where(
+          and(
+            eq(validationSettings.serverId, serverId),
+            eq(validationSettings.isActive, false),
+            sql`${validationSettings.settings}->'_backup' IS NOT NULL`
+          )
+        )
+        .orderBy(desc(validationSettings.createdAt));
+      
+      return result.map(record => {
+        const backupData = (record.settings as any)._backup;
+        return {
+          id: backupData.id,
+          serverId: record.serverId!,
+          settings: record.settings as ValidationSettings,
+          timestamp: backupData.timestamp,
+          version: backupData.version,
+          description: backupData.description
+        };
+      });
+    } catch (error) {
+      console.error(`[ValidationSettingsRepository] Error getting backups:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete backup by ID
+   */
+  async deleteBackup(backupId: string): Promise<void> {
+    try {
+      await db.delete(validationSettings)
+        .where(
+          and(
+            sql`${validationSettings.settings}->'_backup'->>'id' = ${backupId}`,
+            eq(validationSettings.isActive, false)
+          )
+        );
+      
+      console.log(`[ValidationSettingsRepository] Deleted backup: ${backupId}`);
+    } catch (error) {
+      console.error(`[ValidationSettingsRepository] Error deleting backup:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Clean up old backups (keep only the most recent ones)
+   */
+  async cleanupOldBackups(serverId: number, maxBackups: number = 10): Promise<void> {
+    try {
+      const backups = await this.getBackups(serverId);
+      
+      if (backups.length > maxBackups) {
+        const toDelete = backups.slice(maxBackups);
+        
+        for (const backup of toDelete) {
+          await this.deleteBackup(backup.id);
+        }
+        
+        console.log(`[ValidationSettingsRepository] Cleaned up ${toDelete.length} old backups for server ${serverId}`);
+      }
+    } catch (error) {
+      console.error(`[ValidationSettingsRepository] Error cleaning up backups:`, error);
+      throw error;
+    }
+  }
 
   /**
    * Deactivate all existing settings

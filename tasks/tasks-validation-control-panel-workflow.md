@@ -5,13 +5,14 @@
 ### Core Components
 - `client/src/components/dashboard/controls/ValidationControlPanel.tsx` - Main validation control panel component with start/pause/stop buttons
 - `client/src/components/dashboard/controls/ValidationControlPanel.test.tsx` - Unit tests for validation control panel
-- `client/src/hooks/use-validation-polling.ts` - Polling hook for validation progress updates
+- `client/src/hooks/use-validation-polling.ts` - Enhanced polling hook with configurable intervals, smart polling, and retry logic
 - `client/src/hooks/use-validation-polling.test.ts` - Unit tests for validation polling hook
 - `client/src/hooks/use-dashboard-data-wiring.ts` - Dashboard data wiring with validation status integration
 - `client/src/hooks/use-dashboard-data-wiring.test.ts` - Unit tests for dashboard data wiring
 
 ### Backend API Endpoints
-- `server/routes/api/validation/validation.ts` - Validation control API endpoints (start/stop/pause/resume/progress)
+- `server/routes/api/validation/validation.ts` - Individual validation and settings API endpoints
+- `server/routes/api/validation/bulk-control.ts` - Bulk validation control API endpoints with enhanced progress calculation
 - `server/routes/api/validation/validation.test.ts` - Integration tests for validation API endpoints
 - `server/services/validation/core/consolidated-validation-service.ts` - Core validation service with state management
 - `server/services/validation/core/consolidated-validation-service.test.ts` - Unit tests for validation service
@@ -40,6 +41,10 @@
 - `server/db/scripts/clear-validation-data.ts` - Script for clearing validation data
 - `migrations/014_add_server_scoped_validation_settings.sql` - Server-scoped validation settings migration
 
+### Error Handling
+- `server/utils/validation-error-handler.ts` - Centralized error handling utility with user-friendly messages
+- `server/utils/validation-error-handler.test.ts` - Unit tests for error handling utility
+
 ### Notes
 
 - The validation control panel should follow the existing polling-based architecture (MVP approach)
@@ -57,7 +62,7 @@
   - [x] 1.2 Create validation status mapping from backend state to UI display states
   - [x] 1.3 Implement proper state persistence across browser sessions and server restarts
   - [x] 1.4 Add validation state validation and error recovery mechanisms
-  - [ ] 1.5 **CRITICAL**: Create state change event system for real-time UI updates
+  - [x] 1.5 **CRITICAL**: Create state change event system for real-time UI updates
 
 - [x] 2.0 Validation Control API Integration
   - [x] 2.1 Implement start validation endpoint with proper request validation and error handling
@@ -65,53 +70,59 @@
   - [x] 2.3 Implement stop validation endpoint with graceful shutdown and cleanup
   - [x] 2.4 Implement API for retrieving current validation settings
   - [x] 2.5 Document that /api/validation/bulk/progress includes status; no separate status endpoint
-  - [ ] 2.6 **CRITICAL**: Fix PUT settings endpoint validation (currently returning 400 for valid payloads)
-  - [ ] 2.7 Implement proper API error handling with user-friendly error messages
-  - [ ] 2.8 **CRITICAL**: Add validation configuration endpoint for dynamic settings updates
-  - [ ] 2.9 Refactor routes: extract bulk control endpoints from large file into focused modules
+  - [x] 2.6 **CRITICAL**: Fix PUT settings endpoint validation (currently returning 400 for valid payloads)
+  - [x] 2.7 Implement proper API error handling with user-friendly error messages
+  - [x] 2.8 **CRITICAL**: Add validation configuration endpoint for dynamic settings updates
+  - [x] 2.9 Refactor routes: extract bulk control endpoints from large file into focused modules
 
 - [ ] 3.0 Progress Tracking & Real-time Updates
-  - [ ] 3.1 Implement polling-based progress updates with configurable intervals
-  - [ ] 3.2 Add progress calculation for total resources, processed resources, and completion percentage
-  - [ ] 3.3 Implement processing rate calculation (resources/second) and ETA estimation
-  - [ ] 3.4 Add per-resource-type progress tracking and display
-  - [ ] 3.5 Implement validation aspect progress tracking (structural, profile, terminology, etc.)
-  - [ ] 3.6 Add error and warning count tracking with real-time updates
-  - [ ] 3.7 Implement progress persistence across browser sessions and server restarts
-  - [ ] 3.8 Verify server scoping everywhere (React Query keys, API params, DB writes)
-  - [ ] 3.9 **CRITICAL**: Fix validation stats consistency issues (total validated vs valid + error resources mismatch)
+  - [x] 3.1 Implement polling-based progress updates with configurable intervals
+  - [x] 3.2 Add progress calculation for total resources, processed resources, and completion percentage
+  - [x] 3.3 Implement processing rate calculation (resources/second) and ETA estimation
+  - [x] 3.4 Add per-resource-type progress tracking and display
+  - [x] 3.5 Implement validation aspect progress tracking (structural, profile, terminology, etc.)
+  - [x] 3.6 Add error and warning count tracking with real-time updates
+  - [x] 3.7 Implement progress persistence across browser sessions and server restarts
+  - [x] 3.8 Verify server scoping everywhere (React Query keys, API params, DB writes)
+  - [x] 3.9 **CRITICAL**: Fix validation stats consistency issues (total validated vs valid + error resources mismatch)
 
 - [ ] 4.0 User Interface & User Experience
-  - [ ] 4.1 Design and implement validation control panel UI with start/pause/stop buttons
-  - [ ] 4.2 Add progress bar with percentage completion and ETA display
-  - [ ] 4.3 Implement status badges and indicators for validation state
-  - [ ] 4.4 Add error and warning display with detailed messages
-  - [ ] 4.5 Implement responsive design for different screen sizes
-  - [ ] 4.6 Add accessibility features (keyboard navigation, ARIA labels, screen reader support)
-  - [ ] 4.7 Implement loading states and skeleton screens
-  - [ ] 4.8 Add confirmation dialogs for destructive actions (stop validation)
+  - [x] 4.1 Design and implement validation control panel UI with start/pause/stop buttons
+  - [x] 4.2 Add progress bar with percentage completion and ETA display
+  - [x] 4.3 Implement status badges and indicators for validation state
+  - [x] 4.4 Add error and warning display with detailed messages
+  - [x] 4.5 Implement responsive design for different screen sizes
+  - [x] 4.6 Add accessibility features (keyboard navigation, ARIA labels, screen reader support)
+  - [x] 4.7 Implement loading states and skeleton screens
+  - [x] 4.8 Add confirmation dialogs for destructive actions (stop validation)
 
 - [ ] 5.0 Error Handling & Recovery
-  - [ ] 5.1 Implement comprehensive error handling for network failures
-  - [ ] 5.2 Add retry mechanisms with exponential backoff
-  - [ ] 5.3 Implement graceful degradation when services are unavailable
-  - [ ] 5.4 Add user-friendly error messages and recovery suggestions
-  - [ ] 5.5 Implement error logging and monitoring
-  - [ ] 5.6 Add timeout handling for long-running operations
-  - [ ] 5.7 Implement error recovery mechanisms for partial failures
+  - [x] 5.1 Implement comprehensive error handling for network failures
+  - [x] 5.2 Add retry mechanisms with exponential backoff
+  - [x] 5.3 Implement graceful degradation when services are unavailable
+  - [x] 5.4 Add user-friendly error messages and recovery suggestions
+  - [x] 5.5 Implement error logging and monitoring
+  - [x] 5.6 Add timeout handling for long-running operations
+  - [x] 5.7 Implement error recovery mechanisms for partial failures
 
 - [ ] 6.0 Settings Integration & Configuration
-  - [ ] 6.1 **CRITICAL**: Integrate with validation settings service for aspect configuration
-  - [ ] 6.2 Add settings validation and normalization
-  - [ ] 6.3 Implement settings change detection and UI updates
-  - [ ] 6.4 Add settings persistence and server scoping
-  - [ ] 6.5 Implement settings validation and error handling
-  - [ ] 6.6 Add settings change notifications and cache invalidation
-  - [ ] 6.7 Implement settings backup and restore functionality
-  - [ ] 6.8 **CRITICAL**: Fix validation settings PUT endpoint validation issues
+  - [x] 6.1 **CRITICAL**: Integrate with validation settings service for aspect configuration
+  - [x] 6.2 Add settings validation and normalization
+  - [x] 6.3 Implement settings change detection and UI updates
+  - [x] 6.4 Add settings persistence and server scoping
+  - [x] 6.5 Implement settings validation and error handling
+  - [x] 6.6 Add settings change notifications and cache invalidation
+  - [x] 6.7 Implement settings backup and restore functionality
+  - [x] 6.8 **CRITICAL**: Fix validation settings PUT endpoint validation issues
+  - [ ] 6.9 **CRITICAL**: Implement FHIR version-aware resource type filtering
+    - [ ] 6.9.1 Create FHIR version detection and resource type mapping
+    - [ ] 6.9.2 Implement version-specific default resource type lists (R4 vs R5)
+    - [ ] 6.9.3 Add resource type validation against available FHIR version
+    - [ ] 6.9.4 Create migration logic for settings when FHIR version changes
+    - [ ] 6.9.5 Add UI warnings when selected resource types are not available in current FHIR version
 
 - [ ] 7.0 Testing & Quality Assurance
-  - [ ] 7.1 Create unit tests for all validation control panel components
+  - [x] 7.1 Create unit tests for all validation control panel components
   - [ ] 7.2 Add integration tests for API endpoints
   - [ ] 7.3 Implement end-to-end tests for complete validation workflows
   - [ ] 7.4 Add performance tests for large-scale validation operations
@@ -205,6 +216,16 @@
   - [ ] **IMPLEMENT**: Settings validation and normalization
   - [ ] **ADD**: Settings change detection and UI updates
   - [ ] **TEST**: Settings persistence and server scoping
+
+- [ ] **Implement FHIR version-aware resource type filtering**
+  - [ ] **FILE**: `server/services/fhir/fhir-client.ts` and `shared/validation-settings-simplified.ts`
+  - [ ] **ISSUE**: Resource type lists are hardcoded and don't adapt to FHIR version (R4 vs R5)
+  - [ ] **CREATE**: FHIR version detection and resource type mapping system
+  - [ ] **IMPLEMENT**: Version-specific default resource type lists
+  - [ ] **ADD**: Resource type validation against available FHIR version
+  - [ ] **CREATE**: Migration logic for settings when FHIR version changes
+  - [ ] **ADD**: UI warnings when selected resource types are not available in current FHIR version
+  - [ ] **TEST**: Settings don't break when switching between R4 and R5 servers
 
 ### **📊 MEDIUM PRIORITY: Data Quality**
 - [ ] **Fix validation stats consistency**

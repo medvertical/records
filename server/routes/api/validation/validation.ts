@@ -7,6 +7,7 @@ import { DashboardService } from "../../../services/dashboard/dashboard-service"
 import type { ValidationSettings, ValidationSettingsUpdate } from "@shared/validation-settings-simplified";
 import ValidationCacheManager from "../../../utils/validation-cache-manager.js";
 import { randomUUID } from "crypto";
+import { setupBulkControlRoutes } from "./bulk-control";
 
 // Validation schemas and helper functions
 interface StartRequestPayload {
@@ -26,149 +27,9 @@ interface StartRequestPayload {
   };
 }
 
-interface ValidationResult {
-  isValid: boolean;
-  errors: string[];
-}
 
-// Validate start request payload
-function validateStartRequest(payload: any): ValidationResult {
-  const errors: string[] = [];
 
-  // Check if payload is an object
-  if (!payload || typeof payload !== 'object') {
-    errors.push('Request body must be a valid JSON object');
-    return { isValid: false, errors };
-  }
 
-  // Validate resourceTypes (optional array of strings)
-  if (payload.resourceTypes !== undefined) {
-    if (!Array.isArray(payload.resourceTypes)) {
-      errors.push('resourceTypes must be an array of strings');
-    } else {
-      const invalidTypes = payload.resourceTypes.filter((type: any) => typeof type !== 'string' || !type.trim());
-      if (invalidTypes.length > 0) {
-        errors.push('All resourceTypes must be non-empty strings');
-      }
-    }
-  }
-
-  // Validate validationAspects (optional object with boolean properties)
-  if (payload.validationAspects !== undefined) {
-    if (typeof payload.validationAspects !== 'object' || payload.validationAspects === null) {
-      errors.push('validationAspects must be an object');
-    } else {
-      const validAspects = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'];
-      const aspectKeys = Object.keys(payload.validationAspects);
-      const invalidAspects = aspectKeys.filter(key => !validAspects.includes(key));
-      if (invalidAspects.length > 0) {
-        errors.push(`Invalid validation aspects: ${invalidAspects.join(', ')}. Valid aspects are: ${validAspects.join(', ')}`);
-      }
-      
-      const nonBooleanAspects = aspectKeys.filter(key => typeof payload.validationAspects[key] !== 'boolean');
-      if (nonBooleanAspects.length > 0) {
-        errors.push(`All validation aspect values must be boolean. Invalid: ${nonBooleanAspects.join(', ')}`);
-      }
-    }
-  }
-
-  // Validate config (optional object)
-  if (payload.config !== undefined) {
-    if (typeof payload.config !== 'object' || payload.config === null) {
-      errors.push('config must be an object');
-    } else {
-      // Validate batchSize
-      if (payload.config.batchSize !== undefined) {
-        if (!Number.isInteger(payload.config.batchSize) || payload.config.batchSize < 1 || payload.config.batchSize > 1000) {
-          errors.push('config.batchSize must be an integer between 1 and 1000');
-        }
-      }
-
-      // Validate maxConcurrency
-      if (payload.config.maxConcurrency !== undefined) {
-        if (!Number.isInteger(payload.config.maxConcurrency) || payload.config.maxConcurrency < 1 || payload.config.maxConcurrency > 20) {
-          errors.push('config.maxConcurrency must be an integer between 1 and 20');
-        }
-      }
-
-      // Validate timeout
-      if (payload.config.timeout !== undefined) {
-        if (!Number.isInteger(payload.config.timeout) || payload.config.timeout < 1000 || payload.config.timeout > 300000) {
-          errors.push('config.timeout must be an integer between 1000 and 300000 milliseconds');
-        }
-      }
-    }
-  }
-
-  return { isValid: errors.length === 0, errors };
-}
-
-// Generate unique job ID
-function generateJobId(): string {
-  return `validation-${Date.now()}-${randomUUID().slice(0, 8)}`;
-}
-
-// Estimate validation duration based on resource types and aspects
-function estimateValidationDuration(resourceTypes?: string[], validationAspects?: any): number {
-  const baseTimePerResource = 100; // milliseconds
-  const aspectMultiplier = validationAspects ? Object.values(validationAspects).filter(Boolean).length : 6;
-  const resourceCount = resourceTypes ? resourceTypes.length : 10; // Default estimate
-  
-  return Math.max(30000, resourceCount * aspectMultiplier * baseTimePerResource); // Minimum 30 seconds
-}
-
-// Global validation state tracking
-let globalValidationState = {
-  isRunning: false,
-  isPaused: false,
-  startTime: null as Date | null,
-  canPause: false,
-  shouldStop: false,
-  resumeData: null as any | null,
-  currentResourceType: null as string | null,
-  nextResourceType: null as string | null,
-  activeValidationAspects: null as {
-    structural: boolean;
-    profile: boolean;
-    terminology: boolean;
-    reference: boolean;
-    businessRule: boolean;
-    metadata: boolean;
-  } | null,
-  lastBroadcastTime: null as number | null,
-  // Real-time progress counters
-  processedResources: 0,
-  totalResources: 0,
-  currentBatch: 0,
-  totalBatches: 0,
-  errors: 0,
-  warnings: 0,
-  // Performance metrics
-  startTimeMs: 0,
-  lastUpdateTime: 0,
-  averageProcessingTime: 0,
-  estimatedTimeRemaining: 0,
-  // Resource type progress
-  resourceTypeProgress: {} as Record<string, {
-    processed: number;
-    total: number;
-    errors: number;
-    warnings: number;
-    startTime: number;
-  }>,
-  // Validation aspects progress
-  aspectProgress: {} as Record<string, {
-    processed: number;
-    total: number;
-    errors: number;
-    warnings: number;
-    startTime: number;
-  }>,
-  // Enhanced tracking fields
-  jobId: null as string | null,
-  requestPayload: null as StartRequestPayload | null,
-  startTimestamp: 0
-};
 
 export function setupValidationRoutes(app: Express, consolidatedValidationService: ConsolidatedValidationService | null, dashboardService: DashboardService | null) {
   // Individual resource validation
@@ -218,305 +79,8 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
     }
   });
 
-  // Bulk validation operations
-  app.post("/api/validation/bulk/start", async (req, res) => {
-    try {
-      // Schema validation for request payload
-      const validationResult = validateStartRequest(req.body);
-      if (!validationResult.isValid) {
-        return res.status(400).json({ 
-          message: "Invalid request payload",
-          errors: validationResult.errors
-        });
-      }
-
-      const { resourceTypes, validationAspects, config } = req.body;
-      
-      // Check if validation is already running (idempotent behavior)
-      if (globalValidationState.isRunning) {
-        return res.status(200).json({ 
-          message: "Validation is already running",
-          state: globalValidationState,
-          jobId: generateJobId(),
-          isIdempotent: true
-        });
-      }
-
-      // Use consolidated validation service for bulk operations
-      const validationPipeline = getValidationPipeline();
-      const queueService = getValidationQueueService();
-      
-      // Generate unique job ID for tracking
-      const jobId = generateJobId();
-      
-      // Initialize global state with enhanced tracking
-      globalValidationState = {
-        isRunning: true,
-        isPaused: false,
-        startTime: new Date(),
-        canPause: true,
-        shouldStop: false,
-        resumeData: null,
-        currentResourceType: null,
-        nextResourceType: null,
-        activeValidationAspects: validationAspects,
-        lastBroadcastTime: null,
-        processedResources: 0,
-        totalResources: 0,
-        currentBatch: 0,
-        totalBatches: 0,
-        errors: 0,
-        warnings: 0,
-        startTimeMs: Date.now(),
-        lastUpdateTime: Date.now(),
-        averageProcessingTime: 0,
-        estimatedTimeRemaining: 0,
-        resourceTypeProgress: {},
-        aspectProgress: {},
-        // Enhanced tracking
-        jobId,
-        requestPayload: { resourceTypes, validationAspects, config },
-        startTimestamp: Date.now()
-      };
-
-      // Start validation process
-      res.status(202).json({ 
-        message: "Bulk validation started",
-        jobId,
-        state: globalValidationState,
-        estimatedDuration: estimateValidationDuration(resourceTypes, validationAspects)
-      });
-    } catch (error: any) {
-      console.error('[ValidationStart] Error starting validation:', error);
-      res.status(500).json({ 
-        message: "Failed to start validation",
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
-    }
-  });
-
-  // GET /api/validation/bulk/progress - Get validation progress and status
-  // This endpoint provides both progress data AND status information.
-  // The 'status' field indicates the current validation state: 'idle', 'running', 'paused', 'completed', 'error'
-  // No separate status endpoint is needed - all status information is included here.
-  app.get("/api/validation/bulk/progress", async (req, res) => {
-    try {
-      // Get progress from consolidated service
-      const progressService = getIndividualResourceProgressService();
-      const progressStats = progressService.getProgressStats();
-      const activeProgress = progressService.getActiveProgress();
-      
-      // Determine status based on global state
-      let status = 'idle';
-      if (globalValidationState.isRunning && !globalValidationState.isPaused) {
-        status = 'running';
-      } else if (globalValidationState.isRunning && globalValidationState.isPaused) {
-        status = 'paused';
-      } else if (globalValidationState.shouldStop) {
-        status = 'completed';
-      }
-      
-      // Combine with global state for backward compatibility
-      const combinedProgress = {
-        ...globalValidationState,
-        ...progressStats,
-        activeProgress,
-        // Add status field for frontend compatibility
-        status,
-        // Ensure we have the latest progress data
-        processedResources: progressStats.totalResources || globalValidationState.processedResources,
-        totalResources: progressStats.totalResources || globalValidationState.totalResources,
-        errors: progressStats.failedResources || globalValidationState.errors,
-        warnings: progressStats.failedResources || globalValidationState.warnings
-      };
-      
-      res.json(combinedProgress);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.post("/api/validation/bulk/pause", async (req, res) => {
-    try {
-      // State consistency checks
-      if (!globalValidationState.isRunning) {
-        return res.status(400).json({ 
-          message: "No validation is currently running",
-          currentState: {
-            isRunning: globalValidationState.isRunning,
-            isPaused: globalValidationState.isPaused,
-            jobId: globalValidationState.jobId
-          }
-        });
-      }
-
-      if (globalValidationState.isPaused) {
-        return res.status(200).json({ 
-          message: "Validation is already paused",
-          state: globalValidationState,
-          isIdempotent: true
-        });
-      }
-
-      // Check if pause is allowed (e.g., not in critical section)
-      if (!globalValidationState.canPause) {
-        return res.status(409).json({ 
-          message: "Validation cannot be paused at this time",
-          reason: "Currently in a non-pausable operation",
-          retryAfter: 5000 // milliseconds
-        });
-      }
-
-      // Record pause timestamp for tracking
-      const pauseTimestamp = Date.now();
-      
-      // Implement pause semantics: allow in-flight operations to complete gracefully
-      // This is a soft pause - new operations won't start, but current ones finish
-      console.log('[ValidationPause] Initiating graceful pause of validation operations');
-      
-      // Update global state with enhanced tracking
-      globalValidationState.isPaused = true;
-      globalValidationState.canPause = false;
-      globalValidationState.lastUpdateTime = pauseTimestamp;
-      
-      res.status(202).json({ 
-        message: "Validation pause requested",
-        state: globalValidationState,
-        pauseTimestamp,
-        estimatedResumeTime: pauseTimestamp + 1000 // Allow 1 second for graceful pause
-      });
-    } catch (error: any) {
-      console.error('[ValidationPause] Error pausing validation:', error);
-      res.status(500).json({ 
-        message: "Failed to pause validation",
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
-    }
-  });
-
-  app.post("/api/validation/bulk/resume", async (req, res) => {
-    try {
-      // State consistency checks
-      if (!globalValidationState.isRunning) {
-        return res.status(400).json({ 
-          message: "No validation is currently running to resume",
-          currentState: {
-            isRunning: globalValidationState.isRunning,
-            isPaused: globalValidationState.isPaused,
-            jobId: globalValidationState.jobId
-          }
-        });
-      }
-
-      if (!globalValidationState.isPaused) {
-        return res.status(200).json({ 
-          message: "Validation is not paused",
-          state: globalValidationState,
-          isIdempotent: true
-        });
-      }
-
-      // Record resume timestamp for tracking
-      const resumeTimestamp = Date.now();
-      const pauseDuration = resumeTimestamp - globalValidationState.lastUpdateTime;
-      
-      // Implement resume semantics: restart processing from where it was paused
-      console.log('[ValidationResume] Resuming validation operations from paused state');
-      
-      // Update global state with enhanced tracking
-      globalValidationState.isPaused = false;
-      globalValidationState.canPause = true;
-      globalValidationState.lastUpdateTime = resumeTimestamp;
-      
-      res.status(202).json({ 
-        message: "Validation resume requested",
-        state: globalValidationState,
-        resumeTimestamp,
-        pauseDuration,
-        estimatedProcessingResume: resumeTimestamp + 500 // Allow 500ms for graceful resume
-      });
-    } catch (error: any) {
-      console.error('[ValidationResume] Error resuming validation:', error);
-      res.status(500).json({ 
-        message: "Failed to resume validation",
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
-    }
-  });
-
-  app.post("/api/validation/bulk/stop", async (req, res) => {
-    try {
-      // State consistency checks
-      if (!globalValidationState.isRunning) {
-        return res.status(200).json({ 
-          message: "No validation is currently running",
-          currentState: {
-            isRunning: globalValidationState.isRunning,
-            isPaused: globalValidationState.isPaused,
-            jobId: globalValidationState.jobId
-          },
-          isIdempotent: true
-        });
-      }
-
-      // Record stop timestamp for tracking
-      const stopTimestamp = Date.now();
-      const runDuration = stopTimestamp - globalValidationState.startTimestamp;
-      
-      console.log('[ValidationStop] Initiating graceful shutdown of validation operations');
-      
-      // Use consolidated service for stop operations
-      const cancellationService = getValidationCancellationRetryService();
-      const cancellationResult = await cancellationService.cancelAllOperations('bulk-validation', 'user-requested');
-      
-      // Perform cleanup operations
-      console.log('[ValidationStop] Performing cleanup operations');
-      
-      // Reset global state with enhanced tracking
-      const finalState = {
-        ...globalValidationState,
-        isRunning: false,
-        isPaused: false,
-        shouldStop: true,
-        lastUpdateTime: stopTimestamp,
-        stopTimestamp,
-        runDuration,
-        finalStats: {
-          processedResources: globalValidationState.processedResources,
-          totalResources: globalValidationState.totalResources,
-          errors: globalValidationState.errors,
-          warnings: globalValidationState.warnings,
-          currentBatch: globalValidationState.currentBatch,
-          totalBatches: globalValidationState.totalBatches
-        }
-      };
-      
-      // Update global state
-      globalValidationState = finalState;
-      
-      res.status(202).json({ 
-        message: "Validation stop requested",
-        state: finalState,
-        stopTimestamp,
-        runDuration,
-        cancellationResult: {
-          cancelledOperations: cancellationResult?.length || 0,
-          reason: 'user-requested'
-        },
-        estimatedCleanupTime: stopTimestamp + 2000 // Allow 2 seconds for cleanup
-      });
-    } catch (error: any) {
-      console.error('[ValidationStop] Error stopping validation:', error);
-      res.status(500).json({ 
-        message: "Failed to stop validation",
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
-    }
-  });
+  // Setup bulk validation control routes
+  setupBulkControlRoutes(app);
 
   // Validation settings (simplified)
   app.get("/api/validation/settings", async (req, res) => {
@@ -599,22 +163,14 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
         });
       }
 
-      if (!update.settings || typeof update.settings !== 'object') {
-        return res.status(400).json({ 
-          error: 'Missing settings',
-          message: 'Settings object is required in the request body',
-          code: 'MISSING_SETTINGS'
-        });
-      }
-
-      // Validate that settings contains at least one valid validation setting
-      const validSettingKeys = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata', 'server', 'performance'];
-      const hasValidSettings = validSettingKeys.some(key => key in update.settings);
+      // Validate that update contains at least one valid validation setting
+      const validSettingKeys = ['aspects', 'server', 'performance', 'resourceTypes', 'records'];
+      const hasValidSettings = validSettingKeys.some(key => key in update);
       
-      if (!hasValidSettings && Object.keys(update.settings).length > 0) {
+      if (!hasValidSettings && Object.keys(update).length > 0) {
         return res.status(400).json({ 
           error: 'Invalid settings content',
-          message: 'Settings object must contain valid validation settings (structural, profile, terminology, reference, businessRule, metadata, server, or performance)',
+          message: 'Request body must contain valid validation settings (aspects, server, performance, resourceTypes, or records)',
           code: 'INVALID_SETTINGS_CONTENT',
           validKeys: validSettingKeys
         });
@@ -657,6 +213,158 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
         message: 'An unexpected error occurred while updating settings',
         code: 'INTERNAL_ERROR'
       });
+    }
+  });
+
+  // PUT /api/validation/configuration - Dynamic validation configuration endpoint
+  app.put("/api/validation/configuration", async (req, res) => {
+    try {
+      const settingsService = getValidationSettingsService();
+      const { action, payload, options } = req.body;
+      
+      // Validate request structure
+      if (!action || typeof action !== 'string') {
+        return res.status(400).json({
+          error: 'Invalid request',
+          message: 'Request must include an "action" field specifying the configuration action',
+          code: 'MISSING_ACTION',
+          validActions: [
+            'update-aspects',
+            'update-performance',
+            'update-resource-types',
+            'update-records',
+            'reset-to-defaults',
+            'validate-configuration',
+            'get-configuration-status'
+          ]
+        });
+      }
+
+      let result: any;
+
+      switch (action) {
+        case 'update-aspects':
+          if (!payload || !payload.aspects) {
+            return res.status(400).json({
+              error: 'Invalid payload',
+              message: 'update-aspects action requires payload.aspects',
+              code: 'INVALID_PAYLOAD'
+            });
+          }
+          result = await settingsService.updateSettings({ aspects: payload.aspects });
+          break;
+
+        case 'update-performance':
+          if (!payload || !payload.performance) {
+            return res.status(400).json({
+              error: 'Invalid payload',
+              message: 'update-performance action requires payload.performance',
+              code: 'INVALID_PAYLOAD'
+            });
+          }
+          result = await settingsService.updateSettings({ performance: payload.performance });
+          break;
+
+        case 'update-resource-types':
+          if (!payload || !payload.resourceTypes) {
+            return res.status(400).json({
+              error: 'Invalid payload',
+              message: 'update-resource-types action requires payload.resourceTypes',
+              code: 'INVALID_PAYLOAD'
+            });
+          }
+          result = await settingsService.updateSettings({ resourceTypes: payload.resourceTypes });
+          break;
+
+        case 'update-records':
+          if (!payload || !payload.records) {
+            return res.status(400).json({
+              error: 'Invalid payload',
+              message: 'update-records action requires payload.records',
+              code: 'INVALID_PAYLOAD'
+            });
+          }
+          result = await settingsService.updateSettings({ records: payload.records });
+          break;
+
+        case 'reset-to-defaults':
+          // Reset to default settings
+          result = await settingsService.resetToDefaults();
+          break;
+
+        case 'validate-configuration':
+          // Validate current configuration without saving
+          const currentSettings = await settingsService.getCurrentSettings();
+          const validationResult = await settingsService.validateSettings(currentSettings);
+          result = {
+            isValid: validationResult.isValid,
+            errors: validationResult.errors || [],
+            warnings: validationResult.warnings || [],
+            settings: currentSettings
+          };
+          break;
+
+        case 'get-configuration-status':
+          // Get configuration status and health
+          const statusSettings = await settingsService.getCurrentSettings();
+          const healthStatus = await settingsService.getHealthStatus();
+          const cacheStats = settingsService.getCacheStats();
+          result = {
+            status: 'active',
+            lastModified: statusSettings.lastModified || new Date().toISOString(),
+            serverId: statusSettings.server?.id || null,
+            serverUrl: statusSettings.server?.url || null,
+            totalAspects: Object.keys(statusSettings.aspects || {}).length,
+            enabledAspects: Object.values(statusSettings.aspects || {}).filter((aspect: any) => aspect?.enabled).length,
+            health: healthStatus,
+            cache: cacheStats,
+            configuration: {
+              hasValidSettings: !!statusSettings.aspects,
+              hasServerConfig: !!statusSettings.server,
+              hasPerformanceConfig: !!statusSettings.performance,
+              hasResourceTypesConfig: !!statusSettings.resourceTypes,
+              hasRecordsConfig: !!statusSettings.records
+            }
+          };
+          break;
+
+        default:
+          return res.status(400).json({
+            error: 'Invalid action',
+            message: `Unknown action: ${action}`,
+            code: 'INVALID_ACTION',
+            validActions: [
+              'update-aspects',
+              'update-performance', 
+              'update-resource-types',
+              'update-records',
+              'reset-to-defaults',
+              'validate-configuration',
+              'get-configuration-status'
+            ]
+          });
+      }
+
+      // Add metadata to response
+      const response = {
+        success: true,
+        action,
+        timestamp: new Date().toISOString(),
+        data: result,
+        metadata: {
+          serverId: result?.server?.id || null,
+          serverUrl: result?.server?.url || null,
+          requestId: randomUUID().slice(0, 8)
+        }
+      };
+
+      res.json(response);
+    } catch (error: any) {
+      console.error('[Validation Configuration] Error:', error);
+      
+      // Use the error handler for consistent error responses
+      const { handleError } = await import('../../../utils/validation-error-handler');
+      handleError(error, req, res, 'validation-configuration');
     }
   });
 

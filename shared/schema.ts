@@ -11,6 +11,16 @@ export const fhirServers = pgTable("fhir_servers", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const validationProgressState = pgTable("validation_progress_state", {
+  id: serial("id").primaryKey(),
+  jobId: text("job_id").notNull().unique(),
+  serverId: integer("server_id").notNull().references(() => fhirServers.id, { onDelete: "cascade" }),
+  stateData: jsonb("state_data").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  expiresAt: timestamp("expires_at").defaultNow(),
+});
+
 export const fhirResources = pgTable("fhir_resources", {
   id: serial("id").primaryKey(),
   serverId: integer("server_id").references(() => fhirServers.id),

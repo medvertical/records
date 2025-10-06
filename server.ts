@@ -4,6 +4,7 @@ import { createServer, type Server } from "http";
 import { serveStatic, log } from "./server/static";
 import { logger } from "./server/utils/logger.js";
 import { FeatureFlags, assertProductionSafety, logFeatureFlags } from "./server/config/feature-flags";
+import { getValidationPerformanceMonitor } from "./server/services/performance/validation-performance-monitor";
 
 const app = express();
 app.use(express.json());
@@ -1500,6 +1501,32 @@ app.get("/api/health", async (req, res) => {
         validationEngine: "initialized",
         environment: "vercel"
       }
+    });
+  }
+});
+
+// Initialize performance monitoring
+const performanceMonitor = getValidationPerformanceMonitor();
+performanceMonitor.initialize();
+
+// Performance monitoring endpoint
+app.get("/api/performance/metrics", (req, res) => {
+  try {
+    const metrics = performanceMonitor.getMetrics();
+    const health = performanceMonitor.getHealthStatus();
+    const analytics = performanceMonitor.getAnalytics();
+    
+    res.json({
+      metrics,
+      health,
+      analytics,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[Performance] Error getting metrics:', error);
+    res.status(500).json({
+      error: 'Failed to get performance metrics',
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });

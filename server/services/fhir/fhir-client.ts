@@ -283,6 +283,87 @@ export class FhirClient {
     }
   }
 
+  async searchAllResources(
+    resourceType: string,
+    params: Record<string, string | number> = {},
+    maxResources?: number
+  ): Promise<any[]> {
+    try {
+      console.log(`[FhirClient] Starting paginated search for ${resourceType}`);
+      
+      const allResources: any[] = [];
+      let nextUrl: string | null = null;
+      let pageCount = 0;
+      const maxPages = 20; // Safety limit to prevent infinite loops
+      
+      // Start with initial search
+      const searchParams = new URLSearchParams();
+      
+      // Add all parameters from params first
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          searchParams.set(key, value.toString());
+        }
+      });
+      
+      // Set a reasonable page size for pagination
+      searchParams.set('_count', '500'); // Most FHIR servers limit to 500-1000 per page
+      searchParams.set('_format', 'json');
+
+      let url = `${this.baseUrl}/${resourceType}?${searchParams.toString()}`;
+      
+      while (url && pageCount < maxPages) {
+        pageCount++;
+        console.log(`[FhirClient] Fetching page ${pageCount} for ${resourceType}: ${url}`);
+        
+        const response: AxiosResponse<FhirBundle> = await axios.get(
+          url,
+          { 
+            headers: this.headers,
+            timeout: 15000 // Longer timeout for pagination
+          }
+        );
+
+        const bundle = response.data;
+        const pageResources = bundle.entry?.map(entry => entry.resource) || [];
+        allResources.push(...pageResources);
+        
+        console.log(`[FhirClient] Page ${pageCount}: Found ${pageResources.length} resources, total so far: ${allResources.length}`);
+        
+        // Check if we've hit the max resources limit
+        if (maxResources && allResources.length >= maxResources) {
+          console.log(`[FhirClient] Reached max resources limit: ${maxResources}`);
+          break;
+        }
+        
+        // Look for next page link
+        nextUrl = null;
+        if (bundle.link) {
+          const nextLink = bundle.link.find(link => link.relation === 'next');
+          if (nextLink) {
+            nextUrl = nextLink.url;
+          }
+        }
+        
+        url = nextUrl;
+        
+        // Small delay between requests to be respectful to the server
+        if (url) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      
+      console.log(`[FhirClient] Completed paginated search for ${resourceType}: ${allResources.length} total resources across ${pageCount} pages`);
+      return allResources;
+      
+    } catch (error: any) {
+      if (error.response?.data?.resourceType === 'OperationOutcome') {
+        throw new Error(`FHIR Error: ${this.formatOperationOutcome(error.response.data)}`);
+      }
+      throw new Error(`Failed to search all ${resourceType}: ${error.message}`);
+    }
+  }
+
   async getResource(resourceType: string, id: string): Promise<any> {
     try {
       const response = await axios.get(

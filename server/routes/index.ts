@@ -15,6 +15,7 @@ import {
 import { setupFhirRoutes, setupProfileRoutes, resourceEditRoutes, batchEditRoutes } from "./api/fhir";
 import { setupDashboardRoutes } from "./api/dashboard";
 import { setupServerRoutes } from "./api/servers";
+import { performanceRoutes } from "./api/performance";
 import adminRoutes from "./api/admin/clear-validation-results";
 
 export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, consolidatedValidationService: ConsolidatedValidationService | null, dashboardService: DashboardService | null) {
@@ -44,6 +45,10 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   // FHIR resource edit routes
   app.use('/api/fhir/resources/:resourceType/:id', resourceEditRoutes);
   app.use('/api/fhir/resources/batch-edit', batchEditRoutes);
+  
+  // Performance monitoring routes
+  app.use('/api/performance', performanceRoutes);
+  
   
   // Admin routes
   app.use('/api/admin', adminRoutes);

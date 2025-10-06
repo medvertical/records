@@ -226,7 +226,7 @@ export class DashboardService {
       });
 
       const rawStats: ValidationStats = {
-        totalValidated: dbStats.totalResources,
+        totalValidated: dbStats.validResources + dbStats.errorResources,
         validResources: dbStats.validResources,
         errorResources: dbStats.errorResources,
         warningResources: dbStats.warningResources || 0,
