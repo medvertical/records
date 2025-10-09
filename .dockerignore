@@ -1,0 +1,44 @@
+# Node modules (will be installed in container)
+node_modules
+
+# Development files
+.env
+.env.*
+*.log
+
+# Git
+.git
+.gitignore
+
+# Documentation
+docs/
+tasks/
+*.md
+!README.md
+
+# Tests
+e2e/
+tests/
+**/*.test.ts
+**/*.test.tsx
+
+# IDE
+.vscode
+.idea
+.cursor
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts (will be rebuilt)
+dist/
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+

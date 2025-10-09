@@ -32,6 +32,7 @@ The Records FHIR Platform provides a streamlined interface for managing FHIR res
 ### Prerequisites
 - Node.js 18+ 
 - PostgreSQL 12+
+- Java Runtime 11+ (for HAPI FHIR Validator)
 - FHIR server access
 
 ### Installation
@@ -47,18 +48,32 @@ The Records FHIR Platform provides a streamlined interface for managing FHIR res
    npm install
    ```
 
-3. **Configure environment**
+3. **Setup HAPI FHIR Validator**
+   ```bash
+   # Automated setup (downloads validator JAR and verifies Java)
+   bash scripts/setup-hapi-validator.sh
+   
+   # Or manual setup:
+   # 1. Install Java 11+: brew install openjdk@11 (macOS)
+   # 2. Download validator JAR:
+   #    curl -L -o server/lib/validator_cli.jar \
+   #      https://github.com/hapifhir/org.hl7.fhir.core/releases/download/6.3.23/validator_cli.jar
+   ```
+   
+   See `server/lib/README.md` for detailed setup instructions.
+
+4. **Configure environment**
    ```bash
    cp env.example.txt .env
    # Edit .env with your database and FHIR server settings
    ```
 
-4. **Run database migrations**
+5. **Run database migrations**
    ```bash
    npm run migrate
    ```
 
-5. **Start the development server**
+6. **Start the development server**
    ```bash
    npm run dev
    ```

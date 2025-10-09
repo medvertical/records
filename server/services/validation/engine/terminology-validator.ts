@@ -1,440 +1,472 @@
 /**
- * Terminology Validator
+ * Terminology Validator (Refactored)
  * 
- * Handles terminology validation of FHIR resources including:
- * - Code system validation using R4 Ontoserver
- * - Value set validation using R4 Ontoserver
- * - Terminology server integration
- * - R4 terminology validation
+ * Handles FHIR terminology validation using HAPI FHIR Validator.
+ * Replaces disabled stub implementation with real terminology validation.
+ * 
+ * Features:
+ * - Real terminology validation via HAPI
+ * - ValueSet and CodeSystem validation
+ * - Support for R4, R5, R6 terminology
+ * - Integration with TerminologyAdapter for fallback chain
+ * - Online/offline mode support (tx.fhir.org vs local Ontoserver)
+ * - Proper caching to avoid performance issues
+ * 
+ * Architecture:
+ * - Primary: Uses HAPI FHIR Validator for comprehensive terminology validation
+ * - Fallback: TerminologyAdapter for direct ValueSet/CodeSystem lookups
+ * - Cache: Terminology cache with TTL (1 hour online, indefinite offline)
+ * 
+ * File size: Target <400 lines (global.mdc compliance)
  */
 
 import type { ValidationIssue } from '../types/validation-types';
-import { OntoserverClient } from '../../fhir/ontoserver-client';
+import { hapiValidatorClient } from './hapi-validator-client';
+import type { HapiValidationOptions } from './hapi-validator-types';
+import { TerminologyAdapter } from '../terminology/terminology-adapter';
+import type { ValidationSettings } from '@shared/validation-settings';
+
+// ============================================================================
+// Terminology Validator
+// ============================================================================
 
 export class TerminologyValidator {
-  private ontoserverClient: OntoserverClient;
-  private knownValueSets: Map<string, any> = new Map();
+  private hapiAvailable: boolean | null = null;
+  private terminologyAdapter: TerminologyAdapter;
+  private validationCache: Map<string, CachedValidationResult> = new Map();
 
   constructor() {
-    this.ontoserverClient = new OntoserverClient();
-    this.initializeKnownValueSets();
+    this.terminologyAdapter = new TerminologyAdapter();
   }
 
   /**
-   * Initialize known FHIR R4 value sets for validation
+   * Validate resource terminology
+   * 
+   * @param resource - FHIR resource to validate
+   * @param resourceType - Expected resource type
+   * @param settings - Validation settings (includes mode: online/offline)
+   * @returns Array of terminology validation issues
    */
-  private initializeKnownValueSets(): void {
-    // Common FHIR R4 value sets
-    this.knownValueSets.set('http://hl7.org/fhir/ValueSet/administrative-gender', {
-      name: 'Administrative Gender',
-      description: 'FHIR R4 Administrative Gender value set',
-      system: 'http://hl7.org/fhir/administrative-gender',
-      codes: ['male', 'female', 'other', 'unknown']
-    });
-
-    this.knownValueSets.set('http://hl7.org/fhir/ValueSet/observation-status', {
-      name: 'Observation Status',
-      description: 'FHIR R4 Observation Status value set',
-      system: 'http://hl7.org/fhir/observation-status',
-      codes: ['registered', 'preliminary', 'final', 'amended', 'corrected', 'cancelled', 'entered-in-error', 'unknown']
-    });
-
-    this.knownValueSets.set('http://hl7.org/fhir/ValueSet/encounter-status', {
-      name: 'Encounter Status',
-      description: 'FHIR R4 Encounter Status value set',
-      system: 'http://hl7.org/fhir/encounter-status',
-      codes: ['planned', 'arrived', 'triaged', 'in-progress', 'onleave', 'finished', 'cancelled', 'entered-in-error', 'unknown']
-    });
-
-    this.knownValueSets.set('http://hl7.org/fhir/ValueSet/condition-clinical', {
-      name: 'Condition Clinical Status',
-      description: 'FHIR R4 Condition Clinical Status value set',
-      system: 'http://terminology.hl7.org/CodeSystem/condition-clinical',
-      codes: ['active', 'recurrence', 'relapse', 'inactive', 'remission', 'resolved']
-    });
-
-    this.knownValueSets.set('http://hl7.org/fhir/ValueSet/condition-ver-status', {
-      name: 'Condition Verification Status',
-      description: 'FHIR R4 Condition Verification Status value set',
-      system: 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
-      codes: ['unconfirmed', 'provisional', 'differential', 'confirmed', 'refuted', 'entered-in-error']
-    });
-
-    this.knownValueSets.set('http://hl7.org/fhir/ValueSet/bundle-type', {
-      name: 'Bundle Type',
-      description: 'FHIR R4 Bundle Type value set',
-      system: 'http://hl7.org/fhir/bundle-type',
-      codes: ['document', 'message', 'transaction', 'transaction-response', 'batch', 'batch-response', 'history', 'searchset', 'collection']
-    });
-
-    console.log(`[TerminologyValidator] Initialized ${this.knownValueSets.size} known FHIR R4 value sets`);
-  }
-
-  async validate(resource: any, resourceType: string, terminologyClient?: any): Promise<ValidationIssue[]> {
-    // TEMPORARILY DISABLED FOR PERFORMANCE TESTING
-    console.log(`[TerminologyValidator] SKIPPING terminology validation for ${resourceType} (performance optimization)`);
-    console.log(`[TerminologyValidator] Returning immediately to avoid any processing`);
-    return []; // Return empty issues array for now
-    
-    // Original code (disabled):
-    // const issues: ValidationIssue[] = [];
-    // const startTime = Date.now();
-    // 
-    // console.log(`[TerminologyValidator] Validating ${resourceType} resource terminology...`);
-    // 
-    // try {
-    //   // Test R4 Ontoserver connectivity first
-    //   const connectivityTest = await this.ontoserverClient.testR4Connectivity();
-    //   if (!connectivityTest.success) {
-    //     console.warn('[TerminologyValidator] R4 Ontoserver connectivity failed, using fallback validation');
-    //     const fallbackIssues = await this.performFallbackTerminologyValidation(resource, resourceType);
-    //     issues.push(...fallbackIssues);
-    //   } else {
-    //     console.log('[TerminologyValidator] R4 Ontoserver connected successfully');
-    //     
-    //     // Perform comprehensive terminology validation
-    //     const terminologyIssues = await this.performComprehensiveTerminologyValidation(resource, resourceType);
-    //     issues.push(...terminologyIssues);
-    //   }
-
-    //   const validationTime = Date.now() - startTime;
-    //   console.log(`[TerminologyValidator] Validated ${resourceType} terminology in ${validationTime}ms, found ${issues.length} issues`);
-    // 
-    // } catch (error) {
-    //   console.error('[TerminologyValidator] Terminology validation failed:', error);
-    //   issues.push({
-    //     id: `terminology-error-${Date.now()}`,
-    //     aspect: 'terminology',
-    //     severity: 'error',
-    //     code: 'terminology-validation-error',
-    //     message: `Terminology validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    //     path: '',
-    //     humanReadable: 'Terminology validation encountered an error',
-    //     details: {
-    //       error: error instanceof Error ? error.message : 'Unknown error',
-    //       resourceType: resourceType
-    //     },
-    //     validationMethod: 'terminology-validation-error',
-    //     timestamp: new Date().toISOString(),
-    //     resourceType: resourceType,
-    //     schemaVersion: 'R4'
-    //   });
-    // }
-    // 
-    // return issues;
-  }
-
-  /**
-   * Perform comprehensive terminology validation using R4 Ontoserver
-   */
-  private async performComprehensiveTerminologyValidation(resource: any, resourceType: string): Promise<ValidationIssue[]> {
-    const issues: ValidationIssue[] = [];
-
-    // Validate common terminology fields based on resource type
-    const terminologyFields = this.getTerminologyFieldsForResourceType(resourceType);
-    
-    for (const field of terminologyFields) {
-      const fieldValue = this.getFieldValue(resource, field.path);
-      
-      if (fieldValue !== undefined && fieldValue !== null) {
-        const fieldIssues = await this.validateTerminologyField(fieldValue, field, resourceType);
-        issues.push(...fieldIssues);
-      }
-    }
-
-    return issues;
-  }
-
-  /**
-   * Get terminology fields to validate for a specific resource type
-   */
-  private getTerminologyFieldsForResourceType(resourceType: string): Array<{path: string, valueSet?: string, system?: string}> {
-    const terminologyFields: Record<string, Array<{path: string, valueSet?: string, system?: string}>> = {
-      'Patient': [
-        { path: 'gender', valueSet: 'http://hl7.org/fhir/ValueSet/administrative-gender' }
-      ],
-      'Observation': [
-        { path: 'status', valueSet: 'http://hl7.org/fhir/ValueSet/observation-status' },
-        { path: 'category.coding.code', system: 'http://terminology.hl7.org/CodeSystem/observation-category' },
-        { path: 'code.coding.code', system: 'http://loinc.org' }
-      ],
-      'Condition': [
-        { path: 'clinicalStatus.coding.code', valueSet: 'http://hl7.org/fhir/ValueSet/condition-clinical' },
-        { path: 'verificationStatus.coding.code', valueSet: 'http://hl7.org/fhir/ValueSet/condition-ver-status' },
-        { path: 'code.coding.code', system: 'http://snomed.info/sct' }
-      ],
-      'Encounter': [
-        { path: 'status', valueSet: 'http://hl7.org/fhir/ValueSet/encounter-status' },
-        { path: 'class.code', system: 'http://terminology.hl7.org/CodeSystem/v3-ActCode' }
-      ],
-      'Bundle': [
-        { path: 'type', valueSet: 'http://hl7.org/fhir/ValueSet/bundle-type' }
-      ]
-    };
-
-    return terminologyFields[resourceType] || [];
-  }
-
-  /**
-   * Validate a terminology field using R4 Ontoserver
-   */
-  private async validateTerminologyField(fieldValue: any, field: any, resourceType: string): Promise<ValidationIssue[]> {
+  async validate(
+    resource: any,
+    resourceType: string,
+    settings?: ValidationSettings
+  ): Promise<ValidationIssue[]> {
+    const startTime = Date.now();
     const issues: ValidationIssue[] = [];
 
     try {
-      // Handle different field value types
-      if (typeof fieldValue === 'string') {
-        // Direct code validation
-        const validation = await this.validateCodeAgainstValueSet(fieldValue, field.valueSet, field.system);
-        if (!validation.isValid) {
-          issues.push({
-            id: `terminology-invalid-code-${Date.now()}-${field.path}`,
-            aspect: 'terminology',
-            severity: 'error',
-            code: 'invalid-code',
-            message: `Invalid code '${fieldValue}' for field '${field.path}'`,
-            path: field.path,
-            humanReadable: `The code '${fieldValue}' is not valid for the ${field.valueSet ? 'value set' : 'code system'} specified`,
-            details: {
-              fieldPath: field.path,
-              actualCode: fieldValue,
-              valueSet: field.valueSet,
-              system: field.system,
-              resourceType: resourceType,
-              validationResult: validation
-            },
-            location: this.parseErrorLocation(field.path),
-            validationMethod: 'r4-ontoserver-validation',
-            timestamp: new Date().toISOString(),
-            resourceType: resourceType,
-            schemaVersion: 'R4'
-          });
-        }
-      } else if (fieldValue.coding && Array.isArray(fieldValue.coding)) {
-        // CodeableConcept validation
-        for (const coding of fieldValue.coding) {
-          if (coding.code) {
-            const validation = await this.validateCodeAgainstValueSet(coding.code, field.valueSet, coding.system || field.system);
-            if (!validation.isValid) {
-              issues.push({
-                id: `terminology-invalid-coding-${Date.now()}-${field.path}`,
-                aspect: 'terminology',
-                severity: 'error',
-                code: 'invalid-coding',
-                message: `Invalid coding '${coding.code}' in system '${coding.system}' for field '${field.path}'`,
-                path: field.path,
-                humanReadable: `The coding '${coding.code}' is not valid in the specified code system`,
-                details: {
-                  fieldPath: field.path,
-                  actualCoding: coding,
-                  valueSet: field.valueSet,
-                  system: coding.system || field.system,
-                  resourceType: resourceType,
-                  validationResult: validation
-                },
-                location: this.parseErrorLocation(field.path),
-                validationMethod: 'r4-ontoserver-validation',
-                timestamp: new Date().toISOString(),
-                resourceType: resourceType,
-                schemaVersion: 'R4'
-              });
-            }
-          }
-        }
+      console.log(`[TerminologyValidator] Validating ${resourceType} resource terminology...`);
+
+      // Detect FHIR version
+      const fhirVersion = this.detectFhirVersion(resource);
+
+      // Get mode from settings (default to online)
+      const mode = settings?.mode || 'online';
+      console.log(`[TerminologyValidator] Mode: ${mode}, Version: ${fhirVersion}`);
+
+      // Check cache first
+      const cacheKey = this.generateCacheKey(resource, resourceType, mode);
+      const cachedResult = this.getCachedResult(cacheKey, mode);
+      if (cachedResult) {
+        console.log(`[TerminologyValidator] Using cached result`);
+        return cachedResult.issues;
       }
 
+      // Check HAPI availability
+      await this.checkHapiAvailability();
+
+      // Perform validation
+      if (this.hapiAvailable) {
+        // Use HAPI for comprehensive terminology validation
+        const hapiIssues = await this.validateWithHapi(resource, resourceType, fhirVersion, mode);
+        issues.push(...hapiIssues);
+      } else {
+        // Fallback to basic terminology validation
+        console.log(`[TerminologyValidator] HAPI not available, using fallback validation`);
+        const fallbackIssues = await this.validateWithFallback(resource, resourceType, settings);
+        issues.push(...fallbackIssues);
+      }
+
+      // Cache result
+      this.cacheResult(cacheKey, issues, mode);
+
+      const validationTime = Date.now() - startTime;
+      console.log(
+        `[TerminologyValidator] Validated ${resourceType} terminology in ${validationTime}ms ` +
+        `(${issues.length} issues, validator: ${this.hapiAvailable ? 'HAPI' : 'fallback'})`
+      );
+
     } catch (error) {
-      console.error('[TerminologyValidator] Field validation failed:', error);
+      console.error('[TerminologyValidator] Terminology validation failed:', error);
       issues.push({
-        id: `terminology-field-error-${Date.now()}-${field.path}`,
+        id: `terminology-error-${Date.now()}`,
         aspect: 'terminology',
-        severity: 'warning',
-        code: 'terminology-field-validation-error',
-        message: `Terminology field validation failed for '${field.path}': ${error instanceof Error ? error.message : 'Unknown error'}`,
-        path: field.path,
-        humanReadable: `Unable to validate terminology for field '${field.path}'`,
-        details: {
-          fieldPath: field.path,
-          error: error instanceof Error ? error.message : 'Unknown error',
-          resourceType: resourceType
-        },
-        validationMethod: 'terminology-field-error',
-        timestamp: new Date().toISOString(),
-        resourceType: resourceType,
-        schemaVersion: 'R4'
+        severity: 'error',
+        code: 'terminology-validation-error',
+        message: `Terminology validation failed: ${error instanceof Error ? error.message : String(error)}`,
+        path: '',
+        timestamp: new Date(),
       });
     }
 
-      return issues;
+    return issues;
   }
 
   /**
-   * Validate a code against a value set using R4 Ontoserver
+   * Validate using HAPI FHIR Validator
    */
-  private async validateCodeAgainstValueSet(code: string, valueSet?: string, system?: string): Promise<{isValid: boolean, display?: string, error?: string}> {
+  private async validateWithHapi(
+    resource: any,
+    resourceType: string,
+    fhirVersion: 'R4' | 'R5' | 'R6',
+    mode: 'online' | 'offline'
+  ): Promise<ValidationIssue[]> {
     try {
-      // First try with known value sets
-      if (valueSet && this.knownValueSets.has(valueSet)) {
-        const knownValueSet = this.knownValueSets.get(valueSet);
-        const isValid = knownValueSet.codes.includes(code);
-        return {
-          isValid,
-          display: isValid ? code : undefined,
-          error: isValid ? undefined : `Code '${code}' not found in value set '${valueSet}'`
-        };
-      }
+      console.log(`[TerminologyValidator] Using HAPI validator for terminology`);
 
-      // If we have a system but no value set, validate against the code system
-      if (system && !valueSet) {
-        // For now, we'll use basic validation for common systems
-        const isValid = this.validateAgainstCommonCodeSystem(code, system);
-        return {
-          isValid,
-          display: isValid ? code : undefined,
-          error: isValid ? undefined : `Code '${code}' not valid in system '${system}'`
-        };
-      }
+      // Build validation options
+      const options: HapiValidationOptions = {
+        fhirVersion,
+        mode,
+        // HAPI will validate terminology as part of comprehensive validation
+      };
 
-      // Use Ontoserver for external validation (TEMPORARILY DISABLED FOR PERFORMANCE TESTING)
-      if (valueSet) {
-        // TEMPORARY: Skip external validation for performance testing
-        console.log(`[TerminologyValidator] SKIPPING external validation for ${code} in ${system} (performance optimization)`);
-        return {
-          isValid: true, // Assume valid for now
-          display: code,
-          error: null
-        };
-        
-        // Original code (disabled):
-        // const result = await this.ontoserverClient.validateCodeR4(code, system || '', valueSet);
-        // return {
-        //   isValid: result.isValid,
-        //   display: result.display,
-        //   error: result.error
-        // };
-      }
+      // Call HAPI validator
+      const allIssues = await hapiValidatorClient.validateResource(resource, options);
 
-      return { isValid: true }; // Default to valid if no validation criteria
+      // Filter to terminology issues only
+      const terminologyIssues = this.filterTerminologyIssues(allIssues);
+
+      console.log(
+        `[TerminologyValidator] HAPI validation complete: ${terminologyIssues.length} terminology issues ` +
+        `(${allIssues.length} total)`
+      );
+
+      return terminologyIssues;
 
     } catch (error) {
-      console.error('[TerminologyValidator] Code validation failed:', error);
-      return {
-        isValid: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
+      console.error(`[TerminologyValidator] HAPI validation failed:`, error);
+      
+      // Return error as validation issue
+      return [{
+        id: `hapi-terminology-error-${Date.now()}`,
+        aspect: 'terminology',
+        severity: 'warning',
+        code: 'hapi-terminology-validation-error',
+        message: `HAPI terminology validation failed: ${error instanceof Error ? error.message : String(error)}`,
+        path: '',
+        timestamp: new Date(),
+      }];
     }
   }
 
   /**
-   * Validate against common code systems
+   * Filter HAPI validation issues to only terminology-related ones
    */
-  private validateAgainstCommonCodeSystem(code: string, system: string): boolean {
-    // Basic validation for common code systems
-    if (system === 'http://loinc.org') {
-      return /^\d+-\d+$/.test(code); // LOINC codes typically have format like "33747-0"
-    }
-    
-    if (system === 'http://snomed.info/sct') {
-      return /^\d+$/.test(code); // SNOMED CT codes are numeric
-    }
-    
-    if (system === 'http://terminology.hl7.org/CodeSystem/v3-ActCode') {
-      return /^[A-Z_]+$/.test(code); // Act codes are typically uppercase with underscores
-    }
+  private filterTerminologyIssues(allIssues: ValidationIssue[]): ValidationIssue[] {
+    return allIssues.filter(issue => {
+      // Already tagged as terminology by hapi-issue-mapper
+      if (issue.aspect === 'terminology') {
+        return true;
+      }
 
-    // Default to true for unknown systems
-    return true;
+      // Additional check: look for terminology-related codes
+      const code = issue.code?.toLowerCase() || '';
+      const message = issue.message?.toLowerCase() || '';
+
+      const terminologyKeywords = [
+        'code',
+        'valueset',
+        'binding',
+        'terminology',
+        'codesystem',
+        'concept',
+        'display',
+      ];
+
+      return terminologyKeywords.some(keyword => 
+        code.includes(keyword) || message.includes(keyword)
+      );
+    });
   }
 
   /**
-   * Perform fallback terminology validation when Ontoserver is unavailable
+   * Fallback terminology validation using TerminologyAdapter
    */
-  private async performFallbackTerminologyValidation(resource: any, resourceType: string): Promise<ValidationIssue[]> {
+  private async validateWithFallback(
+    resource: any,
+    resourceType: string,
+    settings?: ValidationSettings
+  ): Promise<ValidationIssue[]> {
     const issues: ValidationIssue[] = [];
 
-    // Use known value sets for fallback validation
-    const terminologyFields = this.getTerminologyFieldsForResourceType(resourceType);
-    
-    for (const field of terminologyFields) {
-      const fieldValue = this.getFieldValue(resource, field.path);
-      
-      if (fieldValue !== undefined && fieldValue !== null) {
-        const validation = this.validateWithKnownValueSets(fieldValue, field);
-        if (!validation.isValid) {
-          issues.push({
-            id: `terminology-fallback-invalid-${Date.now()}-${field.path}`,
-            aspect: 'terminology',
-            severity: 'warning',
-            code: 'invalid-code-fallback',
-            message: `Invalid code '${fieldValue}' for field '${field.path}' (fallback validation)`,
-            path: field.path,
-            humanReadable: `The code '${fieldValue}' may not be valid (using fallback validation)`,
-            details: {
-              fieldPath: field.path,
-              actualCode: fieldValue,
-              valueSet: field.valueSet,
-              system: field.system,
-              resourceType: resourceType,
-              validationMethod: 'fallback'
-            },
-            validationMethod: 'terminology-fallback-validation',
-            timestamp: new Date().toISOString(),
-            resourceType: resourceType,
-            schemaVersion: 'R4'
-          });
+    try {
+      // Extract and validate codes from resource
+      const codes = this.extractCodes(resource, resourceType);
+
+      for (const codeInfo of codes) {
+        // Use TerminologyAdapter to validate code
+        try {
+          const validationResult = await this.terminologyAdapter.validateCode(
+            codeInfo.code,
+            codeInfo.system,
+            codeInfo.valueSetUrl,
+            settings || { mode: 'online' } as ValidationSettings
+          );
+
+          if (!validationResult.valid) {
+            issues.push({
+              id: `fallback-terminology-${Date.now()}-${codeInfo.path}`,
+              aspect: 'terminology',
+              severity: 'warning',
+              code: 'code-not-in-valueset',
+              message: validationResult.message || `Code '${codeInfo.code}' not valid in ValueSet '${codeInfo.valueSetUrl}'`,
+              path: codeInfo.path,
+              timestamp: new Date(),
+            });
+          }
+        } catch (error) {
+          console.warn(`[TerminologyValidator] Failed to validate code at ${codeInfo.path}:`, error);
+          // Continue with other codes
         }
       }
+
+    } catch (error) {
+      console.error(`[TerminologyValidator] Fallback validation failed:`, error);
+      issues.push({
+        id: `fallback-terminology-error-${Date.now()}`,
+        aspect: 'terminology',
+        severity: 'warning',
+        code: 'terminology-fallback-error',
+        message: `Fallback terminology validation failed: ${error instanceof Error ? error.message : String(error)}`,
+        path: '',
+        timestamp: new Date(),
+      });
     }
 
     return issues;
   }
 
   /**
-   * Validate using known value sets
+   * Extract codes from resource for validation
    */
-  private validateWithKnownValueSets(fieldValue: any, field: any): {isValid: boolean, error?: string} {
-    if (field.valueSet && this.knownValueSets.has(field.valueSet)) {
-      const knownValueSet = this.knownValueSets.get(field.valueSet);
-      
-      if (typeof fieldValue === 'string') {
-        const isValid = knownValueSet.codes.includes(fieldValue);
-        return {
-          isValid,
-          error: isValid ? undefined : `Code '${fieldValue}' not found in known value set '${field.valueSet}'`
-        };
+  private extractCodes(resource: any, resourceType: string): Array<{
+    code: string;
+    system: string;
+    valueSetUrl?: string;
+    path: string;
+  }> {
+    const codes: Array<{ code: string; system: string; valueSetUrl?: string; path: string }> = [];
+
+    // Common terminology fields by resource type
+    const terminologyPaths: Record<string, Array<{ path: string; valueSetUrl?: string }>> = {
+      Patient: [
+        { path: 'gender', valueSetUrl: 'http://hl7.org/fhir/ValueSet/administrative-gender' }
+      ],
+      Observation: [
+        { path: 'status', valueSetUrl: 'http://hl7.org/fhir/ValueSet/observation-status' },
+        { path: 'code.coding' },
+      ],
+      Condition: [
+        { path: 'clinicalStatus.coding' },
+        { path: 'verificationStatus.coding' },
+        { path: 'code.coding' },
+      ],
+      Encounter: [
+        { path: 'status', valueSetUrl: 'http://hl7.org/fhir/ValueSet/encounter-status' },
+        { path: 'class.code' },
+      ],
+    };
+
+    const paths = terminologyPaths[resourceType] || [];
+
+    for (const pathInfo of paths) {
+      const value = this.getFieldValue(resource, pathInfo.path);
+      if (value) {
+        if (typeof value === 'string') {
+          // Simple code field
+          codes.push({
+            code: value,
+            system: '', // System would need to be inferred
+            valueSetUrl: pathInfo.valueSetUrl,
+            path: pathInfo.path,
+          });
+        } else if (Array.isArray(value)) {
+          // Array of codings
+          value.forEach((coding: any, index: number) => {
+            if (coding.code && coding.system) {
+              codes.push({
+                code: coding.code,
+                system: coding.system,
+                valueSetUrl: pathInfo.valueSetUrl,
+                path: `${pathInfo.path}[${index}]`,
+              });
+            }
+          });
+        } else if (value.code && value.system) {
+          // Single coding
+          codes.push({
+            code: value.code,
+            system: value.system,
+            valueSetUrl: pathInfo.valueSetUrl,
+            path: pathInfo.path,
+          });
+        }
       }
     }
 
-    return { isValid: true }; // Default to valid
+    return codes;
   }
 
   /**
-   * Get field value from resource using dot notation
+   * Get field value from resource by path
    */
-  private getFieldValue(resource: any, fieldPath: string): any {
-    if (!fieldPath) return resource;
-    
-    const parts = fieldPath.split('.');
+  private getFieldValue(resource: any, path: string): any {
+    const parts = path.split('.');
     let current = resource;
-    
+
     for (const part of parts) {
       if (current === null || current === undefined) {
         return undefined;
       }
       current = current[part];
     }
-    
+
     return current;
   }
 
   /**
-   * Parse error location from field path
+   * Generate cache key for validation result
    */
-  private parseErrorLocation(fieldPath: string): any {
+  private generateCacheKey(resource: any, resourceType: string, mode: string): string {
+    // Simple cache key based on resource ID and type
+    const resourceId = resource.id || 'no-id';
+    const resourceVersion = resource.meta?.versionId || 'no-version';
+    return `${resourceType}-${resourceId}-${resourceVersion}-${mode}`;
+  }
+
+  /**
+   * Get cached validation result
+   */
+  private getCachedResult(cacheKey: string, mode: 'online' | 'offline'): CachedValidationResult | null {
+    const cached = this.validationCache.get(cacheKey);
+    if (!cached) {
+      return null;
+    }
+
+    // Check TTL based on mode
+    const ttl = mode === 'online' ? 60 * 60 * 1000 : Number.MAX_SAFE_INTEGER; // 1 hour online, indefinite offline
+    const age = Date.now() - cached.timestamp;
+
+    if (age > ttl) {
+      // Expired
+      this.validationCache.delete(cacheKey);
+      return null;
+    }
+
+    return cached;
+  }
+
+  /**
+   * Cache validation result
+   */
+  private cacheResult(cacheKey: string, issues: ValidationIssue[], mode: 'online' | 'offline'): void {
+    this.validationCache.set(cacheKey, {
+      issues,
+      timestamp: Date.now(),
+      mode,
+    });
+
+    // Limit cache size
+    if (this.validationCache.size > 1000) {
+      // Remove oldest entries
+      const keysToRemove = Array.from(this.validationCache.keys()).slice(0, 100);
+      keysToRemove.forEach(key => this.validationCache.delete(key));
+    }
+  }
+
+  /**
+   * Clear cache (useful on mode switch)
+   */
+  clearCache(): void {
+    this.validationCache.clear();
+    console.log(`[TerminologyValidator] Cache cleared`);
+  }
+
+  /**
+   * Detect FHIR version from resource
+   */
+  private detectFhirVersion(resource: any): 'R4' | 'R5' | 'R6' {
+    // Check meta.profile for version indicators
+    if (resource.meta?.profile && Array.isArray(resource.meta.profile)) {
+      for (const profile of resource.meta.profile) {
+        if (typeof profile === 'string') {
+          if (profile.includes('r6') || profile.includes('R6')) return 'R6';
+          if (profile.includes('r5') || profile.includes('R5')) return 'R5';
+          if (profile.includes('r4') || profile.includes('R4')) return 'R4';
+        }
+      }
+    }
+
+    // Default to R4
+    return 'R4';
+  }
+
+  /**
+   * Check HAPI validator availability (cached)
+   */
+  private async checkHapiAvailability(): Promise<void> {
+    if (this.hapiAvailable !== null) {
+      return;
+    }
+
+    try {
+      const setupResult = await hapiValidatorClient.testSetup();
+      this.hapiAvailable = setupResult.success;
+      console.log(`[TerminologyValidator] HAPI validator available: ${this.hapiAvailable}`);
+    } catch (error) {
+      console.warn(`[TerminologyValidator] Failed to check HAPI availability:`, error);
+      this.hapiAvailable = false;
+    }
+  }
+
+  /**
+   * Refresh HAPI availability check
+   */
+  async refreshHapiAvailability(): Promise<boolean> {
+    this.hapiAvailable = null;
+    await this.checkHapiAvailability();
+    return this.hapiAvailable === true;
+  }
+
+  /**
+   * Get validator status
+   */
+  getValidatorStatus(): {
+    hapiAvailable: boolean | null;
+    cacheSize: number;
+    preferredValidator: 'hapi' | 'fallback' | 'unknown';
+  } {
     return {
-      field: fieldPath,
-      path: fieldPath.split('.'),
-      depth: fieldPath.split('.').length
+      hapiAvailable: this.hapiAvailable,
+      cacheSize: this.validationCache.size,
+      preferredValidator: this.hapiAvailable === true ? 'hapi' : 
+                         this.hapiAvailable === false ? 'fallback' : 
+                         'unknown',
     };
   }
 }
+
+// ============================================================================
+// Types
+// ============================================================================
+
+interface CachedValidationResult {
+  issues: ValidationIssue[];
+  timestamp: number;
+  mode: 'online' | 'offline';
+}
+
+// Export singleton instance (maintains backward compatibility)
+export const terminologyValidator = new TerminologyValidator();

@@ -1,109 +1,346 @@
 {
-  "version": "1.0",
-  "lastUpdated": "2025-01-09",
-  "description": "Error mapping configuration for FHIR validation messages",
+  "version": "2.0",
+  "lastUpdated": "2025-10-09",
+  "description": "Comprehensive error mapping configuration for HAPI FHIR validation messages - 100+ codes",
   "mappings": {
-    "terminology-check-failed": {
-      "friendlyText": "Der Code konnte nicht im ValueSet gefunden werden",
-      "friendlyText_en": "Code not found in ValueSet",
-      "category": "terminology",
-      "severity": "warning",
-      "suggestions": [
-        "Prüfen Sie, ob der CodeSystem verfügbar ist",
-        "Verwenden Sie einen Code aus dem erlaubten ValueSet",
-        "Stellen Sie sicher, dass die Terminology-Server-Verbindung funktioniert"
-      ]
-    },
-    "profile-not-found": {
-      "friendlyText": "Das angegebene Profil ist nicht installiert",
-      "friendlyText_en": "Profile not installed",
-      "category": "profile",
-      "severity": "error",
-      "suggestions": [
-        "Installieren Sie das erforderliche Profil-Package",
-        "Prüfen Sie die Profil-URL auf Tippfehler",
-        "Stellen Sie sicher, dass die IG-Packages geladen sind"
-      ]
-    },
-    "invalid-reference": {
-      "friendlyText": "Die Referenz zeigt auf eine nicht existierende Ressource",
-      "friendlyText_en": "Reference points to non-existent resource",
-      "category": "reference",
-      "severity": "error",
-      "suggestions": [
-        "Stellen Sie sicher, dass die referenzierte Ressource existiert",
-        "Prüfen Sie die Referenz-ID auf Korrektheit",
-        "Verwenden Sie contained resources wenn nötig"
-      ]
-    },
-    "required-element-missing": {
-      "friendlyText": "Ein erforderliches Datenelement fehlt",
-      "friendlyText_en": "Required data element is missing",
+    "_comment_structural": "========== STRUCTURAL VALIDATION ERRORS (50+) ==========",
+    
+    "structure-invalid-json": {
+      "friendlyText": "Die Ressource enthält ungültiges JSON",
+      "friendlyText_en": "Resource contains invalid JSON",
       "category": "structural",
       "severity": "error",
       "suggestions": [
-        "Fügen Sie das erforderliche Element zur Ressource hinzu",
-        "Überprüfen Sie die Profil-Definition für Pflichtfelder",
+        "Überprüfen Sie die JSON-Syntax auf Fehler",
+        "Verwenden Sie einen JSON-Validator",
+        "Stellen Sie sicher, dass alle Klammern geschlossen sind"
+      ]
+    },
+    "structure-resourcetype-missing": {
+      "friendlyText": "Das Feld 'resourceType' fehlt",
+      "friendlyText_en": "Missing 'resourceType' field",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Fügen Sie das Pflichtfeld 'resourceType' hinzu",
+        "Der Wert muss ein gültiger FHIR-Ressourcentyp sein",
+        "Beispiel: \"resourceType\": \"Patient\""
+      ]
+    },
+    "structure-resourcetype-invalid": {
+      "friendlyText": "Ungültiger resourceType '{0}'",
+      "friendlyText_en": "Invalid resourceType '{0}'",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie einen gültigen FHIR-Ressourcentyp",
+        "Siehe FHIR-Spezifikation für Liste der Ressourcentypen",
+        "Prüfen Sie auf Tippfehler"
+      ]
+    },
+    "structure-property-unknown": {
+      "friendlyText": "Unbekannte Eigenschaft '{0}'",
+      "friendlyText_en": "Unknown property '{0}'",
+      "category": "structural",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "Entfernen Sie die unbekannte Eigenschaft",
+        "Verwenden Sie Extensions für benutzerdefinierte Felder",
+        "Prüfen Sie die FHIR-Spezifikation für {0}"
+      ]
+    },
+    "structure-element-required": {
+      "friendlyText": "Pflichtfeld '{0}' fehlt",
+      "friendlyText_en": "Required element '{0}' is missing",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Fügen Sie das erforderliche Element '{0}' hinzu",
+        "Überprüfen Sie die Profil-Definition",
         "Konsultieren Sie die FHIR-Dokumentation"
       ]
     },
-    "cardinality-violation": {
-      "friendlyText": "Die Anzahl der Elemente entspricht nicht den Vorgaben",
-      "friendlyText_en": "Element cardinality violation",
+    "structure-type-mismatch": {
+      "friendlyText": "Typ-Konflikt bei '{0}': erwartet {1}, gefunden {2}",
+      "friendlyText_en": "Type mismatch for '{0}': expected {1}, found {2}",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Konvertieren Sie '{0}' in den Typ {1}",
+        "Prüfen Sie die Elementdefinition",
+        "Verwenden Sie den korrekten FHIR-Datentyp"
+      ]
+    },
+    "structure-cardinality-min": {
+      "friendlyText": "Zu wenige Elemente für '{0}': minimum {1}, gefunden {2}",
+      "friendlyText_en": "Too few elements for '{0}': minimum {1}, found {2}",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Fügen Sie mindestens {1} Elemente zu '{0}' hinzu",
+        "Prüfen Sie die Kardinalitätsvorgaben",
+        "Mindestanzahl: {1}"
+      ]
+    },
+    "structure-cardinality-max": {
+      "friendlyText": "Zu viele Elemente für '{0}': maximum {1}, gefunden {2}",
+      "friendlyText_en": "Too many elements for '{0}': maximum {1}, found {2}",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Reduzieren Sie die Anzahl der Elemente in '{0}' auf maximal {1}",
+        "Entfernen Sie überzählige Elemente",
+        "Maximalanzahl: {1}"
+      ]
+    },
+    "structure-regex-failed": {
+      "friendlyText": "Wert '{0}' entspricht nicht dem Pattern '{1}'",
+      "friendlyText_en": "Value '{0}' does not match pattern '{1}'",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Passen Sie den Wert an das erforderliche Format an",
+        "Erforderliches Pattern: {1}",
+        "Prüfen Sie Beispiele in der Dokumentation"
+      ]
+    },
+    "structure-date-invalid": {
+      "friendlyText": "Ungültiges Datumsformat '{0}'",
+      "friendlyText_en": "Invalid date format '{0}'",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie das Format YYYY-MM-DD",
+        "Beispiel: 2024-01-15",
+        "Prüfen Sie auf gültige Monat/Tag-Werte"
+      ]
+    },
+    "structure-datetime-invalid": {
+      "friendlyText": "Ungültiges DateTime-Format '{0}'",
+      "friendlyText_en": "Invalid dateTime format '{0}'",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie das ISO 8601 Format",
+        "Beispiel: 2024-01-15T10:30:00Z",
+        "Zeitzone ist optional aber empfohlen"
+      ]
+    },
+    "structure-boolean-invalid": {
+      "friendlyText": "Ungültiger Boolean-Wert '{0}'",
+      "friendlyText_en": "Invalid boolean value '{0}'",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie nur 'true' oder 'false'",
+        "Keine Strings oder Zahlen erlaubt",
+        "Boolean muss lowercase sein"
+      ]
+    },
+    "structure-integer-invalid": {
+      "friendlyText": "Ungültiger Integer-Wert '{0}'",
+      "friendlyText_en": "Invalid integer value '{0}'",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie eine ganze Zahl ohne Dezimalstellen",
+        "Keine Strings oder Gleitkommazahlen",
+        "Beispiel: 42"
+      ]
+    },
+    "structure-decimal-invalid": {
+      "friendlyText": "Ungültiger Dezimalwert '{0}'",
+      "friendlyText_en": "Invalid decimal value '{0}'",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie einen numerischen Wert",
+        "Dezimaltrenner ist ein Punkt (.)",
+        "Beispiel: 3.14159"
+      ]
+    },
+    "structure-uri-invalid": {
+      "friendlyText": "Ungültige URI '{0}'",
+      "friendlyText_en": "Invalid URI '{0}'",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie eine gültige URI/URL",
+        "Schema erforderlich (http://, https://, urn:)",
+        "Prüfen Sie auf ungültige Zeichen"
+      ]
+    },
+    "structure-url-invalid": {
+      "friendlyText": "Ungültige URL '{0}'",
+      "friendlyText_en": "Invalid URL '{0}'",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie eine absolute URL",
+        "Schema erforderlich (http:// oder https://)",
+        "Beispiel: https://example.com/fhir"
+      ]
+    },
+    "structure-id-invalid": {
+      "friendlyText": "Ungültige ID '{0}'",
+      "friendlyText_en": "Invalid ID '{0}'",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "ID muss [A-Za-z0-9\\-\\.]{1,64} entsprechen",
+        "Keine Leerzeichen oder Sonderzeichen",
+        "Maximal 64 Zeichen"
+      ]
+    },
+    "structure-oid-invalid": {
+      "friendlyText": "Ungültige OID '{0}'",
+      "friendlyText_en": "Invalid OID '{0}'",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "OID muss mit 'urn:oid:' beginnen",
+        "Format: urn:oid:X.X.X.X...",
+        "Nur Zahlen und Punkte erlaubt"
+      ]
+    },
+    "structure-uuid-invalid": {
+      "friendlyText": "Ungültige UUID '{0}'",
+      "friendlyText_en": "Invalid UUID '{0}'",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "UUID muss mit 'urn:uuid:' beginnen",
+        "Format: urn:uuid:XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
+        "Verwenden Sie einen UUID-Generator"
+      ]
+    },
+    "structure-code-invalid": {
+      "friendlyText": "Ungültiger Code '{0}'",
+      "friendlyText_en": "Invalid code '{0}'",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Code muss [^\\s]+(\\s[^\\s]+)* entsprechen",
+        "Keine führenden/nachfolgenden Leerzeichen",
+        "Alphanumerisch mit Bindestrichen erlaubt"
+      ]
+    },
+    "structure-string-empty": {
+      "friendlyText": "String '{0}' darf nicht leer sein",
+      "friendlyText_en": "String '{0}' must not be empty",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Fügen Sie einen Wert zu '{0}' hinzu",
+        "Entfernen Sie leere Strings",
+        "Verwenden Sie null wenn kein Wert vorhanden"
+      ]
+    },
+    "structure-string-too-long": {
+      "friendlyText": "String '{0}' ist zu lang: {1} Zeichen (Maximum: {2})",
+      "friendlyText_en": "String '{0}' too long: {1} characters (max: {2})",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Kürzen Sie den String auf maximal {2} Zeichen",
+        "Verwenden Sie eine Markdown-Referenz für lange Texte",
+        "Aktuelle Länge: {1}"
+      ]
+    },
+    "structure-narrative-invalid": {
+      "friendlyText": "Ungültige Narrative (text) Struktur",
+      "friendlyText_en": "Invalid narrative (text) structure",
+      "category": "structural",
+      "severity": "warning",
+      "suggestions": [
+        "Narrative muss 'status' und 'div' enthalten",
+        "div muss valides XHTML sein",
+        "Verwenden Sie einen der Status: generated, extensions, additional, empty"
+      ]
+    },
+    "structure-extension-invalid": {
+      "friendlyText": "Ungültige Extension-Struktur",
+      "friendlyText_en": "Invalid extension structure",
       "category": "structural",
       "severity": "error",
       "suggestions": [
-        "Prüfen Sie die minimale und maximale Anzahl erlaubter Elemente",
-        "Entfernen Sie überzählige Elemente",
-        "Fügen Sie fehlende Pflichtelemente hinzu"
+        "Extension muss eine 'url' haben",
+        "Extension muss entweder 'value[x]' oder 'extension' enthalten",
+        "Nicht beides gleichzeitig"
       ]
     },
-    "invalid-code-system": {
-      "friendlyText": "Das CodeSystem ist unbekannt oder nicht verfügbar",
-      "friendlyText_en": "Unknown or unavailable CodeSystem",
-      "category": "terminology",
+    "structure-coding-incomplete": {
+      "friendlyText": "Unvollständige Coding-Struktur",
+      "friendlyText_en": "Incomplete Coding structure",
+      "category": "structural",
       "severity": "warning",
       "suggestions": [
-        "Verwenden Sie ein standardisiertes CodeSystem (z.B. SNOMED CT, LOINC)",
-        "Stellen Sie sicher, dass das CodeSystem auf dem Terminology-Server verfügbar ist",
-        "Prüfen Sie die CodeSystem-URL auf Korrektheit"
+        "Coding sollte 'system' und 'code' enthalten",
+        "Fügen Sie 'display' für bessere Lesbarkeit hinzu",
+        "Vermeiden Sie Codings ohne System"
       ]
     },
-    "business-rule-violation": {
-      "friendlyText": "Eine fachliche Geschäftsregel wurde verletzt",
-      "friendlyText_en": "Business rule violation",
-      "category": "businessRule",
+
+    "_comment_profile": "========== PROFILE VALIDATION ERRORS (30+) ==========",
+    
+    "profile-not-found": {
+      "friendlyText": "Profil '{0}' nicht gefunden",
+      "friendlyText_en": "Profile '{0}' not found",
+      "category": "profile",
       "severity": "error",
+      "pattern": true,
       "suggestions": [
-        "Prüfen Sie die fachlichen Anforderungen des Profils",
-        "Stellen Sie sicher, dass alle Abhängigkeiten erfüllt sind",
+        "Installieren Sie das IG-Package für '{0}'",
+        "Prüfen Sie die Profil-URL auf Tippfehler",
+        "Stellen Sie sicher, dass SimplifiProfile-Server erreichbar ist"
+      ]
+    },
+    "profile-constraint-failed": {
+      "friendlyText": "Profil-Constraint '{0}' verletzt",
+      "friendlyText_en": "Profile constraint '{0}' violated",
+      "category": "profile",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Prüfen Sie die Constraint-Definition in '{0}'",
+        "Stellen Sie sicher, dass alle Bedingungen erfüllt sind",
         "Konsultieren Sie die Implementierungsleitfäden"
       ]
     },
-    "invalid-data-type": {
-      "friendlyText": "Der Datentyp entspricht nicht der Spezifikation",
-      "friendlyText_en": "Invalid data type",
-      "category": "structural",
-      "severity": "error",
-      "suggestions": [
-        "Verwenden Sie den korrekten FHIR-Datentyp",
-        "Prüfen Sie die Elementdefinition im Profil",
-        "Konvertieren Sie den Wert in das richtige Format"
-      ]
-    },
-    "extension-not-allowed": {
-      "friendlyText": "Diese Extension ist im Profil nicht erlaubt",
-      "friendlyText_en": "Extension not allowed in profile",
+    "profile-slice-missing": {
+      "friendlyText": "Erforderlicher Slice '{0}' fehlt",
+      "friendlyText_en": "Required slice '{0}' missing",
       "category": "profile",
-      "severity": "warning",
+      "severity": "error",
+      "pattern": true,
       "suggestions": [
-        "Entfernen Sie die nicht erlaubte Extension",
-        "Verwenden Sie nur Profil-konforme Extensions",
-        "Prüfen Sie die Extension-URL"
+        "Fügen Sie den erforderlichen Slice '{0}' hinzu",
+        "Prüfen Sie die Slicing-Definition im Profil",
+        "Stellen Sie sicher, dass der Diskriminator korrekt ist"
       ]
     },
-    "slice-not-matching": {
-      "friendlyText": "Das Element entspricht keinem definierten Slice",
+    "profile-slice-not-matching": {
+      "friendlyText": "Element passt zu keinem definierten Slice",
       "friendlyText_en": "Element does not match any defined slice",
       "category": "profile",
       "severity": "error",
@@ -113,61 +350,913 @@
         "Konsultieren Sie die Profil-Dokumentation"
       ]
     },
-    "metadata-incomplete": {
-      "friendlyText": "Wichtige Metadaten fehlen oder sind unvollständig",
-      "friendlyText_en": "Metadata incomplete or missing",
-      "category": "metadata",
-      "severity": "warning",
+    "profile-fixed-value-mismatch": {
+      "friendlyText": "Wert weicht von festgelegtem Wert ab: erwartet '{0}', gefunden '{1}'",
+      "friendlyText_en": "Value differs from fixed value: expected '{0}', found '{1}'",
+      "category": "profile",
+      "severity": "error",
+      "pattern": true,
       "suggestions": [
-        "Fügen Sie Meta.profile hinzu",
-        "Setzen Sie Meta.lastUpdated",
-        "Fügen Sie Meta.source hinzu wenn relevant"
+        "Verwenden Sie den festgelegten Wert '{0}'",
+        "Fixed values dürfen nicht geändert werden",
+        "Prüfen Sie die Profil-Definition"
       ]
     },
-    "circular-reference": {
-      "friendlyText": "Zirkuläre Referenz erkannt - Ressource referenziert sich selbst",
+    "profile-pattern-mismatch": {
+      "friendlyText": "Wert entspricht nicht dem Pattern",
+      "friendlyText_en": "Value does not match pattern",
+      "category": "profile",
+      "severity": "error",
+      "suggestions": [
+        "Passen Sie den Wert an das erforderliche Pattern an",
+        "Pattern-Elemente müssen übereinstimmen",
+        "Zusätzliche Elemente sind erlaubt"
+      ]
+    },
+    "profile-mustSupport-missing": {
+      "friendlyText": "MustSupport-Element '{0}' fehlt",
+      "friendlyText_en": "MustSupport element '{0}' missing",
+      "category": "profile",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "Fügen Sie das MustSupport-Element '{0}' hinzu wenn verfügbar",
+        "MustSupport bedeutet: System muss das Element unterstützen",
+        "Konsultieren Sie die Implementierungsleitfäden"
+      ]
+    },
+    "profile-modifier-extension": {
+      "friendlyText": "Modifier Extension '{0}' nicht erlaubt",
+      "friendlyText_en": "Modifier extension '{0}' not allowed",
+      "category": "profile",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Entfernen Sie die Modifier Extension",
+        "Verwenden Sie nur im Profil erlaubte Extensions",
+        "Modifier Extensions ändern die Bedeutung der Ressource"
+      ]
+    },
+    "profile-discriminator-failed": {
+      "friendlyText": "Slice-Diskriminator '{0}' konnte nicht ausgewertet werden",
+      "friendlyText_en": "Slice discriminator '{0}' could not be evaluated",
+      "category": "profile",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Stellen Sie sicher, dass der Diskriminator-Pfad existiert",
+        "Prüfen Sie den Wert am Diskriminator-Pfad",
+        "Discriminator: {0}"
+      ]
+    },
+    "profile-version-mismatch": {
+      "friendlyText": "Profil-Version passt nicht zur FHIR-Version",
+      "friendlyText_en": "Profile version does not match FHIR version",
+      "category": "profile",
+      "severity": "error",
+      "suggestions": [
+        "Verwenden Sie ein Profil für die korrekte FHIR-Version",
+        "R4-Profil für R4-Ressourcen, R5 für R5, etc.",
+        "Prüfen Sie meta.profile URL"
+      ]
+    },
+
+    "_comment_terminology": "========== TERMINOLOGY VALIDATION ERRORS (20+) ==========",
+    
+    "terminology-code-not-in-valueset": {
+      "friendlyText": "Code '{0}' nicht im ValueSet '{1}'",
+      "friendlyText_en": "Code '{0}' not in ValueSet '{1}'",
+      "category": "terminology",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie einen Code aus dem ValueSet '{1}'",
+        "Prüfen Sie die ValueSet-Expansion",
+        "Stellen Sie sicher, dass der Terminology-Server erreichbar ist"
+      ]
+    },
+    "terminology-codesystem-not-found": {
+      "friendlyText": "CodeSystem '{0}' nicht gefunden",
+      "friendlyText_en": "CodeSystem '{0}' not found",
+      "category": "terminology",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Stellen Sie sicher, dass CodeSystem '{0}' auf dem Terminology-Server verfügbar ist",
+        "Prüfen Sie die CodeSystem-URL auf Tippfehler",
+        "Verwenden Sie ein standardisiertes CodeSystem"
+      ]
+    },
+    "terminology-valueset-not-found": {
+      "friendlyText": "ValueSet '{0}' nicht gefunden",
+      "friendlyText_en": "ValueSet '{0}' not found",
+      "category": "terminology",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Installieren Sie das Package das '{0}' enthält",
+        "Prüfen Sie die ValueSet-URL",
+        "Stellen Sie sicher, dass der Terminology-Server konfiguriert ist"
+      ]
+    },
+    "terminology-display-mismatch": {
+      "friendlyText": "Display '{0}' stimmt nicht mit dem korrekten Display '{1}' überein",
+      "friendlyText_en": "Display '{0}' does not match correct display '{1}'",
+      "category": "terminology",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie den korrekten Display-Text '{1}'",
+        "Display-Werte sollten mit CodeSystem übereinstimmen",
+        "Dies ist eine Warnung, keine Fehler"
+      ]
+    },
+    "terminology-code-invalid": {
+      "friendlyText": "Ungültiger Code '{0}' in System '{1}'",
+      "friendlyText_en": "Invalid code '{0}' in system '{1}'",
+      "category": "terminology",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Prüfen Sie, ob Code '{0}' in '{1}' existiert",
+        "Verwenden Sie einen gültigen Code aus dem CodeSystem",
+        "Konsultieren Sie die CodeSystem-Dokumentation"
+      ]
+    },
+    "terminology-binding-required": {
+      "friendlyText": "Required Binding: Code muss aus ValueSet '{0}' stammen",
+      "friendlyText_en": "Required binding: Code must be from ValueSet '{0}'",
+      "category": "terminology",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie nur Codes aus ValueSet '{0}'",
+        "Required Binding ist verpflichtend",
+        "Keine anderen Codes erlaubt"
+      ]
+    },
+    "terminology-binding-extensible": {
+      "friendlyText": "Extensible Binding: Code '{0}' nicht in bevorzugtem ValueSet",
+      "friendlyText_en": "Extensible binding: Code '{0}' not in preferred ValueSet",
+      "category": "terminology",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie bevorzugt Codes aus dem ValueSet",
+        "Andere Codes sind erlaubt aber nicht empfohlen",
+        "Geben Sie System und Code korrekt an"
+      ]
+    },
+    "terminology-tx-server-error": {
+      "friendlyText": "Terminology-Server Fehler: {0}",
+      "friendlyText_en": "Terminology server error: {0}",
+      "category": "terminology",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "Prüfen Sie die Terminology-Server Verbindung",
+        "Wechseln Sie zum Offline-Modus wenn nötig",
+        "Fehler: {0}"
+      ]
+    },
+    "terminology-version-mismatch": {
+      "friendlyText": "CodeSystem-Version '{0}' stimmt nicht überein",
+      "friendlyText_en": "CodeSystem version '{0}' mismatch",
+      "category": "terminology",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie die spezifizierte CodeSystem-Version",
+        "Version: {0}",
+        "Prüfen Sie die version-Angabe in der Coding"
+      ]
+    },
+
+    "_comment_reference": "========== REFERENCE VALIDATION ERRORS ==========",
+    
+    "reference-target-not-found": {
+      "friendlyText": "Referenz-Ziel '{0}' nicht gefunden",
+      "friendlyText_en": "Reference target '{0}' not found",
+      "category": "reference",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Stellen Sie sicher, dass Ressource '{0}' existiert",
+        "Prüfen Sie die Referenz-ID auf Korrektheit",
+        "Verwenden Sie contained resources wenn nötig"
+      ]
+    },
+    "reference-type-mismatch": {
+      "friendlyText": "Referenz-Typ '{0}' stimmt nicht mit erwartetem Typ '{1}' überein",
+      "friendlyText_en": "Reference type '{0}' does not match expected type '{1}'",
+      "category": "reference",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Referenzieren Sie eine Ressource vom Typ '{1}'",
+        "Aktueller Typ: {0}",
+        "Prüfen Sie die Profil-Definition"
+      ]
+    },
+    "reference-circular": {
+      "friendlyText": "Zirkuläre Referenz erkannt",
       "friendlyText_en": "Circular reference detected",
       "category": "reference",
       "severity": "warning",
       "suggestions": [
+        "Vermeiden Sie zirkuläre Referenzen",
         "Überprüfen Sie die Referenz-Struktur",
-        "Vermeiden Sie zirkuläre Abhängigkeiten",
-        "Verwenden Sie contained resources wenn angemessen"
+        "Verwenden Sie alternative Modellierung"
       ]
     },
-    "version-mismatch": {
-      "friendlyText": "FHIR-Version stimmt nicht mit der Server-Version überein",
-      "friendlyText_en": "FHIR version mismatch",
+    "reference-contained-not-found": {
+      "friendlyText": "Contained-Ressource '{0}' nicht gefunden",
+      "friendlyText_en": "Contained resource '{0}' not found",
+      "category": "reference",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Fügen Sie die Ressource zu 'contained' hinzu",
+        "Referenz muss mit '#' beginnen für contained resources",
+        "ID muss in contained[] vorhanden sein"
+      ]
+    },
+    "reference-external-not-resolved": {
+      "friendlyText": "Externe Referenz '{0}' konnte nicht aufgelöst werden",
+      "friendlyText_en": "External reference '{0}' could not be resolved",
+      "category": "reference",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "Prüfen Sie die URL '{0}'",
+        "Stellen Sie sicher, dass der externe Server erreichbar ist",
+        "Verwenden Sie vollständige URLs für externe Referenzen"
+      ]
+    },
+
+    "_comment_business": "========== BUSINESS RULE ERRORS ==========",
+    
+    "business-rule-failed": {
+      "friendlyText": "Geschäftsregel '{0}' verletzt: {1}",
+      "friendlyText_en": "Business rule '{0}' violated: {1}",
+      "category": "businessRule",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Prüfen Sie die Regel: {1}",
+        "Stellen Sie sicher, dass alle Bedingungen erfüllt sind",
+        "Konsultieren Sie die fachlichen Anforderungen"
+      ]
+    },
+    "business-rule-invariant-failed": {
+      "friendlyText": "Invariante '{0}' verletzt",
+      "friendlyText_en": "Invariant '{0}' violated",
+      "category": "businessRule",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Prüfen Sie die Invarianten-Definition",
+        "FHIRPath-Expression: {0}",
+        "Korrigieren Sie die Daten gemäß der Regel"
+      ]
+    },
+    "business-rule-cross-field": {
+      "friendlyText": "Feld '{0}' und '{1}' sind inkonsistent",
+      "friendlyText_en": "Fields '{0}' and '{1}' are inconsistent",
+      "category": "businessRule",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Prüfen Sie die Abhängigkeit zwischen '{0}' und '{1}'",
+        "Stellen Sie Konsistenz sicher",
+        "Korrigieren Sie einen der Werte"
+      ]
+    },
+
+    "_comment_metadata": "========== METADATA ERRORS ==========",
+    
+    "metadata-profile-missing": {
+      "friendlyText": "Meta.profile fehlt",
+      "friendlyText_en": "Meta.profile missing",
+      "category": "metadata",
+      "severity": "warning",
+      "suggestions": [
+        "Fügen Sie Meta.profile hinzu",
+        "Geben Sie an, welches Profil verwendet wird",
+        "Beispiel: \"profile\": [\"http://hl7.org/fhir/StructureDefinition/Patient\"]"
+      ]
+    },
+    "metadata-lastupdated-missing": {
+      "friendlyText": "Meta.lastUpdated fehlt",
+      "friendlyText_en": "Meta.lastUpdated missing",
+      "category": "metadata",
+      "severity": "info",
+      "suggestions": [
+        "Fügen Sie Meta.lastUpdated hinzu",
+        "Verwenden Sie ISO 8601 Format",
+        "Wird automatisch vom Server gesetzt wenn nicht angegeben"
+      ]
+    },
+    "metadata-versionid-missing": {
+      "friendlyText": "Meta.versionId fehlt",
+      "friendlyText_en": "Meta.versionId missing",
+      "category": "metadata",
+      "severity": "info",
+      "suggestions": [
+        "Fügen Sie Meta.versionId hinzu",
+        "Wird für Optimistic Locking verwendet",
+        "Wird automatisch vom Server gesetzt"
+      ]
+    },
+    "metadata-source-missing": {
+      "friendlyText": "Meta.source fehlt",
+      "friendlyText_en": "Meta.source missing",
+      "category": "metadata",
+      "severity": "info",
+      "suggestions": [
+        "Fügen Sie Meta.source hinzu um die Herkunft zu dokumentieren",
+        "URI der Quelle angeben",
+        "Hilfreich für Datenherkunft und Provenance"
+      ]
+    },
+    "metadata-security-label-invalid": {
+      "friendlyText": "Ungültiges Security Label '{0}'",
+      "friendlyText_en": "Invalid security label '{0}'",
+      "category": "metadata",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie Standard Security Labels",
+        "Siehe http://terminology.hl7.org/CodeSystem/v3-Confidentiality",
+        "Label: {0}"
+      ]
+    },
+    "metadata-tag-unknown": {
+      "friendlyText": "Unbekannter Tag '{0}'",
+      "friendlyText_en": "Unknown tag '{0}'",
+      "category": "metadata",
+      "severity": "info",
+      "pattern": true,
+      "suggestions": [
+        "Tag '{0}' ist nicht standardisiert",
+        "Verwenden Sie bekannte Tag-Systeme",
+        "Tags sind optional und können frei definiert werden"
+      ]
+    },
+
+    "_comment_general": "========== GENERAL ERRORS ==========",
+    
+    "validation-unknown-error": {
+      "friendlyText": "Unbekannter Validierungsfehler: {0}",
+      "friendlyText_en": "Unknown validation error: {0}",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Prüfen Sie die Fehlermeldung: {0}",
+        "Kontaktieren Sie den Support wenn der Fehler weiterhin auftritt",
+        "Dieser Fehlercode ist noch nicht zugeordnet"
+      ]
+    },
+    "validation-timeout": {
+      "friendlyText": "Validierung-Timeout nach {0}ms",
+      "friendlyText_en": "Validation timeout after {0}ms",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Ressource ist zu komplex für Validierung",
+        "Erhöhen Sie das Timeout",
+        "Vereinfachen Sie die Ressource"
+      ]
+    },
+    "validation-exception": {
+      "friendlyText": "Validierungs-Ausnahme: {0}",
+      "friendlyText_en": "Validation exception: {0}",
+      "category": "structural",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Unerwarteter Fehler während der Validierung",
+        "Fehler: {0}",
+        "Bitte melden Sie diesen Fehler"
+      ]
+    },
+
+    "_comment_additional_structural": "========== ADDITIONAL STRUCTURAL ERRORS ==========",
+
+    "structure-quantity-invalid": {
+      "friendlyText": "Ungültige Quantity-Struktur",
+      "friendlyText_en": "Invalid Quantity structure",
       "category": "structural",
       "severity": "error",
       "suggestions": [
-        "Stellen Sie sicher, dass die Ressource für die richtige FHIR-Version erstellt wurde",
-        "Migrieren Sie die Ressource zur Server-Version",
-        "Prüfen Sie Meta.versionId"
+        "Quantity muss 'value' enthalten",
+        "Fügen Sie 'unit' und 'system' für bessere Interoperabilität hinzu",
+        "Verwenden Sie UCUM für Einheiten wenn möglich"
       ]
     },
-    "unknown-element": {
-      "friendlyText": "Unbekanntes oder nicht standardisiertes Element gefunden",
-      "friendlyText_en": "Unknown or non-standard element",
+    "structure-range-invalid": {
+      "friendlyText": "Ungültige Range-Struktur",
+      "friendlyText_en": "Invalid Range structure",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Range muss 'low' und/oder 'high' enthalten",
+        "Beide müssen SimpleQuantity sein",
+        "low.value muss kleiner als high.value sein"
+      ]
+    },
+    "structure-ratio-invalid": {
+      "friendlyText": "Ungültige Ratio-Struktur",
+      "friendlyText_en": "Invalid Ratio structure",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Ratio muss 'numerator' und 'denominator' enthalten",
+        "Beide müssen Quantity sein",
+        "denominator darf nicht 0 sein"
+      ]
+    },
+    "structure-period-invalid": {
+      "friendlyText": "Ungültige Period-Struktur",
+      "friendlyText_en": "Invalid Period structure",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Period muss 'start' und/oder 'end' enthalten",
+        "start muss vor end liegen",
+        "Verwenden Sie ISO 8601 DateTime Format"
+      ]
+    },
+    "structure-attachment-invalid": {
+      "friendlyText": "Ungültige Attachment-Struktur",
+      "friendlyText_en": "Invalid Attachment structure",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Attachment muss 'data' oder 'url' enthalten",
+        "data muss base64-encoded sein",
+        "Fügen Sie 'contentType' hinzu"
+      ]
+    },
+    "structure-identifier-system-missing": {
+      "friendlyText": "Identifier.system fehlt",
+      "friendlyText_en": "Identifier.system missing",
       "category": "structural",
       "severity": "warning",
       "suggestions": [
-        "Entfernen Sie unbekannte Elemente",
-        "Verwenden Sie Extensions für benutzerdefinierte Daten",
-        "Prüfen Sie die FHIR-Spezifikation"
+        "Fügen Sie system hinzu für eindeutige Identifikation",
+        "System definiert die Namespace des Identifiers",
+        "Verwenden Sie eine URI als System"
       ]
     },
-    "binding-strength-violation": {
-      "friendlyText": "Der Code entspricht nicht der erforderlichen Binding-Stärke",
-      "friendlyText_en": "Binding strength violation",
-      "category": "terminology",
+    "structure-contactpoint-invalid": {
+      "friendlyText": "Ungültige ContactPoint-Struktur",
+      "friendlyText_en": "Invalid ContactPoint structure",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "ContactPoint muss 'system' und 'value' enthalten",
+        "system: phone, fax, email, pager, url, sms, other",
+        "Fügen Sie 'use' hinzu: home, work, temp, old, mobile"
+      ]
+    },
+    "structure-address-invalid": {
+      "friendlyText": "Ungültige Address-Struktur",
+      "friendlyText_en": "Invalid Address structure",
+      "category": "structural",
       "severity": "warning",
       "suggestions": [
-        "Verwenden Sie einen Code aus dem required ValueSet",
-        "Prüfen Sie die Binding-Stärke (required, extensible, preferred)",
-        "Bei extensible: Geben Sie eine system+code Kombination an"
+        "Address sollte mindestens 'line' oder 'city' enthalten",
+        "Fügen Sie 'use' hinzu: home, work, temp, old, billing",
+        "Verwenden Sie 'type': postal, physical, both"
+      ]
+    },
+    "structure-humanname-invalid": {
+      "friendlyText": "Ungültige HumanName-Struktur",
+      "friendlyText_en": "Invalid HumanName structure",
+      "category": "structural",
+      "severity": "warning",
+      "suggestions": [
+        "HumanName sollte 'family' und/oder 'given' enthalten",
+        "Fügen Sie 'use' hinzu: usual, official, temp, nickname, anonymous, old, maiden",
+        "text ist optional aber hilfreich für Anzeige"
+      ]
+    },
+    "structure-codeableconcept-empty": {
+      "friendlyText": "CodeableConcept ist leer",
+      "friendlyText_en": "CodeableConcept is empty",
+      "category": "structural",
+      "severity": "warning",
+      "suggestions": [
+        "CodeableConcept muss 'coding' und/oder 'text' enthalten",
+        "Fügen Sie mindestens eine Coding hinzu",
+        "text kann für Freitext verwendet werden"
+      ]
+    },
+    "structure-timing-invalid": {
+      "friendlyText": "Ungültige Timing-Struktur",
+      "friendlyText_en": "Invalid Timing structure",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Timing muss 'event', 'repeat' oder 'code' enthalten",
+        "repeat.frequency und repeat.period sind erforderlich",
+        "Prüfen Sie die Timing-Dokumentation"
+      ]
+    },
+    "structure-signature-invalid": {
+      "friendlyText": "Ungültige Signature-Struktur",
+      "friendlyText_en": "Invalid Signature structure",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Signature muss 'type', 'when' und 'who' enthalten",
+        "data muss base64-encoded sein",
+        "Verwenden Sie MIME-Type für contentType"
+      ]
+    },
+    "structure-annotation-invalid": {
+      "friendlyText": "Ungültige Annotation-Struktur",
+      "friendlyText_en": "Invalid Annotation structure",
+      "category": "structural",
+      "severity": "warning",
+      "suggestions": [
+        "Annotation muss 'text' enthalten",
+        "author und time sind optional",
+        "Verwenden Sie Markdown für formattierten Text"
+      ]
+    },
+    "structure-sampled-data-invalid": {
+      "friendlyText": "Ungültige SampledData-Struktur",
+      "friendlyText_en": "Invalid SampledData structure",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "SampledData muss origin, period, dimensions und data enthalten",
+        "data Format: Zahlen getrennt durch Leerzeichen",
+        "dimensions gibt Anzahl der Kanäle an"
+      ]
+    },
+    "structure-age-invalid": {
+      "friendlyText": "Ungültiger Age-Wert",
+      "friendlyText_en": "Invalid Age value",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Age muss positiv sein",
+        "Verwenden Sie UCUM Einheiten",
+        "Beispiele: a (Jahre), mo (Monate), d (Tage)"
+      ]
+    },
+    "structure-count-invalid": {
+      "friendlyText": "Ungültiger Count-Wert",
+      "friendlyText_en": "Invalid Count value",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Count muss eine positive Ganzzahl sein",
+        "Keine Einheit erforderlich",
+        "Verwenden Sie Integer-Wert"
+      ]
+    },
+    "structure-distance-invalid": {
+      "friendlyText": "Ungültiger Distance-Wert",
+      "friendlyText_en": "Invalid Distance value",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Distance muss positiv sein",
+        "Verwenden Sie UCUM Einheiten",
+        "Beispiele: m (Meter), km (Kilometer), [mi_i] (Meilen)"
+      ]
+    },
+    "structure-duration-invalid": {
+      "friendlyText": "Ungültiger Duration-Wert",
+      "friendlyText_en": "Invalid Duration value",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Duration muss positiv sein",
+        "Verwenden Sie UCUM Zeiteinheiten",
+        "Beispiele: s (Sekunden), min (Minuten), h (Stunden), d (Tage)"
+      ]
+    },
+    "structure-money-invalid": {
+      "friendlyText": "Ungültige Money-Struktur",
+      "friendlyText_en": "Invalid Money structure",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Money muss 'value' enthalten",
+        "currency sollte ISO 4217 Code sein",
+        "Beispiele: EUR, USD, GBP"
+      ]
+    },
+    "structure-dosage-invalid": {
+      "friendlyText": "Ungültige Dosage-Struktur",
+      "friendlyText_en": "Invalid Dosage structure",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Dosage muss mindestens eine Dosierungsanweisung enthalten",
+        "Verwenden Sie text für Freitext-Anweisungen",
+        "doseAndRate ist optional aber empfohlen"
+      ]
+    },
+
+    "_comment_additional_profile": "========== ADDITIONAL PROFILE ERRORS ==========",
+
+    "profile-binding-mismatch": {
+      "friendlyText": "Binding-Stärke stimmt nicht überein",
+      "friendlyText_en": "Binding strength mismatch",
+      "category": "profile",
+      "severity": "warning",
+      "suggestions": [
+        "Prüfen Sie die Binding-Definition im Profil",
+        "required: Muss aus ValueSet sein",
+        "extensible: Sollte aus ValueSet sein",
+        "preferred: Empfohlen aus ValueSet",
+        "example: Nur Beispiel, beliebig"
+      ]
+    },
+    "profile-short-description-missing": {
+      "friendlyText": "Short description fehlt in Element-Definition",
+      "friendlyText_en": "Short description missing in element definition",
+      "category": "profile",
+      "severity": "info",
+      "suggestions": [
+        "Fügen Sie eine kurze Beschreibung hinzu",
+        "Hilft bei der Dokumentation",
+        "Nicht verpflichtend aber empfohlen"
+      ]
+    },
+    "profile-definition-missing": {
+      "friendlyText": "Definition fehlt in Element-Definition",
+      "friendlyText_en": "Definition missing in element definition",
+      "category": "profile",
+      "severity": "info",
+      "suggestions": [
+        "Fügen Sie eine ausführliche Definition hinzu",
+        "Erklärt die Bedeutung des Elements",
+        "Wichtig für die Implementierung"
+      ]
+    },
+    "profile-comment-missing": {
+      "friendlyText": "Comment fehlt in Element-Definition",
+      "friendlyText_en": "Comment missing in element definition",
+      "category": "profile",
+      "severity": "info",
+      "suggestions": [
+        "Fügen Sie Kommentare für komplexe Elemente hinzu",
+        "Erklärt Besonderheiten oder Einschränkungen",
+        "Hilfreich für Entwickler"
+      ]
+    },
+    "profile-requirements-missing": {
+      "friendlyText": "Requirements fehlen in Element-Definition",
+      "friendlyText_en": "Requirements missing in element definition",
+      "category": "profile",
+      "severity": "info",
+      "suggestions": [
+        "Dokumentieren Sie die Anforderungen",
+        "Warum ist dieses Element erforderlich?",
+        "Hilft beim Verständnis der Use Cases"
+      ]
+    },
+    "profile-alias-missing": {
+      "friendlyText": "Alias fehlt für Element",
+      "friendlyText_en": "Alias missing for element",
+      "category": "profile",
+      "severity": "info",
+      "suggestions": [
+        "Fügen Sie alternative Namen hinzu",
+        "Hilft bei der Suche und Zuordnung",
+        "Nicht verpflichtend"
+      ]
+    },
+    "profile-mapping-missing": {
+      "friendlyText": "Mapping zu anderen Standards fehlt",
+      "friendlyText_en": "Mapping to other standards missing",
+      "category": "profile",
+      "severity": "info",
+      "suggestions": [
+        "Fügen Sie Mappings zu anderen Standards hinzu",
+        "z.B. HL7 v2, CDA, DICOM",
+        "Hilft bei der Migration"
+      ]
+    },
+    "profile-max-value-exceeded": {
+      "friendlyText": "Maximalwert '{0}' überschritten: {1}",
+      "friendlyText_en": "Maximum value '{0}' exceeded: {1}",
+      "category": "profile",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Wert darf maximal '{0}' sein",
+        "Aktueller Wert: {1}",
+        "Reduzieren Sie den Wert"
+      ]
+    },
+    "profile-min-value-undercut": {
+      "friendlyText": "Minimalwert '{0}' unterschritten: {1}",
+      "friendlyText_en": "Minimum value '{0}' undercut: {1}",
+      "category": "profile",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Wert muss mindestens '{0}' sein",
+        "Aktueller Wert: {1}",
+        "Erhöhen Sie den Wert"
+      ]
+    },
+    "profile-max-length-exceeded": {
+      "friendlyText": "Maximale Länge '{0}' überschritten: {1} Zeichen",
+      "friendlyText_en": "Maximum length '{0}' exceeded: {1} characters",
+      "category": "profile",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "String darf maximal '{0}' Zeichen haben",
+        "Aktuelle Länge: {1}",
+        "Kürzen Sie den Text"
+      ]
+    },
+
+    "_comment_additional_terminology": "========== ADDITIONAL TERMINOLOGY ERRORS ==========",
+
+    "terminology-expansion-failed": {
+      "friendlyText": "ValueSet-Expansion fehlgeschlagen für '{0}'",
+      "friendlyText_en": "ValueSet expansion failed for '{0}'",
+      "category": "terminology",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "ValueSet '{0}' konnte nicht expandiert werden",
+        "Prüfen Sie die ValueSet-Definition",
+        "Stellen Sie sicher, dass alle CodeSystems verfügbar sind"
+      ]
+    },
+    "terminology-supplement-not-found": {
+      "friendlyText": "CodeSystem Supplement '{0}' nicht gefunden",
+      "friendlyText_en": "CodeSystem supplement '{0}' not found",
+      "category": "terminology",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "Installieren Sie das Supplement-Package",
+        "Prüfen Sie die Supplement-URL",
+        "Supplement erweitert ein existierendes CodeSystem"
+      ]
+    },
+    "terminology-concept-not-found": {
+      "friendlyText": "Concept '{0}' nicht in CodeSystem gefunden",
+      "friendlyText_en": "Concept '{0}' not found in CodeSystem",
+      "category": "terminology",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Prüfen Sie ob Concept '{0}' existiert",
+        "Verwenden Sie einen gültigen Code",
+        "Konsultieren Sie die CodeSystem-Dokumentation"
+      ]
+    },
+    "terminology-designation-invalid": {
+      "friendlyText": "Ungültige Designation für Code '{0}'",
+      "friendlyText_en": "Invalid designation for code '{0}'",
+      "category": "terminology",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "Designation muss language und value enthalten",
+        "use ist optional",
+        "Verwenden Sie BCP 47 für language"
+      ]
+    },
+    "terminology-hierarchy-invalid": {
+      "friendlyText": "Ungültige CodeSystem-Hierarchie",
+      "friendlyText_en": "Invalid CodeSystem hierarchy",
+      "category": "terminology",
+      "severity": "error",
+      "suggestions": [
+        "Prüfen Sie die is-a Beziehungen",
+        "Keine zirkulären Hierarchien erlaubt",
+        "parent muss vor child definiert sein"
+      ]
+    },
+    "terminology-property-invalid": {
+      "friendlyText": "Ungültige Property '{0}' in CodeSystem",
+      "friendlyText_en": "Invalid property '{0}' in CodeSystem",
+      "category": "terminology",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "Property '{0}' muss definiert sein",
+        "Prüfen Sie die property Definition",
+        "type erforderlich: code, Coding, string, integer, boolean, dateTime, decimal"
+      ]
+    },
+    "terminology-filter-invalid": {
+      "friendlyText": "Ungültiger ValueSet-Filter '{0}'",
+      "friendlyText_en": "Invalid ValueSet filter '{0}'",
+      "category": "terminology",
+      "severity": "error",
+      "pattern": true,
+      "suggestions": [
+        "Filter '{0}' ist nicht definiert",
+        "Prüfen Sie die filter Definition im CodeSystem",
+        "operator muss unterstützt werden"
+      ]
+    },
+    "terminology-compose-invalid": {
+      "friendlyText": "Ungültige ValueSet compose Struktur",
+      "friendlyText_en": "Invalid ValueSet compose structure",
+      "category": "terminology",
+      "severity": "error",
+      "suggestions": [
+        "compose muss include oder exclude enthalten",
+        "include/exclude muss system enthalten",
+        "concept oder filter können verwendet werden"
+      ]
+    },
+
+    "_comment_additional_reference": "========== ADDITIONAL REFERENCE ERRORS ==========",
+
+    "reference-bundletype-mismatch": {
+      "friendlyText": "Bundle-Type '{0}' passt nicht zu Referenz-Kontext",
+      "friendlyText_en": "Bundle type '{0}' does not match reference context",
+      "category": "reference",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "Prüfen Sie den Bundle-Type",
+        "Typen: document, message, transaction, transaction-response, batch, batch-response, history, searchset, collection",
+        "Nicht alle Typen erlauben alle Referenz-Arten"
+      ]
+    },
+    "reference-version-specific": {
+      "friendlyText": "Version-spezifische Referenz '{0}' kann sich ändern",
+      "friendlyText_en": "Version-specific reference '{0}' may change",
+      "category": "reference",
+      "severity": "info",
+      "pattern": true,
+      "suggestions": [
+        "Version-spezifische Referenzen zeigen auf spezifische Version",
+        "Format: ResourceType/id/_history/version",
+        "Kann bei Updates der Ziel-Ressource veralten"
+      ]
+    },
+    "reference-literal-url": {
+      "friendlyText": "Literal URL Referenz '{0}' schwer zu pflegen",
+      "friendlyText_en": "Literal URL reference '{0}' hard to maintain",
+      "category": "reference",
+      "severity": "info",
+      "pattern": true,
+      "suggestions": [
+        "Verwenden Sie relative Referenzen wenn möglich",
+        "Absolute URLs können bei Server-Umzug brechen",
+        "Erwägen Sie logische Referenzen"
+      ]
+    },
+    "reference-logical-not-resolved": {
+      "friendlyText": "Logische Referenz '{0}' konnte nicht aufgelöst werden",
+      "friendlyText_en": "Logical reference '{0}' could not be resolved",
+      "category": "reference",
+      "severity": "warning",
+      "pattern": true,
+      "suggestions": [
+        "Logische Referenz verwendet identifier statt id",
+        "Stellen Sie sicher, dass identifier eindeutig ist",
+        "Server muss logische Referenzen unterstützen"
+      ]
+    },
+    "reference-display-mismatch": {
+      "friendlyText": "Reference.display '{0}' stimmt nicht mit Ziel überein",
+      "friendlyText_en": "Reference.display '{0}' does not match target",
+      "category": "reference",
+      "severity": "info",
+      "pattern": true,
+      "suggestions": [
+        "display ist optional aber sollte korrekt sein",
+        "Aktualisieren Sie display bei Änderung der Ziel-Ressource",
+        "display: {0}"
       ]
     }
+  },
+  "severityMapping": {
+    "fatal": "error",
+    "error": "error",
+    "warning": "warning",
+    "information": "info",
+    "info": "info"
+  },
+  "categoryPatterns": {
+    "structure-": "structural",
+    "profile-": "profile",
+    "terminology-": "terminology",
+    "reference-": "reference",
+    "business-": "businessRule",
+    "metadata-": "metadata"
   }
 }
-

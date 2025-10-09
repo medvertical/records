@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: records-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: records
+      POSTGRES_USER: records
+      POSTGRES_PASSWORD: records_dev_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U records"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Ontoserver R4 (Offline Terminology Server)
+  ontoserver-r4:
+    image: aehrc/ontoserver:latest
+    container_name: records-ontoserver-r4
+    restart: unless-stopped
+    environment:
+      - FHIR_VERSION=r4
+      - server.port=8080
+    volumes:
+      - ontoserver_r4_data:/var/ontoserver
+    ports:
+      - "8081:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/fhir/metadata"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Ontoserver R5 (Offline Terminology Server)
+  ontoserver-r5:
+    image: aehrc/ontoserver:latest
+    container_name: records-ontoserver-r5
+    restart: unless-stopped
+    environment:
+      - FHIR_VERSION=r5
+      - server.port=8080
+    volumes:
+      - ontoserver_r5_data:/var/ontoserver
+    ports:
+      - "8082:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/fhir/metadata"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Records Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: records-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      ontoserver-r4:
+        condition: service_healthy
+    environment:
+      # Database
+      DATABASE_URL: postgresql://records:records_dev_password@db:5432/records
+      
+      # Application
+      NODE_ENV: production
+      PORT: 5000
+      
+      # HAPI Validator
+      HAPI_JAR_PATH: /app/server/lib/validator_cli.jar
+      HAPI_TIMEOUT: 30000
+      HAPI_MAX_PARALLEL: 4
+      
+      # FHIR Version Support
+      HAPI_DEFAULT_VERSION: R4
+      HAPI_SUPPORT_R5: "true"
+      HAPI_SUPPORT_R6: "true"
+      
+      # Terminology Servers (Online)
+      HAPI_TX_ONLINE_R4: https://tx.fhir.org/r4
+      HAPI_TX_ONLINE_R5: https://tx.fhir.org/r5
+      HAPI_TX_ONLINE_R6: https://tx.fhir.org/r6
+      
+      # Terminology Servers (Offline - Local Ontoserver)
+      HAPI_TX_OFFLINE_R4: http://ontoserver-r4:8080/fhir
+      HAPI_TX_OFFLINE_R5: http://ontoserver-r5:8080/fhir
+      HAPI_TX_OFFLINE_R6: http://ontoserver-r5:8080/fhir
+      
+      # Cache Paths
+      HAPI_IG_CACHE_PATH: /app/server/storage/igs
+      HAPI_TERMINOLOGY_CACHE_PATH: /app/server/storage/terminology
+    volumes:
+      # Mount validator JAR (download separately)
+      - ./server/lib/validator_cli.jar:/app/server/lib/validator_cli.jar:ro
+      
+      # Mount cache directories for persistence
+      - ig_cache:/app/server/storage/igs
+      - terminology_cache:/app/server/storage/terminology
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  ontoserver_r4_data:
+    driver: local
+  ontoserver_r5_data:
+    driver: local
+  ig_cache:
+    driver: local
+  terminology_cache:
+    driver: local
+
+networks:
+  default:
+    name: records-network
+
