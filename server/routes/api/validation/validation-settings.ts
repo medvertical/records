@@ -378,4 +378,31 @@ export function setupValidationSettingsRoutes(app: Express) {
       });
     }
   });
+
+  // Notify Change (polling trigger endpoint)
+  // This endpoint is called by clients to notify other connected clients of settings changes
+  // Returns 200 OK to acknowledge the notification
+  app.post("/api/validation/settings/notify-change", async (req, res) => {
+    try {
+      logger.debug('[ValidationSettings] Settings change notification received', {
+        timestamp: new Date().toISOString(),
+        body: req.body
+      });
+      
+      // Simply acknowledge the notification
+      // The polling mechanism will handle propagating changes to other clients
+      res.json({
+        success: true,
+        message: 'Settings change notification acknowledged',
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      logger.error('[ValidationSettings] Notify change error:', error);
+      res.status(500).json({ 
+        error: 'Internal server error',
+        message: error.message || 'An unexpected error occurred',
+        code: 'INTERNAL_ERROR'
+      });
+    }
+  });
 }

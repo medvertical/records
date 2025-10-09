@@ -17,6 +17,8 @@ import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { ShortcutsHelpDialog } from "@/components/keyboard-shortcuts/shortcuts-help-dialog";
 
 // ConnectionStatus interface is now imported from use-server-data
 import type { ServerStatus as ConnectionStatus } from "@/hooks/use-server-data";
@@ -30,6 +32,12 @@ function Router() {
   
   // Use the centralized server status instead of separate query
   const connectionStatus = serverStatus as ConnectionStatus | undefined;
+
+  // Enable keyboard shortcuts globally
+  useKeyboardShortcuts({
+    enabled: true,
+    showNotifications: false,
+  });
 
   const toggleSidebar = () => {
     setSidebarOpen(prev => !prev);
@@ -192,6 +200,9 @@ function Router() {
         </Route>
         <Route component={NotFound} />
       </Switch>
+      
+      {/* Global Keyboard Shortcuts Help Dialog */}
+      <ShortcutsHelpDialog />
     </div>
   );
 }

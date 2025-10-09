@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import AppIcon from "@/components/ui/app-icon";
 import { ValidationAspectsDropdown } from "@/components/ui/validation-aspects-dropdown";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import type { ServerStatus as ConnectionStatus } from "@/hooks/use-server-data";
 
 interface HeaderProps {
@@ -158,6 +159,9 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
             <RefreshCw className="h-4 w-4" />
             <span className="hidden lg:inline">Refresh</span>
           </Button>
+          
+          {/* Theme Toggle - Dark Mode */}
+          <ThemeToggle />
         </div>
       </div>
     </header>

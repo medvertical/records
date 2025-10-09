@@ -30,7 +30,8 @@ import {
   Zap,
   Users,
   Globe,
-  HardDrive
+  HardDrive,
+  Info
 } from 'lucide-react';
 import type { 
   ValidationSettings, 
@@ -722,6 +723,37 @@ export function ValidationSettingsTab() {
                 <AlertDescription className="text-blue-900 text-xs">
                   When enabled, resources will be automatically validated after any edit operation. 
                   This ensures validation results are always up-to-date but may increase server load.
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          {/* $validate Operation Toggle */}
+          <Separator />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-semibold">Use $validate Operation</Label>
+                <p className="text-sm text-muted-foreground">
+                  Use FHIR server's native $validate operation if available
+                </p>
+              </div>
+              <Switch
+                checked={settings.useFhirValidateOperation || false}
+                onCheckedChange={(checked) => {
+                  setSettings({
+                    ...settings,
+                    useFhirValidateOperation: checked
+                  });
+                }}
+              />
+            </div>
+            {settings.useFhirValidateOperation && (
+              <Alert className="bg-blue-50 border-blue-200">
+                <Info className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-900 text-xs">
+                  When enabled, validation will use the FHIR server's $validate operation when supported. 
+                  Falls back to local HAPI validator if not available.
                 </AlertDescription>
               </Alert>
             )}
