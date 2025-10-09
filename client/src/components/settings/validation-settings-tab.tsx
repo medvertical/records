@@ -281,7 +281,7 @@ export function ValidationSettingsTab() {
             {settings.mode === 'online' ? (
               <Globe className="h-5 w-5 text-blue-500" />
             ) : (
-              <HardDrive className="h-5 w-5 text-gray-500" />
+              <HardDrive className="h-5 w-5 text-gray-500 dark:text-gray-400" />
             )}
             Validation Mode
           </CardTitle>
@@ -381,9 +381,9 @@ export function ValidationSettingsTab() {
                 </Label>
               </div>
               
-              <Alert className="bg-blue-50 border-blue-200">
-                <AlertTriangle className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-blue-900">
+              <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                <AlertTriangle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-blue-900 dark:text-blue-200">
                   Offline mode requires a local Ontoserver installation. Validation will fall back to cached ValueSets and finally tx.fhir.org if local server is unavailable.
                 </AlertDescription>
               </Alert>
@@ -718,9 +718,9 @@ export function ValidationSettingsTab() {
               />
             </div>
             {settings.autoRevalidateAfterEdit && (
-              <Alert className="bg-blue-50 border-blue-200">
-                <Info className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-blue-900 text-xs">
+              <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-blue-900 dark:text-blue-200 text-xs">
                   When enabled, resources will be automatically validated after any edit operation. 
                   This ensures validation results are always up-to-date but may increase server load.
                 </AlertDescription>
@@ -749,9 +749,9 @@ export function ValidationSettingsTab() {
               />
             </div>
             {settings.useFhirValidateOperation && (
-              <Alert className="bg-blue-50 border-blue-200">
-                <Info className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-blue-900 text-xs">
+              <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-blue-900 dark:text-blue-200 text-xs">
                   When enabled, validation will use the FHIR server's $validate operation when supported. 
                   Falls back to local HAPI validator if not available.
                 </AlertDescription>

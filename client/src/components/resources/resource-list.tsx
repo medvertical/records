@@ -224,7 +224,7 @@ export default function ResourceList({
 
   const renderResourceCardSkeleton = (index: number) => (
     <div key={`skeleton-${index}`} className="mb-4 last:mb-0">
-      <Card className="border-dashed border-gray-300 bg-gray-50/50">
+      <Card className="border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4 flex-1 min-w-0">
@@ -459,7 +459,7 @@ export default function ResourceList({
                 {resource.retryInfo && (
                   <Tooltip>
                     <TooltipTrigger>
-                      <Badge variant="outline" className="text-xs bg-gray-50 text-gray-600 border-gray-200">
+                      <Badge variant="outline" className="text-xs bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700">
                         🔄 {resource.retryInfo.attemptCount}/{resource.retryInfo.maxAttempts}
                       </Badge>
                     </TooltipTrigger>
@@ -569,7 +569,7 @@ export default function ResourceList({
       default:
         return (
           <div className="flex items-center gap-2">
-            <Badge className="bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-50">
+            <Badge className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
               <AlertCircle className="h-3 w-3 mr-1" />
               Not Validated
             </Badge>
@@ -637,8 +637,8 @@ export default function ResourceList({
               <div key={resource.id || `${resource.resourceType}-${index}`} className="mb-4 last:mb-0">
                 <Link href={`/resources/${resource.resourceId || resource.id}?type=${resource.resourceType}`}>
                   <Card className={cn(
-                    "hover:bg-gray-50 transition-colors cursor-pointer",
-                    validationStatus === 'not-validated' && "border-dashed border-gray-300 bg-gray-50/50"
+                    "hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer",
+                    validationStatus === 'not-validated' && "border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50"
                   )}>
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">

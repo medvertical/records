@@ -117,10 +117,10 @@ export default function ResourceSearch({
   const hasActiveFilters = filters.aspects.length > 0 || filters.severities.length > 0 || filters.hasIssuesOnly;
 
   return (
-    <div className="w-full bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+    <div className="w-full bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
       <div className="flex items-center space-x-4">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 h-4 w-4" />
           <Input
             type="text"
             placeholder="Search resources by ID, name, or content..."
@@ -198,11 +198,11 @@ export default function ResourceSearch({
       
       {/* Expanded Filter Section */}
       {onFilterChange && isFilterExpanded && (
-        <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
           <div className="space-y-4">
             {/* Aspect Filters */}
             <div className="text-left">
-              <Label className="text-sm font-semibold text-gray-700 mb-2 block text-left">
+              <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block text-left">
                 Validation Aspects
               </Label>
               <div className="space-y-2">
