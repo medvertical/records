@@ -1211,9 +1211,15 @@
     - Filters: severity, aspects, date range, format (JSON/CSV)
     - Options: compress (gzip), include resources
     - Async export with progress indication
-  - [ ] 11.10 ⏭️ **OPTIONAL** - Export options modal
-  - [ ] 11.11 ⏭️ **OPTIONAL** - Progress indicator
-  - [ ] 11.12 ⏭️ **OPTIONAL** - Export history view
+  - [x] 11.10 ✅ **COMPLETED** - Export options modal (part of ExportDialog)
+  - [x] 11.11 ✅ **COMPLETED** - Progress indicator (real-time progress bars)
+  - [x] 11.12 ✅ **COMPLETED** - Export history view (ExportHistory component)
+    - View all export jobs with status badges
+    - Real-time progress tracking (5s auto-refresh)
+    - Download completed exports
+    - Delete exports
+    - File size & metadata display
+    - Error messages for failed exports
   - [x] 11.13 Implement export file cleanup: delete after 24 hours
     - ✅ Automatic cleanup task (runs hourly)
     - ✅ Deletes exports older than 24 hours
@@ -1282,7 +1288,13 @@
   - [ ] 12.10 ⏭️ **OPTIONAL** - Server-side rate limiting
   - [ ] 12.11 ⏭️ **OPTIONAL** - ETag/Last-Modified support (prepared in hook)
   - [ ] 12.12 ⏭️ **OPTIONAL** - Conditional polling
-  - [ ] 12.13 ⏭️ **OPTIONAL** - Settings UI
+  - [x] 12.13 ✅ **COMPLETED** - Settings UI (Polling Settings Tab)
+    - Full configuration UI with all options
+    - Fast/Slow/Very Slow intervals (5s/30s/60s)
+    - Max retries, backoff multiplier
+    - Enable jitter & pause-on-hidden toggles
+    - Reset defaults & save settings
+    - Added as 5th tab in Settings page
   - [ ] 12.14 ⏭️ **OPTIONAL** - Unit tests
   - [ ] 12.15 ⏭️ **OPTIONAL** - Integration tests
   - [ ] 12.16 ⏭️ **OPTIONAL** - Documentation
