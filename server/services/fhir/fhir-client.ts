@@ -1,6 +1,7 @@
 import axios, { AxiosResponse } from 'axios';
 import { errorHandler } from '../../utils/error-handler.js';
 import { logger } from '../../utils/logger.js';
+import { getFhirValidateOperation, ValidateOperationOptions, ValidateOperationResult } from './fhir-validate-operation';
 
 export interface FhirBundle {
   resourceType: 'Bundle';
@@ -902,5 +903,77 @@ export class FhirClient {
     return outcome.issue
       .map(issue => `${issue.severity}: ${issue.details?.text || issue.diagnostics || 'Unknown error'}`)
       .join('; ');
+  }
+
+  // ==========================================================================
+  // Task 8.3: FHIR $validate Operation Integration
+  // ==========================================================================
+
+  /**
+   * Validate a resource using the FHIR server's $validate operation
+   * 
+   * @param resourceType - Type of FHIR resource
+   * @param resource - FHIR resource to validate
+   * @param profileUrl - Optional profile URL to validate against
+   * @param mode - Validation mode ('create' | 'update' | 'delete')
+   * @returns ValidateOperationResult
+   */
+  async validateResource(
+    resourceType: string,
+    resource: any,
+    profileUrl?: string,
+    mode?: 'create' | 'update' | 'delete'
+  ): Promise<ValidateOperationResult> {
+    const validator = getFhirValidateOperation();
+
+    const options: ValidateOperationOptions = {
+      resourceType,
+      resource,
+      profileUrl,
+      mode,
+      timeout: 10000 // 10 seconds
+    };
+
+    return await validator.validate(this.baseUrl, options, this.headers);
+  }
+
+  /**
+   * Check if the FHIR server supports the $validate operation
+   * 
+   * @returns boolean indicating support
+   */
+  async supportsValidateOperation(): Promise<boolean> {
+    const validator = getFhirValidateOperation();
+    
+    try {
+      const capabilityUrl = `${this.baseUrl}/metadata`;
+      const response = await axios.get(capabilityUrl, {
+        headers: this.headers,
+        timeout: 5000
+      });
+
+      const capability = response.data;
+
+      // Check for $validate operation
+      if (capability.rest && Array.isArray(capability.rest)) {
+        for (const rest of capability.rest) {
+          if (rest.resource && Array.isArray(rest.resource)) {
+            for (const resource of rest.resource) {
+              if (resource.operation && Array.isArray(resource.operation)) {
+                const hasValidate = resource.operation.some((op: any) => 
+                  op.name === 'validate' || op.definition?.includes('validate')
+                );
+                if (hasValidate) return true;
+              }
+            }
+          }
+        }
+      }
+
+      return false;
+    } catch (error) {
+      console.error('[FhirClient] Failed to check $validate support:', error);
+      return false;
+    }
   }
 }

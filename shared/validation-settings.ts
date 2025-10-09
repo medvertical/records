@@ -48,6 +48,9 @@ export interface ValidationSettings {
 
   /** Validation Mode (Online/Offline) for terminology validation */
   mode?: 'online' | 'offline'; // Default: 'online'
+
+  /** Task 8.2: Use FHIR server's $validate operation when available */
+  useFhirValidateOperation?: boolean; // Default: false
   
   /** Terminology Fallback Configuration */
   terminologyFallback?: {
