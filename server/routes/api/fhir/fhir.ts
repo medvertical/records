@@ -94,6 +94,7 @@ async function enhanceResourcesWithValidationData(resources: any[]): Promise<any
         // Enhance the resource with database ID and validation data
         enhancedResources.push({
           ...resource,
+          resourceId: resource.id,  // Map FHIR id to resourceId for consistency
           _dbId: dbResource.id,
           _validationSummary: validationSummary
         });
@@ -101,6 +102,7 @@ async function enhanceResourcesWithValidationData(resources: any[]): Promise<any
         // Resource not in database and couldn't be created, no validation data
         enhancedResources.push({
           ...resource,
+          resourceId: resource.id,  // Map FHIR id to resourceId
           _validationSummary: null
         });
       }
@@ -109,6 +111,7 @@ async function enhanceResourcesWithValidationData(resources: any[]): Promise<any
       // Add resource without validation data if enhancement fails
       enhancedResources.push({
         ...resource,
+        resourceId: resource.id,  // Map FHIR id to resourceId
         _validationSummary: null
       });
     }

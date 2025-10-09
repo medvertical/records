@@ -1,9 +1,11 @@
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-polling";
+import { useServerData } from "@/hooks/use-server-data";
 import ValidationErrors from "@/components/validation/validation-errors";
 import ResourceViewer from "@/components/resources/resource-viewer";
+import { ValidationMessagesPerAspect } from "@/components/validation/validation-messages-per-aspect";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +19,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 export default function ResourceDetail() {
   const { id } = useParams<{ id: string }>();
+  const [location] = useLocation();
   const queryClient = useQueryClient();
+  const { activeServer } = useServerData();
+  
+  // Parse query parameters
+  const searchParams = new URLSearchParams(location.split('?')[1] || '');
+  const highlightSignature = searchParams.get('highlightSignature') || undefined;
   
   // Use validation settings polling to detect changes and refresh resource detail
   const { lastChange } = useValidationSettingsPolling({
@@ -277,13 +285,26 @@ export default function ResourceDetail() {
         </div>
 
 
-        {/* Main content - single column with integrated validation */}
-        <div>
-          <ResourceViewer 
-            resource={resource} 
-            resourceId={resource.resourceId}
-            resourceType={resource.resourceType}
-          />
+        {/* Main content - two columns: Resource Structure (left) and Validation Messages (right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left: Resource Structure */}
+          <div>
+            <ResourceViewer 
+              resource={resource} 
+              resourceId={resource.resourceId}
+              resourceType={resource.resourceType}
+            />
+          </div>
+          
+          {/* Right: Per-Aspect Validation Messages */}
+          <div>
+            <ValidationMessagesPerAspect
+              resourceType={resource.resourceType}
+              resourceId={resource.resourceId}
+              serverId={activeServer?.id}
+              highlightSignature={highlightSignature}
+            />
+          </div>
         </div>
       </div>
     </div>

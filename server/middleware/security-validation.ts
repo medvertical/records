@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import logger from '../utils/logger';
 
 /**
  * Security & Validation Middleware
@@ -79,7 +80,7 @@ export function validateFhirResource(req: Request, res: Response, next: NextFunc
 
     next();
   } catch (error) {
-    console.error('[Security] FHIR validation error:', error);
+    logger.error('[Security] FHIR validation error:', error);
     return res.status(400).json({
       error: 'Bad Request',
       message: 'Failed to parse request body',
@@ -156,7 +157,7 @@ export function validateBatchOperations(req: Request, res: Response, next: NextF
 
     next();
   } catch (error) {
-    console.error('[Security] Batch validation error:', error);
+    logger.error('[Security] Batch validation error:', error);
     return res.status(400).json({
       error: 'Bad Request',
       message: 'Failed to validate batch operations',
@@ -271,13 +272,13 @@ export function validateReferenceScope(serverId: number, allowCrossServer: boole
         // This would check if the referenced resource belongs to the same server
         // For MVP, we'll just log a warning
         if (reference.includes('/')) {
-          console.warn(`[Security] Cross-server reference detected: ${reference} (not enforced yet)`);
+          logger.warn(`[Security] Cross-server reference detected: ${reference} (not enforced yet)`);
         }
       }
 
       next();
     } catch (error) {
-      console.error('[Security] Reference scope validation error:', error);
+      logger.error('[Security] Reference scope validation error:', error);
       return res.status(500).json({
         error: 'Internal Server Error',
         message: 'Failed to validate reference scope',

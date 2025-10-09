@@ -169,6 +169,23 @@ export const validationSettings = pgTable("validation_settings", {
   updatedBy: text("updated_by"),
 });
 
+export const editAuditTrail = pgTable("edit_audit_trail", {
+  id: serial("id").primaryKey(),
+  serverId: integer("server_id").notNull().references(() => fhirServers.id, { onDelete: "cascade" }),
+  resourceType: text("resource_type").notNull(),
+  fhirId: text("fhir_id").notNull(),
+  beforeHash: text("before_hash").notNull(),
+  afterHash: text("after_hash").notNull(),
+  editedAt: timestamp("edited_at").notNull().defaultNow(),
+  editedBy: text("edited_by").default("system"),
+  operation: text("operation").notNull(), // 'single_edit' | 'batch_edit'
+  result: text("result").notNull(), // 'success' | 'failed'
+  errorMessage: text("error_message"),
+  versionBefore: text("version_before"),
+  versionAfter: text("version_after"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // Audit trail table removed - no longer needed in simplified schema
 
 // Legacy validation settings table removed - no longer needed
@@ -198,7 +215,10 @@ export const insertValidationSettingsSchema = createInsertSchema(validationSetti
   updatedAt: true,
 });
 
-// Audit trail schema removed - no longer needed
+export const insertEditAuditTrailSchema = createInsertSchema(editAuditTrail).omit({
+  id: true,
+  createdAt: true,
+});
 
 export const insertDashboardCardSchema = createInsertSchema(dashboardCards).omit({
   id: true,
@@ -225,7 +245,8 @@ export type InsertDashboardCard = z.infer<typeof insertDashboardCardSchema>;
 export type ValidationSettings = typeof validationSettings.$inferSelect;
 export type InsertValidationSettings = z.infer<typeof insertValidationSettingsSchema>;
 
-// Audit trail types removed - no longer needed
+export type EditAuditTrail = typeof editAuditTrail.$inferSelect;
+export type InsertEditAuditTrail = z.infer<typeof insertEditAuditTrailSchema>;
 
 // Additional types for FHIR resources
 export interface FhirResourceWithValidation extends FhirResource {

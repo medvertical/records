@@ -3,8 +3,15 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { validationQueue } from '../../../services/validation/queue/validation-queue-simple';
 import { securityMiddleware } from '../../../middleware/security-validation';
+import { rateLimiters } from '../../../middleware/security-config';
+import { db } from '../../../db';
+import { editAuditTrail } from '@shared/schema';
+import logger from '../../../utils/logger';
 
 const router = Router();
+
+// Apply strict rate limiting for write operations
+router.use(rateLimiters.strictWrite);
 
 /**
  * Resource edit request validation schema
@@ -192,22 +199,27 @@ router.put(
       });
     }
     
-    // Create audit record
-    const auditRecord = {
-      serverId,
-      resourceType,
-      fhirId: id,
-      beforeHash,
-      afterHash,
-      editedAt: new Date().toISOString(),
-      editedBy: 'system', // TODO: Get from auth context
-      result: 'success',
-      versionBefore: currentResource.meta?.versionId,
-      versionAfter: updatedResource.meta?.versionId,
-    };
-    
-    // TODO: Persist audit record to database
-    console.log('Audit record:', auditRecord);
+    // Create and persist audit record
+    try {
+      await db.insert(editAuditTrail).values({
+        serverId,
+        resourceType,
+        fhirId: id,
+        beforeHash,
+        afterHash,
+        editedAt: new Date(),
+        editedBy: 'system', // TODO: Get from auth context when authentication is implemented
+        operation: 'single_edit',
+        result: 'success',
+        versionBefore: currentResource.meta?.versionId,
+        versionAfter: updatedResource.meta?.versionId,
+      });
+      
+      logger.info(`[Audit] Recorded successful edit: ${resourceType}/${id}`);
+    } catch (auditError) {
+      // Log audit error but don't fail the request
+      logger.error('[Audit] Failed to record audit trail:', auditError);
+    }
     
     // Enqueue revalidation (higher priority than batch)
     validationQueue.enqueue({
@@ -230,7 +242,7 @@ router.put(
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('Error updating resource:', error);
+    logger.error('Error updating resource:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to update resource',

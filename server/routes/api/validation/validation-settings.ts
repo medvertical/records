@@ -8,6 +8,7 @@
 import type { Express } from "express";
 import { getValidationSettingsService } from "../../../services/validation/settings/validation-settings-service";
 import { asyncHandler, InputValidator, ApiResponse, ValidationError, ServiceError } from "../../../utils/error-handler";
+import logger from "../../../utils/logger";
 import type { 
   ValidationSettings, 
   ValidationSettingsUpdate,
@@ -136,9 +137,30 @@ export function setupValidationSettingsRoutes(app: Express) {
         validate: update.validate !== false // Default to true, allow override
       });
       
-      res.json(result);
+      // AFTER settings update, invalidate all results for this server
+      // This ensures deterministic revalidation with new settings
+      const { validationEnginePerAspect } = await import('../../../services/validation/engine/validation-engine-per-aspect');
+      
+      let invalidatedCount = 0;
+      if (serverId) {
+        const invalidationResult = await validationEnginePerAspect.invalidateAllResults(serverId);
+        invalidatedCount = invalidationResult.deleted;
+        logger.info(`[Settings] Invalidated ${invalidatedCount} validation results for server ${serverId}`);
+      }
+      
+      // Note: Background revalidation would be started here
+      // For MVP, we rely on automatic revalidation when resources are browsed
+      // Future: Enqueue background batch revalidation job
+      
+      res.json({
+        ...result,
+        invalidated: true,
+        invalidatedCount,
+        revalidationStarted: false, // MVP: Manual/on-demand revalidation
+        message: `Settings updated successfully. ${invalidatedCount} validation results invalidated. Resources will be revalidated when browsed.`
+      });
     } catch (error: any) {
-      console.error('[ValidationSettings] Update error:', error);
+      logger.error('[ValidationSettings] Update error:', error);
       
       // Handle validation errors specifically
       if (error.message && error.message.includes('Validation failed:')) {
@@ -186,7 +208,7 @@ export function setupValidationSettingsRoutes(app: Express) {
       const validation = await settingsService.validateSettings(settings, fhirVersion);
       res.json(validation);
     } catch (error: any) {
-      console.error('[ValidationSettings] Validation error:', error);
+      logger.error('[ValidationSettings] Validation error:', error);
       res.status(500).json({ 
         error: 'Internal server error',
         message: error.message || 'An unexpected error occurred',
@@ -228,7 +250,7 @@ export function setupValidationSettingsRoutes(app: Express) {
       const result = await settingsService.autoMigrateSettingsForServer(serverUrl, serverId);
       res.json(result);
     } catch (error: any) {
-      console.error('[ValidationSettings] Migration error:', error);
+      logger.error('[ValidationSettings] Migration error:', error);
       res.status(500).json({ 
         error: 'Internal server error',
         message: error.message || 'An unexpected error occurred',
@@ -254,7 +276,7 @@ export function setupValidationSettingsRoutes(app: Express) {
       const result = await settingsService.checkMigrationNeeded(serverUrl, serverId);
       res.json(result);
     } catch (error: any) {
-      console.error('[ValidationSettings] Migration check error:', error);
+      logger.error('[ValidationSettings] Migration check error:', error);
       res.status(500).json({ 
         error: 'Internal server error',
         message: error.message || 'An unexpected error occurred',
@@ -280,7 +302,7 @@ export function setupValidationSettingsRoutes(app: Express) {
       const result = await settingsService.previewMigration(serverUrl, serverId);
       res.json(result);
     } catch (error: any) {
-      console.error('[ValidationSettings] Migration preview error:', error);
+      logger.error('[ValidationSettings] Migration preview error:', error);
       res.status(500).json({ 
         error: 'Internal server error',
         message: error.message || 'An unexpected error occurred',
@@ -318,7 +340,7 @@ export function setupValidationSettingsRoutes(app: Express) {
         timestamp: new Date().toISOString()
       });
     } catch (error: any) {
-      console.error('[ValidationSettings] Resource type validation error:', error);
+      logger.error('[ValidationSettings] Resource type validation error:', error);
       res.status(500).json({ 
         error: 'Internal server error',
         message: error.message || 'An unexpected error occurred',
@@ -348,7 +370,7 @@ export function setupValidationSettingsRoutes(app: Express) {
         timestamp: new Date().toISOString()
       });
     } catch (error: any) {
-      console.error('[ValidationSettings] FHIR version detection error:', error);
+      logger.error('[ValidationSettings] FHIR version detection error:', error);
       res.status(500).json({ 
         error: 'Internal server error',
         message: error.message || 'An unexpected error occurred',

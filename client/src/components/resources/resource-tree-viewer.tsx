@@ -165,73 +165,88 @@ function CollapsibleNode({
   const isArray = Array.isArray(value);
   
   return (
-    <div className={`${level > 0 ? 'ml-4' : ''} ${hasIssues ? `border-l-2 ${severityColor}` : ''}`}>
-      <div className="flex items-center gap-2 py-1">
-        {/* Expand/Collapse Button */}
-        {isExpandable && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="h-6 w-6 p-0"
-          >
-            {shouldExpand ? (
-              <ChevronDown className="h-3 w-3" />
-            ) : (
-              <ChevronRight className="h-3 w-3" />
-            )}
-          </Button>
-        )}
+    <div className={`${hasIssues ? `border-l-2 ${severityColor}` : ''}`}>
+      {/* Key-Value Grid Layout with fixed column width */}
+      <div className="grid items-center py-0.5" style={{ 
+        gridTemplateColumns: `${level * 16}px 24px minmax(150px, auto) 1fr auto`,
+        paddingLeft: 0 
+      }}>
+        {/* Column 1: Indentation spacer */}
+        <div />
         
-        {/* Key Name */}
-        <span className="font-medium text-gray-900">{keyName}:</span>
-        
-        {/* Value */}
-        <div className="flex-1">
+        {/* Column 2: Expand/Collapse Button or Spacer */}
+        <div className="flex items-center justify-start">
           {isExpandable ? (
-            <span className="text-gray-600">
-              {shouldExpand ? 'Object' : `Object (${Object.keys(value).length} properties)`}
-            </span>
-          ) : isArray ? (
-            <span className="text-gray-600">
-              {shouldExpand ? 'Array' : `Array (${value.length} items)`}
-            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="h-6 w-6 p-0"
+            >
+              {shouldExpand ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
+            </Button>
           ) : (
-            renderValue(value)
+            <div className="w-6" />
           )}
         </div>
         
-        {/* Validation Issues */}
-        {hasIssues && (
-          <div className="flex items-center gap-1">
-            {pathIssues.map((issue, index) => (
-              <div key={issue.id || index} className="flex items-center gap-1">
-                {/* Severity Badge */}
-                <Badge
-                  variant={issue.severity === 'error' ? 'destructive' : 'secondary'}
-                  className="h-5 text-xs cursor-pointer"
-                  onClick={() => handleSeverityClick(issue.severity || 'information')}
-                >
-                  {getSeverityIcon(issue.severity || 'information')}
-                </Badge>
-                
-                {/* Category Badge */}
-                <Badge
-                  variant="outline"
-                  className="h-5 text-xs cursor-pointer"
-                  onClick={() => handleCategoryClick(issue.category || 'general')}
-                >
-                  {getCategoryIcon(issue.category || 'general')}
-                </Badge>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Column 3: Key Name - fixed width column */}
+        <div className="flex items-center">
+          <span className="font-medium text-gray-900 whitespace-nowrap">{keyName}:</span>
+        </div>
+        
+        {/* Column 4: Value (all aligned on same X position) */}
+        <div className="text-left pl-2">
+          {!shouldExpand && (
+            <>
+              {isExpandable ? (
+                <span className="text-gray-600">
+                  Object ({Object.keys(value).length} properties)
+                </span>
+              ) : isArray ? (
+                <span className="text-gray-600">
+                  Array ({value.length} items)
+                </span>
+              ) : (
+                renderValue(value)
+              )}
+            </>
+          )}
+        </div>
+        
+        {/* Column 5: Validation Issues */}
+        <div className="flex items-center gap-1 justify-end ml-2">
+          {hasIssues && pathIssues.map((issue, index) => (
+            <div key={issue.id || index} className="flex items-center gap-1">
+              {/* Severity Badge */}
+              <Badge
+                variant={issue.severity === 'error' ? 'destructive' : 'secondary'}
+                className="h-5 text-xs cursor-pointer"
+                onClick={() => handleSeverityClick(issue.severity || 'information')}
+              >
+                {getSeverityIcon(issue.severity || 'information')}
+              </Badge>
+              
+              {/* Category Badge */}
+              <Badge
+                variant="outline"
+                className="h-5 text-xs cursor-pointer"
+                onClick={() => handleCategoryClick(issue.category || 'general')}
+              >
+                {getCategoryIcon(issue.category || 'general')}
+              </Badge>
+            </div>
+          ))}
+        </div>
       </div>
       
       {/* Expanded Content */}
       {shouldExpand && (
-        <div className="ml-4 space-y-1">
+        <div className="space-y-1">
           {isExpandable && Object.entries(value).map(([key, val]) => (
             <CollapsibleNode
               key={key}
@@ -297,20 +312,22 @@ export default function ResourceTreeViewer({
     <div className="space-y-2">
       {/* Tree Structure */}
       <div className="font-mono text-sm">
-        {Object.entries(resourceData).map(([key, value]) => (
-          <CollapsibleNode
-            key={key}
-            keyName={key}
-            value={value}
-            level={0}
-            validationIssues={validationResults}
-            path={key}
-            expandAll={expandAll}
-            onCategoryChange={onCategoryChange}
-            onSeverityChange={onSeverityChange}
-            onIssueClick={onIssueClick}
-          />
-        ))}
+        {Object.entries(resourceData)
+          .filter(([key]) => !key.startsWith('_') && key !== 'resourceId') // Filter out internal fields
+          .map(([key, value]) => (
+            <CollapsibleNode
+              key={key}
+              keyName={key}
+              value={value}
+              level={0}
+              validationIssues={validationResults}
+              path={key}
+              expandAll={expandAll}
+              onCategoryChange={onCategoryChange}
+              onSeverityChange={onSeverityChange}
+              onIssueClick={onIssueClick}
+            />
+          ))}
       </div>
       
       {/* Summary */}

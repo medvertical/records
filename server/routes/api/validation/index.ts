@@ -7,3 +7,8 @@ export { setupResourceValidationRoutes } from './validation-resource';
 export { setupValidationPipelineRoutes } from './validation-pipeline';
 export { setupValidationProfilesRoutes } from './validation-profiles';
 export { setupValidationBackupsRoutes } from './validation-backups';
+
+// Export new validation groups and resource messages routes
+export { default as validationGroupsRoutes } from './groups';
+export { default as resourceMessagesRoutes } from './resource-messages';
+export { default as validationProgressRoutes } from './progress';

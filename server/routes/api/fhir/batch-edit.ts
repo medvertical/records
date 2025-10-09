@@ -3,8 +3,15 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { validationQueue } from '../../../services/validation/queue/validation-queue-simple';
 import { securityMiddleware } from '../../../middleware/security-validation';
+import { rateLimiters } from '../../../middleware/security-config';
+import { db } from '../../../db';
+import { editAuditTrail } from '@shared/schema';
+import logger from '../../../utils/logger';
 
 const router = Router();
+
+// Apply strict rate limiting for batch operations
+router.use(rateLimiters.batchOperation);
 
 /**
  * JSON Patch operation schema (RFC 6902)
@@ -194,7 +201,7 @@ router.post(
           const resource = await fhirClient.read(resourceType, id);
           resourcesToEdit.push(resource);
         } catch (error: any) {
-          console.warn(`Failed to fetch ${resourceType}/${id}:`, error.message);
+          logger.warn(`Failed to fetch ${resourceType}/${id}:`, error.message);
         }
       }
     } else if (filter?.searchParams) {
@@ -293,6 +300,25 @@ router.post(
           
           modified++;
           
+          // Persist audit record for this successful edit
+          try {
+            await db.insert(editAuditTrail).values({
+              serverId,
+              resourceType,
+              fhirId: id,
+              beforeHash,
+              afterHash,
+              editedAt: new Date(),
+              editedBy: 'system', // TODO: Get from auth context
+              operation: 'batch_edit',
+              result: 'success',
+              versionBefore: originalResource.meta?.versionId,
+              versionAfter: updatedResource.meta?.versionId,
+            });
+          } catch (auditError) {
+            logger.error(`[Audit] Failed to record audit for ${id}:`, auditError);
+          }
+          
           // Enqueue revalidation (higher priority)
           validationQueue.enqueue({
             serverId,
@@ -309,6 +335,25 @@ router.post(
             beforeHash,
           });
           failed++;
+          
+          // Persist failed audit record
+          try {
+            await db.insert(editAuditTrail).values({
+              serverId,
+              resourceType,
+              fhirId: id,
+              beforeHash,
+              afterHash: beforeHash, // No change on failure
+              editedAt: new Date(),
+              editedBy: 'system',
+              operation: 'batch_edit',
+              result: 'failed',
+              errorMessage: updateError.message || 'Unknown error',
+              versionBefore: originalResource.meta?.versionId,
+            });
+          } catch (auditError) {
+            logger.error(`[Audit] Failed to record failed audit for ${id}:`, auditError);
+          }
         }
       } catch (error: any) {
         results.push({
@@ -322,8 +367,8 @@ router.post(
       }
     }
     
-    // TODO: Create audit records for all changes
-    console.log(`Batch edit audit: matched=${matched}, modified=${modified}, failed=${failed}`);
+    // Audit summary (individual records already persisted above)
+    logger.info(`[Audit] Batch edit completed: matched=${matched}, modified=${modified}, failed=${failed}`);
     
     res.json({
       success: true,
@@ -335,7 +380,7 @@ router.post(
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('Error in batch edit:', error);
+    logger.error('Error in batch edit:', error);
     res.status(500).json({
       success: false,
       error: 'Batch edit failed',

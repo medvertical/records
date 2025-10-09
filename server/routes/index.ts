@@ -6,23 +6,21 @@ import { DashboardService } from "../services/dashboard/dashboard-service";
 // Import route modules
 import { 
   setupValidationRoutes, 
-  setupValidationSettingsRoutes
+  setupValidationSettingsRoutes,
+  validationGroupsRoutes,
+  resourceMessagesRoutes,
+  validationProgressRoutes
 } from "./api/validation";
 import { setupFhirRoutes, setupProfileRoutes, resourceEditRoutes, batchEditRoutes } from "./api/fhir";
 import { setupDashboardRoutes } from "./api/dashboard";
 import { setupServerRoutes } from "./api/servers";
 import { performanceRoutes } from "./api/performance";
 import adminRoutes from "./api/admin/clear-validation-results";
+import healthCheckRoutes from "./api/health/health-checks";
 
 export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, consolidatedValidationService: ConsolidatedValidationService | null, dashboardService: DashboardService | null) {
-  // Health check endpoint
-  app.get('/api/health', (req, res) => {
-    res.json({ 
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime()
-    });
-  });
+  // Health check endpoints
+  app.use('/api/health', healthCheckRoutes);
 
   // Setup all route modules
   setupValidationRoutes(app, consolidatedValidationService, dashboardService);
@@ -33,7 +31,9 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   setupServerRoutes(app);
   
   // Validation API routes
-  // Note: validationClearRoutes and validationGroupsRoutes removed during simplification
+  app.use('/api/validation', validationGroupsRoutes);
+  app.use('/api/validation', resourceMessagesRoutes);
+  app.use('/api/validation', validationProgressRoutes);
   
   // FHIR resource edit routes
   app.use('/api/fhir/resources/:resourceType/:id', resourceEditRoutes);
@@ -41,7 +41,6 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   
   // Performance monitoring routes
   app.use('/api/performance', performanceRoutes);
-  
   
   // Admin routes
   app.use('/api/admin', adminRoutes);

@@ -52,13 +52,8 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // Serve static files from dist/public in development
-  app.use(express.static('dist/public'));
-
-  // Fall through to index.html for client-side routing (SPA)
-  app.use("*", (_req, res) => {
-    res.sendFile('dist/public/index.html', { root: process.cwd() });
-  });
+  // In development, Vite handles static files and client-side routing
+  // Only serve API routes from Express
 
   // Default backend API to 3000 so Vite proxy and docs stay in sync
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
