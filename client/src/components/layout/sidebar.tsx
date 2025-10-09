@@ -92,7 +92,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
 
         {/* Mobile Sidebar */}
         <aside className={cn(
-          "fixed left-0 top-16 h-full w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out z-40 md:hidden",
+          "fixed left-0 top-16 h-full w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out z-40 md:hidden",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}>
         <SidebarContent 
@@ -115,7 +115,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
 
   return (
     <aside className={cn(
-      "fixed left-0 top-16 h-[calc(100vh-4rem)] bg-white border-r border-gray-200 transition-all duration-300 ease-in-out z-30 overflow-y-auto",
+      "fixed left-0 top-16 h-[calc(100vh-4rem)] bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out z-30 overflow-y-auto",
       isOpen ? "w-64" : "w-0 overflow-hidden"
     )}>
       <div className="w-64">
@@ -243,13 +243,13 @@ function SidebarContent({
           </div>
         </div>
         <div className={cn(
-          "flex items-center justify-between bg-gray-50 p-2 rounded transition-all duration-200",
-          isLoading && "bg-blue-50 border border-blue-200"
+          "flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-2 rounded transition-all duration-200",
+          isLoading && "bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700"
         )}>
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium text-gray-700 truncate flex items-center gap-1">
+            <div className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate flex items-center gap-1">
               {isLoading && !activeServer ? (
-                <span className="text-gray-500">Switching servers...</span>
+                <span className="text-gray-500 dark:text-gray-400">Switching servers...</span>
               ) : (
                 <>
                   {activeServer?.name || "No Server"}
@@ -272,12 +272,12 @@ function SidebarContent({
                 </>
               )}
               {isLoading && activeServer && (
-                <div className="w-2 h-2 border border-gray-300 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-2 h-2 border border-gray-300 dark:border-gray-600 border-t-transparent rounded-full animate-spin"></div>
               )}
             </div>
-            <div className="text-xs text-gray-500 truncate">
+            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
               {isLoading && !activeServer ? (
-                <span className="text-gray-400">Updating connection...</span>
+                <span className="text-gray-400 dark:text-gray-500">Updating connection...</span>
               ) : (
                 <>
                   {activeServer?.url || "Not connected"}
@@ -286,7 +286,7 @@ function SidebarContent({
             </div>
             {isLoading && !activeServer ? (
               <div className="flex items-center gap-2 mt-1">
-                <div className="text-xs px-2 py-1 rounded-full font-medium bg-blue-100 text-blue-700">
+                <div className="text-xs px-2 py-1 rounded-full font-medium bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
                   🔄 Switching...
                 </div>
               </div>
@@ -297,7 +297,7 @@ function SidebarContent({
               variant="ghost" 
               size="sm"
               onClick={onChangeServer}
-              className="h-auto p-1 text-gray-500 hover:text-fhir-blue hover:bg-gray-100"
+              className="h-auto p-1 text-gray-500 dark:text-gray-400 hover:text-fhir-blue dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-800"
               title="Change server connection"
             >
               <Server className="h-3 w-3" />
@@ -361,8 +361,8 @@ function SidebarContent({
                       className={cn(
                         "flex items-center space-x-3 p-2 rounded-lg font-medium transition-colors cursor-pointer",
                         isActive 
-                          ? "text-fhir-blue bg-blue-50" 
-                          : "text-gray-700 hover:bg-gray-100"
+                          ? "text-fhir-blue bg-blue-50 dark:bg-blue-900/30" 
+                          : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                       )}
                       onClick={onItemClick}
                     >
@@ -379,7 +379,7 @@ function SidebarContent({
         {/* Resource Types Quick Access */}
         {isServerConnected && (
           <div className="mt-8">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
               Quick Access
             </h3>
             <ul className="space-y-1">
@@ -411,8 +411,8 @@ function SidebarContent({
                       className={cn(
                         "flex items-center justify-between p-2 text-sm rounded transition-colors cursor-pointer",
                         isSelected 
-                          ? "text-fhir-blue bg-blue-50 font-medium" 
-                          : "text-gray-600 hover:bg-gray-100"
+                          ? "text-fhir-blue bg-blue-50 dark:bg-blue-900/30 font-medium" 
+                          : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                       )}
                       onClick={() => {
                         // Use the same navigation approach as resource browser
@@ -425,13 +425,13 @@ function SidebarContent({
                           <span className={cn(
                             "text-xs font-medium",
                             isSelected 
-                              ? "text-blue-600" 
-                              : "text-gray-400"
+                              ? "text-blue-600 dark:text-blue-400" 
+                              : "text-gray-400 dark:text-gray-500"
                           )}>
                             {formatCount(resourceCounts[item.resourceType])}
                           </span>
                         ) : (
-                          <div className="w-4 h-4 border border-gray-300 border-t-transparent rounded-full animate-spin"></div>
+                          <div className="w-4 h-4 border border-gray-300 dark:border-gray-600 border-t-transparent rounded-full animate-spin"></div>
                         )}
                       </div>
                   </li>
@@ -443,14 +443,14 @@ function SidebarContent({
       </nav>
 
       {/* Settings at Bottom */}
-      <div className="p-4 border-t border-gray-200 mt-auto">
+      <div className="p-4 border-t border-gray-200 dark:border-gray-700 mt-auto">
         <Link href={settingsItem.href}>
           <div 
             className={cn(
               "flex items-center space-x-3 p-2 rounded-lg font-medium transition-colors cursor-pointer",
               location === settingsItem.href 
-                ? "text-fhir-blue bg-blue-50" 
-                : "text-gray-700 hover:bg-gray-100"
+                ? "text-fhir-blue bg-blue-50 dark:bg-blue-900/30" 
+                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
             )}
             onClick={onItemClick}
           >

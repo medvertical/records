@@ -114,13 +114,13 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
   };
 
   return (
-    <header className="bg-white border-b border-gray-200 w-screen fixed top-0 left-0 z-50">
+    <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 w-screen fixed top-0 left-0 z-50">
       <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center w-64">
           <div className="flex items-center space-x-3">
             <AppIcon size="md" />
             <div>
-              <h1 className="text-xl font-bold text-gray-900">{title}</h1>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">{title}</h1>
             </div>
           </div>
           {onSidebarToggle && (
