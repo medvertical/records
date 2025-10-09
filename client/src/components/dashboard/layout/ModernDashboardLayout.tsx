@@ -10,6 +10,7 @@ import {
 } from '../widgets';
 import { DashboardProvider } from '@/contexts/DashboardContext';
 import { DashboardErrorBoundary } from '../shared/ErrorBoundary';
+import { ValidationHistoryTimeline } from '@/components/validation/validation-history-timeline';
 
 interface ModernDashboardLayoutProps {
   className?: string;
@@ -46,10 +47,13 @@ export const ModernDashboardLayout: React.FC<ModernDashboardLayoutProps> = ({
             </DashboardErrorBoundary>
           </div>
 
-        {/* Bottom Row - Single Card (Full Width) */}
-        <div className="grid grid-cols-1 gap-6">
+        {/* Bottom Row - Two Cards */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
           <DashboardErrorBoundary context="ResourceBreakdownCard">
             <ResourceBreakdownCard />
+          </DashboardErrorBoundary>
+          <DashboardErrorBoundary context="ValidationHistoryTimeline">
+            <ValidationHistoryTimeline />
           </DashboardErrorBoundary>
         </div>
         </div>
