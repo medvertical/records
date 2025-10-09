@@ -5,7 +5,8 @@ import {
   Settings, 
   Server, 
   BarChart3, 
-  Database
+  Database,
+  Activity
 } from 'lucide-react';
 
 // Import tab components
@@ -13,6 +14,7 @@ import { ValidationSettingsTab } from '@/components/settings/validation-settings
 import { ServerManagementTab } from '@/components/settings/server-management-tab';
 import { DashboardSettingsTab } from '@/components/settings/dashboard-settings-tab';
 import { SystemSettingsTab } from '@/components/settings/system-settings-tab';
+import { PollingSettingsTab } from '@/components/settings/polling-settings-tab';
 
 // ============================================================================
 // Types
@@ -112,7 +114,7 @@ export default function SettingsPage() {
 
         {/* Settings Tabs */}
         <Tabs defaultValue="validation" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="validation" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               Validation
@@ -120,6 +122,10 @@ export default function SettingsPage() {
             <TabsTrigger value="servers" className="flex items-center gap-2">
               <Server className="h-4 w-4" />
               Servers
+            </TabsTrigger>
+            <TabsTrigger value="polling" className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              Polling
             </TabsTrigger>
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4" />
@@ -139,6 +145,11 @@ export default function SettingsPage() {
           {/* Server Management Tab */}
           <TabsContent value="servers" className="space-y-6">
             <ServerManagementTab onServersChange={handleServersChange} />
+          </TabsContent>
+
+          {/* Polling Settings Tab */}
+          <TabsContent value="polling" className="space-y-6">
+            <PollingSettingsTab />
           </TabsContent>
 
           {/* Dashboard Settings Tab */}
