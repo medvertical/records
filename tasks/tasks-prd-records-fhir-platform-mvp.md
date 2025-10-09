@@ -1037,7 +1037,9 @@
     - ✅ Error handling with graceful fallback
     - ✅ Duration tracking
   - [ ] 8.8 ⏭️ **OPTIONAL** - Store $validate results with source tracking
-  - [ ] 8.9 ⏭️ **OPTIONAL** - UI toggle in Settings
+  - [x] 8.9 ✅ **COMPLETED** - UI toggle (useFhirValidateOperation in ValidationSettings)
+    - Switch component with Info alert explaining functionality
+    - Falls back to HAPI validator if not available in Settings
   - [ ] 8.10 ⏭️ **OPTIONAL** - Comparison view ($validate vs HAPI)
   - [ ] 8.11 ⏭️ **OPTIONAL** - Metrics tracking
   - [ ] 8.12 ⏭️ **OPTIONAL** - Settings validation warnings
@@ -1205,7 +1207,10 @@
     - ✅ getExportStream() method
     - ✅ Returns fs.ReadStream for download
     - ✅ Validates job status and file existence
-  - [ ] 11.9 ⏭️ **OPTIONAL** - UI component for export
+  - [x] 11.9 ✅ **COMPLETED** - UI component for export (ExportDialog)
+    - Filters: severity, aspects, date range, format (JSON/CSV)
+    - Options: compress (gzip), include resources
+    - Async export with progress indication
   - [ ] 11.10 ⏭️ **OPTIONAL** - Export options modal
   - [ ] 11.11 ⏭️ **OPTIONAL** - Progress indicator
   - [ ] 11.12 ⏭️ **OPTIONAL** - Export history view
@@ -1323,10 +1328,18 @@
     - ValidationModeBadge with tooltip (🌐 Online / 📦 Offline)
   - [ ] 13.12 ⏭️ **OPTIONAL** - Validation history timeline
   - [ ] 13.13 ⏭️ **OPTIONAL** - Compare versions feature
-  - [ ] 13.14 ⏭️ **OPTIONAL** - Keyboard shortcuts
-  - [ ] 13.15 ⏭️ **OPTIONAL** - Accessibility improvements
-  - [ ] 13.16 ⏭️ **OPTIONAL** - Dark mode support
-  - [ ] 13.17 ⏭️ **OPTIONAL** - Responsive design
+  - [x] 13.14 ✅ **COMPLETED** - Keyboard shortcuts (D, B, P, S, R, V, E, ?, Esc)
+    - useKeyboardShortcuts hook with global event listeners
+    - ShortcutsHelpDialog component (press ? to show)
+    - Navigation shortcuts (Dashboard, Browse, Packages, Settings)
+    - Action shortcuts (Refresh, Validate, Focus search, Close modals)
+  - [ ] 13.15 ⏭️ **OPTIONAL** - Accessibility improvements (ARIA labels, focus, screen reader)
+  - [x] 13.16 ✅ **COMPLETED** - Dark mode support
+    - useTheme hook with localStorage persistence
+    - ThemeToggle component (light/dark/system)
+    - Comprehensive dark mode styling across all components
+    - Consistent color scheme (gray-900, gray-800, gray-700)
+  - [ ] 13.17 ⏭️ **OPTIONAL** - Responsive design (mobile/tablet testing)
   - [ ] 13.18 ⏭️ **OPTIONAL** - Component tests
   - [ ] 13.19 ⏭️ **OPTIONAL** - Visual regression tests
   - [ ] 13.20 ⏭️ **OPTIONAL** - E2E integration test

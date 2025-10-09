@@ -129,6 +129,7 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
               size="sm"
               onClick={onSidebarToggle}
               className="p-2 ml-auto mr-8"
+              aria-label="Toggle sidebar"
             >
               <PanelLeft className="h-5 w-5 text-gray-600" />
             </Button>
@@ -144,6 +145,7 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
             variant="outline"
             size="sm"
             className="flex items-center space-x-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+            aria-label="Clear validation cache"
           >
             <Trash2 className="h-4 w-4" />
             <span className="hidden lg:inline">Clear Cache</span>
@@ -155,6 +157,7 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
             variant="outline"
             size="sm"
             className="flex items-center space-x-1"
+            aria-label="Refresh resource data"
           >
             <RefreshCw className="h-4 w-4" />
             <span className="hidden lg:inline">Refresh</span>
