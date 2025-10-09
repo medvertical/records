@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { WireframeValidationControlPanel } from './WireframeValidationControlPanel';
 import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
-import { ValidationSettingsModal } from '../modals/ValidationSettingsModal';
+// ValidationSettingsModal removed - using simplified settings tab instead
 
 interface WiredWireframeValidationControlPanelProps {
   className?: string;
@@ -89,10 +89,7 @@ export const WiredWireframeValidationControlPanel: React.FC<WiredWireframeValida
         className={className}
       />
       
-      <ValidationSettingsModal
-        isOpen={isSettingsModalOpen}
-        onClose={() => setIsSettingsModalOpen(false)}
-      />
+      {/* ValidationSettingsModal removed - settings are now in the settings tab */}
     </>
   );
 };

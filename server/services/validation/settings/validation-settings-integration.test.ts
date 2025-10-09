@@ -4,10 +4,10 @@
  * Tests persistence, event emission, and service integration
  */
 
-import { ValidationSettingsService } from './validation-settings-service-simplified';
+import { ValidationSettingsService } from './validation-settings-service';
 import { ValidationSettingsRepository } from '../../../repositories/validation-settings-repository-simplified';
-import { DEFAULT_VALIDATION_SETTINGS } from '@shared/validation-settings-simplified';
-import type { ValidationSettings, ValidationSettingsUpdate } from '@shared/validation-settings-simplified';
+import { DEFAULT_VALIDATION_SETTINGS } from '@shared/validation-settings';
+import type { ValidationSettings, ValidationSettingsUpdate } from '@shared/validation-settings';
 
 // Mock the repository
 jest.mock('../../../repositories/validation-settings-repository-simplified');

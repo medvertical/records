@@ -11,7 +11,7 @@ import { getValidationResultFilteringService } from './validation-result-filteri
 import { getValidationScoreCalculationService } from './validation-score-calculation-service';
 import { getValidationRealtimeNotificationService } from './validation-realtime-notification-service';
 import { FeatureFlags } from '../../../config/feature-flags.js';
-import type { ValidationSettings } from '@shared/validation-settings-simplified';
+import type { ValidationSettings } from '@shared/validation-settings';
 
 export interface ResourceValidationBadge {
   resourceId: string;

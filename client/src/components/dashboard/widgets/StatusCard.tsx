@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Activity, RefreshCw, Clock } from 'lucide-react';
-import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
+import { useDashboard } from '@/contexts/DashboardContext';
 
 interface StatusCardProps {
   className?: string;
@@ -21,7 +21,7 @@ export const StatusCard: React.FC<StatusCardProps> = ({
     statusLoading, 
     statusError, 
     refreshStatus 
-  } = useDashboardDataWiring();
+  } = useDashboard();
 
   if (statusLoading) {
     return (

@@ -10,7 +10,7 @@
  */
 
 import type { Express } from "express";
-import { getValidationSettingsService } from "../../../services/validation/settings/validation-settings-service-simplified";
+import { getValidationSettingsService } from "../../../services/validation/settings/validation-settings-service";
 import { getValidationPipeline, getValidationQueueService, ValidationPriority, getIndividualResourceProgressService, getValidationCancellationRetryService } from "../../../services/validation";
 import { CancellationType } from "../../../services/validation/features/validation-cancellation-retry-service";
 import type { ResourceProgressStats, IndividualResourceProgress } from "../../../services/validation/features/individual-resource-progress-service";
@@ -365,28 +365,38 @@ async function processValidationResources(jobId: string, requestPayload: StartRe
     const fhirClient = new FhirClient(activeServer.url);
     let resources: any[] = [];
     
-    // Fetch resources from FHIR server by type
+    // Get validation settings to determine which resource types to validate
+    const settingsService = getValidationSettingsService();
+    const settings = await settingsService.getCurrentSettings();
+    
+    // Determine resource types to validate based on settings
+    let resourceTypesToValidate: string[] = [];
+    
     if (requestPayload.resourceTypes && requestPayload.resourceTypes.length > 0) {
-      console.log(`[BulkValidation] Fetching resources from FHIR server for types: ${requestPayload.resourceTypes.join(', ')}`);
-      
-      for (const resourceType of requestPayload.resourceTypes) {
-        try {
-          console.log(`[BulkValidation] Fetching ${resourceType} resources with pagination...`);
-          // Use searchAllResources to get all available resources with pagination
-          const typeResources = await fhirClient.searchAllResources(resourceType, {}, 10000); // Limit to 10k per type for performance
-          console.log(`[BulkValidation] Found ${typeResources.length} ${resourceType} resources`);
-          resources.push(...typeResources);
-        } catch (error) {
-          console.error(`[BulkValidation] Error fetching ${resourceType} resources:`, error);
-          // Continue with other resource types
-        }
-      }
+      // Use resource types from request payload
+      resourceTypesToValidate = requestPayload.resourceTypes;
+    } else if (settings.resourceTypes.enabled && settings.resourceTypes.includedTypes.length > 0) {
+      // Use resource types from settings
+      resourceTypesToValidate = settings.resourceTypes.includedTypes;
     } else {
-      // Fetch all resources if no specific types requested
-      console.log(`[BulkValidation] Fetching all resources from FHIR server...`);
-      // Note: This would be very resource intensive, so we'll limit it
-      const allResources = await fhirClient.searchAllResources('*', {}, 50000); // Limit to 50k total
-      resources = allResources;
+      // Use default resource types if no specific types are configured
+      resourceTypesToValidate = ['Patient', 'Observation', 'Encounter', 'Condition', 'Procedure', 'Medication', 'DiagnosticReport'];
+    }
+    
+    console.log(`[BulkValidation] Resource types to validate: ${resourceTypesToValidate.join(', ')}`);
+    
+    // Fetch resources from FHIR server by type
+    for (const resourceType of resourceTypesToValidate) {
+      try {
+        console.log(`[BulkValidation] Fetching ${resourceType} resources from FHIR server...`);
+        // Use searchAllResources to get all available resources with pagination
+        const typeResources = await fhirClient.searchAllResources(resourceType, {}, 10000); // Limit to 10k per type for performance
+        console.log(`[BulkValidation] Found ${typeResources.length} ${resourceType} resources from FHIR server`);
+        resources.push(...typeResources);
+      } catch (error) {
+        console.error(`[BulkValidation] Error fetching ${resourceType} resources from FHIR server:`, error);
+        // Continue with other resource types
+      }
     }
     
     console.log(`[BulkValidation] Total resources fetched from FHIR server: ${resources.length}`);
@@ -1105,6 +1115,17 @@ export function setupBulkControlRoutes(app: Express): void {
       );
       
 
+      // Calculate valid and error resources from resourceTypeProgress
+      let totalValidResources = 0;
+      let totalErrorResources = 0;
+      
+      if (globalValidationState.resourceTypeProgress) {
+        Object.values(globalValidationState.resourceTypeProgress).forEach((resourceType: any) => {
+          totalValidResources += (resourceType.processed || 0) - (resourceType.errors || 0);
+          totalErrorResources += resourceType.errors || 0;
+        });
+      }
+
       const response = {
         isRunning: globalValidationState.isRunning,
         isPaused: globalValidationState.isPaused,
@@ -1114,6 +1135,8 @@ export function setupBulkControlRoutes(app: Express): void {
         startTime: globalValidationState.startTime,
         processedResources: globalValidationState.processedResources,
         totalResources: globalValidationState.totalResources,
+        validResources: totalValidResources,
+        errorResources: totalErrorResources,
         currentBatch: globalValidationState.currentBatch,
         totalBatches: globalValidationState.totalBatches,
         errors: globalValidationState.errors,

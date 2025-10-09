@@ -6,11 +6,7 @@ import { DashboardService } from "../services/dashboard/dashboard-service";
 // Import route modules
 import { 
   setupValidationRoutes, 
-  setupValidationQueueRoutes, 
-  setupValidationSettingsRoutes, 
-  validationClearRoutes,
-  validationGroupsRoutes,
-  resourceMessagesRoutes
+  setupValidationSettingsRoutes
 } from "./api/validation";
 import { setupFhirRoutes, setupProfileRoutes, resourceEditRoutes, batchEditRoutes } from "./api/fhir";
 import { setupDashboardRoutes } from "./api/dashboard";
@@ -34,13 +30,10 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   setupDashboardRoutes(app, dashboardService);
   setupProfileRoutes(app);
   setupValidationSettingsRoutes(app);
-  setupValidationQueueRoutes(app);
   setupServerRoutes(app);
   
   // Validation API routes
-  app.use('/api/validation/clear', validationClearRoutes);
-  app.use('/api/validation/issues/groups', validationGroupsRoutes);
-  app.use('/api/validation/resources', resourceMessagesRoutes);
+  // Note: validationClearRoutes and validationGroupsRoutes removed during simplification
   
   // FHIR resource edit routes
   app.use('/api/fhir/resources/:resourceType/:id', resourceEditRoutes);

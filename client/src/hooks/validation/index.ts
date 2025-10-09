@@ -15,9 +15,9 @@
 
 // Core validation hooks - Primary functionality
 export { useValidationPolling } from '../use-validation-polling';
-export { useValidationSSE } from '../use-validation-sse';
 export { useValidationSettings } from '../use-validation-settings';
-export { useValidationSettingsRealTime as useValidationSettingsRealtime } from '../use-validation-settings-realtime';
+export { useFHIRVersionDetection } from '../use-fhir-version-detection';
+export { useValidationSettingsMigration } from '../use-validation-settings-migration';
 
 // Enhanced validation hooks - Normalized results
 export { useValidationResults, useValidationResultsBatch } from '../use-validation-results';
@@ -48,3 +48,5 @@ export type { ValidationControlsState, ValidationControlsActions } from '../use-
 export type { ValidationCompletenessState, ValidationCompletenessActions } from '../use-validation-completeness';
 export type { ValidationConfidenceState, ValidationConfidenceActions } from '../use-validation-confidence';
 export type { ValidationQualityMetricsState, ValidationQualityMetricsActions } from '../use-validation-quality-metrics';
+export type { FHIRServerMetadata, UseFHIRVersionDetectionOptions, UseFHIRVersionDetectionReturn } from '../use-fhir-version-detection';
+export type { UseValidationSettingsMigrationOptions, UseValidationSettingsMigrationReturn } from '../use-validation-settings-migration';

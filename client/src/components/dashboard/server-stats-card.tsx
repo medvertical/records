@@ -93,7 +93,7 @@ export function ServerStatsCard({
       ...(data?.serverInfo ?? {}),
       lastChecked: data?.serverInfo?.lastChecked ? new Date(data.serverInfo.lastChecked) : fallbackData.serverInfo.lastChecked
     },
-    resourceBreakdown: Array.isArray(data?.resourceBreakdown) ? data!.resourceBreakdown : fallbackData.resourceBreakdown,
+    resourceBreakdown: Array.isArray(data?.resourceBreakdown) ? data.resourceBreakdown : fallbackData.resourceBreakdown,
     resourceCounts: data?.resourceCounts ?? fallbackData.resourceCounts
   };
   const [fhirVersionInfo, setFhirVersionInfo] = useState<{

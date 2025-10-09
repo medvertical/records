@@ -8,7 +8,7 @@
 
 import { EventEmitter } from 'events';
 import { getValidationSettingsService } from '../settings';
-import type { ValidationSettings } from '@shared/validation-settings-simplified';
+import type { ValidationSettings } from '@shared/validation-settings';
 import type { ValidationResult, ValidationAspectResult } from '../types/validation-types';
 import { ALL_VALIDATION_ASPECTS } from '../types/validation-types';
 

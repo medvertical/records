@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ValidationStateEventHelpers } from '../lib/validation-state-event-emitter';
+// Event emitter was removed during simplification
 import { useServerScopedStorageKey } from '../lib/server-scoping';
 
 export interface ValidationProgress {
@@ -162,45 +162,45 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
       switch (newValidationStatus) {
         case 'running':
           if (previousValidationStatus === 'idle') {
-            ValidationStateEventHelpers.emitValidationStarted(newProgress, currentServer?.id);
+            // Event emission removed during simplification
           } else if (previousValidationStatus === 'paused') {
-            ValidationStateEventHelpers.emitValidationResumed(newProgress);
+            // Event emission removed during simplificationemitValidationResumed(newProgress);
           }
           break;
         case 'paused':
           if (previousValidationStatus === 'running') {
-            ValidationStateEventHelpers.emitValidationPaused(newProgress);
+            // Event emission removed during simplificationemitValidationPaused(newProgress);
           }
           break;
         case 'completed':
           if (previousValidationStatus === 'running') {
-            ValidationStateEventHelpers.emitValidationCompleted(newProgress);
+            // Event emission removed during simplificationemitValidationCompleted(newProgress);
           }
           break;
         case 'error':
           if (previousValidationStatus === 'running' || previousValidationStatus === 'paused') {
-            ValidationStateEventHelpers.emitValidationError(error || 'Unknown error', newProgress);
+            // Event emission removed during simplificationemitValidationError(error || 'Unknown error', newProgress);
           }
           break;
         case 'idle':
           if (previousValidationStatus === 'running' || previousValidationStatus === 'paused') {
-            ValidationStateEventHelpers.emitValidationStopped(newProgress);
+            // Event emission removed during simplificationemitValidationStopped(newProgress);
           }
           break;
       }
       
       // Emit general status change event
-      ValidationStateEventHelpers.emitStatusChanged(previousValidationStatus, newValidationStatus, newProgress);
+      // Event emission removed during simplificationemitStatusChanged(previousValidationStatus, newValidationStatus, newProgress);
     }
 
     // Emit connection state change events
     if (newConnectionState !== previousConnectionState) {
-      ValidationStateEventHelpers.emitConnectionStateChanged(newConnectionState, error);
+      // Event emission removed during simplificationemitConnectionStateChanged(newConnectionState, error);
     }
 
     // Emit progress update events
     if (newProgress !== previousProgress) {
-      ValidationStateEventHelpers.emitProgressUpdated(newProgress, previousProgress);
+      // Event emission removed during simplificationemitProgressUpdated(newProgress, previousProgress);
     }
 
     // Update previous state refs
@@ -408,7 +408,7 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
       const currentPollInterval = currentConfig.pollInterval || pollInterval;
       let currentInterval = currentEnableSmartPolling ? currentIdlePollInterval : currentPollInterval;
 
-      pollingIntervalRef.current = setInterval(async () => {
+      const pollingFunction = async () => {
         try {
           const progressData = await fetchValidationProgress();
           if (progressData) {
@@ -435,7 +435,7 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
             if (newInterval !== currentInterval) {
               currentInterval = newInterval;
               clearInterval(pollingIntervalRef.current);
-              pollingIntervalRef.current = setInterval(arguments.callee, newInterval);
+              pollingIntervalRef.current = setInterval(pollingFunction, newInterval);
               console.log(`[ValidationPolling] Adjusted polling interval to ${newInterval}ms for status: ${progressData.status}`);
             }
           } else {
@@ -462,7 +462,9 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
             stopPolling();
           }
         }
-      }, currentInterval);
+      };
+      
+      pollingIntervalRef.current = setInterval(pollingFunction, currentInterval);
       
       console.log(`[ValidationPolling] Set polling interval to ${currentInterval}ms`);
     };

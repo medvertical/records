@@ -2,7 +2,7 @@ import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Database, RefreshCw } from 'lucide-react';
-import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
+import { useDashboard } from '@/contexts/DashboardContext';
 import { BaseDashboardCard, LoadingCard, ErrorCard } from './BaseDashboardCard';
 import type { DashboardWidgetProps } from '@/types/dashboard';
 
@@ -18,7 +18,7 @@ export const OverviewCard: React.FC<DashboardWidgetProps> = ({
     isLoading, 
     hasErrors, 
     refreshOverview 
-  } = useDashboardDataWiring();
+  } = useDashboard();
 
   // Calculate success rate from validation stats
   const successRate = validationStats?.totalValidated > 0 

@@ -1,8 +1,9 @@
 /**
- * Validation Settings Schema - Rock Solid Configuration
+ * Simplified Validation Settings Schema
  * 
- * This module defines the centralized, type-safe schema for all validation settings
- * used throughout the FHIR Records Management Platform.
+ * This module defines a simplified, minimal schema for validation settings
+ * focusing only on essential functionality: 6 validation aspects, performance settings,
+ * and resource type filtering. No presets, audit trails, or complex features.
  */
 
 // ============================================================================
@@ -15,806 +16,798 @@ export interface ValidationAspectConfig {
   
   /** Severity level for issues found by this aspect */
   severity: 'error' | 'warning' | 'info';
-  
-  /** Custom rules or overrides for this aspect */
-  customRules?: ValidationRule[];
-  
-  /** Timeout in milliseconds for this validation aspect */
-  timeoutMs?: number;
-  
-  /** Whether to fail fast on first error for this aspect */
-  failFast?: boolean;
-}
-
-export interface ValidationRule {
-  /** Unique identifier for the rule */
-  id: string;
-  
-  /** Human-readable name of the rule */
-  name: string;
-  
-  /** Rule description */
-  description?: string;
-  
-  /** Whether this rule is enabled */
-  enabled: boolean;
-  
-  /** Severity override for this specific rule */
-  severity?: 'error' | 'warning' | 'info';
-  
-  /** Rule-specific configuration */
-  config?: Record<string, any>;
 }
 
 // ============================================================================
-// Server Configuration
-// ============================================================================
-
-export interface TerminologyServerConfig {
-  /** Unique identifier for the server */
-  id: string;
-  
-  /** Display name for the server */
-  name: string;
-  
-  /** Server URL */
-  url: string;
-  
-  /** Whether this server is enabled */
-  enabled: boolean;
-  
-  /** Priority order (lower numbers = higher priority) */
-  priority: number;
-  
-  /** Authentication configuration */
-  auth?: ServerAuthConfig;
-  
-  /** Timeout in milliseconds */
-  timeoutMs?: number;
-  
-  /** Whether to use this server for validation */
-  useForValidation: boolean;
-  
-  /** Whether to use this server for expansion */
-  useForExpansion: boolean;
-}
-
-export interface ProfileResolutionServerConfig {
-  /** Unique identifier for the server */
-  id: string;
-  
-  /** Display name for the server */
-  name: string;
-  
-  /** Server URL */
-  url: string;
-  
-  /** Whether this server is enabled */
-  enabled: boolean;
-  
-  /** Priority order (lower numbers = higher priority) */
-  priority: number;
-  
-  /** Authentication configuration */
-  auth?: ServerAuthConfig;
-  
-  /** Timeout in milliseconds */
-  timeoutMs?: number;
-  
-  /** Whether to use this server for profile resolution */
-  useForProfileResolution: boolean;
-  
-  /** Whether to use this server for structure definition resolution */
-  useForStructureDefinitionResolution: boolean;
-}
-
-export interface ServerAuthConfig {
-  /** Authentication type */
-  type: 'none' | 'basic' | 'bearer' | 'oauth2';
-  
-  /** Username for basic auth */
-  username?: string;
-  
-  /** Password for basic auth */
-  password?: string;
-  
-  /** Bearer token */
-  token?: string;
-  
-  /** OAuth2 configuration */
-  oauth2?: OAuth2Config;
-}
-
-export interface OAuth2Config {
-  /** Client ID */
-  clientId: string;
-  
-  /** Client secret */
-  clientSecret: string;
-  
-  /** Token URL */
-  tokenUrl: string;
-  
-  /** Scope */
-  scope?: string;
-}
-
-// ============================================================================
-// Resource Type Filtering Configuration
-// ============================================================================
-
-export interface ResourceTypeFilterConfig {
-  /** Whether resource type filtering is enabled */
-  enabled: boolean;
-  
-  /** Filtering mode: 'include' means only validate these types, 'exclude' means skip these types */
-  mode: 'include' | 'exclude';
-  
-  /** List of resource types to include/exclude */
-  resourceTypes: string[];
-  
-  /** Whether to validate unknown resource types (not in the list) */
-  validateUnknownTypes: boolean;
-  
-  /** Whether to show resource type counts in validation progress */
-  showResourceTypeCounts: boolean;
-  
-  /** Whether to validate resource types that are not FHIR standard types */
-  validateCustomTypes: boolean;
-}
-
-// ============================================================================
-// Batch Processing Configuration
-// ============================================================================
-
-export interface BatchProcessingConfig {
-  /** Default batch size for validation processing */
-  defaultBatchSize: number;
-  
-  /** Minimum allowed batch size */
-  minBatchSize: number;
-  
-  /** Maximum allowed batch size */
-  maxBatchSize: number;
-  
-  /** Whether to use adaptive batch sizing based on performance */
-  useAdaptiveBatchSizing: boolean;
-  
-  /** Target processing time per batch in milliseconds */
-  targetBatchProcessingTimeMs: number;
-  
-  /** Whether to pause between batches to prevent server overload */
-  pauseBetweenBatches: boolean;
-  
-  /** Pause duration between batches in milliseconds */
-  pauseDurationMs: number;
-  
-  /** Whether to retry failed batches */
-  retryFailedBatches: boolean;
-  
-  /** Maximum number of retry attempts for failed batches */
-  maxRetryAttempts: number;
-  
-  /** Retry delay in milliseconds (exponential backoff base) */
-  retryDelayMs: number;
-}
-
-// ============================================================================
-// Performance Configuration
-// ============================================================================
-
-export interface CacheConfig {
-  /** Whether caching is enabled */
-  enabled: boolean;
-  
-  /** Cache TTL in milliseconds */
-  ttlMs: number;
-  
-  /** Maximum cache size in MB */
-  maxSizeMB: number;
-  
-  /** Whether to cache validation results */
-  cacheValidationResults: boolean;
-  
-  /** Whether to cache terminology expansions */
-  cacheTerminologyExpansions: boolean;
-  
-  /** Whether to cache profile resolutions */
-  cacheProfileResolutions: boolean;
-}
-
-export interface TimeoutConfig {
-  /** Default timeout in milliseconds */
-  defaultTimeoutMs: number;
-  
-  /** Timeout for structural validation */
-  structuralValidationTimeoutMs: number;
-  
-  /** Timeout for profile validation */
-  profileValidationTimeoutMs: number;
-  
-  /** Timeout for terminology validation */
-  terminologyValidationTimeoutMs: number;
-  
-  /** Timeout for reference validation */
-  referenceValidationTimeoutMs: number;
-  
-  /** Timeout for business rule validation */
-  businessRuleValidationTimeoutMs: number;
-  
-  /** Timeout for metadata validation */
-  metadataValidationTimeoutMs: number;
-}
-
-// ============================================================================
-// Main Validation Settings Interface
+// Simplified Validation Settings
 // ============================================================================
 
 export interface ValidationSettings {
-  /** Unique identifier for this settings configuration */
-  id?: string;
+  /** 6 Validation Aspects (Structural, Profile, Terminology, Reference, Business Rules, Metadata) */
+  aspects: {
+    structural: ValidationAspectConfig;
+    profile: ValidationAspectConfig;
+    terminology: ValidationAspectConfig;
+    reference: ValidationAspectConfig;
+    businessRules: ValidationAspectConfig; // Note: businessRules (not businessRule) to match main PRD
+    metadata: ValidationAspectConfig;
+  };
   
-  /** Version number for this settings configuration */
-  version: number;
+  /** Performance Settings (only 2 essential fields) */
+  performance: {
+    maxConcurrent: number; // 1-20, default: 5
+    batchSize: number;     // 10-100, default: 50
+  };
   
-  /** Whether this configuration is active */
-  isActive: boolean;
-  
-  /** Timestamp when this configuration was created */
-  createdAt?: Date;
-  
-  /** Timestamp when this configuration was last updated */
-  updatedAt?: Date;
-  
-  /** User who created this configuration */
-  createdBy?: string;
-  
-  /** User who last updated this configuration */
-  updatedBy?: string;
-  
-  // ========================================================================
-  // Core Validation Aspects (The 6 Pillars)
-  // ========================================================================
-  
-  /** Structural validation configuration */
-  structural: ValidationAspectConfig;
-  
-  /** Profile validation configuration */
-  profile: ValidationAspectConfig;
-  
-  /** Terminology validation configuration */
-  terminology: ValidationAspectConfig;
-  
-  /** Reference validation configuration */
-  reference: ValidationAspectConfig;
-  
-  /** Business rule validation configuration */
-  businessRule: ValidationAspectConfig;
-  
-  /** Metadata validation configuration */
-  metadata: ValidationAspectConfig;
-  
-  // ========================================================================
-  // Global Settings
-  // ========================================================================
-  
-  /** Whether to run in strict mode (fail on any validation error) */
-  strictMode: boolean;
-  
-  /** Default severity for validation issues */
-  defaultSeverity: 'error' | 'warning' | 'info';
-  
-  /** Whether to include debug information in validation results */
-  includeDebugInfo: boolean;
-  
-  /** Whether to validate against base FHIR specification */
-  validateAgainstBaseSpec: boolean;
-  
-  /** FHIR version to validate against */
-  fhirVersion: 'R4' | 'R4B' | 'R5';
-  
-  // ========================================================================
-  // Server Configurations
-  // ========================================================================
-  
-  /** Terminology servers configuration */
-  terminologyServers: TerminologyServerConfig[];
-  
-  /** Profile resolution servers configuration */
-  profileResolutionServers: ProfileResolutionServerConfig[];
-  
-  // ========================================================================
-  // Performance Settings
-  // ========================================================================
-  
-  /** Cache configuration */
-  cacheSettings: CacheConfig;
-  
-  /** Timeout configuration */
-  timeoutSettings: TimeoutConfig;
-  
-  /** Batch processing configuration */
-  batchProcessingSettings: BatchProcessingConfig;
-  
-  /** Resource type filtering configuration */
-  resourceTypeFilterSettings: ResourceTypeFilterConfig;
-  
-  /** Maximum number of concurrent validations */
-  maxConcurrentValidations: number;
-  
-  /** Whether to use parallel validation where possible */
-  useParallelValidation: boolean;
-  
-  // ========================================================================
-  // Advanced Settings
-  // ========================================================================
-  
-  /** Custom validation rules */
-  customRules: ValidationRule[];
-  
-  /** Resource type specific overrides */
-  resourceTypeOverrides?: Record<string, Partial<ValidationSettings>>;
-  
-  /** Whether to validate references to external resources */
-  validateExternalReferences: boolean;
-  
-  /** Whether to validate references to non-existent resources */
-  validateNonExistentReferences: boolean;
-  
-  /** Whether to validate references to resources of wrong type */
-  validateReferenceTypes: boolean;
+  /** Resource Type Filtering (essential for performance) */
+  resourceTypes: {
+    enabled: boolean;           // Whether filtering is active
+    includedTypes: string[];    // List of resource types to validate (empty = all)
+    excludedTypes: string[];    // List of resource types to exclude
+  };
 }
 
 // ============================================================================
-// Default Settings
+// Common FHIR Resource Types
 // ============================================================================
 
-export const DEFAULT_VALIDATION_SETTINGS: ValidationSettings = {
-  version: 1,
-  isActive: true,
-  
-  // Core validation aspects - all enabled by default
-  structural: {
-    enabled: true,
-    severity: 'error',
-    timeoutMs: 30000,
-    failFast: false
-  },
-  
-  profile: {
-    enabled: true,
-    severity: 'warning',
-    timeoutMs: 45000,
-    failFast: false
-  },
-  
-  terminology: {
-    enabled: true,
-    severity: 'warning',
-    timeoutMs: 60000,
-    failFast: false
-  },
-  
-  reference: {
-    enabled: true,
-    severity: 'error',
-    timeoutMs: 30000,
-    failFast: false
-  },
-  
-  businessRule: {
-    enabled: true,
-    severity: 'warning',
-    timeoutMs: 30000,
-    failFast: false
-  },
-  
-  metadata: {
-    enabled: true,
-    severity: 'info',
-    timeoutMs: 15000,
-    failFast: false
-  },
-  
-  // Global settings
-  strictMode: false,
-  defaultSeverity: 'warning',
-  includeDebugInfo: false,
-  validateAgainstBaseSpec: true,
-  fhirVersion: 'R4',
-  
-  // Server configurations - with default terminology servers
-  terminologyServers: [
-    {
-      id: 'csiro-ontoserver',
-      name: 'CSIRO OntoServer',
-      url: 'https://r4.ontoserver.csiro.au/fhir',
-      enabled: true,
-      priority: 1,
-      useForValidation: true,
-      useForExpansion: true,
-      timeoutMs: 60000
-    },
-    {
-      id: 'hl7-fhir-terminology',
-      name: 'HL7 FHIR Terminology Server',
-      url: 'https://tx.fhir.org/r4',
-      enabled: true,
-      priority: 2,
-      useForValidation: true,
-      useForExpansion: true,
-      timeoutMs: 60000
-    },
-    {
-      id: 'snomed-international',
-      name: 'SNOMED International',
-      url: 'https://snowstorm.ihtsdotools.org/fhir',
-      enabled: true,
-      priority: 3,
-      useForValidation: true,
-      useForExpansion: true,
-      timeoutMs: 60000
-    }
-  ],
-  profileResolutionServers: [
-    {
-      id: 'simplifier-net',
-      name: 'Simplifier.net',
-      url: 'https://packages.simplifier.net',
-      enabled: true,
-      priority: 1,
-      useForProfileResolution: true,
-      useForStructureDefinitionResolution: true,
-      timeoutMs: 60000
-    },
-    {
-      id: 'fhir-ci-build',
-      name: 'FHIR CI Build',
-      url: 'https://build.fhir.org',
-      enabled: true,
-      priority: 2,
-      useForProfileResolution: true,
-      useForStructureDefinitionResolution: true,
-      timeoutMs: 60000
-    },
-    {
-      id: 'fhir-package-registry',
-      name: 'FHIR Package Registry',
-      url: 'https://registry.fhir.org',
-      enabled: true,
-      priority: 3,
-      useForProfileResolution: true,
-      useForStructureDefinitionResolution: true,
-      timeoutMs: 60000
-    }
-  ],
-  
-  // Performance settings
-  cacheSettings: {
-    enabled: true,
-    ttlMs: 300000, // 5 minutes
-    maxSizeMB: 100,
-    cacheValidationResults: true,
-    cacheTerminologyExpansions: true,
-    cacheProfileResolutions: true
-  },
-  
-  timeoutSettings: {
-    defaultTimeoutMs: 30000,
-    structuralValidationTimeoutMs: 30000,
-    profileValidationTimeoutMs: 45000,
-    terminologyValidationTimeoutMs: 60000,
-    referenceValidationTimeoutMs: 30000,
-    businessRuleValidationTimeoutMs: 30000,
-    metadataValidationTimeoutMs: 15000
-  },
-  
-  batchProcessingSettings: {
-    defaultBatchSize: 200,
-    minBatchSize: 50,
-    maxBatchSize: 1000,
-    useAdaptiveBatchSizing: false,
-    targetBatchProcessingTimeMs: 30000, // 30 seconds
-    pauseBetweenBatches: false,
-    pauseDurationMs: 1000, // 1 second
-    retryFailedBatches: true,
-    maxRetryAttempts: 1,
-    retryDelayMs: 2000 // 2 seconds
-  },
-  
-  resourceTypeFilterSettings: {
-    enabled: false,
-    mode: 'include',
-    resourceTypes: ['Patient', 'Observation', 'Encounter', 'Condition', 'Procedure', 'Medication', 'DiagnosticReport'],
-    validateUnknownTypes: true,
-    showResourceTypeCounts: true,
-    validateCustomTypes: true
-  },
-  
-  maxConcurrentValidations: 10,
-  useParallelValidation: true,
-  
-  // Advanced settings
-  customRules: [],
-  validateExternalReferences: false,
-  validateNonExistentReferences: true,
-  validateReferenceTypes: true
-};
+export const COMMON_FHIR_RESOURCE_TYPES = [
+  'Patient',
+  'Observation',
+  'Condition',
+  'Medication',
+  'MedicationRequest',
+  'Encounter',
+  'DiagnosticReport',
+  'Procedure',
+  'AllergyIntolerance',
+  'Immunization',
+  'Organization',
+  'Practitioner',
+  'PractitionerRole',
+  'Location',
+  'Device',
+  'Specimen',
+  'DocumentReference',
+  'ImagingStudy',
+  'CarePlan',
+  'Goal',
+  'ServiceRequest',
+  'Task',
+  'Questionnaire',
+  'QuestionnaireResponse',
+  'Appointment',
+  'Schedule',
+  'Slot',
+  'Account',
+  'ChargeItem',
+  'Invoice',
+  'PaymentNotice',
+  'PaymentReconciliation',
+  'Coverage',
+  'CoverageEligibilityRequest',
+  'CoverageEligibilityResponse',
+  'EnrollmentRequest',
+  'EnrollmentResponse',
+  'Claim',
+  'ClaimResponse',
+  'ExplanationOfBenefit',
+  'InsurancePlan',
+  'MedicinalProduct',
+  'MedicinalProductAuthorization',
+  'MedicinalProductContraindication',
+  'MedicinalProductIndication',
+  'MedicinalProductIngredient',
+  'MedicinalProductInteraction',
+  'MedicinalProductManufactured',
+  'MedicinalProductPackaged',
+  'MedicinalProductPharmaceutical',
+  'MedicinalProductUndesirableEffect',
+  'Substance',
+  'SubstanceNucleicAcid',
+  'SubstancePolymer',
+  'SubstanceProtein',
+  'SubstanceReferenceInformation',
+  'SubstanceSourceMaterial',
+  'SubstanceSpecification',
+  'ActivityDefinition',
+  'PlanDefinition',
+  'ResearchDefinition',
+  'ResearchElementDefinition',
+  'ResearchStudy',
+  'ResearchSubject',
+  'CatalogEntry',
+  'EventDefinition',
+  'Evidence',
+  'EvidenceVariable',
+  'ExampleScenario',
+  'GuidanceResponse',
+  'Library',
+  'Measure',
+  'MeasureReport',
+  'MessageDefinition',
+  'MessageHeader',
+  'NamingSystem',
+  'OperationDefinition',
+  'OperationOutcome',
+  'Parameters',
+  'SearchParameter',
+  'StructureDefinition',
+  'StructureMap',
+  'TerminologyCapabilities',
+  'TestScript',
+  'ValueSet',
+  'ConceptMap',
+  'CodeSystem',
+  'CompartmentDefinition',
+  'GraphDefinition',
+  'ImplementationGuide',
+  'CapabilityStatement',
+  'AuditEvent',
+  'Provenance',
+  'Consent',
+  'Contract',
+  'Composition',
+  'List',
+  'Bundle',
+  'Binary',
+  'DomainResource',
+  'Resource'
+] as const;
+
+export type CommonFhirResourceType = typeof COMMON_FHIR_RESOURCE_TYPES[number];
 
 // ============================================================================
-// Settings Presets
+// FHIR Version-Aware Resource Type Constants
 // ============================================================================
 
-export interface ValidationSettingsPreset {
-  /** Unique identifier for the preset */
-  id: string;
-  
-  /** Display name for the preset */
-  name: string;
-  
-  /** Description of the preset */
-  description: string;
-  
-  /** The settings configuration for this preset */
-  settings: Partial<ValidationSettings>;
-  
-  /** Whether this is a built-in preset */
-  isBuiltIn: boolean;
-  
-  /** Tags for categorizing presets */
-  tags: string[];
-}
+// Complete R4 Resource Types (143 total in R4)
+export const R4_ALL_RESOURCE_TYPES = [
+  'Account', 'ActivityDefinition', 'AdverseEvent', 'AllergyIntolerance', 'Appointment',
+  'AppointmentResponse', 'AuditEvent', 'Basic', 'Binary', 'BiologicallyDerivedProduct',
+  'BodyStructure', 'Bundle', 'CapabilityStatement', 'CarePlan', 'CareTeam',
+  'CatalogEntry', 'ChargeItem', 'ChargeItemDefinition', 'Claim', 'ClaimResponse',
+  'ClinicalImpression', 'CodeSystem', 'Communication', 'CommunicationRequest',
+  'CompartmentDefinition', 'Composition', 'ConceptMap', 'Condition', 'Consent',
+  'Contract', 'Coverage', 'CoverageEligibilityRequest', 'CoverageEligibilityResponse',
+  'DetectedIssue', 'Device', 'DeviceDefinition', 'DeviceMetric', 'DeviceRequest',
+  'DeviceUseStatement', 'DiagnosticReport', 'DocumentManifest', 'DocumentReference',
+  'EffectEvidenceSynthesis', 'Encounter', 'Endpoint', 'EnrollmentRequest',
+  'EnrollmentResponse', 'EpisodeOfCare', 'EventDefinition', 'Evidence',
+  'EvidenceVariable', 'ExampleScenario', 'ExplanationOfBenefit', 'FamilyMemberHistory',
+  'Flag', 'Goal', 'GraphDefinition', 'Group', 'GuidanceResponse', 'HealthcareService',
+  'ImagingStudy', 'Immunization', 'ImmunizationEvaluation', 'ImmunizationRecommendation',
+  'ImplementationGuide', 'InsurancePlan', 'Invoice', 'Library', 'Linkage', 'List',
+  'Location', 'Measure', 'MeasureReport', 'Media', 'Medication', 'MedicationAdministration',
+  'MedicationDispense', 'MedicationKnowledge', 'MedicationRequest', 'MedicationStatement',
+  'MedicinalProduct', 'MedicinalProductAuthorization', 'MedicinalProductContraindication',
+  'MedicinalProductIndication', 'MedicinalProductIngredient', 'MedicinalProductInteraction',
+  'MedicinalProductManufactured', 'MedicinalProductPackaged', 'MedicinalProductPharmaceutical',
+  'MedicinalProductUndesirableEffect', 'MessageDefinition', 'MessageHeader',
+  'MolecularSequence', 'NamingSystem', 'NutritionOrder', 'Observation', 'ObservationDefinition',
+  'OperationDefinition', 'OperationOutcome', 'Organization', 'OrganizationAffiliation',
+  'Parameters', 'Patient', 'PaymentNotice', 'PaymentReconciliation', 'Person',
+  'PlanDefinition', 'Practitioner', 'PractitionerRole', 'Procedure', 'Provenance',
+  'Questionnaire', 'QuestionnaireResponse', 'RelatedPerson', 'RequestGroup',
+  'ResearchDefinition', 'ResearchElementDefinition', 'ResearchStudy', 'ResearchSubject',
+  'RiskAssessment', 'RiskEvidenceSynthesis', 'Schedule', 'SearchParameter',
+  'ServiceRequest', 'Slot', 'Specimen', 'SpecimenDefinition', 'StructureDefinition',
+  'StructureMap', 'Subscription', 'Substance', 'SubstanceNucleicAcid', 'SubstancePolymer',
+  'SubstanceProtein', 'SubstanceReferenceInformation', 'SubstanceSourceMaterial',
+  'SubstanceSpecification', 'SupplyDelivery', 'SupplyRequest', 'Task', 'TerminologyCapabilities',
+  'TestReport', 'TestScript', 'ValueSet', 'VerificationResult', 'VisionPrescription'
+] as const;
 
-export const BUILT_IN_PRESETS: ValidationSettingsPreset[] = [
-  {
-    id: 'accuracy-first',
-    name: 'Accuracy-First Validation',
-    description: 'Optimized for maximum validation accuracy with all aspects enabled and comprehensive checks',
-    isBuiltIn: true,
-    tags: ['accuracy', 'comprehensive', 'production', 'recommended'],
-    settings: {
-      strictMode: false,
-      defaultSeverity: 'warning',
-      structural: { enabled: true, severity: 'error' },
-      profile: { enabled: true, severity: 'error' },
-      terminology: { enabled: true, severity: 'error' },
-      reference: { enabled: true, severity: 'error' },
-      businessRule: { enabled: true, severity: 'warning' },
-      metadata: { enabled: true, severity: 'warning' },
-      validateExternalReferences: true,
-      validateNonExistentReferences: true,
-      validateReferenceTypes: true,
-      batchProcessingSettings: {
-        defaultBatchSize: 150,
-        minBatchSize: 25,
-        maxBatchSize: 750,
-        useAdaptiveBatchSizing: true,
-        targetBatchProcessingTimeMs: 45000,
-        pauseBetweenBatches: true,
-        pauseDurationMs: 1500,
-        retryFailedBatches: true,
-        maxRetryAttempts: 2,
-        retryDelayMs: 2500
-      },
-      resourceTypeFilterSettings: {
-        enabled: false,
-        mode: 'include',
-        resourceTypes: [],
-        validateUnknownTypes: true,
-        showResourceTypeCounts: true,
-        validateCustomTypes: true
-      }
-    }
-  },
+// Complete R5 Resource Types (154 total in R5)
+export const R5_ALL_RESOURCE_TYPES = [
+  ...R4_ALL_RESOURCE_TYPES,
+  // R5-specific new resource types
+  'Citation', 'EvidenceReport', 'InventoryReport', 'RegulatedAuthorization',
+  'SubstanceDefinition', 'Transport'
+] as const;
+
+// R4 Default included resource types (most important for validation)
+export const R4_DEFAULT_INCLUDED_RESOURCE_TYPES = [
+  // Core Clinical Resources (R4)
+  'Patient', 'Observation', 'Condition', 'Encounter', 'Procedure',
+  'Medication', 'MedicationRequest', 'DiagnosticReport', 'AllergyIntolerance',
+  'Immunization', 'CarePlan', 'Goal', 'ServiceRequest',
   
-  {
-    id: 'strict',
-    name: 'Strict Validation',
-    description: 'Maximum validation with all aspects enabled and strict error handling',
-    isBuiltIn: true,
-    tags: ['strict', 'compliance', 'production'],
-    settings: {
-      strictMode: true,
-      defaultSeverity: 'error',
-      structural: { enabled: true, severity: 'error' },
-      profile: { enabled: true, severity: 'error' },
-      terminology: { enabled: true, severity: 'error' },
-      reference: { enabled: true, severity: 'error' },
-      businessRule: { enabled: true, severity: 'error' },
-      metadata: { enabled: true, severity: 'error' },
-      validateExternalReferences: true,
-      validateNonExistentReferences: true,
-      validateReferenceTypes: true,
-      batchProcessingSettings: {
-        defaultBatchSize: 100,
-        minBatchSize: 25,
-        maxBatchSize: 500,
-        useAdaptiveBatchSizing: false,
-        targetBatchProcessingTimeMs: 45000,
-        pauseBetweenBatches: true,
-        pauseDurationMs: 2000,
-        retryFailedBatches: true,
-        maxRetryAttempts: 2,
-        retryDelayMs: 3000
-      },
-      resourceTypeFilterSettings: {
-        enabled: false,
-        mode: 'include',
-        resourceTypes: [],
-        validateUnknownTypes: true,
-        showResourceTypeCounts: true,
-        validateCustomTypes: true
-      }
-    }
-  },
+  // Administrative Resources (R4)
+  'Organization', 'Practitioner', 'PractitionerRole', 'Location',
+  'DocumentReference', 'Composition', 'List', 'Appointment', 'Schedule', 'Slot'
+];
+
+// R5 Default included resource types (most important for validation)
+export const R5_DEFAULT_INCLUDED_RESOURCE_TYPES = [
+  // Core Clinical Resources (R5 - includes new types)
+  'Patient', 'Observation', 'Condition', 'Encounter', 'Procedure',
+  'Medication', 'MedicationRequest', 'DiagnosticReport', 'AllergyIntolerance',
+  'Immunization', 'CarePlan', 'Goal', 'ServiceRequest',
   
-  {
-    id: 'permissive',
-    name: 'Permissive Validation',
-    description: 'Minimal validation for development and testing',
-    isBuiltIn: true,
-    tags: ['permissive', 'development', 'testing'],
-    settings: {
-      strictMode: false,
-      defaultSeverity: 'info',
-      structural: { enabled: true, severity: 'warning' },
-      profile: { enabled: false, severity: 'info' },
-      terminology: { enabled: false, severity: 'info' },
-      reference: { enabled: true, severity: 'warning' },
-      businessRule: { enabled: false, severity: 'info' },
-      metadata: { enabled: false, severity: 'info' },
-      validateExternalReferences: false,
-      validateNonExistentReferences: false,
-      validateReferenceTypes: false,
-      batchProcessingSettings: {
-        defaultBatchSize: 500,
-        minBatchSize: 100,
-        maxBatchSize: 2000,
-        useAdaptiveBatchSizing: true,
-        targetBatchProcessingTimeMs: 15000,
-        pauseBetweenBatches: false,
-        pauseDurationMs: 500,
-        retryFailedBatches: false,
-        maxRetryAttempts: 0,
-        retryDelayMs: 1000
-      },
-      resourceTypeFilterSettings: {
-        enabled: true,
-        mode: 'include',
-        resourceTypes: ['Patient', 'Observation'],
-        validateUnknownTypes: false,
-        showResourceTypeCounts: false,
-        validateCustomTypes: false
-      }
-    }
-  },
+  // Administrative Resources (R5)
+  'Organization', 'Practitioner', 'PractitionerRole', 'Location',
+  'DocumentReference', 'Composition', 'List', 'Appointment', 'Schedule', 'Slot',
   
-  {
-    id: 'balanced',
-    name: 'Balanced Validation',
-    description: 'Balanced validation suitable for most production use cases',
-    isBuiltIn: true,
-    tags: ['balanced', 'production', 'recommended'],
-    settings: {
-      strictMode: false,
-      defaultSeverity: 'warning',
-      structural: { enabled: true, severity: 'error' },
-      profile: { enabled: true, severity: 'warning' },
-      terminology: { enabled: true, severity: 'warning' },
-      reference: { enabled: true, severity: 'error' },
-      businessRule: { enabled: true, severity: 'warning' },
-      metadata: { enabled: true, severity: 'info' },
-      validateExternalReferences: false,
-      validateNonExistentReferences: true,
-      validateReferenceTypes: true,
-      batchProcessingSettings: {
-        defaultBatchSize: 200,
-        minBatchSize: 50,
-        maxBatchSize: 1000,
-        useAdaptiveBatchSizing: true,
-        targetBatchProcessingTimeMs: 30000,
-        pauseBetweenBatches: true,
-        pauseDurationMs: 1000,
-        retryFailedBatches: true,
-        maxRetryAttempts: 1,
-        retryDelayMs: 2000
-      },
-      resourceTypeFilterSettings: {
-        enabled: false,
-        mode: 'include',
-        resourceTypes: ['Patient', 'Observation', 'Encounter', 'Condition', 'Procedure'],
-        validateUnknownTypes: true,
-        showResourceTypeCounts: true,
-        validateCustomTypes: true
-      }
-    }
-  }
+  // R5-specific new resource types
+  'Evidence', 'EvidenceReport', 'EvidenceVariable', 'Citation'
 ];
 
 // ============================================================================
-// Utility Types
+// Default Settings Constants
 // ============================================================================
 
-export type ValidationAspect = keyof Pick<ValidationSettings, 
-  'structural' | 'profile' | 'terminology' | 'reference' | 'businessRule' | 'metadata'
->;
+// Common validation configurations for quick setup
+export const VALIDATION_CONFIGS = {
+  // Strict validation - all aspects enabled with error severity
+  STRICT: {
+    aspects: {
+      structural: { enabled: true, severity: 'error' as const },
+      profile: { enabled: true, severity: 'error' as const },
+      terminology: { enabled: true, severity: 'error' as const },
+      reference: { enabled: true, severity: 'error' as const },
+      businessRules: { enabled: true, severity: 'error' as const },
+      metadata: { enabled: true, severity: 'error' as const }
+    },
+    performance: {
+      maxConcurrent: 3,
+      batchSize: 25
+    }
+  },
+  
+  // Balanced validation - mix of error and warning severity
+  BALANCED: {
+    aspects: {
+      structural: { enabled: true, severity: 'error' as const },
+      profile: { enabled: true, severity: 'warning' as const },
+      terminology: { enabled: true, severity: 'warning' as const },
+      reference: { enabled: true, severity: 'error' as const },
+      businessRules: { enabled: true, severity: 'warning' as const },
+      metadata: { enabled: true, severity: 'error' as const }
+    },
+    performance: {
+      maxConcurrent: 5,
+      batchSize: 50
+    }
+  },
+  
+  // Fast validation - only critical aspects with higher concurrency
+  FAST: {
+    aspects: {
+      structural: { enabled: true, severity: 'error' as const },
+      profile: { enabled: false, severity: 'warning' as const },
+      terminology: { enabled: false, severity: 'warning' as const },
+      reference: { enabled: true, severity: 'error' as const },
+      businessRules: { enabled: false, severity: 'warning' as const },
+      metadata: { enabled: false, severity: 'info' as const }
+    },
+    performance: {
+      maxConcurrent: 10,
+      batchSize: 100
+    }
+  }
+} as const;
 
-export type ValidationSeverity = 'error' | 'warning' | 'info';
+export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
+  aspects: {
+    structural: { enabled: true, severity: 'error' },
+    profile: { enabled: true, severity: 'warning' },
+    terminology: { enabled: true, severity: 'warning' },
+    reference: { enabled: true, severity: 'error' },
+    businessRules: { enabled: true, severity: 'error' },
+    metadata: { enabled: true, severity: 'error' }
+  },
+  performance: {
+    maxConcurrent: 5,
+    batchSize: 50
+  },
+  resourceTypes: {
+    enabled: true,
+    includedTypes: R4_DEFAULT_INCLUDED_RESOURCE_TYPES,
+    excludedTypes: []
+  }
+};
 
-export type FHIRVersion = 'R4' | 'R4B' | 'R5';
-
-export type ResourceTypeFilterMode = 'include' | 'exclude';
+export const DEFAULT_VALIDATION_SETTINGS_R5: ValidationSettings = {
+  aspects: {
+    structural: { enabled: true, severity: 'error' },
+    profile: { enabled: true, severity: 'warning' },
+    terminology: { enabled: true, severity: 'warning' },
+    reference: { enabled: true, severity: 'error' },
+    businessRules: { enabled: true, severity: 'error' },
+    metadata: { enabled: true, severity: 'error' }
+  },
+  performance: {
+    maxConcurrent: 5,
+    batchSize: 50
+  },
+  resourceTypes: {
+    enabled: true,
+    includedTypes: R5_DEFAULT_INCLUDED_RESOURCE_TYPES,
+    excludedTypes: []
+  }
+};
 
 // ============================================================================
-// Settings Update Types
+// Update Interface
 // ============================================================================
 
 export interface ValidationSettingsUpdate {
   /** Partial settings to update */
-  settings: Partial<ValidationSettings>;
-  
-  /** Whether to validate the update before applying */
-  validate?: boolean;
-  
-  /** Whether to create a new version */
-  createNewVersion?: boolean;
-  
-  /** User making the update */
-  updatedBy?: string;
+  aspects?: Partial<ValidationSettings['aspects']>;
+  performance?: Partial<ValidationSettings['performance']>;
+  resourceTypes?: Partial<ValidationSettings['resourceTypes']>;
 }
+
+// ============================================================================
+// Validation Result
+// ============================================================================
 
 export interface ValidationSettingsValidationResult {
   /** Whether the settings are valid */
   isValid: boolean;
   
   /** Validation errors */
-  errors: ValidationError[];
+  errors: string[];
   
   /** Validation warnings */
-  warnings: ValidationWarning[];
-  
-  /** Suggested fixes */
-  suggestions: ValidationSuggestion[];
+  warnings: string[];
 }
 
-export interface ValidationError {
-  /** Error code */
-  code: string;
-  
-  /** Error message */
-  message: string;
-  
-  /** Path to the invalid field */
-  path: string;
-  
-  /** Suggested fix */
-  suggestion?: string;
+// ============================================================================
+// FHIR Version Detection
+// ============================================================================
+
+export type FHIRVersion = 'R4' | 'R5';
+
+export interface FHIRResourceTypeConfig {
+  version: FHIRVersion;
+  includedTypes: string[];
+  excludedTypes: string[];
+  totalCount: number;
 }
 
-export interface ValidationWarning {
-  /** Warning code */
-  code: string;
-  
-  /** Warning message */
-  message: string;
-  
-  /** Path to the field */
-  path: string;
-  
-  /** Suggested improvement */
-  suggestion?: string;
+// ============================================================================
+// Performance Settings Constants & Validation
+// ============================================================================
+
+export const PERFORMANCE_LIMITS = {
+  maxConcurrent: {
+    min: 1,
+    max: 20,
+    default: 5
+  },
+  batchSize: {
+    min: 10,
+    max: 100,
+    default: 50
+  }
+} as const;
+
+/**
+ * Validate performance settings
+ */
+export function validatePerformanceSettings(performance: ValidationSettings['performance']): {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+} {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // Validate maxConcurrent
+  if (performance.maxConcurrent < PERFORMANCE_LIMITS.maxConcurrent.min) {
+    errors.push(`maxConcurrent must be at least ${PERFORMANCE_LIMITS.maxConcurrent.min}`);
+  }
+  if (performance.maxConcurrent > PERFORMANCE_LIMITS.maxConcurrent.max) {
+    errors.push(`maxConcurrent must not exceed ${PERFORMANCE_LIMITS.maxConcurrent.max}`);
+  }
+
+  // Validate batchSize
+  if (performance.batchSize < PERFORMANCE_LIMITS.batchSize.min) {
+    errors.push(`batchSize must be at least ${PERFORMANCE_LIMITS.batchSize.min}`);
+  }
+  if (performance.batchSize > PERFORMANCE_LIMITS.batchSize.max) {
+    errors.push(`batchSize must not exceed ${PERFORMANCE_LIMITS.batchSize.max}`);
+  }
+
+  // Performance warnings
+  if (performance.maxConcurrent > 10) {
+    warnings.push('High concurrent validation may impact server performance');
+  }
+  if (performance.batchSize > 75) {
+    warnings.push('Large batch sizes may cause memory issues');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings
+  };
 }
 
-export interface ValidationSuggestion {
-  /** Suggestion code */
-  code: string;
-  
-  /** Suggestion message */
-  message: string;
-  
-  /** Path to the field */
-  path: string;
-  
-  /** Suggested value */
-  suggestedValue?: any;
+/**
+ * Get default performance settings
+ */
+export function getDefaultPerformanceSettings(): ValidationSettings['performance'] {
+  return {
+    maxConcurrent: PERFORMANCE_LIMITS.maxConcurrent.default,
+    batchSize: PERFORMANCE_LIMITS.batchSize.default
+  };
 }
+
+// ============================================================================
+// FHIR Version Management Utilities
+// ============================================================================
+
+/**
+ * Get all resource types for a specific FHIR version
+ */
+export function getAllResourceTypesForVersion(version: FHIRVersion): readonly string[] {
+  return version === 'R4' ? R4_ALL_RESOURCE_TYPES : R5_ALL_RESOURCE_TYPES;
+}
+
+/**
+ * Get default included resource types for a specific FHIR version
+ */
+export function getDefaultIncludedTypesForVersion(version: FHIRVersion): string[] {
+  return version === 'R4' ? [...R4_DEFAULT_INCLUDED_RESOURCE_TYPES] : [...R5_DEFAULT_INCLUDED_RESOURCE_TYPES];
+}
+
+/**
+ * Check if a resource type is available in a specific FHIR version
+ */
+export function isResourceTypeAvailableInVersion(resourceType: string, version: FHIRVersion): boolean {
+  const allTypes = getAllResourceTypesForVersion(version);
+  return allTypes.includes(resourceType);
+}
+
+/**
+ * Get resource types that are not available in a specific FHIR version
+ */
+export function getUnavailableResourceTypes(resourceTypes: string[], version: FHIRVersion): string[] {
+  const allTypes = getAllResourceTypesForVersion(version);
+  return resourceTypes.filter(type => !allTypes.includes(type));
+}
+
+/**
+ * Get resource types that are new in R5 (not available in R4)
+ */
+export function getR5SpecificResourceTypes(): string[] {
+  return R5_ALL_RESOURCE_TYPES.filter(type => !R4_ALL_RESOURCE_TYPES.includes(type));
+}
+
+/**
+ * Migrate resource type settings from one FHIR version to another
+ */
+export function migrateResourceTypesForVersion(
+  resourceTypes: ValidationSettings['resourceTypes'],
+  fromVersion: FHIRVersion,
+  toVersion: FHIRVersion
+): ValidationSettings['resourceTypes'] {
+  if (fromVersion === toVersion) {
+    return resourceTypes;
+  }
+
+  const toAllTypes = getAllResourceTypesForVersion(toVersion);
+  
+  // Filter out unavailable types
+  const migratedIncludedTypes = resourceTypes.includedTypes.filter(type => 
+    toAllTypes.includes(type)
+  );
+  
+  const migratedExcludedTypes = resourceTypes.excludedTypes.filter(type => 
+    toAllTypes.includes(type)
+  );
+
+  // If no included types remain, use defaults for the target version
+  const finalIncludedTypes = migratedIncludedTypes.length > 0 
+    ? migratedIncludedTypes 
+    : getDefaultIncludedTypesForVersion(toVersion);
+
+  return {
+    enabled: resourceTypes.enabled,
+    includedTypes: finalIncludedTypes,
+    excludedTypes: migratedExcludedTypes
+  };
+}
+
+// ============================================================================
+// Resource Type Filtering Utilities
+// ============================================================================
+
+/**
+ * Validate resource type filtering settings
+ */
+export function validateResourceTypeSettings(resourceTypes: ValidationSettings['resourceTypes']): {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+} {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // Check for conflicts between included and excluded types
+  const conflicts = resourceTypes.includedTypes.filter(type => 
+    resourceTypes.excludedTypes.includes(type)
+  );
+  
+  if (conflicts.length > 0) {
+    errors.push(`Resource types cannot be both included and excluded: ${conflicts.join(', ')}`);
+  }
+
+  // Check for empty included types when filtering is enabled
+  if (resourceTypes.enabled && resourceTypes.includedTypes.length === 0) {
+    warnings.push('Resource type filtering is enabled but no types are included (will validate all types)');
+  }
+
+  // Check for duplicate types
+  const includedDuplicates = resourceTypes.includedTypes.filter((type, index) => 
+    resourceTypes.includedTypes.indexOf(type) !== index
+  );
+  if (includedDuplicates.length > 0) {
+    errors.push(`Duplicate included resource types: ${includedDuplicates.join(', ')}`);
+  }
+
+  const excludedDuplicates = resourceTypes.excludedTypes.filter((type, index) => 
+    resourceTypes.excludedTypes.indexOf(type) !== index
+  );
+  if (excludedDuplicates.length > 0) {
+    errors.push(`Duplicate excluded resource types: ${excludedDuplicates.join(', ')}`);
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+
+/**
+ * Validate resource type filtering settings against a specific FHIR version
+ */
+export function validateResourceTypeSettingsForVersion(
+  resourceTypes: ValidationSettings['resourceTypes'],
+  version: FHIRVersion
+): {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+} {
+  const baseValidation = validateResourceTypeSettings(resourceTypes);
+  const errors = [...baseValidation.errors];
+  const warnings = [...baseValidation.warnings];
+
+  const allTypesForVersion = getAllResourceTypesForVersion(version);
+
+  // Check for invalid included types (not available in this FHIR version)
+  const invalidIncludedTypes = resourceTypes.includedTypes.filter(type => 
+    !allTypesForVersion.includes(type)
+  );
+  if (invalidIncludedTypes.length > 0) {
+    errors.push(`Included resource types not available in FHIR ${version}: ${invalidIncludedTypes.join(', ')}`);
+  }
+
+  // Check for invalid excluded types (not available in this FHIR version)
+  const invalidExcludedTypes = resourceTypes.excludedTypes.filter(type => 
+    !allTypesForVersion.includes(type)
+  );
+  if (invalidExcludedTypes.length > 0) {
+    errors.push(`Excluded resource types not available in FHIR ${version}: ${invalidExcludedTypes.join(', ')}`);
+  }
+
+  // Check for R5-specific types when using R4
+  if (version === 'R4') {
+    const r5SpecificIncluded = resourceTypes.includedTypes.filter(type => 
+      getR5SpecificResourceTypes().includes(type)
+    );
+    if (r5SpecificIncluded.length > 0) {
+      errors.push(`R5-specific resource types cannot be used with FHIR R4: ${r5SpecificIncluded.join(', ')}`);
+    }
+
+    const r5SpecificExcluded = resourceTypes.excludedTypes.filter(type => 
+      getR5SpecificResourceTypes().includes(type)
+    );
+    if (r5SpecificExcluded.length > 0) {
+      warnings.push(`R5-specific resource types in excluded list (will be ignored for R4): ${r5SpecificExcluded.join(', ')}`);
+    }
+  }
+
+  // Performance warnings for large resource type lists
+  if (resourceTypes.includedTypes.length > 50) {
+    warnings.push(`Large number of included resource types (${resourceTypes.includedTypes.length}) may impact validation performance`);
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+
+/**
+ * Get effective resource types to validate based on settings
+ */
+export function getEffectiveResourceTypes(
+  resourceTypes: ValidationSettings['resourceTypes'],
+  allAvailableTypes: string[]
+): string[] {
+  if (!resourceTypes.enabled) {
+    return allAvailableTypes;
+  }
+
+  let effectiveTypes = resourceTypes.includedTypes.length > 0 
+    ? resourceTypes.includedTypes 
+    : allAvailableTypes;
+
+  // Remove excluded types
+  effectiveTypes = effectiveTypes.filter(type => 
+    !resourceTypes.excludedTypes.includes(type)
+  );
+
+  return effectiveTypes;
+}
+
+/**
+ * Check if a resource type should be validated
+ */
+export function shouldValidateResourceType(
+  resourceType: string,
+  resourceTypes: ValidationSettings['resourceTypes'],
+  allAvailableTypes: string[]
+): boolean {
+  const effectiveTypes = getEffectiveResourceTypes(resourceTypes, allAvailableTypes);
+  return effectiveTypes.includes(resourceType);
+}
+
+/**
+ * Get default resource type settings
+ */
+export function getDefaultResourceTypeSettings(): ValidationSettings['resourceTypes'] {
+  return {
+    enabled: true,
+    includedTypes: [],
+    excludedTypes: []
+  };
+}
+
+// ============================================================================
+// Validation Aspect Utilities
+// ============================================================================
+
+export const VALIDATION_ASPECTS: ValidationAspect[] = [
+  'structural',
+  'profile', 
+  'terminology',
+  'reference',
+  'businessRules',
+  'metadata'
+];
+
+export const VALIDATION_ASPECT_LABELS: Record<ValidationAspect, string> = {
+  structural: 'Structural',
+  profile: 'Profile',
+  terminology: 'Terminology',
+  reference: 'Reference',
+  businessRules: 'Business Rules',
+  metadata: 'Metadata'
+};
+
+export const VALIDATION_ASPECT_DESCRIPTIONS: Record<ValidationAspect, string> = {
+  structural: 'Validates FHIR resource structure and syntax',
+  profile: 'Validates against FHIR profiles and constraints',
+  terminology: 'Validates terminology bindings and code systems',
+  reference: 'Validates resource references and integrity',
+  businessRules: 'Validates business logic and clinical rules',
+  metadata: 'Validates resource metadata and provenance'
+};
+
+/**
+ * Get all enabled validation aspects from settings
+ */
+export function getEnabledAspects(settings: ValidationSettings): ValidationAspect[] {
+  return VALIDATION_ASPECTS.filter(aspect => settings.aspects[aspect].enabled);
+}
+
+/**
+ * Check if a specific aspect is enabled
+ */
+export function isAspectEnabled(settings: ValidationSettings, aspect: ValidationAspect): boolean {
+  return settings.aspects[aspect].enabled;
+}
+
+/**
+ * Get severity for a specific aspect
+ */
+export function getAspectSeverity(settings: ValidationSettings, aspect: ValidationAspect): ValidationSeverity {
+  return settings.aspects[aspect].severity;
+}
+
+// ============================================================================
+// Complete Settings Validation
+// ============================================================================
+
+/**
+ * Validate complete validation settings against a specific FHIR version
+ */
+export function validateValidationSettings(
+  settings: ValidationSettings,
+  version: FHIRVersion
+): ValidationSettingsValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // Validate performance settings
+  const performanceValidation = validatePerformanceSettings(settings.performance);
+  errors.push(...performanceValidation.errors);
+  warnings.push(...performanceValidation.warnings);
+
+  // Validate resource type settings for the specific FHIR version
+  const resourceTypeValidation = validateResourceTypeSettingsForVersion(settings.resourceTypes, version);
+  errors.push(...resourceTypeValidation.errors);
+  warnings.push(...resourceTypeValidation.warnings);
+
+  // Validate aspects
+  const enabledAspects = getEnabledAspects(settings);
+  if (enabledAspects.length === 0) {
+    errors.push('At least one validation aspect must be enabled');
+  }
+
+  // Check for reasonable aspect configurations
+  const errorSeverityAspects = enabledAspects.filter(aspect => 
+    getAspectSeverity(settings, aspect) === 'error'
+  );
+  if (errorSeverityAspects.length === 0) {
+    warnings.push('No validation aspects are configured with error severity');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings
+  };
+}
+
+/**
+ * Get default validation settings for a specific FHIR version
+ */
+export function getDefaultValidationSettingsForVersion(version: FHIRVersion): ValidationSettings {
+  return version === 'R4' ? DEFAULT_VALIDATION_SETTINGS_R4 : DEFAULT_VALIDATION_SETTINGS_R5;
+}
+
+/**
+ * Get default validation settings for R4 (backward compatibility)
+ */
+export function getDefaultValidationSettings(): ValidationSettings {
+  return DEFAULT_VALIDATION_SETTINGS_R4;
+}
+
+/**
+ * Create a copy of default settings for a specific FHIR version
+ */
+export function createDefaultValidationSettings(version: FHIRVersion): ValidationSettings {
+  const defaults = getDefaultValidationSettingsForVersion(version);
+  return JSON.parse(JSON.stringify(defaults)); // Deep copy
+}
+
+/**
+ * Reset settings to defaults for a specific FHIR version
+ */
+export function resetToDefaultSettings(version: FHIRVersion): ValidationSettings {
+  return createDefaultValidationSettings(version);
+}
+
+/**
+ * Check if settings match the defaults for a specific FHIR version
+ */
+export function isDefaultSettings(settings: ValidationSettings, version: FHIRVersion): boolean {
+  const defaults = getDefaultValidationSettingsForVersion(version);
+  return JSON.stringify(settings) === JSON.stringify(defaults);
+}
+
+// ============================================================================
+// Type Exports
+// ============================================================================
+
+export type ValidationAspect = 'structural' | 'profile' | 'terminology' | 'reference' | 'businessRules' | 'metadata';
+export type ValidationSeverity = 'error' | 'warning' | 'info';

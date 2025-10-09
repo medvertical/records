@@ -1,29 +1,27 @@
 /**
- * Validation Scoring & Coverage Utilities
+ * Validation Scoring & Coverage Utilities - MVP Version
  * 
- * Provides consistent scoring and counting logic across all views:
- * - Resource list view
- * - Resource detail view
- * - Group views
- * - Dashboard statistics
- * 
- * Ensures parity in calculations and maintains single source of truth
+ * Simplified scoring and counting logic for validation results:
+ * - Resource validation scoring
+ * - Aspect-based scoring
+ * - Coverage calculations
+ * - Quality metrics
  */
 
-import type { ValidationMessage } from '@/components/validation/ValidationMessageList';
+import type { ValidationSettings } from '@shared/validation-settings';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type ValidationSeverity = 'error' | 'warning' | 'information';
+export type ValidationSeverity = 'error' | 'warning' | 'info';
 export type ValidationAspect = 'structural' | 'profile' | 'terminology' | 'reference' | 'businessRule' | 'metadata';
 
 export interface ValidationCounts {
   total: number;
   errors: number;
   warnings: number;
-  information: number;
+  info: number;
 }
 
 export interface AspectValidationData {
@@ -35,11 +33,19 @@ export interface AspectValidationData {
   messages?: ValidationMessage[];
 }
 
+export interface ValidationMessage {
+  id: string;
+  severity: ValidationSeverity;
+  message: string;
+  location?: string;
+  aspect: ValidationAspect;
+}
+
 export interface AggregatedValidationSummary {
   totalIssues: number;
   errorCount: number;
   warningCount: number;
-  informationCount: number;
+  infoCount: number;
   aggregatedScore: number;
   isValid: boolean;
   aspectResults: AspectValidationData[];
@@ -47,314 +53,336 @@ export interface AggregatedValidationSummary {
   disabledAspectsCount: number;
 }
 
-export interface ValidationSettings {
-  aspects?: {
-    structural?: { enabled: boolean };
-    profile?: { enabled: boolean };
-    terminology?: { enabled: boolean };
-    reference?: { enabled: boolean };
-    businessRule?: { enabled: boolean };
-    metadata?: { enabled: boolean };
-  };
+export interface ResourceValidationSummary {
+  resourceId: string;
+  resourceType: string;
+  totalIssues: number;
+  errorCount: number;
+  warningCount: number;
+  infoCount: number;
+  score: number;
+  isValid: boolean;
+  aspectResults: AspectValidationData[];
+  lastValidated?: Date;
 }
 
 // ============================================================================
-// Scoring Constants
+// Scoring Functions
 // ============================================================================
 
 /**
- * Default scoring weights
- * These values determine how much each issue type affects the score
- */
-export const SCORING_WEIGHTS = {
-  error: 15,      // Error issues: -15 points each
-  warning: 5,     // Warning issues: -5 points each
-  information: 1, // Information issues: -1 point each
-} as const;
-
-/**
- * Minimum and maximum score bounds
- */
-export const SCORE_BOUNDS = {
-  min: 0,
-  max: 100,
-} as const;
-
-// ============================================================================
-// Core Counting Functions
-// ============================================================================
-
-/**
- * Count validation messages by severity
- */
-export function countMessagesBySeverity(
-  messages: ValidationMessage[]
-): ValidationCounts {
-  const counts: ValidationCounts = {
-    total: messages.length,
-    errors: 0,
-    warnings: 0,
-    information: 0,
-  };
-
-  messages.forEach((message) => {
-    switch (message.severity) {
-      case 'error':
-        counts.errors++;
-        break;
-      case 'warning':
-        counts.warnings++;
-        break;
-      case 'information':
-        counts.information++;
-        break;
-    }
-  });
-
-  return counts;
-}
-
-/**
- * Filter messages based on enabled aspects
- */
-export function filterMessagesByAspectSettings(
-  messages: Array<ValidationMessage & { aspect?: ValidationAspect }>,
-  settings?: ValidationSettings
-): Array<ValidationMessage & { aspect?: ValidationAspect }> {
-  if (!settings?.aspects) {
-    return messages; // No settings, return all messages
-  }
-
-  return messages.filter((message) => {
-    const aspect = message.aspect || 'structural';
-    const aspectSettings = settings.aspects?.[aspect];
-    return aspectSettings?.enabled !== false; // Default to enabled if not explicitly disabled
-  });
-}
-
-// ============================================================================
-// Score Calculation Functions
-// ============================================================================
-
-/**
- * Calculate validation score based on issue counts
- * Uses consistent weights across all views
+ * Calculate validation score based on counts
  */
 export function calculateValidationScore(counts: ValidationCounts): number {
-  let score = SCORE_BOUNDS.max;
+  if (counts.total === 0) return 100;
   
-  score -= counts.errors * SCORING_WEIGHTS.error;
-  score -= counts.warnings * SCORING_WEIGHTS.warning;
-  score -= counts.information * SCORING_WEIGHTS.information;
+  const errorWeight = 3;
+  const warningWeight = 2;
+  const infoWeight = 1;
   
-  return Math.max(SCORE_BOUNDS.min, Math.min(SCORE_BOUNDS.max, Math.round(score)));
+  const weightedIssues = (counts.errors * errorWeight) + (counts.warnings * warningWeight) + (counts.info * infoWeight);
+  const maxPossibleIssues = counts.total * errorWeight;
+  
+  const score = Math.max(0, 100 - (weightedIssues / maxPossibleIssues) * 100);
+  return Math.round(score * 100) / 100; // Round to 2 decimal places
 }
 
 /**
- * Calculate aggregated score across multiple aspects
- * Only considers enabled aspects in the calculation
+ * Calculate aspect score
  */
-export function calculateAggregatedScore(
-  aspectResults: AspectValidationData[]
-): number {
-  const enabledAspects = aspectResults.filter(r => r.enabled);
+export function calculateAspectScore(aspect: ValidationAspect, counts: ValidationCounts, settings: ValidationSettings | null): number {
+  if (!settings) return calculateValidationScore(counts);
   
-  if (enabledAspects.length === 0) {
-    return SCORE_BOUNDS.max; // No enabled aspects = perfect score
-  }
+  const aspectConfig = settings.aspects[aspect];
+  if (!aspectConfig.enabled) return 100; // Perfect score for disabled aspects
   
-  const totalScore = enabledAspects.reduce((sum, aspect) => sum + aspect.score, 0);
-  return Math.round(totalScore / enabledAspects.length);
-}
-
-/**
- * Calculate score for a single aspect
- */
-export function calculateAspectScore(
-  messages: ValidationMessage[],
-  enabled: boolean = true
-): number {
-  if (!enabled) {
-    return SCORE_BOUNDS.max; // Disabled aspects get perfect score
-  }
-  
-  const counts = countMessagesBySeverity(messages);
   return calculateValidationScore(counts);
 }
 
-// ============================================================================
-// Aggregation Functions
-// ============================================================================
+/**
+ * Calculate aggregated score from multiple aspects
+ */
+export function calculateAggregatedScore(aspectResults: AspectValidationData[]): number {
+  if (aspectResults.length === 0) return 100;
+  
+  const enabledAspects = aspectResults.filter(result => result.enabled);
+  if (enabledAspects.length === 0) return 100;
+  
+  const totalScore = enabledAspects.reduce((sum, result) => sum + result.score, 0);
+  return Math.round((totalScore / enabledAspects.length) * 100) / 100;
+}
 
 /**
- * Build aspect validation data from messages
+ * Determine if validation is valid based on settings
  */
-export function buildAspectValidationData(
-  aspect: ValidationAspect,
-  messages: ValidationMessage[],
-  enabled: boolean = true
-): AspectValidationData {
-  const counts = countMessagesBySeverity(messages);
-  const score = calculateValidationScore(counts);
+export function isValidationValid(counts: ValidationCounts, settings: ValidationSettings | null): boolean {
+  if (!settings) return counts.errors === 0;
   
+  // Check if any enabled aspect has errors
+  const enabledAspects = Object.entries(settings.aspects)
+    .filter(([_, config]) => config.enabled)
+    .map(([aspect, _]) => aspect as ValidationAspect);
+  
+  // For now, consider valid if no errors
+  return counts.errors === 0;
+}
+
+/**
+ * Get validation counts from messages
+ */
+export function getValidationCounts(messages: ValidationMessage[]): ValidationCounts {
   return {
-    aspect,
-    enabled,
-    counts,
-    score,
-    isValid: counts.errors === 0,
-    messages,
+    total: messages.length,
+    errors: messages.filter(m => m.severity === 'error').length,
+    warnings: messages.filter(m => m.severity === 'warning').length,
+    info: messages.filter(m => m.severity === 'info').length
   };
 }
 
 /**
- * Aggregate validation summary from aspect-specific messages
- * This is the main function used across all views for consistency
+ * Get aspect validation data
  */
-export function aggregateValidationSummary(
-  messagesGroupedByAspect: Record<ValidationAspect, ValidationMessage[]>,
-  settings?: ValidationSettings
-): AggregatedValidationSummary {
-  const aspects: ValidationAspect[] = [
-    'structural',
-    'profile',
-    'terminology',
-    'reference',
-    'businessRule',
-    'metadata',
-  ];
-
-  // Build aspect results
-  const aspectResults: AspectValidationData[] = aspects.map((aspect) => {
-    const messages = messagesGroupedByAspect[aspect] || [];
-    const enabled = settings?.aspects?.[aspect]?.enabled !== false;
-    return buildAspectValidationData(aspect, messages, enabled);
-  });
-
-  // Calculate aggregated counts (only from enabled aspects)
-  const enabledResults = aspectResults.filter(r => r.enabled);
-  const totalCounts: ValidationCounts = {
-    total: 0,
-    errors: 0,
-    warnings: 0,
-    information: 0,
+export function getAspectValidationData(
+  aspect: ValidationAspect,
+  messages: ValidationMessage[],
+  settings: ValidationSettings | null
+): AspectValidationData {
+  const aspectMessages = messages.filter(m => m.aspect === aspect);
+  const counts = getValidationCounts(aspectMessages);
+  const score = calculateAspectScore(aspect, counts, settings);
+  const aspectConfig = settings?.aspects[aspect];
+  
+  return {
+    aspect,
+    enabled: aspectConfig?.enabled || false,
+    counts,
+    score,
+    isValid: isValidationValid(counts, settings),
+    messages: aspectMessages
   };
+}
 
-  enabledResults.forEach((result) => {
-    totalCounts.total += result.counts.total;
-    totalCounts.errors += result.counts.errors;
-    totalCounts.warnings += result.counts.warnings;
-    totalCounts.information += result.counts.information;
-  });
-
-  // Calculate aggregated score
+/**
+ * Get aggregated validation summary
+ */
+export function getAggregatedValidationSummary(
+  messages: ValidationMessage[],
+  settings: ValidationSettings | null
+): AggregatedValidationSummary {
+  const allAspects: ValidationAspect[] = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'];
+  
+  const aspectResults = allAspects.map(aspect => 
+    getAspectValidationData(aspect, messages, settings)
+  );
+  
+  const totalCounts = getValidationCounts(messages);
   const aggregatedScore = calculateAggregatedScore(aspectResults);
-
+  const isValid = isValidationValid(totalCounts, settings);
+  
+  const enabledAspectsCount = aspectResults.filter(result => result.enabled).length;
+  const disabledAspectsCount = aspectResults.filter(result => !result.enabled).length;
+  
   return {
     totalIssues: totalCounts.total,
     errorCount: totalCounts.errors,
     warningCount: totalCounts.warnings,
-    informationCount: totalCounts.information,
+    infoCount: totalCounts.info,
     aggregatedScore,
-    isValid: totalCounts.errors === 0,
+    isValid,
     aspectResults,
-    enabledAspectsCount: enabledResults.length,
-    disabledAspectsCount: aspectResults.length - enabledResults.length,
+    enabledAspectsCount,
+    disabledAspectsCount
   };
 }
 
 /**
- * Group messages by aspect
- * Helper function for organizing messages before aggregation
+ * Get resource validation summary
  */
-export function groupMessagesByAspect(
-  messages: Array<ValidationMessage & { aspect?: ValidationAspect }>
-): Record<ValidationAspect, ValidationMessage[]> {
-  const grouped: Record<ValidationAspect, ValidationMessage[]> = {
-    structural: [],
-    profile: [],
-    terminology: [],
-    reference: [],
-    businessRule: [],
-    metadata: [],
+export function getResourceValidationSummary(
+  resourceId: string,
+  resourceType: string,
+  messages: ValidationMessage[],
+  settings: ValidationSettings | null,
+  lastValidated?: Date
+): ResourceValidationSummary {
+  const summary = getAggregatedValidationSummary(messages, settings);
+  
+  return {
+    resourceId,
+    resourceType,
+    totalIssues: summary.totalIssues,
+    errorCount: summary.errorCount,
+    warningCount: summary.warningCount,
+    infoCount: summary.infoCount,
+    score: summary.aggregatedScore,
+    isValid: summary.isValid,
+    aspectResults: summary.aspectResults,
+    lastValidated
   };
-
-  messages.forEach((message) => {
-    const aspect = message.aspect || 'structural';
-    if (grouped[aspect]) {
-      grouped[aspect].push(message);
-    }
-  });
-
-  return grouped;
 }
 
 // ============================================================================
-// Validation Status Helpers
+// Coverage Functions
 // ============================================================================
 
 /**
- * Get validation status badge variant based on counts
+ * Calculate validation coverage percentage
  */
-export function getValidationBadgeVariant(counts: ValidationCounts): 'success' | 'destructive' | 'warning' | 'secondary' {
-  if (counts.errors > 0) return 'destructive';
-  if (counts.warnings > 0) return 'warning';
-  if (counts.information > 0) return 'secondary';
-  return 'success';
+export function calculateValidationCoverage(
+  validatedResources: number,
+  totalResources: number
+): number {
+  if (totalResources === 0) return 100;
+  
+  const coverage = (validatedResources / totalResources) * 100;
+  return Math.round(coverage * 100) / 100;
 }
 
 /**
- * Get validation status label
+ * Get coverage status
  */
-export function getValidationStatusLabel(counts: ValidationCounts): string {
-  if (counts.errors > 0) return `${counts.errors} Error${counts.errors !== 1 ? 's' : ''}`;
-  if (counts.warnings > 0) return `${counts.warnings} Warning${counts.warnings !== 1 ? 's' : ''}`;
-  if (counts.information > 0) return `${counts.information} Info`;
-  return 'Valid';
+export function getCoverageStatus(coverage: number): 'excellent' | 'good' | 'fair' | 'poor' {
+  if (coverage >= 95) return 'excellent';
+  if (coverage >= 80) return 'good';
+  if (coverage >= 60) return 'fair';
+  return 'poor';
 }
 
 /**
- * Format score for display with color coding
+ * Get coverage color
  */
-export function getScoreColorClass(score: number): string {
+export function getCoverageColor(coverage: number): string {
+  const status = getCoverageStatus(coverage);
+  
+  const colors: Record<string, string> = {
+    excellent: 'text-green-600',
+    good: 'text-blue-600',
+    fair: 'text-yellow-600',
+    poor: 'text-red-600'
+  };
+  
+  return colors[status] || 'text-gray-600';
+}
+
+// ============================================================================
+// Quality Metrics
+// ============================================================================
+
+/**
+ * Calculate quality metrics
+ */
+export function calculateQualityMetrics(
+  summaries: ResourceValidationSummary[]
+): {
+  averageScore: number;
+  medianScore: number;
+  validResources: number;
+  invalidResources: number;
+  totalResources: number;
+  qualityGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+} {
+  if (summaries.length === 0) {
+    return {
+      averageScore: 100,
+      medianScore: 100,
+      validResources: 0,
+      invalidResources: 0,
+      totalResources: 0,
+      qualityGrade: 'A'
+    };
+  }
+  
+  const scores = summaries.map(s => s.score).sort((a, b) => a - b);
+  const averageScore = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+  const medianScore = scores[Math.floor(scores.length / 2)];
+  
+  const validResources = summaries.filter(s => s.isValid).length;
+  const invalidResources = summaries.filter(s => !s.isValid).length;
+  
+  let qualityGrade: 'A' | 'B' | 'C' | 'D' | 'F';
+  if (averageScore >= 90) qualityGrade = 'A';
+  else if (averageScore >= 80) qualityGrade = 'B';
+  else if (averageScore >= 70) qualityGrade = 'C';
+  else if (averageScore >= 60) qualityGrade = 'D';
+  else qualityGrade = 'F';
+  
+  return {
+    averageScore: Math.round(averageScore * 100) / 100,
+    medianScore: Math.round(medianScore * 100) / 100,
+    validResources,
+    invalidResources,
+    totalResources: summaries.length,
+    qualityGrade
+  };
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/**
+ * Get aspect display name
+ */
+export function getAspectDisplayName(aspect: ValidationAspect): string {
+  const names: Record<ValidationAspect, string> = {
+    structural: 'Structural',
+    profile: 'Profile',
+    terminology: 'Terminology',
+    reference: 'Reference',
+    businessRule: 'Business Rules',
+    metadata: 'Metadata'
+  };
+  
+  return names[aspect] || aspect;
+}
+
+/**
+ * Get severity display name
+ */
+export function getSeverityDisplayName(severity: ValidationSeverity): string {
+  const names: Record<ValidationSeverity, string> = {
+    error: 'Error',
+    warning: 'Warning',
+    info: 'Info'
+  };
+  
+  return names[severity] || severity;
+}
+
+/**
+ * Get severity color
+ */
+export function getSeverityColor(severity: ValidationSeverity): string {
+  const colors: Record<ValidationSeverity, string> = {
+    error: 'text-red-600',
+    warning: 'text-yellow-600',
+    info: 'text-blue-600'
+  };
+  
+  return colors[severity] || 'text-gray-600';
+}
+
+/**
+ * Get score color
+ */
+export function getScoreColor(score: number): string {
   if (score >= 90) return 'text-green-600';
+  if (score >= 80) return 'text-blue-600';
   if (score >= 70) return 'text-yellow-600';
-  if (score >= 50) return 'text-orange-600';
+  if (score >= 60) return 'text-orange-600';
   return 'text-red-600';
 }
 
-// ============================================================================
-// Test Utilities
-// ============================================================================
+/**
+ * Format score as percentage
+ */
+export function formatScore(score: number): string {
+  return `${Math.round(score)}%`;
+}
 
 /**
- * Validate parity between two validation summaries
- * Used for testing consistency across views
+ * Format coverage as percentage
  */
-export function validateSummaryParity(
-  summary1: AggregatedValidationSummary,
-  summary2: AggregatedValidationSummary
-): { isParity: boolean; differences: string[] } {
-  const differences: string[] = [];
-
-  if (summary1.totalIssues !== summary2.totalIssues) {
-    differences.push(`Total issues mismatch: ${summary1.totalIssues} vs ${summary2.totalIssues}`);
-  }
-
-  if (summary1.errorCount !== summary2.errorCount) {
-    differences.push(`Error count mismatch: ${summary1.errorCount} vs ${summary2.errorCount}`);
-  }
-
-  if (summary1.warningCount !== summary2.warningCount) {
-    differences.push(`Warning count mismatch: ${summary1.warningCount} vs ${summary2.warningCount}`);
-  }
-
-  if (summary1.aggregatedScore !== summary2.aggregatedScore) {
-    differences.push(`Aggregated score mismatch: ${summary1.aggregatedScore} vs ${summary2.aggregatedScore}`);
-  }
-
-  return {
-    isParity: differences.length === 0,
-    differences,
-  };
+export function formatCoverage(coverage: number): string {
+  return `${Math.round(coverage)}%`;
 }

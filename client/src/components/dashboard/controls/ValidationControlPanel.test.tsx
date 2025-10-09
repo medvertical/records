@@ -4,14 +4,14 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ValidationControlPanel } from './ValidationControlPanel';
 import { useValidationPolling } from '@/hooks/use-validation-polling';
 import { useValidationSettingsIntegration } from '@/lib/validation-settings-integration';
-import { useValidationSettingsChangeDetection } from '@/lib/validation-settings-change-detector';
+// Change detection is now handled by the settings hook
 import { useToast } from '@/hooks/use-toast';
 import { usePerformanceMonitoring } from '@/hooks/use-performance-monitoring';
 
 // Mock all the hooks and utilities
 vi.mock('@/hooks/use-validation-polling');
 vi.mock('@/lib/validation-settings-integration');
-vi.mock('@/lib/validation-settings-change-detector');
+// Change detection is now handled by the settings hook
 vi.mock('@/hooks/use-toast');
 vi.mock('@/hooks/use-performance-monitoring');
 vi.mock('@/lib/confirmation-dialog-utils');
@@ -26,13 +26,7 @@ vi.mock('@/lib/validation-error-utils');
 vi.mock('@/lib/responsive-design-utils');
 vi.mock('@/lib/accessibility-utils');
 vi.mock('@/lib/loading-states-utils');
-vi.mock('../modals/ValidationSettingsModal', () => ({
-  ValidationSettingsModal: ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => (
-    <div data-testid="validation-settings-modal" style={{ display: isOpen ? 'block' : 'none' }}>
-      <button onClick={onClose}>Close Modal</button>
-    </div>
-  ),
-}));
+// ValidationSettingsModal removed - using simplified settings tab instead
 vi.mock('./ValidationProgressDisplay', () => ({
   ValidationProgressDisplay: ({ progress }: { progress: any }) => (
     <div data-testid="validation-progress-display">

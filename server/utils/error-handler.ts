@@ -1,307 +1,205 @@
-// ============================================================================
-// Standardized Error Handling Utility
-// ============================================================================
+/**
+ * Centralized Error Handling Utilities
+ * 
+ * Provides consistent error handling and validation across all API endpoints
+ */
 
-export interface ErrorContext {
-  service: string;
-  operation: string;
-  resourceId?: string;
-  userId?: string;
-  timestamp: Date;
-  metadata?: Record<string, any>;
+import type { Request, Response, NextFunction } from 'express';
+
+export interface ApiError extends Error {
+  statusCode?: number;
+  code?: string;
+  details?: any;
 }
 
-export interface StandardizedError {
-  code: string;
-  message: string;
-  details?: string;
-  context: ErrorContext;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  recoverable: boolean;
-  suggestions: string[];
-  timestamp: Date;
+export class ValidationError extends Error implements ApiError {
+  public statusCode = 400;
+  public code = 'VALIDATION_ERROR';
+  public details: any;
+
+  constructor(message: string, details?: any) {
+    super(message);
+    this.name = 'ValidationError';
+    this.details = details;
+  }
 }
 
-export class ErrorHandler {
-  private static instance: ErrorHandler;
-  private errorLog: StandardizedError[] = [];
+export class NotFoundError extends Error implements ApiError {
+  public statusCode = 404;
+  public code = 'NOT_FOUND';
 
-  private constructor() {}
-
-  static getInstance(): ErrorHandler {
-    if (!ErrorHandler.instance) {
-      ErrorHandler.instance = new ErrorHandler();
-    }
-    return ErrorHandler.instance;
+  constructor(message: string) {
+    super(message);
+    this.name = 'NotFoundError';
   }
+}
+
+export class ServiceError extends Error implements ApiError {
+  public statusCode = 500;
+  public code = 'SERVICE_ERROR';
+  public details: any;
+
+  constructor(message: string, details?: any) {
+    super(message);
+    this.name = 'ServiceError';
+    this.details = details;
+  }
+}
+
+/**
+ * Centralized error handler middleware
+ */
+export function errorHandler(error: ApiError, req: Request, res: Response, next: NextFunction) {
+  const statusCode = error.statusCode || 500;
+  const code = error.code || 'INTERNAL_ERROR';
+  
+  // Log error for debugging
+  console.error(`[API Error] ${code}: ${error.message}`, {
+    url: req.url,
+    method: req.method,
+    statusCode,
+    details: error.details,
+    stack: error.stack
+  });
+
+  // Send error response
+  res.status(statusCode).json({
+    error: {
+      code,
+      message: error.message,
+      details: error.details,
+      timestamp: new Date().toISOString(),
+      path: req.url
+    }
+  });
+}
+
+/**
+ * Async error wrapper to catch async errors in route handlers
+ */
+export function asyncHandler(fn: (req: Request, res: Response, next?: NextFunction) => Promise<any>) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+}
 
   /**
-   * Handle and standardize errors across all services
-   */
-  handleError(
-    error: any,
-    context: Omit<ErrorContext, 'timestamp'>,
-    severity: 'low' | 'medium' | 'high' | 'critical' = 'medium'
-  ): StandardizedError {
-    const standardizedError: StandardizedError = {
-      code: this.extractErrorCode(error),
-      message: this.extractErrorMessage(error),
-      details: this.extractErrorDetails(error),
-      context: {
-        ...context,
-        timestamp: new Date()
-      },
-      severity,
-      recoverable: this.isRecoverable(error),
-      suggestions: this.generateSuggestions(error, context),
-      timestamp: new Date()
-    };
-
-    // Log the error
-    this.logError(standardizedError);
-
-    return standardizedError;
+ * Input validation utilities
+ */
+export class InputValidator {
+  static validateRequired(value: any, fieldName: string): void {
+    if (value === undefined || value === null || value === '') {
+      throw new ValidationError(`${fieldName} is required`);
+    }
   }
 
-  /**
-   * Handle FHIR-specific errors
-   */
-  handleFhirError(
-    error: any,
-    context: Omit<ErrorContext, 'timestamp'>,
-    fhirOperation?: string
-  ): StandardizedError {
-    const fhirContext = {
-      ...context,
-      operation: fhirOperation ? `${context.operation} (${fhirOperation})` : context.operation
-    };
-
-    return this.handleError(error, fhirContext, this.getFhirErrorSeverity(error));
-  }
-
-  /**
-   * Handle validation-specific errors
-   */
-  handleValidationError(
-    error: any,
-    context: Omit<ErrorContext, 'timestamp'>,
-    resourceType?: string
-  ): StandardizedError {
-    const validationContext = {
-      ...context,
-      operation: resourceType ? `${context.operation} (${resourceType})` : context.operation
-    };
-
-    return this.handleError(error, validationContext, this.getValidationErrorSeverity(error));
-  }
-
-  /**
-   * Handle database-specific errors
-   */
-  handleDatabaseError(
-    error: any,
-    context: Omit<ErrorContext, 'timestamp'>,
-    operation?: string
-  ): StandardizedError {
-    const dbContext = {
-      ...context,
-      operation: operation ? `${context.operation} (${operation})` : context.operation
-    };
-
-    return this.handleError(error, dbContext, this.getDatabaseErrorSeverity(error));
-  }
-
-  /**
-   * Get error statistics for monitoring
-   */
-  getErrorStats(timeframe: 'hour' | 'day' | 'week' = 'day'): {
-    total: number;
-    bySeverity: Record<string, number>;
-    byService: Record<string, number>;
-    byCode: Record<string, number>;
-  } {
-    const now = new Date();
-    const cutoff = new Date(now.getTime() - this.getTimeframeMs(timeframe));
-
-    const recentErrors = this.errorLog.filter(error => error.timestamp >= cutoff);
-
-    return {
-      total: recentErrors.length,
-      bySeverity: this.groupBy(recentErrors, 'severity'),
-      byService: this.groupBy(recentErrors, 'context.service'),
-      byCode: this.groupBy(recentErrors, 'code')
-    };
-  }
-
-  /**
-   * Clear old error logs
-   */
-  clearOldLogs(olderThanDays: number = 7): void {
-    const cutoff = new Date(Date.now() - (olderThanDays * 24 * 60 * 60 * 1000));
-    this.errorLog = this.errorLog.filter(error => error.timestamp >= cutoff);
-  }
-
-  private extractErrorCode(error: any): string {
-    if (error.code) return error.code;
-    if (error.name) return error.name.toLowerCase().replace(/\s+/g, '-');
-    if (error.status) return `http-${error.status}`;
-    return 'unknown-error';
-  }
-
-  private extractErrorMessage(error: any): string {
-    if (error.message) return error.message;
-    if (error.error) return error.error;
-    if (typeof error === 'string') return error;
-    return 'An unknown error occurred';
-  }
-
-  private extractErrorDetails(error: any): string | undefined {
-    if (error.details) return error.details;
-    if (error.stack) return error.stack;
-    if (error.response?.data) return JSON.stringify(error.response.data);
-    return undefined;
-  }
-
-  private isRecoverable(error: any): boolean {
-    // Network errors are usually recoverable
-    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') return true;
-    if (error.code === 'ETIMEDOUT') return true;
+  static validateString(value: any, fieldName: string, minLength?: number, maxLength?: number): void {
+    this.validateRequired(value, fieldName);
     
-    // HTTP 5xx errors are usually recoverable
-    if (error.status >= 500) return true;
+    if (typeof value !== 'string') {
+      throw new ValidationError(`${fieldName} must be a string`);
+    }
     
-    // HTTP 4xx errors are usually not recoverable
-    if (error.status >= 400 && error.status < 500) return false;
+    if (minLength !== undefined && value.length < minLength) {
+      throw new ValidationError(`${fieldName} must be at least ${minLength} characters long`);
+    }
     
-    // Database connection errors are recoverable
-    if (error.code === 'ECONNREFUSED' && error.message?.includes('database')) return true;
+    if (maxLength !== undefined && value.length > maxLength) {
+      throw new ValidationError(`${fieldName} must be no more than ${maxLength} characters long`);
+    }
+  }
+
+  static validateNumber(value: any, fieldName: string, min?: number, max?: number): void {
+    this.validateRequired(value, fieldName);
     
-    return false;
-  }
-
-  private generateSuggestions(error: any, context: ErrorContext): string[] {
-    const suggestions: string[] = [];
-
-    // Network-related suggestions
-    if (error.code === 'ENOTFOUND') {
-      suggestions.push('Check if the server URL is correct and accessible');
-      suggestions.push('Verify network connectivity');
+    const num = Number(value);
+    if (isNaN(num)) {
+      throw new ValidationError(`${fieldName} must be a valid number`);
     }
-
-    if (error.code === 'ECONNREFUSED') {
-      suggestions.push('Check if the target service is running');
-      suggestions.push('Verify the port and host configuration');
-    }
-
-    if (error.code === 'ETIMEDOUT') {
-      suggestions.push('Check network latency and server performance');
-      suggestions.push('Consider increasing timeout values');
-    }
-
-    // HTTP-related suggestions
-    if (error.status === 401) {
-      suggestions.push('Check authentication credentials');
-      suggestions.push('Verify token expiration');
-    }
-
-    if (error.status === 403) {
-      suggestions.push('Check user permissions');
-      suggestions.push('Verify access rights');
-    }
-
-    if (error.status === 404) {
-      suggestions.push('Verify the resource exists');
-      suggestions.push('Check the resource ID or URL');
-    }
-
-    if (error.status >= 500) {
-      suggestions.push('Retry the operation after a short delay');
-      suggestions.push('Check server logs for more details');
-    }
-
-    // Database-related suggestions
-    if (error.message?.includes('database') || error.message?.includes('connection')) {
-      suggestions.push('Check database connectivity');
-      suggestions.push('Verify database credentials');
-    }
-
-    // Validation-related suggestions
-    if (context.service === 'validation') {
-      suggestions.push('Check the resource structure and format');
-      suggestions.push('Verify required fields are present');
-    }
-
-    // FHIR-related suggestions
-    if (context.service === 'fhir') {
-      suggestions.push('Check FHIR server status');
-      suggestions.push('Verify FHIR resource format');
-    }
-
-    return suggestions;
-  }
-
-  private getFhirErrorSeverity(error: any): 'low' | 'medium' | 'high' | 'critical' {
-    if (error.status >= 500) return 'high';
-    if (error.status === 404) return 'medium';
-    if (error.status === 401 || error.status === 403) return 'high';
-    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') return 'high';
-    return 'medium';
-  }
-
-  private getValidationErrorSeverity(error: any): 'low' | 'medium' | 'high' | 'critical' {
-    if (error.message?.includes('fatal')) return 'critical';
-    if (error.message?.includes('error')) return 'high';
-    if (error.message?.includes('warning')) return 'medium';
-    return 'low';
-  }
-
-  private getDatabaseErrorSeverity(error: any): 'low' | 'medium' | 'high' | 'critical' {
-    if (error.code === 'ECONNREFUSED') return 'critical';
-    if (error.message?.includes('connection')) return 'high';
-    if (error.message?.includes('timeout')) return 'medium';
-    return 'medium';
-  }
-
-  private logError(error: StandardizedError): void {
-    this.errorLog.push(error);
     
-    // Log to console with appropriate level
-    const logMessage = `[${error.context.service}] ${error.message} (${error.code})`;
+    if (min !== undefined && num < min) {
+      throw new ValidationError(`${fieldName} must be at least ${min}`);
+    }
     
-    switch (error.severity) {
-      case 'critical':
-        console.error(logMessage, error);
-        break;
-      case 'high':
-        console.error(logMessage, error);
-        break;
-      case 'medium':
-        console.warn(logMessage, error);
-        break;
-      case 'low':
-        console.info(logMessage, error);
-        break;
+    if (max !== undefined && num > max) {
+      throw new ValidationError(`${fieldName} must be no more than ${max}`);
     }
   }
 
-  private groupBy<T>(array: T[], key: keyof T): Record<string, number> {
-    return array.reduce((groups, item) => {
-      const value = String(item[key]);
-      groups[value] = (groups[value] || 0) + 1;
-      return groups;
-    }, {} as Record<string, number>);
+  static validateArray(value: any, fieldName: string, minLength?: number): void {
+    this.validateRequired(value, fieldName);
+    
+    if (!Array.isArray(value)) {
+      throw new ValidationError(`${fieldName} must be an array`);
+    }
+    
+    if (minLength !== undefined && value.length < minLength) {
+      throw new ValidationError(`${fieldName} must contain at least ${minLength} items`);
+    }
   }
 
-  private getTimeframeMs(timeframe: 'hour' | 'day' | 'week'): number {
-    switch (timeframe) {
-      case 'hour': return 60 * 60 * 1000;
-      case 'day': return 24 * 60 * 60 * 1000;
-      case 'week': return 7 * 24 * 60 * 60 * 1000;
-      default: return 24 * 60 * 60 * 1000;
+  static validateObject(value: any, fieldName: string, requiredFields?: string[]): void {
+    this.validateRequired(value, fieldName);
+    
+    if (typeof value !== 'object' || Array.isArray(value)) {
+      throw new ValidationError(`${fieldName} must be an object`);
+    }
+    
+    if (requiredFields) {
+      for (const field of requiredFields) {
+        if (!(field in value)) {
+          throw new ValidationError(`${fieldName} must contain field: ${field}`);
+        }
+      }
+    }
+  }
+
+  static validateEnum(value: any, fieldName: string, allowedValues: string[]): void {
+    this.validateRequired(value, fieldName);
+    
+    if (!allowedValues.includes(value)) {
+      throw new ValidationError(`${fieldName} must be one of: ${allowedValues.join(', ')}`);
     }
   }
 }
 
-// Export singleton instance
-export const errorHandler = ErrorHandler.getInstance();
+/**
+ * Response utilities for consistent API responses
+ */
+export class ApiResponse {
+  static success(res: Response, data: any, message?: string, statusCode = 200) {
+    res.status(statusCode).json({
+      success: true,
+      message: message || 'Operation completed successfully',
+      data,
+      timestamp: new Date().toISOString()
+    });
+  }
 
+  static error(res: Response, error: ApiError) {
+    res.status(error.statusCode || 500).json({
+      success: false,
+      error: {
+        code: error.code || 'INTERNAL_ERROR',
+        message: error.message,
+        details: error.details,
+        timestamp: new Date().toISOString()
+      }
+    });
+  }
+
+  static validationError(res: Response, message: string, details?: any) {
+    const error = new ValidationError(message, details);
+    this.error(res, error);
+  }
+
+  static notFound(res: Response, message: string) {
+    const error = new NotFoundError(message);
+    this.error(res, error);
+  }
+
+  static serviceError(res: Response, message: string, details?: any) {
+    const error = new ServiceError(message, details);
+    this.error(res, error);
+  }
+}

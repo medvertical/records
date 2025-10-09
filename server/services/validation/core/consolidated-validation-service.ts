@@ -15,7 +15,7 @@ import { createHash } from 'crypto';
 import { storage } from '../../../storage';
 import { getValidationEngine } from './validation-engine';
 import { getValidationPipeline } from './validation-pipeline';
-import { getValidationSettingsService } from '../settings/validation-settings-service-simplified';
+import { getValidationSettingsService } from '../settings/validation-settings-service';
 import { getValidationResourceTypeFilteringService } from '../features/validation-resource-type-filtering-service';
 import { cacheManager } from '../../../utils/cache-manager';
 import type {
@@ -24,7 +24,7 @@ import type {
   InsertValidationResult,
   ValidationResult as StoredValidationResult,
 } from '@shared/schema';
-import type { ValidationSettings } from '@shared/validation-settings-simplified';
+import type { ValidationSettings } from '@shared/validation-settings';
 import type {
   ValidationPipelineRequest,
   ValidationPipelineConfig,

@@ -139,8 +139,29 @@ export const dashboardCards = pgTable("dashboard_cards", {
 export const validationSettings = pgTable("validation_settings", {
   id: serial("id").primaryKey(),
   serverId: integer("server_id").references(() => fhirServers.id),
-  version: integer("version").notNull().default(1),
-  settings: jsonb("settings").notNull(),
+  
+  // Simplified settings structure - only essential fields
+  aspects: jsonb("aspects").notNull().default({
+    structural: { enabled: true, severity: "error" },
+    profile: { enabled: true, severity: "warning" },
+    terminology: { enabled: true, severity: "warning" },
+    reference: { enabled: true, severity: "error" },
+    businessRules: { enabled: true, severity: "error" },
+    metadata: { enabled: true, severity: "error" }
+  }),
+  
+  performance: jsonb("performance").notNull().default({
+    maxConcurrent: 5,
+    batchSize: 50
+  }),
+  
+  resourceTypes: jsonb("resource_types").notNull().default({
+    enabled: true,
+    includedTypes: [],
+    excludedTypes: []
+  }),
+  
+  // Metadata
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -148,36 +169,9 @@ export const validationSettings = pgTable("validation_settings", {
   updatedBy: text("updated_by"),
 });
 
-export const validationSettingsAuditTrail = pgTable("validation_settings_audit_trail", {
-  id: serial("id").primaryKey(),
-  settingsId: integer("settings_id").references(() => validationSettings.id),
-  version: integer("version").notNull(),
-  action: text("action").notNull(), // 'created', 'updated', 'activated', 'deactivated', 'deleted', 'migrated', 'rolled_back'
-  performedBy: text("performed_by"),
-  performedAt: timestamp("performed_at").defaultNow(),
-  changeReason: text("change_reason"),
-  changes: jsonb("changes").notNull(), // Detailed change information
-  metadata: jsonb("metadata"),
-  ipAddress: text("ip_address"),
-  userAgent: text("user_agent"),
-});
+// Audit trail table removed - no longer needed in simplified schema
 
-// Legacy validation settings table for migration
-export const legacyValidationSettings = pgTable("legacy_validation_settings", {
-  id: serial("id").primaryKey(),
-  enableStructuralValidation: boolean("enable_structural_validation").default(true),
-  enableProfileValidation: boolean("enable_profile_validation").default(true),
-  enableTerminologyValidation: boolean("enable_terminology_validation").default(true),
-  enableReferenceValidation: boolean("enable_reference_validation").default(true),
-  enableBusinessRuleValidation: boolean("enable_business_rule_validation").default(true),
-  enableMetadataValidation: boolean("enable_metadata_validation").default(true),
-  strictMode: boolean("strict_mode").default(false),
-  validationProfiles: jsonb("validation_profiles").default([]),
-  terminologyServers: jsonb("terminology_servers").default([]),
-  profileResolutionServers: jsonb("profile_resolution_servers").default([]),
-  config: jsonb("config").default({}),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
+// Legacy validation settings table removed - no longer needed
 
 // Insert schemas
 export const insertFhirServerSchema = createInsertSchema(fhirServers).omit({
@@ -204,10 +198,7 @@ export const insertValidationSettingsSchema = createInsertSchema(validationSetti
   updatedAt: true,
 });
 
-export const insertValidationSettingsAuditTrailSchema = createInsertSchema(validationSettingsAuditTrail).omit({
-  id: true,
-  performedAt: true,
-});
+// Audit trail schema removed - no longer needed
 
 export const insertDashboardCardSchema = createInsertSchema(dashboardCards).omit({
   id: true,
@@ -234,8 +225,7 @@ export type InsertDashboardCard = z.infer<typeof insertDashboardCardSchema>;
 export type ValidationSettings = typeof validationSettings.$inferSelect;
 export type InsertValidationSettings = z.infer<typeof insertValidationSettingsSchema>;
 
-export type ValidationSettingsAuditTrail = typeof validationSettingsAuditTrail.$inferSelect;
-export type InsertValidationSettingsAuditTrail = z.infer<typeof insertValidationSettingsAuditTrailSchema>;
+// Audit trail types removed - no longer needed
 
 // Additional types for FHIR resources
 export interface FhirResourceWithValidation extends FhirResource {

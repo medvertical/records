@@ -29,7 +29,7 @@ import { eq, desc, and, gt, lt, sql, getTableColumns } from "drizzle-orm";
 import { queryOptimizer } from "./utils/query-optimizer.js";
 import { logger } from "./utils/logger.js";
 import { cacheManager, CACHE_TAGS } from "./utils/cache-manager.js";
-import { getValidationSettingsService } from "./services/validation/settings/validation-settings-service-simplified.js";
+import { getValidationSettingsService } from "./services/validation/settings/validation-settings-service.js";
 
 export interface IStorage {
   // FHIR Servers

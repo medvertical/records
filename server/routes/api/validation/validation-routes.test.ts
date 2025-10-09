@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConsolidatedValidationService } from '../../../services/validation';
-import { getValidationSettingsService } from '../../../services/validation/settings/validation-settings-service-simplified';
+import { getValidationSettingsService } from '../../../services/validation/settings/validation-settings-service';
 import { getValidationPipeline, getValidationQueueService, getIndividualResourceProgressService, getValidationCancellationRetryService } from '../../../services/validation';
 import { storage } from '../../../storage';
 
@@ -30,7 +30,7 @@ vi.mock('../../../services/validation', () => ({
   getValidationCancellationRetryService: vi.fn()
 }));
 
-vi.mock('../../../services/validation/settings/validation-settings-service-simplified', () => ({
+vi.mock('../../../services/validation/settings/validation-settings-service', () => ({
   getValidationSettingsService: vi.fn()
 }));
 

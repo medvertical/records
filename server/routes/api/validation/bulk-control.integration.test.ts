@@ -92,7 +92,7 @@ describe('Validation Control Panel API Integration Tests', () => {
       }
     }));
 
-    vi.mock('../../../services/validation/settings/validation-settings-service-simplified', () => ({
+    vi.mock('../../../services/validation/settings/validation-settings-service', () => ({
       getValidationSettingsService: vi.fn().mockReturnValue({
         getActiveSettings: vi.fn().mockResolvedValue({
           id: 1,

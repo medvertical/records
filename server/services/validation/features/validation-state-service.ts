@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { storage } from '../../../storage';
-// WebSocket removed - using SSE instead
+// WebSocket and SSE removed - using polling only
 
 export interface ValidationState {
   id: string;
@@ -125,7 +125,7 @@ export class ValidationStateService {
     await this.persistState();
     this.notifyListeners();
 
-    // Broadcast state changes via WebSocket
+    // State changes are handled via polling
     this.broadcastStateChange();
 
     return this.currentState;
@@ -405,13 +405,14 @@ export class ValidationStateService {
   }
 
   /**
-   * Broadcast state changes via WebSocket
+   * Broadcast state changes (polling only)
    */
   private broadcastStateChange(): void {
-    if (!this.currentState || !validationWebSocket) return;
+    if (!this.currentState) return;
 
     try {
-      validationWebSocket.broadcastStateChange({
+      // State changes are handled via polling - no real-time broadcasting
+      console.log('State change broadcasted (polling only):', {
         type: 'validation-state-update',
         data: this.currentState
       });

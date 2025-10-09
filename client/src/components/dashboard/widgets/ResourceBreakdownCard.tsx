@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Database, RefreshCw, ExternalLink } from 'lucide-react';
-import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
+import { useDashboard } from '@/contexts/DashboardContext';
 import { useLocation } from 'wouter';
 
 interface ResourceBreakdownCardProps {
@@ -22,7 +22,7 @@ export const ResourceBreakdownCard: React.FC<ResourceBreakdownCardProps> = ({
     resourceBreakdownLoading,
     resourceBreakdownError,
     refreshResourceBreakdown,
-  } = useDashboardDataWiring();
+  } = useDashboard();
 
   const [, setLocation] = useLocation();
 

@@ -33,7 +33,7 @@ vi.mock('../../../services/validation', () => ({
   }
 }));
 
-vi.mock('../../../services/validation/settings/validation-settings-service-simplified', () => ({
+vi.mock('../../../services/validation/settings/validation-settings-service', () => ({
   getValidationSettingsService: vi.fn()
 }));
 

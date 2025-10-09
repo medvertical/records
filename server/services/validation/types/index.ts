@@ -25,7 +25,6 @@ export type {
   ValidationMetrics,
   ValidationControlsActions,
   StartValidationOptions,
-  ValidationWebSocketMessage,
   ValidationProgressMessage,
   ValidationCompletedMessage,
   ValidationErrorMessage,

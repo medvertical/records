@@ -12,21 +12,15 @@ vi.mock('../api/validation', () => ({
   getValidationStatus: vi.fn(),
 }))
 
-// Mock the SSE hook
-const mockSSE = {
-  isConnected: true,
-  isValidating: false,
-  progress: 0,
-  status: 'idle',
+// Mock the polling hook
+const mockPolling = {
+  data: null,
+  isLoading: false,
   error: null,
-  connect: vi.fn(),
-  disconnect: vi.fn(),
-  setProgress: vi.fn(),
-  setStatus: vi.fn(),
 }
 
-vi.mock('./use-validation-sse', () => ({
-  useValidationSSE: () => mockSSE,
+vi.mock('./use-validation-polling', () => ({
+  useValidationPolling: () => mockPolling,
 }))
 
 describe('useValidationControls', () => {

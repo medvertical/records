@@ -2,7 +2,7 @@ import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, Bell, Settings } from 'lucide-react';
-import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
+import { useDashboard } from '@/contexts/DashboardContext';
 import { BaseDashboardCard, LoadingCard, ErrorCard } from './BaseDashboardCard';
 import type { DashboardWidgetProps } from '@/types/dashboard';
 
@@ -12,7 +12,7 @@ import type { DashboardWidgetProps } from '@/types/dashboard';
 export const AlertCard: React.FC<DashboardWidgetProps> = ({
   className,
 }) => {
-  const { alerts, isLoading, hasErrors, refreshAlerts } = useDashboardDataWiring();
+  const { alerts, isLoading, hasErrors, refreshAlerts } = useDashboard();
 
   if (isLoading) {
     return <LoadingCard title="Alerts" icon={Bell} className={className} />;

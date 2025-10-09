@@ -12,9 +12,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ValidationSettingsTab } from './validation-settings-tab-simplified';
+import { ValidationSettingsTab } from './validation-settings-tab';
 import { ValidationAspectsPanel } from '@/components/dashboard/controls/ValidationAspectsPanel';
-import { DEFAULT_VALIDATION_SETTINGS } from '@shared/validation-settings-simplified';
+import { DEFAULT_VALIDATION_SETTINGS } from '@shared/validation-settings';
 
 // Mock fetch globally
 global.fetch = vi.fn();

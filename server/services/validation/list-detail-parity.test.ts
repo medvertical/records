@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { storage } from '../../storage';
-import { getValidationSettingsService } from './settings/validation-settings-service-simplified';
+import { getValidationSettingsService } from './settings/validation-settings-service';
 
 // Mock dependencies
 vi.mock('../../storage', () => ({
@@ -21,7 +21,7 @@ vi.mock('../../storage', () => ({
   }
 }));
 
-vi.mock('./settings/validation-settings-service-simplified', () => ({
+vi.mock('./settings/validation-settings-service', () => ({
   getValidationSettingsService: vi.fn(() => ({
     getActiveSettings: vi.fn()
   }))

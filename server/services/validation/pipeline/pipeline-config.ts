@@ -5,8 +5,8 @@
  */
 
 import { EventEmitter } from 'events';
-import { getValidationSettingsService } from '../settings/validation-settings-service-simplified';
-import type { ValidationSettings } from '@shared/validation-settings-simplified';
+import { getValidationSettingsService } from '../settings/validation-settings-service';
+import type { ValidationSettings } from '@shared/validation-settings';
 import { ValidationPipelineConfig } from './pipeline-types';
 
 // ============================================================================

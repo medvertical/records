@@ -1,3 +1,10 @@
+/**
+ * Validation Settings Tab - MVP Version
+ * 
+ * This component provides a minimal interface for validation settings
+ * with only essential features: 6 validation aspects, performance settings, and resource type filtering.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,6 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
+import { useActiveServer } from '@/hooks/use-active-server';
 import { 
   Settings, 
   CheckCircle, 
@@ -16,299 +24,200 @@ import {
   Loader2,
   Save,
   RefreshCw,
-  TestTube,
-  Shield,
-  Eye,
-  TrendingUp,
-  TrendingDown,
-  Info
+  Server,
+  Database,
+  Zap,
+  Users
 } from 'lucide-react';
-
-// ============================================================================
-// Types
-// ============================================================================
-
-interface ValidationSettings {
-  aspects: {
-    structural: { enabled: boolean; severity: 'error' | 'warning' | 'information' };
-    profile: { enabled: boolean; severity: 'warning' | 'information' };
-    terminology: { enabled: boolean; severity: 'warning' | 'information' };
-    reference: { enabled: boolean; severity: 'error' | 'warning' | 'information' };
-    businessRule: { enabled: boolean; severity: 'error' | 'warning' | 'information' };
-    metadata: { enabled: boolean; severity: 'error' | 'warning' | 'information' };
-  };
-  strictMode: boolean;
-  maxConcurrentValidations: number;
-  timeoutMs: number;
-  memoryLimitMB: number;
-}
-
-interface ValidationSettingsTabProps {
-  onSettingsChange?: (settings: ValidationSettings) => void;
-}
+import type { 
+  ValidationSettings, 
+  ValidationSettingsUpdate,
+  FHIRVersion 
+} from '@shared/validation-settings';
 
 // ============================================================================
 // Component
 // ============================================================================
 
-export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTabProps) {
+export function ValidationSettingsTab() {
   const { toast } = useToast();
+  const { activeServer } = useActiveServer();
   
-  // State management
-  const [validationSettings, setValidationSettings] = useState<ValidationSettings>({
-    aspects: {
-      structural: { enabled: true, severity: 'error' },
-      profile: { enabled: true, severity: 'warning' },
-      terminology: { enabled: true, severity: 'warning' },
-      reference: { enabled: true, severity: 'error' },
-      businessRule: { enabled: true, severity: 'error' },
-      metadata: { enabled: true, severity: 'error' }
-    },
-    strictMode: false,
-    maxConcurrentValidations: 8,
-    timeoutMs: 30000,
-    memoryLimitMB: 512
-  });
-
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [previewData, setPreviewData] = useState<any>(null);
+  // State
+  const [settings, setSettings] = useState<ValidationSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [fhirVersion, setFhirVersion] = useState<FHIRVersion>('R4');
+  const [availableResourceTypes, setAvailableResourceTypes] = useState<string[]>([]);
+  const [showMigrationWarning, setShowMigrationWarning] = useState(false);
+  const [originalFhirVersion, setOriginalFhirVersion] = useState<FHIRVersion>('R4');
 
   // Load settings on mount
   useEffect(() => {
-    loadValidationSettings();
-  }, []);
+    loadSettings();
+  }, [activeServer]);
 
-  // Notify parent of changes
+  // Load available resource types when FHIR version changes
   useEffect(() => {
-    onSettingsChange?.(validationSettings);
-  }, [validationSettings, onSettingsChange]);
+    if (fhirVersion) {
+      loadResourceTypes(fhirVersion);
+    }
+  }, [fhirVersion]);
 
-  // ========================================================================
-  // Data Loading
-  // ========================================================================
-
-  const loadValidationSettings = async () => {
-    setIsLoading(true);
+  const loadSettings = async () => {
     try {
-      const response = await fetch('/api/validation-settings');
-      if (response.ok) {
-        const data = await response.json();
-        setValidationSettings(data);
+      setLoading(true);
+      const serverId = activeServer?.id;
+      const response = await fetch(`/api/validation/settings${serverId ? `?serverId=${serverId}` : ''}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to load settings');
+      }
+      
+      const data = await response.json();
+      setSettings(data);
+      
+      // Extract FHIR version from settings or default to R4
+      if (data.resourceTypes?.fhirVersion) {
+        setFhirVersion(data.resourceTypes.fhirVersion);
+        setOriginalFhirVersion(data.resourceTypes.fhirVersion);
       }
     } catch (error) {
-      console.error('Failed to load validation settings:', error);
+      console.error('Error loading settings:', error);
       toast({
-        title: "Error",
-        description: "Failed to load validation settings",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to load validation settings',
+        variant: 'destructive'
       });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  // ========================================================================
-  // Settings Updates
-  // ========================================================================
+  const loadResourceTypes = async (version: FHIRVersion) => {
+    try {
+      const response = await fetch(`/api/validation/resource-types/${version}`);
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableResourceTypes(data.resourceTypes || []);
+      }
+    } catch (error) {
+      console.error('Error loading resource types:', error);
+    }
+  };
 
-  const updateValidationAspect = (aspect: keyof ValidationSettings['aspects'], field: string, value: any) => {
-    setValidationSettings(prev => ({
-      ...prev,
+  const saveSettings = async () => {
+    if (!settings) return;
+    
+    try {
+      setSaving(true);
+      const serverId = activeServer?.id;
+      const response = await fetch(`/api/validation/settings${serverId ? `?serverId=${serverId}` : ''}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(settings)
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to save settings');
+      }
+      
+      toast({
+        title: 'Success',
+        description: 'Validation settings saved successfully'
+      });
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to save validation settings',
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetToDefaults = async () => {
+    try {
+      setSaving(true);
+      const serverId = activeServer?.id;
+      const response = await fetch('/api/validation/settings/reset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          serverId,
+          fhirVersion 
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to reset settings');
+      }
+      
+      const data = await response.json();
+      setSettings(data);
+      
+      toast({
+        title: 'Success',
+        description: 'Settings reset to defaults'
+      });
+    } catch (error) {
+      console.error('Error resetting settings:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to reset settings',
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateAspect = (aspectKey: keyof ValidationSettings['aspects'], field: 'enabled' | 'severity', value: any) => {
+    if (!settings) return;
+    
+    setSettings({
+      ...settings,
       aspects: {
-        ...prev.aspects,
-        [aspect]: {
-          ...prev.aspects[aspect],
+        ...settings.aspects,
+        [aspectKey]: {
+          ...settings.aspects[aspectKey],
           [field]: value
         }
       }
-    }));
-  };
-
-  const updateGeneralSetting = (field: keyof ValidationSettings, value: any) => {
-    setValidationSettings(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const saveValidationSettings = async () => {
-    setIsSaving(true);
-    try {
-      const response = await fetch('/api/validation-settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(validationSettings),
-      });
-
-      if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Validation settings saved successfully",
-        });
-      } else {
-        throw new Error('Failed to save settings');
-      }
-    } catch (error) {
-      console.error('Failed to save validation settings:', error);
-      toast({
-        title: "Error",
-        description: "Failed to save validation settings",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const testValidationSettings = async () => {
-    try {
-      const response = await fetch('/api/validation/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(validationSettings),
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        setPreviewData(result);
-        toast({
-          title: "Test Complete",
-          description: "Validation settings tested successfully",
-        });
-      } else {
-        throw new Error('Test failed');
-      }
-    } catch (error) {
-      console.error('Failed to test validation settings:', error);
-      toast({
-        title: "Test Failed",
-        description: "Failed to test validation settings",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const resetToDefaults = () => {
-    setValidationSettings({
-      aspects: {
-        structural: { enabled: true, severity: 'error' },
-        profile: { enabled: true, severity: 'warning' },
-        terminology: { enabled: true, severity: 'warning' },
-        reference: { enabled: true, severity: 'error' },
-        businessRule: { enabled: true, severity: 'error' },
-        metadata: { enabled: true, severity: 'error' }
-      },
-      strictMode: false,
-      maxConcurrentValidations: 8,
-      timeoutMs: 30000,
-      memoryLimitMB: 512
     });
   };
 
-  // ========================================================================
-  // Render Helpers
-  // ========================================================================
-
-  const getSeverityIcon = (severity: string) => {
-    switch (severity) {
-      case 'error': return <XCircle className="h-4 w-4 text-red-500" />;
-      case 'warning': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-      case 'information': return <Info className="h-4 w-4 text-blue-500" />;
-      default: return <Info className="h-4 w-4 text-gray-500" />;
-    }
-  };
-
-  const getSeverityBadge = (severity: string) => {
-    const variants = {
-      error: 'destructive' as const,
-      warning: 'secondary' as const,
-      information: 'outline' as const
-    };
+  const updatePerformance = (field: keyof ValidationSettings['performance'], value: number) => {
+    if (!settings) return;
     
-    return (
-      <Badge variant={variants[severity as keyof typeof variants] || 'outline'}>
-        {severity}
-      </Badge>
-    );
+    setSettings({
+      ...settings,
+      performance: {
+        ...settings.performance,
+        [field]: value
+      }
+    });
   };
 
-  const renderValidationAspect = (
-    aspect: keyof ValidationSettings['aspects'],
-    title: string,
-    description: string,
-    icon: React.ReactNode
-  ) => {
-    const aspectSettings = validationSettings.aspects[aspect] as any;
+  const updateResourceTypes = (field: keyof ValidationSettings['resourceTypes'], value: any) => {
+    if (!settings) return;
     
-    return (
-      <Card key={aspect}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {icon}
-            {title}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor={`${aspect}-enabled`}>Enable {title}</Label>
-              <p className="text-sm text-muted-foreground">{description}</p>
-            </div>
-            <Switch
-              id={`${aspect}-enabled`}
-              checked={aspectSettings.enabled}
-              onCheckedChange={(checked) => updateValidationAspect(aspect, 'enabled', checked)}
-            />
-          </div>
-          
-          {aspectSettings.enabled && (
-            <div className="space-y-2">
-              <Label htmlFor={`${aspect}-severity`}>Severity Level</Label>
-              <Select
-                value={aspectSettings.severity}
-                onValueChange={(value) => updateValidationAspect(aspect, 'severity', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="error">
-                    <div className="flex items-center gap-2">
-                      {getSeverityIcon('error')}
-                      Error
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="warning">
-                    <div className="flex items-center gap-2">
-                      {getSeverityIcon('warning')}
-                      Warning
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="information">
-                    <div className="flex items-center gap-2">
-                      {getSeverityIcon('information')}
-                      Information
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    );
+    setSettings({
+      ...settings,
+      resourceTypes: {
+        ...settings.resourceTypes,
+        [field]: value
+      }
+    });
   };
 
-  // ========================================================================
-  // Render
-  // ========================================================================
-
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -317,135 +226,267 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
     );
   }
 
+  if (!settings) {
+    return (
+      <Alert>
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription>
+          Failed to load validation settings. Please try refreshing the page.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Real-time Preview Card */}
-      {previewData && (
-        <Card className="border-blue-200 bg-blue-50/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-blue-900">
-              <TestTube className="h-5 w-5" />
-              Validation Test Results
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
-                <span className="text-sm">Passed: {previewData.passed || 0}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <XCircle className="h-4 w-4 text-red-500" />
-                <span className="text-sm">Failed: {previewData.failed || 0}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                <span className="text-sm">Warnings: {previewData.warnings || 0}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Validation Aspects */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium">Validation Aspects</h3>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={testValidationSettings}
-              disabled={isSaving}
-            >
-              <TestTube className="h-4 w-4 mr-2" />
-              Test Settings
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={resetToDefaults}
-              disabled={isSaving}
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Reset Defaults
-            </Button>
-          </div>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Validation Settings</h2>
+          <p className="text-muted-foreground">
+            Configure validation aspects, performance, and resource type filtering
+          </p>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {renderValidationAspect(
-            'structural',
-            'Structural Validation',
-            'Validates FHIR resource structure and required fields',
-            <Shield className="h-5 w-5" />
-          )}
-          
-          {renderValidationAspect(
-            'profile',
-            'Profile Validation',
-            'Validates against FHIR profiles and constraints',
-            <Settings className="h-5 w-5" />
-          )}
-          
-          {renderValidationAspect(
-            'terminology',
-            'Terminology Validation',
-            'Validates code systems and value sets',
-            <Eye className="h-5 w-5" />
-          )}
-          
-          {renderValidationAspect(
-            'reference',
-            'Reference Validation',
-            'Validates resource references and integrity',
-            <TrendingUp className="h-5 w-5" />
-          )}
-          
-          {renderValidationAspect(
-            'businessRule',
-            'Business Rule Validation',
-            'Validates custom business rules and constraints',
-            <TrendingDown className="h-5 w-5" />
-          )}
-          
-          {renderValidationAspect(
-            'metadata',
-            'Metadata Validation',
-            'Validates resource metadata and timestamps',
-            <Info className="h-5 w-5" />
-          )}
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={resetToDefaults}
+            disabled={saving}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Reset Defaults
+          </Button>
+          <Button
+            onClick={saveSettings}
+            disabled={saving}
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Save Settings
+          </Button>
         </div>
       </div>
 
-      {/* General Settings */}
+      {/* FHIR Version & Resource Types */}
       <Card>
         <CardHeader>
-          <CardTitle>General Settings</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            Resource Type Filtering
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label htmlFor="strict-mode">Strict Mode</Label>
-              <p className="text-sm text-muted-foreground">
-                Enable strict validation mode for enhanced compliance checking
-              </p>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="fhir-version">FHIR Version</Label>
+              <Select
+                value={fhirVersion}
+                onValueChange={(value: FHIRVersion) => {
+                  if (value !== originalFhirVersion) {
+                    setShowMigrationWarning(true);
+                  }
+                  setFhirVersion(value);
+                  updateResourceTypes('fhirVersion', value);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select FHIR version" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="R4">R4</SelectItem>
+                  <SelectItem value="R5">R5</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <Switch
-              id="strict-mode"
-              checked={validationSettings.strictMode}
-              onCheckedChange={(checked) => updateGeneralSetting('strictMode', checked)}
-            />
+            
+            <div className="space-y-2">
+              <Label htmlFor="resource-filtering">Resource Type Filtering</Label>
+              <Select
+                value={settings.resourceTypes.enabled ? 'enabled' : 'disabled'}
+                onValueChange={(value) => updateResourceTypes('enabled', value === 'enabled')}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select filtering mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="disabled">Disabled (Validate All)</SelectItem>
+                  <SelectItem value="enabled">Enabled (Filter Types)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          <Separator />
+          {showMigrationWarning && (
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                <div className="space-y-2">
+                  <p>
+                    <strong>FHIR Version Change Detected:</strong> You've changed from FHIR {originalFhirVersion} to FHIR {fhirVersion}.
+                  </p>
+                  <p>
+                    This may affect your resource type filtering. Resource types that don't exist in FHIR {fhirVersion} will be automatically removed.
+                  </p>
+                  <div className="flex gap-2 mt-3">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setFhirVersion(originalFhirVersion);
+                        updateResourceTypes('fhirVersion', originalFhirVersion);
+                        setShowMigrationWarning(false);
+                      }}
+                    >
+                      Revert to {originalFhirVersion}
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => setShowMigrationWarning(false)}
+                    >
+                      Continue with {fhirVersion}
+                    </Button>
+                  </div>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {settings.resourceTypes.enabled && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Available Resource Types ({availableResourceTypes.length})</Label>
+                <Badge variant="outline" className="flex items-center gap-1">
+                  <Server className="h-3 w-3" />
+                  FHIR {fhirVersion}
+                </Badge>
+              </div>
+              
+              {availableResourceTypes.length === 0 && (
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    No resource types available for FHIR {fhirVersion}. Please check your FHIR server connection.
+                  </AlertDescription>
+                </Alert>
+              )}
+              
+              {availableResourceTypes.length > 0 && (
+                <>
+                  <div className="max-h-32 overflow-y-auto border rounded-md p-2">
+                    <div className="flex flex-wrap gap-1">
+                      {availableResourceTypes.map((type) => (
+                        <Badge
+                          key={type}
+                          variant={settings.resourceTypes.includedTypes?.includes(type) ? 'default' : 'outline'}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            const included = settings.resourceTypes.includedTypes || [];
+                            const newIncluded = included.includes(type)
+                              ? included.filter(t => t !== type)
+                              : [...included, type];
+                            updateResourceTypes('includedTypes', newIncluded);
+                          }}
+                        >
+                          {type}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {settings.resourceTypes.includedTypes && settings.resourceTypes.includedTypes.length === 0 && (
+                    <Alert>
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>
+                        No resource types selected. All resources will be validated.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  
+                  <p className="text-sm text-muted-foreground">
+                    Click resource types to include/exclude them from validation
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Validation Aspects */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5" />
+            Validation Aspects
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {Object.entries(settings.aspects).map(([aspectKey, aspect]) => (
+            <div key={aspectKey} className="flex items-center justify-between p-3 border rounded-lg">
+              <div className="flex items-center gap-3">
+                <Switch
+                  checked={aspect.enabled}
+                  onCheckedChange={(checked) => updateAspect(aspectKey as keyof ValidationSettings['aspects'], 'enabled', checked)}
+                />
+                <div>
+                  <Label className="font-medium capitalize">
+                    {aspectKey.replace(/([A-Z])/g, ' $1').trim()}
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    {getAspectDescription(aspectKey)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant={aspect.enabled ? 'default' : 'secondary'}>
+                  {aspect.enabled ? (
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                  ) : (
+                    <XCircle className="h-3 w-3 mr-1" />
+                  )}
+                  {aspect.enabled ? 'Enabled' : 'Disabled'}
+                </Badge>
+                {aspect.enabled && (
+                  <Select
+                    value={aspect.severity}
+                    onValueChange={(value: 'error' | 'warning' | 'info') => 
+                      updateAspect(aspectKey as keyof ValidationSettings['aspects'], 'severity', value)
+                    }
+                  >
+                    <SelectTrigger className="w-24">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="error">Error</SelectItem>
+                      <SelectItem value="warning">Warning</SelectItem>
+                      <SelectItem value="info">Info</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {/* Performance Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Zap className="h-5 w-5" />
+            Performance Settings
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="max-concurrent">Max Concurrent Validations</Label>
               <Select
-                value={validationSettings.maxConcurrentValidations.toString()}
-                onValueChange={(value) => updateGeneralSetting('maxConcurrentValidations', parseInt(value))}
+                value={settings.performance.maxConcurrent.toString()}
+                onValueChange={(value) => updatePerformance('maxConcurrent', parseInt(value))}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -458,63 +499,52 @@ export function ValidationSettingsTab({ onSettingsChange }: ValidationSettingsTa
                   <SelectItem value="16">16</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-sm text-muted-foreground">
+                Number of resources to validate simultaneously
+              </p>
             </div>
-
+            
             <div className="space-y-2">
-              <Label htmlFor="timeout">Timeout (ms)</Label>
+              <Label htmlFor="batch-size">Batch Size</Label>
               <Select
-                value={validationSettings.timeoutMs.toString()}
-                onValueChange={(value) => updateGeneralSetting('timeoutMs', parseInt(value))}
+                value={settings.performance.batchSize.toString()}
+                onValueChange={(value) => updatePerformance('batchSize', parseInt(value))}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="5000">5 seconds</SelectItem>
-                  <SelectItem value="15000">15 seconds</SelectItem>
-                  <SelectItem value="30000">30 seconds</SelectItem>
-                  <SelectItem value="60000">1 minute</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                  <SelectItem value="250">250</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="memory-limit">Memory Limit (MB)</Label>
-              <Select
-                value={validationSettings.memoryLimitMB.toString()}
-                onValueChange={(value) => updateGeneralSetting('memoryLimitMB', parseInt(value))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="256">256 MB</SelectItem>
-                  <SelectItem value="512">512 MB</SelectItem>
-                  <SelectItem value="1024">1 GB</SelectItem>
-                  <SelectItem value="2048">2 GB</SelectItem>
-                </SelectContent>
-              </Select>
+              <p className="text-sm text-muted-foreground">
+                Number of resources to process in each batch
+              </p>
             </div>
           </div>
         </CardContent>
       </Card>
-
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <Button onClick={saveValidationSettings} disabled={isSaving}>
-          {isSaving ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              Save Settings
-            </>
-          )}
-        </Button>
-      </div>
     </div>
   );
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+function getAspectDescription(aspectKey: string): string {
+  const descriptions: Record<string, string> = {
+    structural: 'Validates FHIR resource structure and required fields',
+    profile: 'Validates against FHIR profiles and extensions',
+    terminology: 'Validates terminology bindings and code systems',
+    reference: 'Validates resource references and relationships',
+    businessRule: 'Validates business rules and constraints',
+    metadata: 'Validates metadata and administrative information'
+  };
+  
+  return descriptions[aspectKey] || 'Validation aspect';
 }

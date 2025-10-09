@@ -547,7 +547,7 @@ export function ServerManagementTab({ onServersChange }: ServerManagementTabProp
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {servers.map(renderServerCard)}
+            {servers && Array.isArray(servers) ? servers.map(renderServerCard) : []}
           </div>
         )}
       </div>

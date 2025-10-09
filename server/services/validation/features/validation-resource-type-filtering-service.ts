@@ -8,8 +8,8 @@
 
 import { EventEmitter } from 'events';
 import { getValidationSettingsService } from '../settings';
-import type { ValidationSettings } from '@shared/validation-settings-simplified';
-import { COMMON_FHIR_RESOURCE_TYPES } from '@shared/validation-settings-simplified';
+import type { ValidationSettings } from '@shared/validation-settings';
+import { COMMON_FHIR_RESOURCE_TYPES } from '@shared/validation-settings';
 
 export interface ResourceTypeFilter {
   enabled: boolean;

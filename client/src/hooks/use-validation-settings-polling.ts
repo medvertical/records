@@ -11,7 +11,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from './use-toast';
 import { usePolling } from './use-polling';
-import type { ValidationSettings } from '@shared/validation-settings-simplified';
+import type { ValidationSettings } from '@shared/validation-settings';
 
 export interface ValidationSettingsPollingOptions {
   /** Polling interval in milliseconds */

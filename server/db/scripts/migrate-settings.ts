@@ -3,8 +3,8 @@ import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import { validationSettings } from '../../../shared/schema';
 import { eq } from 'drizzle-orm';
-import type { ValidationSettings } from '../../../shared/validation-settings-simplified';
-import { DEFAULT_VALIDATION_SETTINGS } from '../../../shared/validation-settings-simplified';
+import type { ValidationSettings } from '../../../shared/validation-settings';
+import { DEFAULT_VALIDATION_SETTINGS_R4 } from '../../../shared/validation-settings';
 
 dotenv.config();
 

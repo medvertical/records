@@ -18,7 +18,7 @@ import {
   WifiOff
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useValidationSSE } from "@/hooks/use-validation-sse";
+import { useValidationPolling } from "@/hooks/use-validation-polling";
 
 interface BulkValidationProgress {
   totalResources: number;
@@ -55,12 +55,13 @@ export default function ServerValidation() {
 
   // Use SSE for real-time validation updates
   const { 
-    isConnected: sseConnected, 
-    progress: sseProgress, 
-    validationStatus, 
-    lastError: sseError,
-    resetProgress 
-  } = useValidationSSE();
+    data: pollingData,
+    isLoading: pollingLoading,
+    error: pollingError
+  } = useValidationPolling({
+    enabled: true,
+    interval: 2000
+  });
 
   // Fallback to polling if SSE is not connected
   const { data: fallbackProgress, isLoading: progressLoading } = useQuery<BulkValidationProgress>({
@@ -70,8 +71,9 @@ export default function ServerValidation() {
     enabled: false, // Disable automatic fetching - only fetch manually
   });
 
-  // Use SSE progress if available, otherwise use fallback
-  const progress = sseConnected ? sseProgress : fallbackProgress;
+  // Use polling data if available, otherwise use fallback
+  const progress = pollingData?.progress || fallbackProgress;
+  const validationStatus = pollingData?.status || 'idle';
 
   // Query validation summary from backend
   const { data: summary, isLoading: summaryLoading, refetch: refetchSummary } = useQuery<ValidationSummary>({
@@ -199,15 +201,11 @@ export default function ServerValidation() {
             Server-Wide Validation
           </CardTitle>
           <div className="flex items-center gap-2">
-            {/* SSE Connection Indicator */}
+            {/* Connection Indicator */}
             <div className="flex items-center gap-1">
-              {sseConnected ? (
-                <Wifi className="h-3 w-3 text-green-600" />
-              ) : (
-                <WifiOff className="h-3 w-3 text-red-600" />
-              )}
+              <Wifi className="h-3 w-3 text-green-600" />
               <span className="text-xs text-gray-500">
-                {sseConnected ? 'Live' : 'Polling'}
+                Polling
               </span>
             </div>
             <Badge variant={getStatusColor() as any} className="ml-2">
@@ -307,7 +305,7 @@ export default function ServerValidation() {
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-blue-600" />
               <span className="text-sm font-medium text-gray-700">
-                Validation in Progress {sseConnected && '(Live Updates)'}
+                Validation in Progress
               </span>
             </div>
             
@@ -356,15 +354,15 @@ export default function ServerValidation() {
 
 
         {/* Errors (if any) */}
-        {(sseError || (progress?.errors && progress.errors.length > 0)) && (
+        {(pollingError || (progress?.errors && progress.errors.length > 0)) && (
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
               <div className="text-sm">
-                {sseError && (
+                {pollingError && (
                   <div className="mb-2">
                     <strong>Validation Error:</strong>
-                    <p className="text-xs text-gray-600">{sseError}</p>
+                    <p className="text-xs text-gray-600">{pollingError.message}</p>
                   </div>
                 )}
                 {progress?.errors && progress.errors.length > 0 && (

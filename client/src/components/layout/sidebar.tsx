@@ -4,7 +4,7 @@ import { useServerData } from "@/hooks/use-server-data";
 import type { ServerStatus } from "@/hooks/use-server-data";
 import { cn, formatCount } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import ServerConnectionModal from "@/components/settings/server-connection-modal";
 
@@ -168,7 +168,10 @@ function SidebarContent({
 }) {
   // Determine connection state for UI gating
   // Show "Checking..." only during initial connection test, otherwise show actual status
-  const isCheckingConnection = Boolean(activeServer && isConnectionLoading && !serverStatus);
+  const isCheckingConnection = useMemo(() => 
+    Boolean(activeServer && isConnectionLoading && !serverStatus), 
+    [activeServer, isConnectionLoading, serverStatus]
+  );
   const connectionLabel = isCheckingConnection
     ? "Connecting..."
     : isServerConnected
@@ -191,17 +194,17 @@ function SidebarContent({
         ? "text-fhir-error"
         : "text-fhir-error";
 
-  // Debug logging to see connection status changes
-  useEffect(() => {
-    console.log('[Sidebar] Connection status update:', {
-      activeServer: activeServer?.name || 'No active server',
-      isActive: activeServer?.isActive || false,
-      serverStatus: serverStatus || 'Not loaded yet',
-      isServerConnected: isServerConnected || false,
-      isConnectionLoading: isConnectionLoading || false,
-      isCheckingConnection: isCheckingConnection || false
-    });
-  }, [activeServer?.id, serverStatus, isServerConnected, isConnectionLoading, isCheckingConnection]);
+  // Debug logging to see connection status changes - temporarily disabled to fix infinite loop
+  // useEffect(() => {
+  //   console.log('[Sidebar] Connection status update:', {
+  //     activeServer: activeServer?.name || 'No active server',
+  //     isActive: activeServer?.isActive || false,
+  //     serverStatus: serverStatus || 'Not loaded yet',
+  //     isServerConnected: isServerConnected || false,
+  //     isConnectionLoading: isConnectionLoading || false,
+  //     isCheckingConnection: isCheckingConnection || false
+  //   });
+  // }, [activeServer?.id, serverStatus, isServerConnected, isConnectionLoading, isCheckingConnection]);
 
   // Get the current location to make the component reactive to URL changes
   const [currentLocation] = useLocation();

@@ -25,7 +25,7 @@ export {
 } from './connection-testing';
 
 // Settings tab components (simplified)
-export { ValidationSettingsTab } from './validation-settings-tab-simplified';
+export { ValidationSettingsTab } from './validation-settings-tab';
 export { ServerManagementTab } from './server-management-tab';
 export { DashboardSettingsTab } from './dashboard-settings-tab';
 export { SystemSettingsTab } from './system-settings-tab';

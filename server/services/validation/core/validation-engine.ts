@@ -12,14 +12,14 @@ import { TerminologyValidator } from '../engine/terminology-validator';
 import { ReferenceValidator } from '../engine/reference-validator';
 import { BusinessRuleValidator } from '../engine/business-rule-validator';
 import { MetadataValidator } from '../engine/metadata-validator';
-import { getValidationSettingsService } from '../settings/validation-settings-service-simplified';
+import { getValidationSettingsService } from '../settings/validation-settings-service';
 import { FhirClient } from '../../fhir/fhir-client';
 import { TerminologyClient } from '../../fhir/terminology-client';
 import type {
   ValidationSettings,
   ValidationAspect,
   ValidationSeverity
-} from '@shared/validation-settings-simplified';
+} from '@shared/validation-settings';
 import type {
   ValidationRequest,
   ValidationAspectResult,
@@ -71,7 +71,7 @@ export class ValidationEngine extends EventEmitter {
     
     try {
       // Get validation settings
-      const settings = request.settings || await this.settingsService.getSettings();
+      const settings = request.settings || await this.settingsService.getCurrentSettings();
       
       const aspectsToExecute = this.resolveRequestedAspects(settings, request.aspects);
       
@@ -198,7 +198,7 @@ export class ValidationEngine extends EventEmitter {
     if (settings.aspects?.reference?.enabled) {
       enabledAspects.add('reference');
     }
-    if (settings.aspects?.businessRule?.enabled) {
+    if (settings.aspects?.businessRules?.enabled) {
       enabledAspects.add('businessRule');
     }
     if (settings.aspects?.metadata?.enabled) {

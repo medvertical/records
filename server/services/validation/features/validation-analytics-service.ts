@@ -7,7 +7,7 @@
 
 import { EventEmitter } from 'events';
 import { storage } from '../../../storage';
-import { getValidationSettingsService } from '../settings/validation-settings-service-simplified';
+import { getValidationSettingsService } from '../settings/validation-settings-service';
 import { getIndividualResourceProgressService } from './individual-resource-progress-service';
 import { getValidationPollingService } from './validation-polling-service';
 

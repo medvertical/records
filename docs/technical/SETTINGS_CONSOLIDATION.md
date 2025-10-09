@@ -130,7 +130,7 @@ console.warn('DEPRECATED: validation-settings.ts is deprecated. Use validation-s
 ### Phase 2: Update All Imports (Completed in Core)
 All critical paths now use:
 ```typescript
-import { ValidationSettings } from '@shared/validation-settings-simplified';
+import { ValidationSettings } from '@shared/validation-settings';
 ```
 
 ### Phase 3: Remove Legacy Code (Deferred)
@@ -152,7 +152,7 @@ import { ValidationSettings } from '@shared/validation-settings-simplified';
 ### ✅ Correct (Use These)
 ```typescript
 // Shared types
-import { ValidationSettings } from '@shared/validation-settings-simplified';
+import { ValidationSettings } from '@shared/validation-settings';
 
 // Server service
 import { getValidationSettingsService } from '../../../services/validation/settings/validation-settings-service-simplified';

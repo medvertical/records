@@ -3,12 +3,12 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ValidationAspectsPanel } from './ValidationAspectsPanel';
 import { useValidationSettingsIntegration } from '@/lib/validation-settings-integration';
-import { useValidationSettingsChangeDetection } from '@/lib/validation-settings-change-detector';
+// Change detection is now handled by the settings hook
 
 // Mock all the hooks and utilities
 vi.mock('@/lib/validation-settings-integration');
-vi.mock('@/lib/validation-settings-change-detector');
-vi.mock('@/lib/validation-settings-validator');
+// Change detection is now handled by the settings hook
+// Validation is now handled by the settings hook
 vi.mock('./ValidationSettingsErrors', () => ({
   default: ({ validationResult }: { validationResult: any }) => (
     <div data-testid="validation-settings-errors">
@@ -26,7 +26,7 @@ vi.mock('./ValidationSettingsChanges', () => ({
 
 describe('ValidationAspectsPanel', () => {
   const mockUseValidationSettingsIntegration = vi.mocked(useValidationSettingsIntegration);
-  const mockUseValidationSettingsChangeDetection = vi.mocked(useValidationSettingsChangeDetection);
+  // Change detection is now handled by the settings hook
 
   const defaultMockSettings = {
     settings: {
@@ -109,39 +109,15 @@ describe('ValidationAspectsPanel', () => {
     }),
   };
 
-  const defaultMockChangeDetection = {
-    hasChanges: false,
-    changes: [],
-    pendingChanges: [],
-    isDirty: false,
-    canUndo: false,
-    canRedo: false,
-    lastChangeTime: null,
-    changeCount: 0,
-    undo: vi.fn(),
-    redo: vi.fn(),
-    reset: vi.fn(),
-    applyChanges: vi.fn(),
-    discardChanges: vi.fn(),
-    getChangeSummary: vi.fn(() => ({})),
-    getAffectedAreas: vi.fn(() => []),
-  };
+  // Change detection is now handled by the settings hook
 
   beforeEach(() => {
     vi.clearAllMocks();
     
     mockUseValidationSettingsIntegration.mockReturnValue(defaultMockSettings);
-    mockUseValidationSettingsChangeDetection.mockReturnValue(defaultMockChangeDetection);
+    // Change detection is now handled by the settings hook
 
-    // Mock validation settings validator
-    vi.mocked(require('@/lib/validation-settings-validator').ValidationSettingsValidatorUtils).mockReturnValue({
-      validate: vi.fn(() => ({
-        isValid: true,
-        errors: [],
-        warnings: [],
-        normalizedSettings: null,
-      })),
-    });
+    // Validation is now handled by the settings hook
   });
 
   afterEach(() => {
@@ -391,9 +367,7 @@ describe('ValidationAspectsPanel', () => {
         normalizedSettings: null,
       };
 
-      vi.mocked(require('@/lib/validation-settings-validator').ValidationSettingsValidatorUtils).mockReturnValue({
-        validate: vi.fn(() => mockValidationResult),
-      });
+      // Validation is now handled by the settings hook
 
       render(<ValidationAspectsPanel showDetails={true} />);
       
@@ -409,9 +383,7 @@ describe('ValidationAspectsPanel', () => {
         normalizedSettings: null,
       };
 
-      vi.mocked(require('@/lib/validation-settings-validator').ValidationSettingsValidatorUtils).mockReturnValue({
-        validate: vi.fn(() => mockValidationResult),
-      });
+      // Validation is now handled by the settings hook
 
       render(<ValidationAspectsPanel showDetails={true} />);
       
@@ -427,9 +399,7 @@ describe('ValidationAspectsPanel', () => {
         normalizedSettings: null,
       };
 
-      vi.mocked(require('@/lib/validation-settings-validator').ValidationSettingsValidatorUtils).mockReturnValue({
-        validate: vi.fn(() => mockValidationResult),
-      });
+      // Validation is now handled by the settings hook
 
       render(<ValidationAspectsPanel showDetails={true} />);
       
@@ -553,9 +523,6 @@ describe('ValidationAspectsPanel', () => {
       render(<ValidationAspectsPanel />);
       
       expect(mockValidate).toHaveBeenCalledWith(defaultMockSettings.settings);
-    });
-  });
-});
     });
   });
 });

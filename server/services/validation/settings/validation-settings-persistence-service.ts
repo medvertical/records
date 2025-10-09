@@ -6,7 +6,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { ValidationSettings } from '@shared/validation-settings-simplified';
+import type { ValidationSettings } from '@shared/validation-settings';
 import { ValidationSettingsRepository } from '../../../repositories/validation-settings-repository-simplified';
 import { getActiveServerId, getActiveServer } from '../../../utils/server-scoping';
 

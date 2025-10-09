@@ -3,41 +3,25 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig({
-  plugins: [
-    react(),
-    // Disabled Replit plugins to prevent WebSocket connection errors
-    // runtimeErrorOverlay(),
-    // ...(process.env.NODE_ENV !== "production" &&
-    // process.env.REPL_ID !== undefined
-    //   ? [
-    //       await import("@replit/vite-plugin-cartographer").then((m) =>
-    //         m.cartographer(),
-    //       ),
-    //     ]
-    //   : []),
-  ],
+  plugins: [react()],
+  root: "client",
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+      "@": path.resolve(process.cwd(), "client/src"),
+      "@shared": path.resolve(process.cwd(), "shared"),
+      "@assets": path.resolve(process.cwd(), "attached_assets"),
     },
   },
-  root: path.resolve(import.meta.dirname, "client"),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    outDir: "../dist/public",
     emptyOutDir: true,
   },
   server: {
-    port: 5173,
-    host: '0.0.0.0',
-    fs: {
-      strict: true,
-      deny: ["**/.*"],
-    },
+    port: 5174,
+    host: "0.0.0.0",
     proxy: {
-      '/api': {
-        target: 'http://localhost:5175',
+      "/api": {
+        target: "http://localhost:3000",
         changeOrigin: true,
         secure: false,
       },

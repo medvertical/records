@@ -287,6 +287,14 @@ export function useDashboardDataWiring(
     resourceBreakdownError,
     refreshResourceBreakdown,
 
+    // Validation Polling Data
+    validationProgress,
+    validationConnected,
+    connectionState,
+    pollingError,
+    startPolling,
+    stopPolling,
+
     // Global State
     isLoading,
     hasErrors,

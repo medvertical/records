@@ -9,7 +9,7 @@
 import { EventEmitter } from 'events';
 import { storage } from '../../../storage';
 import { getValidationSettingsService } from '../settings';
-import type { ValidationSettings } from '@shared/validation-settings-simplified';
+import type { ValidationSettings } from '@shared/validation-settings';
 
 export interface CacheOverrideRequest {
   /** Resource IDs to revalidate */

@@ -39,7 +39,7 @@ export * from './pipeline';
 // Legacy services - To be migrated to new architecture
 export { ValidationSettingsBackupService } from './validation-settings-backup-service';
 export { ValidationSettingsError } from './validation-settings-errors';
-export { ValidationSettingsService } from './validation-settings-service';
+export { ValidationSettingsService } from './settings/validation-settings-service';
 
 // Types - Re-export commonly used types for convenience
 export type {

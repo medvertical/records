@@ -47,7 +47,7 @@ vi.mock('./features/validation-resource-type-filtering-service', () => ({
   })),
 }));
 
-vi.mock('../../settings/validation-settings-service-simplified', () => ({
+vi.mock('../../settings/validation-settings-service', () => ({
   getValidationSettingsService: vi.fn(() => ({
     getSettings: vi.fn().mockResolvedValue({
       resourceTypes: {

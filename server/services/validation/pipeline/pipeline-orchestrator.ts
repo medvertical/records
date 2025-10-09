@@ -6,9 +6,9 @@
 
 import { EventEmitter } from 'events';
 import { getValidationEngine } from '../core/validation-engine';
-import { getValidationSettingsService } from '../settings/validation-settings-service-simplified';
+import { getValidationSettingsService } from '../settings/validation-settings-service';
 import type { ValidationRequest, ValidationResult } from '../types/validation-types';
-import type { ValidationSettings } from '@shared/validation-settings-simplified';
+import type { ValidationSettings } from '@shared/validation-settings';
 import { ValidationPipelineConfig, ValidationPipelineRequest, ValidationPipelineResult, PipelineTimestamps } from './pipeline-types';
 
 // ============================================================================
@@ -130,16 +130,23 @@ export class PipelineOrchestrator extends EventEmitter {
         console.warn('[ValidationPipeline] Failed to load settings, using defaults:', error instanceof Error ? error.message : error);
         // Use default settings when database is unavailable
         settings = {
-          structural: { enabled: true, severity: 'error' },
-          profile: { enabled: true, severity: 'warning' },
-          terminology: { enabled: true, severity: 'warning' },
-          reference: { enabled: true, severity: 'error' },
-          businessRule: { enabled: true, severity: 'warning' },
-          metadata: { enabled: true, severity: 'info' },
-          maxConcurrentValidations: 5,
-          profileResolutionServers: [],
-          terminologyServers: [],
-          customRules: []
+          aspects: {
+            structural: { enabled: true, severity: 'error' },
+            profile: { enabled: true, severity: 'warning' },
+            terminology: { enabled: true, severity: 'warning' },
+            reference: { enabled: true, severity: 'error' },
+            businessRules: { enabled: true, severity: 'error' },
+            metadata: { enabled: true, severity: 'error' }
+          },
+          performance: {
+            maxConcurrent: 5,
+            batchSize: 50
+          },
+          resourceTypes: {
+            enabled: true,
+            includedTypes: [],
+            excludedTypes: []
+          }
         };
       }
       

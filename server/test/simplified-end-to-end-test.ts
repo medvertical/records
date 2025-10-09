@@ -7,7 +7,7 @@
 
 import { testResourceSuite } from './test-resources';
 import { ConsolidatedValidationService } from '../services/validation/core/consolidated-validation-service';
-import { ValidationSettingsService } from '../services/validation/validation-settings-service';
+import { ValidationSettingsService } from '../services/validation/settings/validation-settings-service';
 
 export interface SimplifiedEndToEndTestResult {
   testName: string;

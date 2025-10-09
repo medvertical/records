@@ -24,10 +24,8 @@ export { useDashboardState } from './use-dashboard-state';
 
 // Individual validation hooks (for direct imports)
 export { useValidationPolling } from './use-validation-polling';
-export { useValidationSSE } from './use-validation-sse';
 export { useValidationSettings } from './use-validation-settings';
 export { useValidationSettingsPolling } from './use-validation-settings-polling';
-export { useValidationSettingsRealTime } from './use-validation-settings-realtime';
 export { useValidationResults, useValidationResultsBatch } from './use-validation-results';
 export { useValidationAspects, useValidationAspectsForResource } from './use-validation-aspects';
 export { useValidationCompleteness } from './use-validation-completeness';

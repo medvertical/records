@@ -33,7 +33,6 @@
     "perf:test": "bash scripts/performance-test.sh",
     "test:validation": "vitest run server/services/validation/**/*.test.ts",
     "test:integration": "vitest run server/api/validation.integration.test.ts",
-    "test:e2e": "echo 'E2E tests not yet implemented. See docs/technical/TESTING_STRATEGY.md'",
     "test:integration-validation": "vitest run tests/integration/validation/",
     "test:shared": "vitest run shared/**/*.test.ts",
     "test:core": "vitest run server/services/validation/validation-engine.test.ts server/services/validation/core/**/*.test.ts",
@@ -155,7 +154,7 @@
     "tailwindcss": "^3.4.17",
     "tsx": "^4.20.5",
     "typescript": "^5.6.3",
-    "vite": "^5.4.20",
+    "vite": "^7.1.9",
     "vitest": "^1.3.1"
   }
 }

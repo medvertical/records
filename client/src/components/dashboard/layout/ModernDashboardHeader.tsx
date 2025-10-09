@@ -61,7 +61,7 @@ export const ModernDashboardHeader: React.FC<ModernDashboardHeaderProps> = ({
               </div>
             </div>
             
-            <div className="hidden lg:flex items-center space-x-4 pl-6 border-l border-border">
+            <div className="hidden lg:flex items-center space-x-4 pl-6 border-l border-gray-200">
               <div className="flex items-center space-x-2">
                 <Server className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium text-foreground">
@@ -137,7 +137,7 @@ export const ModernDashboardHeader: React.FC<ModernDashboardHeaderProps> = ({
         </div>
 
         {/* Mobile Server Info */}
-        <div className="lg:hidden mt-3 pt-3 border-t border-border">
+        <div className="lg:hidden mt-3 pt-3 border-t border-gray-200">
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center space-x-2">
               <Server className="h-4 w-4 text-muted-foreground" />

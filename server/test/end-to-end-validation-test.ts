@@ -7,7 +7,7 @@
 
 import { testResourceSuite } from './test-resources';
 import { ConsolidatedValidationService } from '../services/validation/core/consolidated-validation-service';
-import { ValidationSettingsService } from '../services/validation/validation-settings-service';
+import { ValidationSettingsService } from '../services/validation/settings/validation-settings-service';
 import { ValidationResultRepository } from '../repositories/validation-result-repository';
 import { db } from '../db';
 

@@ -39,21 +39,15 @@ vi.mock('../../hooks/use-validation-controls', () => ({
   useValidationControls: () => mockValidationControls
 }))
 
-// Mock the validation SSE hook
-const mockValidationSSE = {
-  isConnected: true,
-  isValidating: false,
-  progress: 0,
-  status: 'idle',
+// Mock the validation polling hook
+const mockValidationPolling = {
+  data: null,
+  isLoading: false,
   error: null,
-  connect: vi.fn(),
-  disconnect: vi.fn(),
-  setProgress: vi.fn(),
-  setStatus: vi.fn()
 }
 
-vi.mock('../../hooks/use-validation-sse', () => ({
-  useValidationSSE: () => mockValidationSSE
+vi.mock('../../hooks/use-validation-polling', () => ({
+  useValidationPolling: () => mockValidationPolling
 }))
 
 describe('ServerValidation', () => {
@@ -81,9 +75,9 @@ describe('ServerValidation', () => {
   })
 
   it('should display validation progress', () => {
-    mockValidationSSE.isValidating = true
-    mockValidationSSE.progress = 50
-    mockValidationSSE.status = 'running'
+    mockValidationPolling.isValidating = true
+    mockValidationPolling.progress = 50
+    mockValidationPolling.status = 'running'
 
     render(<ServerValidation />)
 
@@ -92,8 +86,8 @@ describe('ServerValidation', () => {
   })
 
   it('should display validation status', () => {
-    mockValidationSSE.status = 'paused'
-    mockValidationSSE.progress = 30
+    mockValidationPolling.status = 'paused'
+    mockValidationPolling.progress = 30
 
     render(<ServerValidation />)
 
@@ -102,7 +96,7 @@ describe('ServerValidation', () => {
   })
 
   it('should display connection status', () => {
-    mockValidationSSE.isConnected = true
+    mockValidationPolling.isConnected = true
 
     render(<ServerValidation />)
 
@@ -110,7 +104,7 @@ describe('ServerValidation', () => {
   })
 
   it('should display disconnected status', () => {
-    mockValidationSSE.isConnected = false
+    mockValidationPolling.isConnected = false
 
     render(<ServerValidation />)
 
@@ -118,7 +112,7 @@ describe('ServerValidation', () => {
   })
 
   it('should display error when validation fails', () => {
-    mockValidationSSE.error = 'Validation failed'
+    mockValidationPolling.error = 'Validation failed'
 
     render(<ServerValidation />)
 
@@ -216,7 +210,7 @@ describe('ServerValidation', () => {
   })
 
   it('should display progress bar with correct value', () => {
-    mockValidationSSE.progress = 75
+    mockValidationPolling.progress = 75
 
     render(<ServerValidation />)
 
@@ -228,8 +222,8 @@ describe('ServerValidation', () => {
     const states = ['idle', 'running', 'paused', 'completed', 'error']
 
     states.forEach(state => {
-      mockValidationSSE.status = state as any
-      mockValidationSSE.isValidating = state === 'running'
+      mockValidationPolling.status = state as any
+      mockValidationPolling.isValidating = state === 'running'
 
       const { unmount } = render(<ServerValidation />)
 
@@ -239,8 +233,8 @@ describe('ServerValidation', () => {
   })
 
   it('should display appropriate icons for different states', () => {
-    mockValidationSSE.isValidating = true
-    mockValidationSSE.status = 'running'
+    mockValidationPolling.isValidating = true
+    mockValidationPolling.status = 'running'
 
     render(<ServerValidation />)
 
@@ -250,9 +244,9 @@ describe('ServerValidation', () => {
   })
 
   it('should handle validation completion', () => {
-    mockValidationSSE.isValidating = false
-    mockValidationSSE.status = 'completed'
-    mockValidationSSE.progress = 100
+    mockValidationPolling.isValidating = false
+    mockValidationPolling.status = 'completed'
+    mockValidationPolling.progress = 100
 
     render(<ServerValidation />)
 
@@ -261,9 +255,9 @@ describe('ServerValidation', () => {
   })
 
   it('should handle validation error state', () => {
-    mockValidationSSE.isValidating = false
-    mockValidationSSE.status = 'error'
-    mockValidationSSE.error = 'Validation failed'
+    mockValidationPolling.isValidating = false
+    mockValidationPolling.status = 'error'
+    mockValidationPolling.error = 'Validation failed'
 
     render(<ServerValidation />)
 
@@ -272,9 +266,9 @@ describe('ServerValidation', () => {
   })
 
   it('should display current resource when available', () => {
-    mockValidationSSE.isValidating = true
-    mockValidationSSE.status = 'running'
-    mockValidationSSE.progress = 50
+    mockValidationPolling.isValidating = true
+    mockValidationPolling.status = 'running'
+    mockValidationPolling.progress = 50
 
     render(<ServerValidation />)
 
@@ -296,7 +290,7 @@ describe('ServerValidation', () => {
   })
 
   it('should display connection status correctly', () => {
-    mockValidationSSE.isConnected = true
+    mockValidationPolling.isConnected = true
 
     render(<ServerValidation />)
 
@@ -304,7 +298,7 @@ describe('ServerValidation', () => {
   })
 
   it('should display disconnected status correctly', () => {
-    mockValidationSSE.isConnected = false
+    mockValidationPolling.isConnected = false
 
     render(<ServerValidation />)
 
@@ -312,7 +306,7 @@ describe('ServerValidation', () => {
   })
 
   it('should handle SSE connection errors', () => {
-    mockValidationSSE.error = 'SSE connection failed'
+    mockValidationPolling.error = 'SSE connection failed'
 
     render(<ServerValidation />)
 
@@ -328,8 +322,8 @@ describe('ServerValidation', () => {
   })
 
   it('should display both validation and controls status', () => {
-    mockValidationSSE.status = 'running'
-    mockValidationSSE.progress = 50
+    mockValidationPolling.status = 'running'
+    mockValidationPolling.progress = 50
     mockValidationControls.status = 'running'
     mockValidationControls.progress = 50
 
@@ -340,8 +334,8 @@ describe('ServerValidation', () => {
   })
 
   it('should handle mixed states between SSE and controls', () => {
-    mockValidationSSE.status = 'running'
-    mockValidationSSE.progress = 50
+    mockValidationPolling.status = 'running'
+    mockValidationPolling.progress = 50
     mockValidationControls.status = 'paused'
     mockValidationControls.progress = 30
 

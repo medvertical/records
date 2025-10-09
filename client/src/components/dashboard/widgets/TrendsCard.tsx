@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TrendingUp, TrendingDown, Minus, RefreshCw } from 'lucide-react';
-import { useDashboardDataWiring } from '@/hooks/use-dashboard-data-wiring';
+import { useDashboard } from '@/contexts/DashboardContext';
 
 interface TrendsCardProps {
   className?: string;
@@ -20,7 +20,7 @@ export const TrendsCard: React.FC<TrendsCardProps> = ({
     trendsLoading, 
     trendsError, 
     refreshTrends 
-  } = useDashboardDataWiring();
+  } = useDashboard();
 
   // Calculate current success rate
   const currentSuccessRate = validationStats?.totalValidated > 0 
