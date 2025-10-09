@@ -16,3 +16,6 @@ export { default as validationProgressRoutes } from './progress';
 // Export revalidation routes
 export { default as batchRevalidateRoutes } from './batch-revalidate';
 export { default as singleRevalidateRoutes } from './revalidate-single';
+
+// Export validate-by-ids route
+export { default as validateByIdsRoutes } from './validate-by-ids';

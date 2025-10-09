@@ -12,3 +12,7 @@ vite.config.ts.*
 .env.test.local
 .env.production.local
 .vercel
+
+# Logs
+logs/
+*.log

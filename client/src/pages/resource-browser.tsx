@@ -3,9 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useServerData } from "@/hooks/use-server-data";
 import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-polling";
-import ResourceSearch from "@/components/resources/resource-search";
+import ResourceSearch, { type ValidationFilters } from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
-import { ValidationReportAndFilters, type ValidationFilters, type ValidationSummary } from "@/components/resources/validation-report-and-filters";
+import { ValidationOverview, type ValidationSummary } from "@/components/resources/validation-overview";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 
@@ -57,7 +57,6 @@ export default function ResourceBrowser() {
   const [validationProgress, setValidationProgress] = useState<Map<number, any>>(new Map());
   const [hasValidatedCurrentPage, setHasValidatedCurrentPage] = useState(false);
   const [cacheCleared, setCacheCleared] = useState(false);
-  const [validationDebounceTimer, setValidationDebounceTimer] = useState<NodeJS.Timeout | null>(null);
   const [validationFilters, setValidationFilters] = useState<ValidationFilters>({
     aspects: [],
     severities: [],
@@ -278,8 +277,16 @@ export default function ResourceBrowser() {
     }
   });
 
+  // Check if validation filters are active
+  const hasValidationFilters = validationFilters.aspects.length > 0 || 
+                                validationFilters.severities.length > 0 || 
+                                validationFilters.hasIssuesOnly;
+  
+  // Use filtered endpoint only when validation filters are active
+  const apiEndpoint = hasValidationFilters ? "/api/fhir/resources/filtered" : "/api/fhir/resources";
+
   const { data: resourcesData, isLoading, error} = useQuery<ResourcesResponse>({
-    queryKey: ["/api/fhir/resources", { resourceType, search: searchQuery, page, location, filters: validationFilters }],
+    queryKey: [apiEndpoint, { resourceType, search: searchQuery, page, location, filters: validationFilters }],
     // Only fetch resources when there's an active server (resourceType can be empty for "all types")
     enabled: !!stableActiveServer,
     staleTime: 2 * 60 * 1000, // 2 minutes - resources don't change that frequently
@@ -291,21 +298,59 @@ export default function ResourceBrowser() {
       const [url, params] = queryKey as [string, { resourceType?: string; search?: string; page: number; location: string; filters: ValidationFilters }];
       const searchParams = new URLSearchParams();
       
-      if (params?.resourceType) searchParams.set('resourceType', params.resourceType);
-      if (params?.search) searchParams.set('search', params.search);
-      if (params?.page !== undefined) searchParams.set('page', params.page.toString());
+      const isFilteredEndpoint = url.includes('/filtered');
       
-      // Add filter parameters if they exist
-      if (params?.filters) {
-        if (params.filters.aspects.length > 0) {
-          searchParams.set('validationAspects', params.filters.aspects.join(','));
+      if (isFilteredEndpoint) {
+        // /filtered endpoint parameters
+        // Only set resourceTypes if a specific type is selected (not "all")
+        if (params?.resourceType && params.resourceType !== '' && params.resourceType !== 'all') {
+          searchParams.set('resourceTypes', params.resourceType);
         }
-        if (params.filters.severities.length > 0) {
-          searchParams.set('severities', params.filters.severities.join(','));
+        if (params?.search) searchParams.set('search', params.search);
+        
+        // Add serverId
+        searchParams.set('serverId', '1'); // TODO: Get from context
+        
+        // Convert page to limit/offset for /filtered endpoint
+        const limit = 20; // Match frontend pageSize
+        const offset = (params?.page || 0) * limit;
+        searchParams.set('limit', limit.toString());
+        searchParams.set('offset', offset.toString());
+        
+        // Add filter parameters
+        if (params?.filters) {
+          if (params.filters.aspects.length > 0) {
+            // Map frontend aspect IDs to backend IDs (businessRule → business-rule)
+            const backendAspects = params.filters.aspects.map(a => 
+              a === 'businessRule' ? 'business-rule' : a
+            );
+            searchParams.set('validationAspects', backendAspects.join(','));
+            // When aspects are selected, we want to show only resources with issues in those aspects
+            searchParams.set('hasIssuesInAspects', 'true');
+          }
+          if (params.filters.severities.length > 0) {
+            searchParams.set('severities', params.filters.severities.join(','));
+            // When severities are selected without aspects, also filter by hasIssues
+            if (params.filters.aspects.length === 0) {
+              searchParams.set('hasIssuesInAspects', 'true');
+            }
+          }
+          // The hasIssuesOnly checkbox is now redundant when filters are active
+          // but we keep it for explicit "show only problematic resources" without specific aspect/severity selection
+          if (params.filters.hasIssuesOnly && params.filters.aspects.length === 0 && params.filters.severities.length === 0) {
+            searchParams.set('hasIssuesInAspects', 'true');
+          }
         }
-        if (params.filters.hasIssuesOnly) {
-          searchParams.set('hasIssuesInAspects', 'true');
-        }
+      } else {
+        // Standard /resources endpoint parameters
+        if (params?.resourceType) searchParams.set('resourceType', params.resourceType);
+        if (params?.search) searchParams.set('search', params.search);
+        
+        // Convert page to limit/offset for standard endpoint
+        const limit = 20; // Match frontend pageSize
+        const offset = (params?.page || 0) * limit;
+        searchParams.set('limit', limit.toString());
+        searchParams.set('offset', offset.toString());
       }
       
       const fullUrl = `${url}?${searchParams}`;
@@ -353,14 +398,24 @@ export default function ResourceBrowser() {
         const totalTime = Date.now() - startTime;
         
         console.log('[ResourceBrowser] Resource data received:', {
-          resourceCount: data.resources?.length || 0,
-          totalResources: data.total || 0,
+          resourceCount: isFilteredEndpoint ? (data.data?.resources?.length || 0) : (data.resources?.length || 0),
+          totalResources: isFilteredEndpoint ? (data.data?.totalCount || 0) : (data.total || 0),
           fetchTime: `${fetchTime}ms`,
           totalTime: `${totalTime}ms`,
           url: fullUrl,
           timestamp: new Date().toISOString()
         });
         
+        // Transform /filtered endpoint response to match expected format
+        if (isFilteredEndpoint) {
+          return {
+            resources: data.data?.resources || [],
+            total: data.data?.totalCount || 0,
+            availableResourceTypes: data.data?.filterSummary?.availableResourceTypes || []
+          };
+        }
+        
+        // Return standard endpoint response as is
         return data;
       } catch (error) {
         const totalTime = Date.now() - startTime;
@@ -585,10 +640,11 @@ export default function ResourceBrowser() {
         setValidationProgress(new Map());
       }, 1500);
 
-      // Invalidate the resource query to refresh with new validation results
+      // Invalidate both resource endpoints to refresh with new validation results
       // Add a small delay to ensure validation results are saved to database
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources/filtered'] });
       }, 1000);
 
     } catch (error) {
@@ -604,21 +660,6 @@ export default function ResourceBrowser() {
       setValidatingResourceIds(new Set()); // Clear validating state
     }
   }, [resourcesData, resourceType, page, queryClient, simulateValidationProgress]);
-
-  // Debounced validation function to prevent rapid successive calls
-  const debouncedValidateUnvalidatedResources = useCallback((delay: number = 1000) => {
-    // Clear existing timer
-    if (validationDebounceTimer) {
-      clearTimeout(validationDebounceTimer);
-    }
-    
-    // Set new timer
-    const timer = setTimeout(() => {
-      validateUnvalidatedResources();
-    }, delay);
-    
-    setValidationDebounceTimer(timer);
-  }, [validationDebounceTimer]);
 
   // Function to check if resources need validation and validate them automatically
   const validateUnvalidatedResources = useCallback(async () => {
@@ -757,11 +798,15 @@ export default function ResourceBrowser() {
         setValidationProgress(new Map());
       }, 1500);
 
-      // Invalidate the resource query to refresh with new validation results
+      // Invalidate both resource endpoints to refresh with new validation results
       // Add a small delay to ensure validation results are saved to database
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources/filtered'] });
       }, 1000);
+
+      // Mark this page as validated only after successful validation
+      setHasValidatedCurrentPage(true);
 
     } catch (error) {
       console.warn('[ResourceBrowser] Background validation error:', error);
@@ -797,23 +842,17 @@ export default function ResourceBrowser() {
     }
   }, [resourcesData?.resources]);
 
-  // Cleanup debounce timer on unmount
+  // Auto-validate resources when they're loaded
   useEffect(() => {
-    return () => {
-      if (validationDebounceTimer) {
-        clearTimeout(validationDebounceTimer);
-      }
-    };
-  }, [validationDebounceTimer]);
-
-  // Auto-validate resources when they're loaded (controlled from Settings page)
-  useEffect(() => {
-    if (resourcesData?.resources && resourcesData.resources.length > 0 && !hasValidatedCurrentPage) {
-      // Use debounced validation to prevent rapid successive calls
-      debouncedValidateUnvalidatedResources(1500); // 1.5 second delay
-      setHasValidatedCurrentPage(true);
+    if (resourcesData?.resources && resourcesData.resources.length > 0 && !hasValidatedCurrentPage && !isValidating) {
+      // Validate unvalidated resources with a short delay to allow UI to render
+      const timer = setTimeout(() => {
+        validateUnvalidatedResources();
+      }, 500);
+      
+      return () => clearTimeout(timer);
     }
-  }, [resourcesData?.resources?.length, resourceType, page, hasValidatedCurrentPage, debouncedValidateUnvalidatedResources]);
+  }, [resourcesData?.resources?.length, resourceType, page, hasValidatedCurrentPage, isValidating, validateUnvalidatedResources]);
 
   // Handle filter changes
   const handleFilterChange = useCallback((newFilters: ValidationFilters) => {
@@ -895,6 +934,7 @@ export default function ResourceBrowser() {
       // Refresh resources after a delay to allow validation to complete
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources/filtered'] });
         setIsValidating(false);
       }, 2000);
 
@@ -909,8 +949,8 @@ export default function ResourceBrowser() {
     }
   }, [resourcesData, stableActiveServer, queryClient, toast]);
 
-  // Calculate validation summary for current page
-  const validationSummary: ValidationSummary = useMemo(() => {
+  // Calculate validation summary for current page (with stats for filters)
+  const validationSummaryWithStats = useMemo(() => {
     if (!resourcesData?.resources) {
       return {
         totalResources: 0,
@@ -923,6 +963,7 @@ export default function ResourceBrowser() {
       };
     }
 
+    // Count all resources on the current page (backend now loads exactly 20 per page)
     const totalResources = resourcesData.resources.length;
     const validatedResources = resourcesData.resources.filter((r: any) => r._validationSummary?.lastValidated);
     
@@ -1018,26 +1059,33 @@ export default function ResourceBrowser() {
     };
   }, [resourcesData]);
 
+  // Create simplified validation summary for overview (without stats)
+  const validationSummary: ValidationSummary = useMemo(() => ({
+    totalResources: validationSummaryWithStats.totalResources,
+    validatedCount: validationSummaryWithStats.validatedCount,
+    errorCount: validationSummaryWithStats.errorCount,
+    warningCount: validationSummaryWithStats.warningCount,
+    infoCount: validationSummaryWithStats.infoCount,
+  }), [validationSummaryWithStats]);
+
   return (
     <div className="p-6 h-full overflow-y-auto">
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex-1">
-            <ResourceSearch 
-              resourceTypes={resourceTypes || []}
-              onSearch={handleSearch}
-              defaultResourceType={resourceType}
-              defaultQuery={searchQuery}
-            />
-          </div>
-        </div>
+        {/* Resource Search with integrated filters */}
+        <ResourceSearch 
+          resourceTypes={resourceTypes || []}
+          onSearch={handleSearch}
+          defaultResourceType={resourceType}
+          defaultQuery={searchQuery}
+          filters={validationFilters}
+          onFilterChange={handleFilterChange}
+          validationSummary={validationSummaryWithStats}
+        />
 
-        {/* Validation Report and Filters */}
+        {/* Validation Overview */}
         {resourcesData?.resources && resourcesData.resources.length > 0 && (
-          <ValidationReportAndFilters
+          <ValidationOverview
             validationSummary={validationSummary}
-            filters={validationFilters}
-            onFilterChange={handleFilterChange}
             onRevalidate={handleRevalidate}
             isRevalidating={isValidating}
           />
@@ -1087,7 +1135,7 @@ export default function ResourceBrowser() {
             validationProgress={validationProgress}
             availableResourceTypes={resourcesData?.availableResourceTypes}
             isLoading={isLoading}
-            noResourceTypeMessage={resourcesData?.message}
+            noResourceTypeMessage={undefined} // Don't show "Select a Resource Type" for filtered queries
           />
         )}
       </div>

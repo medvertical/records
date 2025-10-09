@@ -116,6 +116,10 @@ export function ValidationMessagesPerAspect({
 
   const totalMessages = data.aspects.reduce((sum, aspect) => sum + aspect.messages.length, 0);
 
+  // Separate aspects with and without messages
+  const aspectsWithMessages = data.aspects.filter(aspect => aspect.messages.length > 0);
+  const aspectsWithoutMessages = data.aspects.filter(aspect => aspect.messages.length === 0);
+
   return (
     <Card className="text-left">
       <CardHeader className="text-left">
@@ -125,67 +129,88 @@ export function ValidationMessagesPerAspect({
         </CardDescription>
       </CardHeader>
       <CardContent className="text-left">
-        <Accordion type="multiple" className="w-full text-left" defaultValue={data.aspects.map((_, i) => `aspect-${i}`)}>
-          {data.aspects.map((aspectData, index) => (
-            <AccordionItem key={`aspect-${index}`} value={`aspect-${index}`} className="text-left">
-              <AccordionTrigger className="hover:no-underline text-left">
-                <div className="flex items-center justify-start gap-2 w-full text-left">
+        <div className="space-y-4">
+          {/* Aspects with messages - collapsible */}
+          {aspectsWithMessages.length > 0 && (
+            <Accordion type="multiple" className="w-full text-left" defaultValue={aspectsWithMessages.map((_, i) => `aspect-${i}`)}>
+              {aspectsWithMessages.map((aspectData, index) => (
+                <AccordionItem key={`aspect-${index}`} value={`aspect-${index}`} className="text-left">
+                  <AccordionTrigger className="hover:no-underline text-left">
+                    <div className="flex items-center justify-start gap-2 w-full text-left">
+                      <Badge className={getAspectBadgeColor(aspectData.aspect)}>
+                        {aspectData.aspect}
+                      </Badge>
+                      <Badge variant="outline" className="ml-auto mr-2">
+                        {aspectData.messages.length} message{aspectData.messages.length !== 1 ? 's' : ''}
+                      </Badge>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="text-left">
+                    <div className="space-y-3 pt-2 text-left">
+                      {aspectData.messages.map((message, msgIndex) => {
+                        const isHighlighted = highlightSignature && message.signature === highlightSignature;
+                        
+                        return (
+                          <Alert
+                            key={msgIndex}
+                            variant={getSeverityVariant(message.severity as SeverityLevel)}
+                            className={`text-left ${isHighlighted ? 'ring-2 ring-primary ring-offset-2 animate-pulse' : ''}`}
+                          >
+                            <div className="flex items-start gap-2 text-left">
+                              <SeverityIcon severity={message.severity as SeverityLevel} />
+                              <div className="flex-1 space-y-1 text-left">
+                                <div className="flex items-center justify-start gap-2 text-left">
+                                  <Badge variant={getSeverityVariant(message.severity as SeverityLevel)} className="text-xs">
+                                    {message.severity}
+                                  </Badge>
+                                  {message.code && (
+                                    <code className="text-xs bg-muted px-2 py-0.5 rounded">
+                                      {message.code}
+                                    </code>
+                                  )}
+                                  {isHighlighted && (
+                                    <Badge variant="default" className="text-xs">
+                                      Highlighted
+                                    </Badge>
+                                  )}
+                                </div>
+                                <AlertDescription className="text-sm text-left">
+                                  {message.text}
+                                </AlertDescription>
+                                <div className="text-xs text-muted-foreground space-y-1 text-left">
+                                  <div className="text-left">Path: <code className="bg-muted px-1 py-0.5 rounded">{message.canonicalPath}</code></div>
+                                  {message.timestamp && (
+                                    <div className="text-left">Validated: {new Date(message.timestamp).toLocaleString()}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </Alert>
+                        );
+                      })}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          )}
+
+          {/* Aspects without messages - non-collapsible */}
+          {aspectsWithoutMessages.length > 0 && (
+            <div className="space-y-2">
+              {aspectsWithoutMessages.map((aspectData, index) => (
+                <div key={`no-messages-${index}`} className="flex items-center justify-between py-3 px-4 border rounded-lg bg-muted/50">
                   <Badge className={getAspectBadgeColor(aspectData.aspect)}>
                     {aspectData.aspect}
                   </Badge>
-                  <Badge variant="outline" className="ml-auto mr-2">
-                    {aspectData.messages.length} message{aspectData.messages.length !== 1 ? 's' : ''}
+                  <Badge variant="outline" className="text-muted-foreground">
+                    0 messages
                   </Badge>
                 </div>
-              </AccordionTrigger>
-              <AccordionContent className="text-left">
-                <div className="space-y-3 pt-2 text-left">
-                  {aspectData.messages.map((message, msgIndex) => {
-                    const isHighlighted = highlightSignature && message.signature === highlightSignature;
-                    
-                    return (
-                      <Alert
-                        key={msgIndex}
-                        variant={getSeverityVariant(message.severity as SeverityLevel)}
-                        className={`text-left ${isHighlighted ? 'ring-2 ring-primary ring-offset-2 animate-pulse' : ''}`}
-                      >
-                        <div className="flex items-start gap-2 text-left">
-                          <SeverityIcon severity={message.severity as SeverityLevel} />
-                          <div className="flex-1 space-y-1 text-left">
-                            <div className="flex items-center justify-start gap-2 text-left">
-                              <Badge variant={getSeverityVariant(message.severity as SeverityLevel)} className="text-xs">
-                                {message.severity}
-                              </Badge>
-                              {message.code && (
-                                <code className="text-xs bg-muted px-2 py-0.5 rounded">
-                                  {message.code}
-                                </code>
-                              )}
-                              {isHighlighted && (
-                                <Badge variant="default" className="text-xs">
-                                  Highlighted
-                                </Badge>
-                              )}
-                            </div>
-                            <AlertDescription className="text-sm text-left">
-                              {message.text}
-                            </AlertDescription>
-                            <div className="text-xs text-muted-foreground space-y-1 text-left">
-                              <div className="text-left">Path: <code className="bg-muted px-1 py-0.5 rounded">{message.canonicalPath}</code></div>
-                              {message.timestamp && (
-                                <div className="text-left">Validated: {new Date(message.timestamp).toLocaleString()}</div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </Alert>
-                    );
-                  })}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
+              ))}
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

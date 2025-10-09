@@ -568,7 +568,7 @@ export class FhirClient {
               try {
                 const nextSample = await this.searchResources(resourceType, { 
                   _count: '100', 
-                  _offset: pageOffset.toString(),
+                  _skip: pageOffset.toString(),
                   _total: 'accurate'
                 });
                 

@@ -86,6 +86,8 @@ export interface ResourceValidationSummary {
   validationScore: number;
   lastValidated: Date | null;
   hasValidationData: boolean;
+  hasErrors?: boolean;
+  hasWarnings?: boolean;
 }
 
 class ValidationBackendFilteringService extends EventEmitter {
@@ -201,7 +203,8 @@ class ValidationBackendFilteringService extends EventEmitter {
 
     try {
       const { db } = await import('../../../db');
-      const { fhirResources, validationResultsPerAspect, validationMessages } = await import('@shared/schema-validation-per-aspect');
+      const { fhirResources } = await import('@shared/schema');
+      const { validationResultsPerAspect, validationMessages } = await import('@shared/schema-validation-per-aspect');
       const { eq, inArray, and, or, desc, asc, sql } = await import('drizzle-orm');
 
       // Build base query
@@ -228,43 +231,50 @@ class ValidationBackendFilteringService extends EventEmitter {
 
       // Apply aspect/severity filtering if specified
       if (validationAspects.length > 0 || severities.length > 0) {
-        const resourceIdsWithMatchingIssues = new Set<number>();
+        // Build WHERE conditions array
+        const whereConditions = [eq(validationResultsPerAspect.serverId, serverId)];
 
-        // Query validation messages for resources with matching aspects/severities
-        const messagesQuery = db
+        if (validationAspects.length > 0) {
+          whereConditions.push(inArray(validationResultsPerAspect.aspect, validationAspects));
+        }
+
+        if (severities.length > 0) {
+          whereConditions.push(inArray(validationMessages.severity, severities));
+        }
+
+        // Query validation messages with correct column names and joins
+        const matchingMessages = await db
           .select({
-            resourceId: validationMessages.resourceId,
+            serverId: validationResultsPerAspect.serverId,
+            resourceType: validationResultsPerAspect.resourceType,
+            fhirId: validationResultsPerAspect.fhirId,
             aspect: validationResultsPerAspect.aspect,
             severity: validationMessages.severity,
           })
           .from(validationMessages)
           .innerJoin(
             validationResultsPerAspect,
-            eq(validationMessages.aspectResultId, validationResultsPerAspect.id)
+            eq(validationMessages.validationResultId, validationResultsPerAspect.id)
           )
-          .innerJoin(
-            fhirResources,
-            eq(validationResultsPerAspect.resourceId, fhirResources.id)
-          )
-          .where(eq(fhirResources.serverId, serverId))
-          .$dynamic();
+          .where(and(...whereConditions));
 
-        // Add aspect filter
-        if (validationAspects.length > 0) {
-          messagesQuery.where(inArray(validationResultsPerAspect.aspect, validationAspects));
-        }
-
-        // Add severity filter
-        if (severities.length > 0) {
-          messagesQuery.where(inArray(validationMessages.severity, severities));
-        }
-
-        const matchingMessages = await messagesQuery;
         console.log(`[BackendFiltering] Found ${matchingMessages.length} messages matching aspect/severity filters`);
 
-        // Collect resource IDs with matching issues
+        // Create lookup map of (serverId-resourceType-resourceId) -> resource.id
+        const resourceLookup = new Map<string, number>();
+        for (const resource of allResources) {
+          const key = `${serverId}-${resource.resourceType}-${resource.resourceId}`;
+          resourceLookup.set(key, resource.id);
+        }
+
+        // Collect matching resource IDs using composite key
+        const resourceIdsWithMatchingIssues = new Set<number>();
         for (const message of matchingMessages) {
-          resourceIdsWithMatchingIssues.add(message.resourceId);
+          const key = `${message.serverId}-${message.resourceType}-${message.fhirId}`;
+          const resourceId = resourceLookup.get(key);
+          if (resourceId) {
+            resourceIdsWithMatchingIssues.add(resourceId);
+          }
         }
 
         // Filter resources to only those with matching issues
@@ -274,16 +284,25 @@ class ValidationBackendFilteringService extends EventEmitter {
         }
       }
 
-      // Fetch validation results for remaining resources
-      const resourceIds = allResources.map(r => r.id);
-      const validationResults = resourceIds.length > 0 
-        ? await db
-            .select()
-            .from(validationResultsPerAspect)
-            .where(inArray(validationResultsPerAspect.resourceId, resourceIds))
-        : [];
+      // Fetch validation results for remaining resources using composite key matching
+      let validationResults: any[] = [];
+      if (allResources.length > 0) {
+        // Build conditions to match resources by (serverId, resourceType, fhirId)
+        const resourceConditions = allResources.map(r => 
+          and(
+            eq(validationResultsPerAspect.serverId, serverId),
+            eq(validationResultsPerAspect.resourceType, r.resourceType),
+            eq(validationResultsPerAspect.fhirId, r.resourceId)
+          )
+        );
+        
+        validationResults = await db
+          .select()
+          .from(validationResultsPerAspect)
+          .where(or(...resourceConditions));
+      }
 
-      // Attach validation results to resources
+      // Attach validation results to resources using composite key lookup
       const resourceMap = new Map<number, any>();
       for (const resource of allResources) {
         resourceMap.set(resource.id, {
@@ -292,10 +311,21 @@ class ValidationBackendFilteringService extends EventEmitter {
         });
       }
 
+      // Create reverse lookup: (serverId-resourceType-fhirId) -> resource.id
+      const reverseLookup = new Map<string, number>();
+      for (const resource of allResources) {
+        const key = `${serverId}-${resource.resourceType}-${resource.resourceId}`;
+        reverseLookup.set(key, resource.id);
+      }
+
       for (const result of validationResults) {
-        const resource = resourceMap.get(result.resourceId);
-        if (resource) {
-          resource.validationResults.push(result);
+        const key = `${result.serverId}-${result.resourceType}-${result.fhirId}`;
+        const resourceId = reverseLookup.get(key);
+        if (resourceId) {
+          const resource = resourceMap.get(resourceId);
+          if (resource) {
+            resource.validationResults.push(result);
+          }
         }
       }
 
@@ -474,14 +504,18 @@ class ValidationBackendFilteringService extends EventEmitter {
           warningCount: latestValidation?.warningCount || 0,
           informationCount: latestValidation?.informationCount || 0,
           validationScore: latestValidation?.validationScore || 0,
-          lastValidated: latestValidation ? new Date(latestValidation.validatedAt) : null,
-          hasValidationData: validationResults.length > 0
+          lastValidated: latestValidation?.validatedAt ? new Date(latestValidation.validatedAt) : null,
+          hasValidationData: validationResults.length > 0,
+          hasErrors: (latestValidation?.errorCount || 0) > 0,
+          hasWarnings: (latestValidation?.warningCount || 0) > 0
         };
 
         // Enhance resource with validation data
+        // Use _validationSummary for consistency with the rest of the app
         const enhancedResource = {
           ...resource.data,
-          _validation: validationSummary,
+          resourceId: resource.resourceId, // Map FHIR id to resourceId for consistency
+          _validationSummary: validationSummary,
           _dbId: resource.id
         };
 
@@ -491,7 +525,8 @@ class ValidationBackendFilteringService extends EventEmitter {
         // Include resource without validation data
         enhancedResources.push({
           ...resource.data,
-          _validation: {
+          resourceId: resource.resourceId,
+          _validationSummary: {
             resourceId: resource.resourceId,
             resourceType: resource.resourceType,
             isValid: false,

@@ -164,7 +164,7 @@ export async function persistEngineResultPerAspect(params: {
       });
 
       // Upsert message group with atomic increment
-      // Try to insert; if exists (unique constraint on signature), update counter atomically
+      // Try to insert; if exists (unique constraint on serverId + signature), update counter atomically
       const insertResult = await db
         .insert(validationMessageGroups)
         .values({
@@ -179,7 +179,7 @@ export async function persistEngineResultPerAspect(params: {
           totalResources: 1,
         })
         .onConflictDoUpdate({
-          target: validationMessageGroups.signature,
+          target: [validationMessageGroups.serverId, validationMessageGroups.signature],
           set: {
             // Atomic increment using SQL
             totalResources: sql`${validationMessageGroups.totalResources} + 1`,

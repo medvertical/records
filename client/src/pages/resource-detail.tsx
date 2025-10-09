@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { FhirResourceWithValidation } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle, XCircle, ArrowLeft, AlertCircle, AlertTriangle, Info, Settings, Eye, EyeOff, RefreshCw } from "lucide-react";
-import { Link } from "wouter";
 import { Progress } from "@/components/ui/progress";
 import { CircularProgress } from "@/components/ui/circular-progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -161,11 +160,14 @@ export default function ResourceDetail() {
               <p className="text-gray-600 mb-4">
                 The requested resource could not be found or has been removed.
               </p>
-              <Link href="/resources">
-                <Button variant="outline" className="inline-flex items-center">
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-              </Link>
+              <Button 
+                variant="outline" 
+                className="inline-flex items-center"
+                onClick={() => window.history.back()}
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -267,11 +269,15 @@ export default function ResourceDetail() {
         <div className="bg-white rounded-lg border p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <Link href="/resources">
-                <Button variant="outline" size="sm" className="inline-flex items-center">
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-              </Link>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="inline-flex items-center"
+                onClick={() => window.history.back()}
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back
+              </Button>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
                   {resource.resourceType} Resource

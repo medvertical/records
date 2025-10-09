@@ -261,7 +261,148 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
     }
   });
 
+  // ============================================================================
+  // Filtered Resources Endpoint
+  // ============================================================================
+  // CRITICAL: These specific routes MUST come BEFORE /api/fhir/resources/:id
+  // to prevent Express from matching "filtered" as the :id parameter
+
+  // GET /api/fhir/resources/filtered - Get filtered resources with validation data
+  app.get("/api/fhir/resources/filtered", async (req, res) => {
+    try {
+      const {
+        resourceTypes,
+        hasErrors,
+        hasWarnings,
+        hasInformation,
+        isValid,
+        validationAspects,
+        severities,
+        hasIssuesInAspects,
+        search,
+        limit = 20,
+        offset = 0,
+        sortBy = 'lastValidated',
+        sortDirection = 'desc',
+        serverId = 1
+      } = req.query;
+
+      console.log('[FHIR API] Filtered resources endpoint called with filters:', {
+        resourceTypes,
+        validationAspects,
+        severities,
+        hasIssuesInAspects
+      });
+
+      // Get the backend filtering service
+      const { getValidationBackendFilteringService } = await import('../../../services/validation/features/validation-backend-filtering-service');
+      const filteringService = getValidationBackendFilteringService();
+      
+      // Initialize if not already done
+      await filteringService.initialize();
+
+      // Parse resource types
+      const resourceTypesArray: string[] = resourceTypes 
+        ? (Array.isArray(resourceTypes) ? resourceTypes.map(String) : resourceTypes.toString().split(','))
+        : [];
+
+      // Parse validation aspects filter
+      const aspectsArray: string[] = validationAspects
+        ? (Array.isArray(validationAspects) ? validationAspects.map(String) : validationAspects.toString().split(','))
+        : [];
+
+      // Parse severities filter
+      const severitiesArray: string[] = severities
+        ? (Array.isArray(severities) ? severities.map(String) : severities.toString().split(','))
+        : [];
+
+      // Parse validation status filters
+      const validationStatus: any = {};
+      if (hasErrors !== undefined) validationStatus.hasErrors = hasErrors === 'true';
+      if (hasWarnings !== undefined) validationStatus.hasWarnings = hasWarnings === 'true';
+      if (hasInformation !== undefined) validationStatus.hasInformation = hasInformation === 'true';
+      if (isValid !== undefined) validationStatus.isValid = isValid === 'true';
+
+      // Create filter options
+      const filterOptions = {
+        resourceTypes: resourceTypesArray,
+        validationStatus: Object.keys(validationStatus).length > 0 ? validationStatus : undefined,
+        validationAspects: aspectsArray.length > 0 ? aspectsArray : undefined,
+        severities: severitiesArray.length > 0 ? severitiesArray : undefined,
+        hasIssuesInAspects: hasIssuesInAspects === 'true' || undefined,
+        serverId: parseInt(serverId as string),
+        search: search as string,
+        pagination: {
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string)
+        },
+        sorting: {
+          field: sortBy as any,
+          direction: sortDirection as 'asc' | 'desc'
+        }
+      };
+
+      // Filter resources with aspect/severity support
+      const result = await filteringService.filterResourcesWithAspects(filterOptions);
+
+      console.log('[FHIR API] Filtered resources result:', {
+        totalCount: result.totalCount,
+        returnedCount: result.returnedCount
+      });
+
+      res.json({
+        success: true,
+        data: result,
+        message: `Found ${result.totalCount} resources matching the filter criteria`
+      });
+    } catch (error) {
+      console.error('[FHIR API] Error filtering resources:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to filter resources',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // GET /api/fhir/resources/filtered/statistics - Get filtering statistics
+  app.get("/api/fhir/resources/filtered/statistics", async (req, res) => {
+    try {
+      // Get the backend filtering service
+      const { getValidationBackendFilteringService } = await import('../../../services/validation/features/validation-backend-filtering-service');
+      const filteringService = getValidationBackendFilteringService();
+      
+      // Initialize if not already done
+      await filteringService.initialize();
+
+      // Get available resource types
+      const availableResourceTypes = await filteringService.getAvailableResourceTypes();
+
+      // Get validation status statistics
+      const validationStatistics = await filteringService.getValidationStatusStatistics();
+
+      res.json({
+        success: true,
+        data: {
+          availableResourceTypes,
+          validationStatistics
+        }
+      });
+    } catch (error) {
+      console.error('[FHIR API] Error getting filtering statistics:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to get filtering statistics',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // ============================================================================
   // FHIR Individual Resource
+  // ============================================================================
+  // This route MUST come AFTER /api/fhir/resources/filtered to avoid conflicts
+  
   app.get("/api/fhir/resources/:id", async (req, res) => {
     try {
       const { id } = req.params;
@@ -352,7 +493,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
   // FHIR Resources
   app.get("/api/fhir/resources", async (req, res) => {
     try {
-      const { resourceType, limit = 50, offset = 0, search } = req.query;
+      const { resourceType, limit = 20, offset = 0, search } = req.query;
       
     // If no resource type is specified, fetch from all common resource types (expensive but requested)
     if (!resourceType) {
@@ -375,7 +516,8 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
           };
           
           if (parseInt(offset as string) > 0) {
-            searchParams._offset = Math.floor(parseInt(offset as string) / commonResourceTypes.length);
+            // Fire.ly server uses _skip instead of _offset for pagination
+            searchParams._skip = Math.floor(parseInt(offset as string) / commonResourceTypes.length);
           }
           
           // Get the current FHIR client (may have been updated due to server activation)
@@ -415,7 +557,8 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
         }
         
         if (parseInt(offset as string) > 0) {
-          searchParams._offset = parseInt(offset as string);
+          // Fire.ly server uses _skip instead of _offset for pagination
+          searchParams._skip = parseInt(offset as string);
         }
         
         // Get the current FHIR client (may have been updated due to server activation)
@@ -534,11 +677,15 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
     }
   });
 
+  // ============================================================================
   // Generic FHIR Resource Access
+  // ============================================================================
+  // IMPORTANT: These generic parameterized routes come AFTER specific routes
+
   app.get("/api/fhir/:resourceType", async (req, res) => {
     try {
       const { resourceType } = req.params;
-      const { limit = 50, offset = 0, search } = req.query;
+      const { limit = 20, offset = 0, search } = req.query;
       
       // Get the current FHIR client (may have been updated due to server activation)
       const currentFhirClient = getCurrentFhirClient(fhirClient);
@@ -564,129 +711,6 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       res.json(resource);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
-    }
-  });
-
-  // ============================================================================
-  // Filtered Resources Endpoint
-  // ============================================================================
-
-  // GET /api/fhir/resources/filtered - Get filtered resources with validation data
-  app.get("/api/fhir/resources/filtered", async (req, res) => {
-    try {
-      const {
-        resourceTypes,
-        hasErrors,
-        hasWarnings,
-        hasInformation,
-        isValid,
-        validationAspects,
-        severities,
-        hasIssuesInAspects,
-        search,
-        limit = 50,
-        offset = 0,
-        sortBy = 'lastValidated',
-        sortDirection = 'desc',
-        serverId = 1
-      } = req.query;
-
-      // Get the backend filtering service
-      const { getValidationBackendFilteringService } = await import('../../../services/validation/features/validation-backend-filtering-service');
-      const filteringService = getValidationBackendFilteringService();
-      
-      // Initialize if not already done
-      await filteringService.initialize();
-
-      // Parse resource types
-      const resourceTypesArray: string[] = resourceTypes 
-        ? (Array.isArray(resourceTypes) ? resourceTypes.map(String) : resourceTypes.toString().split(','))
-        : [];
-
-      // Parse validation aspects filter
-      const aspectsArray: string[] = validationAspects
-        ? (Array.isArray(validationAspects) ? validationAspects.map(String) : validationAspects.toString().split(','))
-        : [];
-
-      // Parse severities filter
-      const severitiesArray: string[] = severities
-        ? (Array.isArray(severities) ? severities.map(String) : severities.toString().split(','))
-        : [];
-
-      // Parse validation status filters
-      const validationStatus: any = {};
-      if (hasErrors !== undefined) validationStatus.hasErrors = hasErrors === 'true';
-      if (hasWarnings !== undefined) validationStatus.hasWarnings = hasWarnings === 'true';
-      if (hasInformation !== undefined) validationStatus.hasInformation = hasInformation === 'true';
-      if (isValid !== undefined) validationStatus.isValid = isValid === 'true';
-
-      // Create filter options
-      const filterOptions = {
-        resourceTypes: resourceTypesArray,
-        validationStatus: Object.keys(validationStatus).length > 0 ? validationStatus : undefined,
-        validationAspects: aspectsArray.length > 0 ? aspectsArray : undefined,
-        severities: severitiesArray.length > 0 ? severitiesArray : undefined,
-        hasIssuesInAspects: hasIssuesInAspects === 'true' || undefined,
-        serverId: parseInt(serverId as string),
-        search: search as string,
-        pagination: {
-          limit: parseInt(limit as string),
-          offset: parseInt(offset as string)
-        },
-        sorting: {
-          field: sortBy as any,
-          direction: sortDirection as 'asc' | 'desc'
-        }
-      };
-
-      // Filter resources with aspect/severity support
-      const result = await filteringService.filterResourcesWithAspects(filterOptions);
-
-      res.json({
-        success: true,
-        data: result,
-        message: `Found ${result.totalCount} resources matching the filter criteria`
-      });
-    } catch (error) {
-      console.error('[FHIR API] Error filtering resources:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to filter resources',
-        message: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  });
-
-  // GET /api/fhir/resources/filtered/statistics - Get filtering statistics
-  app.get("/api/fhir/resources/filtered/statistics", async (req, res) => {
-    try {
-      // Get the backend filtering service
-      const { getValidationBackendFilteringService } = await import('../../../services/validation/features/validation-backend-filtering-service');
-      const filteringService = getValidationBackendFilteringService();
-      
-      // Initialize if not already done
-      await filteringService.initialize();
-
-      // Get available resource types
-      const availableResourceTypes = await filteringService.getAvailableResourceTypes();
-
-      // Get validation status statistics
-      const validationStatistics = await filteringService.getValidationStatusStatistics();
-
-      res.json({
-        success: true,
-        data: {
-          availableResourceTypes,
-          validationStatistics
-        }
-      });
-    } catch (error) {
-      console.error('[FHIR API] Error getting filtering statistics:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to get filtering statistics',
-        message: error instanceof Error ? error.message : 'Unknown error'
-      });
     }
   });
 }
