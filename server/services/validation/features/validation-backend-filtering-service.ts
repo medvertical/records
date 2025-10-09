@@ -26,6 +26,14 @@ export interface BackendFilterOptions {
     /** Include resources that are valid (no errors) */
     isValid?: boolean;
   };
+  /** Validation aspects to filter by (structural, profile, terminology, reference, businessRule, metadata) */
+  validationAspects?: string[];
+  /** Severities to filter by (error, warning, information) */
+  severities?: string[];
+  /** Only show resources with issues in the specified aspects */
+  hasIssuesInAspects?: boolean;
+  /** Server ID to filter by */
+  serverId?: number;
   /** Text search across resource content */
   search?: string;
   /** Pagination options */
@@ -168,6 +176,170 @@ class ValidationBackendFilteringService extends EventEmitter {
       };
     } catch (error) {
       console.error('[BackendFiltering] Error filtering resources:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Filter resources with aspect and severity support
+   * Uses database queries to filter by validation aspects and message severities
+   */
+  async filterResourcesWithAspects(options: BackendFilterOptions = {}): Promise<FilteredResourceResult> {
+    await this.initialize();
+
+    const {
+      resourceTypes = [],
+      validationStatus = {},
+      validationAspects = [],
+      severities = [],
+      hasIssuesInAspects = false,
+      serverId = 1,
+      search = '',
+      pagination = { limit: 50, offset: 0 },
+      sorting = { field: 'lastValidated', direction: 'desc' }
+    } = options;
+
+    try {
+      const { db } = await import('../../../db');
+      const { fhirResources, validationResultsPerAspect, validationMessages } = await import('@shared/schema-validation-per-aspect');
+      const { eq, inArray, and, or, desc, asc, sql } = await import('drizzle-orm');
+
+      // Build base query
+      let query = db
+        .select({
+          id: fhirResources.id,
+          resourceType: fhirResources.resourceType,
+          resourceId: fhirResources.resourceId,
+          data: fhirResources.data,
+          lastValidated: fhirResources.lastValidated,
+        })
+        .from(fhirResources)
+        .where(eq(fhirResources.serverId, serverId))
+        .$dynamic();
+
+      // Apply resource type filtering
+      if (resourceTypes.length > 0) {
+        query = query.where(inArray(fhirResources.resourceType, resourceTypes));
+      }
+
+      // Fetch all matching resources
+      let allResources = await query;
+      console.log(`[BackendFiltering] Found ${allResources.length} resources after resource type filtering`);
+
+      // Apply aspect/severity filtering if specified
+      if (validationAspects.length > 0 || severities.length > 0) {
+        const resourceIdsWithMatchingIssues = new Set<number>();
+
+        // Query validation messages for resources with matching aspects/severities
+        const messagesQuery = db
+          .select({
+            resourceId: validationMessages.resourceId,
+            aspect: validationResultsPerAspect.aspect,
+            severity: validationMessages.severity,
+          })
+          .from(validationMessages)
+          .innerJoin(
+            validationResultsPerAspect,
+            eq(validationMessages.aspectResultId, validationResultsPerAspect.id)
+          )
+          .innerJoin(
+            fhirResources,
+            eq(validationResultsPerAspect.resourceId, fhirResources.id)
+          )
+          .where(eq(fhirResources.serverId, serverId))
+          .$dynamic();
+
+        // Add aspect filter
+        if (validationAspects.length > 0) {
+          messagesQuery.where(inArray(validationResultsPerAspect.aspect, validationAspects));
+        }
+
+        // Add severity filter
+        if (severities.length > 0) {
+          messagesQuery.where(inArray(validationMessages.severity, severities));
+        }
+
+        const matchingMessages = await messagesQuery;
+        console.log(`[BackendFiltering] Found ${matchingMessages.length} messages matching aspect/severity filters`);
+
+        // Collect resource IDs with matching issues
+        for (const message of matchingMessages) {
+          resourceIdsWithMatchingIssues.add(message.resourceId);
+        }
+
+        // Filter resources to only those with matching issues
+        if (hasIssuesInAspects) {
+          allResources = allResources.filter(r => resourceIdsWithMatchingIssues.has(r.id));
+          console.log(`[BackendFiltering] Filtered to ${allResources.length} resources with matching issues`);
+        }
+      }
+
+      // Fetch validation results for remaining resources
+      const resourceIds = allResources.map(r => r.id);
+      const validationResults = resourceIds.length > 0 
+        ? await db
+            .select()
+            .from(validationResultsPerAspect)
+            .where(inArray(validationResultsPerAspect.resourceId, resourceIds))
+        : [];
+
+      // Attach validation results to resources
+      const resourceMap = new Map<number, any>();
+      for (const resource of allResources) {
+        resourceMap.set(resource.id, {
+          ...resource,
+          validationResults: []
+        });
+      }
+
+      for (const result of validationResults) {
+        const resource = resourceMap.get(result.resourceId);
+        if (resource) {
+          resource.validationResults.push(result);
+        }
+      }
+
+      allResources = Array.from(resourceMap.values());
+
+      // Apply validation status filtering
+      let filteredResources = this.applyValidationStatusFiltering(allResources, validationStatus);
+      console.log(`[BackendFiltering] After validation status filtering: ${filteredResources.length} resources`);
+
+      // Apply text search if provided
+      if (search) {
+        filteredResources = this.applyTextSearch(filteredResources, search);
+        console.log(`[BackendFiltering] After text search: ${filteredResources.length} resources`);
+      }
+
+      // Apply sorting
+      filteredResources = this.applySorting(filteredResources, sorting);
+
+      // Calculate filter summary
+      const filterSummary = this.calculateFilterSummary(filteredResources, resourceTypes, validationStatus);
+
+      // Apply pagination
+      const totalCount = filteredResources.length;
+      const startIndex = pagination.offset || 0;
+      const endIndex = startIndex + (pagination.limit || 50);
+      const paginatedResources = filteredResources.slice(startIndex, endIndex);
+
+      // Enhance resources with validation data
+      const enhancedResources = await this.enhanceResourcesWithValidationData(paginatedResources);
+
+      return {
+        resources: enhancedResources,
+        totalCount,
+        returnedCount: paginatedResources.length,
+        pagination: {
+          limit: pagination.limit || 50,
+          offset: pagination.offset || 0,
+          hasMore: endIndex < totalCount
+        },
+        filterSummary,
+        appliedFilters: options
+      };
+    } catch (error) {
+      console.error('[BackendFiltering] Error filtering resources with aspects:', error);
       throw error;
     }
   }

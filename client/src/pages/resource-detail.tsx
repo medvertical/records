@@ -1,8 +1,9 @@
 import { useParams, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-polling";
 import { useServerData } from "@/hooks/use-server-data";
+import { useToast } from "@/hooks/use-toast";
 import ValidationErrors from "@/components/validation/validation-errors";
 import ResourceViewer from "@/components/resources/resource-viewer";
 import { ValidationMessagesPerAspect } from "@/components/validation/validation-messages-per-aspect";
@@ -11,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FhirResourceWithValidation } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, XCircle, ArrowLeft, AlertCircle, AlertTriangle, Info, Settings, Eye, EyeOff } from "lucide-react";
+import { CheckCircle, XCircle, ArrowLeft, AlertCircle, AlertTriangle, Info, Settings, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import { Progress } from "@/components/ui/progress";
 import { CircularProgress } from "@/components/ui/circular-progress";
@@ -22,6 +23,8 @@ export default function ResourceDetail() {
   const [location] = useLocation();
   const queryClient = useQueryClient();
   const { activeServer } = useServerData();
+  const { toast } = useToast();
+  const [isRevalidating, setIsRevalidating] = useState(false);
   
   // Parse query parameters
   const searchParams = new URLSearchParams(location.split('?')[1] || '');
@@ -78,6 +81,44 @@ export default function ResourceDetail() {
       return () => sse.removeEventListener('message', handleSSEMessage);
     }
   }, [queryClient, id]);
+
+  // Handle revalidation
+  const handleRevalidate = async () => {
+    if (!resource) return;
+
+    setIsRevalidating(true);
+    
+    try {
+      const response = await fetch(
+        `/api/validation/resources/${resource.resourceType}/${resource.resourceId}/revalidate?serverId=${activeServer?.id || 1}`,
+        { method: 'POST' }
+      );
+
+      if (!response.ok) {
+        throw new Error('Revalidation failed');
+      }
+
+      const result = await response.json();
+
+      toast({
+        title: "Revalidation completed",
+        description: `Resource has been revalidated successfully.`,
+      });
+
+      // Refresh resource data
+      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources', id] });
+      
+    } catch (error) {
+      console.error('Revalidation error:', error);
+      toast({
+        title: "Revalidation failed",
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: "destructive",
+      });
+    } finally {
+      setIsRevalidating(false);
+    }
+  };
   
   const { data: resource, isLoading, error } = useQuery<FhirResourceWithValidation>({
     queryKey: ["/api/fhir/resources", id],
@@ -268,6 +309,15 @@ export default function ResourceDetail() {
             </div>
             {validationSummary && (
               <div className="flex items-center space-x-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRevalidate}
+                  disabled={isRevalidating}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${isRevalidating ? 'animate-spin' : ''}`} />
+                  Revalidate
+                </Button>
                 <CircularProgress 
                   value={validationSummary.score} 
                   size="lg"

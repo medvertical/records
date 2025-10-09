@@ -580,11 +580,15 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
         hasWarnings,
         hasInformation,
         isValid,
+        validationAspects,
+        severities,
+        hasIssuesInAspects,
         search,
         limit = 50,
         offset = 0,
         sortBy = 'lastValidated',
-        sortDirection = 'desc'
+        sortDirection = 'desc',
+        serverId = 1
       } = req.query;
 
       // Get the backend filtering service
@@ -595,8 +599,18 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       await filteringService.initialize();
 
       // Parse resource types
-      const resourceTypesArray = resourceTypes 
-        ? (Array.isArray(resourceTypes) ? resourceTypes : resourceTypes.toString().split(','))
+      const resourceTypesArray: string[] = resourceTypes 
+        ? (Array.isArray(resourceTypes) ? resourceTypes.map(String) : resourceTypes.toString().split(','))
+        : [];
+
+      // Parse validation aspects filter
+      const aspectsArray: string[] = validationAspects
+        ? (Array.isArray(validationAspects) ? validationAspects.map(String) : validationAspects.toString().split(','))
+        : [];
+
+      // Parse severities filter
+      const severitiesArray: string[] = severities
+        ? (Array.isArray(severities) ? severities.map(String) : severities.toString().split(','))
         : [];
 
       // Parse validation status filters
@@ -610,6 +624,10 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       const filterOptions = {
         resourceTypes: resourceTypesArray,
         validationStatus: Object.keys(validationStatus).length > 0 ? validationStatus : undefined,
+        validationAspects: aspectsArray.length > 0 ? aspectsArray : undefined,
+        severities: severitiesArray.length > 0 ? severitiesArray : undefined,
+        hasIssuesInAspects: hasIssuesInAspects === 'true' || undefined,
+        serverId: parseInt(serverId as string),
         search: search as string,
         pagination: {
           limit: parseInt(limit as string),
@@ -621,8 +639,8 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
         }
       };
 
-      // Filter resources
-      const result = await filteringService.filterResources(filterOptions);
+      // Filter resources with aspect/severity support
+      const result = await filteringService.filterResourcesWithAspects(filterOptions);
 
       res.json({
         success: true,

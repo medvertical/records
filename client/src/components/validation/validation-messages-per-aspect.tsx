@@ -2,8 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, AlertTriangle, Info, CheckCircle } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { SeverityIcon, getSeverityVariant } from '@/components/ui/severity-icon';
+import type { SeverityLevel } from '@/components/ui/severity-icon';
 
 interface ValidationMessage {
   severity: string;
@@ -30,31 +32,6 @@ interface ValidationMessagesPerAspectProps {
   resourceId: string;
   serverId?: number;
   highlightSignature?: string;
-}
-
-function getSeverityIcon(severity: string) {
-  switch (severity.toLowerCase()) {
-    case 'error':
-      return <AlertCircle className="h-4 w-4" />;
-    case 'warning':
-      return <AlertTriangle className="h-4 w-4" />;
-    case 'information':
-    case 'info':
-      return <Info className="h-4 w-4" />;
-    default:
-      return null;
-  }
-}
-
-function getSeverityVariant(severity: string): "default" | "destructive" | "secondary" {
-  switch (severity.toLowerCase()) {
-    case 'error':
-      return 'destructive';
-    case 'warning':
-      return 'secondary';
-    default:
-      return 'default';
-  }
 }
 
 function getAspectBadgeColor(aspect: string): string {
@@ -169,14 +146,14 @@ export function ValidationMessagesPerAspect({
                     return (
                       <Alert
                         key={msgIndex}
-                        variant={getSeverityVariant(message.severity)}
+                        variant={getSeverityVariant(message.severity as SeverityLevel)}
                         className={`text-left ${isHighlighted ? 'ring-2 ring-primary ring-offset-2 animate-pulse' : ''}`}
                       >
                         <div className="flex items-start gap-2 text-left">
-                          {getSeverityIcon(message.severity)}
+                          <SeverityIcon severity={message.severity as SeverityLevel} />
                           <div className="flex-1 space-y-1 text-left">
                             <div className="flex items-center justify-start gap-2 text-left">
-                              <Badge variant={getSeverityVariant(message.severity)} className="text-xs">
+                              <Badge variant={getSeverityVariant(message.severity as SeverityLevel)} className="text-xs">
                                 {message.severity}
                               </Badge>
                               {message.code && (

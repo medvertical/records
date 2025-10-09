@@ -9,7 +9,9 @@ import {
   setupValidationSettingsRoutes,
   validationGroupsRoutes,
   resourceMessagesRoutes,
-  validationProgressRoutes
+  validationProgressRoutes,
+  batchRevalidateRoutes,
+  singleRevalidateRoutes
 } from "./api/validation";
 import { setupFhirRoutes, setupProfileRoutes, resourceEditRoutes, batchEditRoutes } from "./api/fhir";
 import { setupDashboardRoutes } from "./api/dashboard";
@@ -34,6 +36,8 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   app.use('/api/validation', validationGroupsRoutes);
   app.use('/api/validation', resourceMessagesRoutes);
   app.use('/api/validation', validationProgressRoutes);
+  app.use('/api/validation', batchRevalidateRoutes);
+  app.use('/api/validation', singleRevalidateRoutes);
   
   // FHIR resource edit routes
   app.use('/api/fhir/resources/:resourceType/:id', resourceEditRoutes);

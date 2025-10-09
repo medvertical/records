@@ -12,3 +12,7 @@ export { setupValidationBackupsRoutes } from './validation-backups';
 export { default as validationGroupsRoutes } from './groups';
 export { default as resourceMessagesRoutes } from './resource-messages';
 export { default as validationProgressRoutes } from './progress';
+
+// Export revalidation routes
+export { default as batchRevalidateRoutes } from './batch-revalidate';
+export { default as singleRevalidateRoutes } from './revalidate-single';

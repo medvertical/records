@@ -5,10 +5,9 @@ import { useServerData } from "@/hooks/use-server-data";
 import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-polling";
 import ResourceSearch from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
+import { ValidationReportAndFilters, type ValidationFilters, type ValidationSummary } from "@/components/resources/validation-report-and-filters";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, Play, Settings, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 // Simple client-side cache to track validated resources
 const validatedResourcesCache = new Set<string>();
@@ -59,7 +58,13 @@ export default function ResourceBrowser() {
   const [hasValidatedCurrentPage, setHasValidatedCurrentPage] = useState(false);
   const [cacheCleared, setCacheCleared] = useState(false);
   const [validationDebounceTimer, setValidationDebounceTimer] = useState<NodeJS.Timeout | null>(null);
+  const [validationFilters, setValidationFilters] = useState<ValidationFilters>({
+    aspects: [],
+    severities: [],
+    hasIssuesOnly: false,
+  });
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   // Use validation settings polling to detect changes and refresh resource list
   const { lastChange, isPolling, error: pollingError } = useValidationSettingsPolling({
@@ -111,11 +116,17 @@ export default function ResourceBrowser() {
     const urlParams = new URLSearchParams(window.location.search);
     const typeParam = urlParams.get('type');
     const searchParam = urlParams.get('search');
+    const aspectsParam = urlParams.get('aspects');
+    const severitiesParam = urlParams.get('severities');
+    const hasIssuesParam = urlParams.get('hasIssues');
     
     console.log('[ResourceBrowser] URL changed:', {
       location,
       typeParam,
       searchParam,
+      aspectsParam,
+      severitiesParam,
+      hasIssuesParam,
       currentResourceType: resourceType,
       currentSearchQuery: searchQuery
     });
@@ -123,6 +134,11 @@ export default function ResourceBrowser() {
     // Update state directly - this will trigger the query to re-run
     setResourceType(typeParam || "");
     setSearchQuery(searchParam || "");
+    setValidationFilters({
+      aspects: aspectsParam ? aspectsParam.split(',') : [],
+      severities: severitiesParam ? severitiesParam.split(',') : [],
+      hasIssuesOnly: hasIssuesParam === 'true',
+    });
     setPage(0); // Reset to first page when navigating
   }, [location]);
 
@@ -262,8 +278,8 @@ export default function ResourceBrowser() {
     }
   });
 
-  const { data: resourcesData, isLoading, error } = useQuery<ResourcesResponse>({
-    queryKey: ["/api/fhir/resources", { resourceType, search: searchQuery, page, location }],
+  const { data: resourcesData, isLoading, error} = useQuery<ResourcesResponse>({
+    queryKey: ["/api/fhir/resources", { resourceType, search: searchQuery, page, location, filters: validationFilters }],
     // Only fetch resources when there's an active server (resourceType can be empty for "all types")
     enabled: !!stableActiveServer,
     staleTime: 2 * 60 * 1000, // 2 minutes - resources don't change that frequently
@@ -272,12 +288,25 @@ export default function ResourceBrowser() {
     refetchOnWindowFocus: false, // Don't refetch on window focus
     refetchOnMount: false, // Don't refetch on component mount if data is fresh
     queryFn: async ({ queryKey }) => {
-      const [url, params] = queryKey as [string, { resourceType?: string; search?: string; page: number; location: string }];
+      const [url, params] = queryKey as [string, { resourceType?: string; search?: string; page: number; location: string; filters: ValidationFilters }];
       const searchParams = new URLSearchParams();
       
       if (params?.resourceType) searchParams.set('resourceType', params.resourceType);
       if (params?.search) searchParams.set('search', params.search);
       if (params?.page !== undefined) searchParams.set('page', params.page.toString());
+      
+      // Add filter parameters if they exist
+      if (params?.filters) {
+        if (params.filters.aspects.length > 0) {
+          searchParams.set('validationAspects', params.filters.aspects.join(','));
+        }
+        if (params.filters.severities.length > 0) {
+          searchParams.set('severities', params.filters.severities.join(','));
+        }
+        if (params.filters.hasIssuesOnly) {
+          searchParams.set('hasIssuesInAspects', 'true');
+        }
+      }
       
       const fullUrl = `${url}?${searchParams}`;
       
@@ -287,7 +316,8 @@ export default function ResourceBrowser() {
           resourceType: params?.resourceType || 'all',
           search: params?.search || '',
           page: params?.page || 0,
-          location: params?.location || ''
+          location: params?.location || '',
+          filters: params?.filters
         },
         timestamp: new Date().toISOString()
       });
@@ -785,6 +815,209 @@ export default function ResourceBrowser() {
     }
   }, [resourcesData?.resources?.length, resourceType, page, hasValidatedCurrentPage, debouncedValidateUnvalidatedResources]);
 
+  // Handle filter changes
+  const handleFilterChange = useCallback((newFilters: ValidationFilters) => {
+    setValidationFilters(newFilters);
+    setPage(0);
+    
+    // Update URL with new filters
+    const urlParams = new URLSearchParams(window.location.search);
+    if (resourceType && resourceType !== "all") {
+      urlParams.set('type', resourceType);
+    }
+    if (searchQuery) {
+      urlParams.set('search', searchQuery);
+    }
+    if (newFilters.aspects.length > 0) {
+      urlParams.set('aspects', newFilters.aspects.join(','));
+    } else {
+      urlParams.delete('aspects');
+    }
+    if (newFilters.severities.length > 0) {
+      urlParams.set('severities', newFilters.severities.join(','));
+    } else {
+      urlParams.delete('severities');
+    }
+    if (newFilters.hasIssuesOnly) {
+      urlParams.set('hasIssues', 'true');
+    } else {
+      urlParams.delete('hasIssues');
+    }
+    
+    const newUrl = urlParams.toString() ? `/resources?${urlParams.toString()}` : '/resources';
+    window.history.pushState({}, '', newUrl);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, [resourceType, searchQuery]);
+
+  // Handle revalidation of current page
+  const handleRevalidate = useCallback(async () => {
+    if (!resourcesData?.resources || resourcesData.resources.length === 0) {
+      toast({
+        title: "No resources to revalidate",
+        description: "The current page has no resources.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsValidating(true);
+    
+    try {
+      // Get resource IDs from current page
+      const resourceIds = resourcesData.resources.map((r: any) => r._dbId).filter(Boolean);
+      
+      if (resourceIds.length === 0) {
+        throw new Error('No valid resource IDs found');
+      }
+
+      // Call batch revalidation endpoint
+      const response = await fetch('/api/validation/batch-revalidate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resourceIds,
+          serverId: stableActiveServer?.id || 1,
+          forceRevalidation: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Revalidation request failed');
+      }
+
+      const result = await response.json();
+
+      toast({
+        title: "Revalidation started",
+        description: `Queued ${result.queuedCount} resources for revalidation.`,
+      });
+
+      // Refresh resources after a delay to allow validation to complete
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+        setIsValidating(false);
+      }, 2000);
+
+    } catch (error) {
+      console.error('Revalidation error:', error);
+      toast({
+        title: "Revalidation failed",
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: "destructive",
+      });
+      setIsValidating(false);
+    }
+  }, [resourcesData, stableActiveServer, queryClient, toast]);
+
+  // Calculate validation summary for current page
+  const validationSummary: ValidationSummary = useMemo(() => {
+    if (!resourcesData?.resources) {
+      return {
+        totalResources: 0,
+        validatedCount: 0,
+        errorCount: 0,
+        warningCount: 0,
+        infoCount: 0,
+        aspectStats: {},
+        severityStats: {},
+      };
+    }
+
+    const totalResources = resourcesData.resources.length;
+    const validatedResources = resourcesData.resources.filter((r: any) => r._validationSummary?.lastValidated);
+    
+    let errorCount = 0;
+    let warningCount = 0;
+    let infoCount = 0;
+
+    // Initialize aspect stats with the aspect IDs expected by the frontend component
+    const aspectStats: { [key: string]: { valid: number; invalid: number; warnings: number; total: number } } = {
+      structural: { valid: 0, invalid: 0, warnings: 0, total: 0 },
+      profile: { valid: 0, invalid: 0, warnings: 0, total: 0 },
+      terminology: { valid: 0, invalid: 0, warnings: 0, total: 0 },
+      reference: { valid: 0, invalid: 0, warnings: 0, total: 0 },
+      businessRule: { valid: 0, invalid: 0, warnings: 0, total: 0 },
+      metadata: { valid: 0, invalid: 0, warnings: 0, total: 0 },
+    };
+
+    // Initialize severity stats
+    const severityStats: { [key: string]: { count: number; resourceCount: number } } = {
+      error: { count: 0, resourceCount: 0 },
+      warning: { count: 0, resourceCount: 0 },
+      information: { count: 0, resourceCount: 0 },
+    };
+
+    validatedResources.forEach((r: any) => {
+      if (r._validationSummary) {
+        const resourceErrors = r._validationSummary.errorCount || 0;
+        const resourceWarnings = r._validationSummary.warningCount || 0;
+        const resourceInfo = r._validationSummary.informationCount || 0;
+
+        errorCount += resourceErrors;
+        warningCount += resourceWarnings;
+        infoCount += resourceInfo;
+
+        // Count resources with each severity
+        if (resourceErrors > 0) {
+          severityStats.error.count += resourceErrors;
+          severityStats.error.resourceCount += 1;
+        }
+        if (resourceWarnings > 0) {
+          severityStats.warning.count += resourceWarnings;
+          severityStats.warning.resourceCount += 1;
+        }
+        if (resourceInfo > 0) {
+          severityStats.information.count += resourceInfo;
+          severityStats.information.resourceCount += 1;
+        }
+
+        // Process aspect breakdown for this resource
+        if (r._validationSummary.aspectBreakdown && typeof r._validationSummary.aspectBreakdown === 'object') {
+          // Map backend aspect keys to frontend keys
+          const aspectMapping: { [key: string]: string } = {
+            'structural': 'structural',
+            'profile': 'profile',
+            'terminology': 'terminology',
+            'reference': 'reference',
+            'business-rule': 'businessRule',
+            'businessRule': 'businessRule',
+            'metadata': 'metadata',
+          };
+
+          Object.keys(r._validationSummary.aspectBreakdown).forEach((backendAspect: string) => {
+            const frontendAspect = aspectMapping[backendAspect] || backendAspect;
+            const aspectData = r._validationSummary.aspectBreakdown[backendAspect];
+            
+            if (aspectData && typeof aspectData === 'object' && aspectStats[frontendAspect]) {
+              const hasErrors = (Number(aspectData.errorCount) || 0) > 0;
+              const hasWarnings = (Number(aspectData.warningCount) || 0) > 0;
+              
+              aspectStats[frontendAspect].total += 1;
+              
+              if (hasErrors) {
+                aspectStats[frontendAspect].invalid += 1;
+              } else if (hasWarnings) {
+                aspectStats[frontendAspect].warnings += 1;
+              } else {
+                aspectStats[frontendAspect].valid += 1;
+              }
+            }
+          });
+        }
+      }
+    });
+
+    return {
+      totalResources,
+      validatedCount: validatedResources.length,
+      errorCount,
+      warningCount,
+      infoCount,
+      aspectStats,
+      severityStats,
+    };
+  }, [resourcesData]);
+
   return (
     <div className="p-6 h-full overflow-y-auto">
       <div className="space-y-6">
@@ -797,258 +1030,18 @@ export default function ResourceBrowser() {
               defaultQuery={searchQuery}
             />
           </div>
-          
-          {/* Validation Controls */}
-          {resourcesData?.resources && resourcesData.resources.length > 0 && (
-            <div className="flex items-center space-x-4 lg:ml-4">
-              {/* Enhanced Validation Summary */}
-              {(() => {
-                const totalResources = resourcesData.resources.length;
-                const validatedResources = resourcesData.resources.filter((resource: any) => 
-                  resource._validationSummary?.lastValidated
-                );
-                const unvalidatedResources = totalResources - validatedResources.length;
-                
-                // Calculate detailed statistics from validation results
-                let totalErrors = 0;
-                let totalWarnings = 0;
-                let totalInformation = 0;
-                let validResources = 0;
-                let averageScore = 0;
-                
-                // Aspect breakdown statistics (using server-side normalized keys)
-                const aspectStats = {
-                  structural: { errors: 0, warnings: 0, info: 0, total: 0, score: 0 },
-                  profile: { errors: 0, warnings: 0, info: 0, total: 0, score: 0 },
-                  terminology: { errors: 0, warnings: 0, info: 0, total: 0, score: 0 },
-                  reference: { errors: 0, warnings: 0, info: 0, total: 0, score: 0 },
-                  'business-rule': { errors: 0, warnings: 0, info: 0, total: 0, score: 0 },
-                  metadata: { errors: 0, warnings: 0, info: 0, total: 0, score: 0 }
-                };
-                
-                validatedResources.forEach((resource: any) => {
-                  const summary = resource._validationSummary;
-                  if (summary) {
-                    // Aggregate total counts with null safety
-                    totalErrors += summary.errorCount || 0;
-                    totalWarnings += summary.warningCount || 0;
-                    totalInformation += summary.informationCount || 0;
-                    
-                    // Count valid resources (no errors or warnings)
-                    if (summary.isValid && !summary.hasErrors && !summary.hasWarnings) {
-                      validResources++;
-                    }
-                    
-                    // Aggregate validation scores
-                    averageScore += summary.validationScore || 0;
-                    
-                    // Aggregate aspect breakdown statistics with enhanced error handling
-                    if (summary.aspectBreakdown && typeof summary.aspectBreakdown === 'object') {
-                      Object.keys(aspectStats).forEach(aspect => {
-                        const aspectData = summary.aspectBreakdown[aspect];
-                        if (aspectData && typeof aspectData === 'object') {
-                          // Ensure counts are numbers and handle null/undefined
-                          aspectStats[aspect].errors += Number(aspectData.errorCount) || 0;
-                          aspectStats[aspect].warnings += Number(aspectData.warningCount) || 0;
-                          aspectStats[aspect].info += Number(aspectData.informationCount) || 0;
-                          aspectStats[aspect].total += 1;
-                          aspectStats[aspect].score += Number(aspectData.validationScore) || 0;
-                        }
-                      });
-                    }
-                  }
-                });
-                
-                averageScore = validatedResources.length > 0 ? Math.round(averageScore / validatedResources.length) : 0;
-                
-                // Calculate overall trend based on validation quality
-                const totalIssues = totalErrors + totalWarnings + totalInformation;
-                const avgIssuesPerResource = validatedResources.length > 0 ? totalIssues / validatedResources.length : 0;
-                const overallTrend = avgIssuesPerResource === 0 ? 'excellent' : 
-                                   avgIssuesPerResource <= 1 ? 'good' : 
-                                   avgIssuesPerResource <= 3 ? 'stable' : 'declining';
-                
-                // Additional statistics
-                const invalidResources = validatedResources.length - validResources;
-                const validationCoverage = totalResources > 0 ? Math.round((validatedResources.length / totalResources) * 100) : 0;
-                
-                // Calculate average aspect scores and trends
-                Object.keys(aspectStats).forEach(aspect => {
-                  if (aspectStats[aspect].total > 0) {
-                    aspectStats[aspect].score = Math.round(aspectStats[aspect].score / aspectStats[aspect].total);
-                    
-                    // Simple trend calculation based on issue counts
-                    // More issues = declining trend, fewer issues = improving trend
-                    const totalIssues = aspectStats[aspect].errors + aspectStats[aspect].warnings + aspectStats[aspect].info;
-                    const avgIssuesPerResource = totalIssues / aspectStats[aspect].total;
-                    
-                    if (avgIssuesPerResource === 0) {
-                      aspectStats[aspect].trend = 'excellent';
-                    } else if (avgIssuesPerResource <= 1) {
-                      aspectStats[aspect].trend = 'good';
-                    } else if (avgIssuesPerResource <= 3) {
-                      aspectStats[aspect].trend = 'stable';
-                    } else {
-                      aspectStats[aspect].trend = 'declining';
-                    }
-                  }
-                });
-                
-                return (
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    {/* Resource Count Summary */}
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{totalResources} total</span>
-                      {validatedResources.length > 0 && (
-                        <>
-                          <span className="text-green-600">
-                            {validatedResources.length} validated
-                          </span>
-                          {unvalidatedResources > 0 && (
-                            <span className="text-orange-600">
-                              • {unvalidatedResources} pending
-                            </span>
-                          )}
-                          <span className="text-gray-500">
-                            ({validationCoverage}% coverage)
-                          </span>
-                        </>
-                      )}
-                    </div>
-                    
-                    {/* Validation Quality Summary */}
-                    {validatedResources.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3 text-xs">
-                          <span className="text-green-600">
-                            ✓ {validResources} valid
-                          </span>
-                          {invalidResources > 0 && (
-                            <span className="text-red-600">
-                              ✗ {invalidResources} invalid
-                            </span>
-                          )}
-                          {totalErrors > 0 && (
-                            <span className="text-red-600">
-                              ⚠ {totalErrors} errors
-                            </span>
-                          )}
-                          {totalWarnings > 0 && (
-                            <span className="text-yellow-600">
-                              ⚡ {totalWarnings} warnings
-                            </span>
-                          )}
-                          {totalInformation > 0 && (
-                            <span className="text-blue-600">
-                              ℹ {totalInformation} info
-                            </span>
-                          )}
-                          <div className="flex items-center gap-1">
-                            {overallTrend === 'excellent' && <TrendingUp className="h-3 w-3 text-green-500" />}
-                            {overallTrend === 'good' && <TrendingUp className="h-3 w-3 text-green-400" />}
-                            {overallTrend === 'stable' && <Minus className="h-3 w-3 text-gray-400" />}
-                            {overallTrend === 'declining' && <TrendingDown className="h-3 w-3 text-red-400" />}
-                            <span className="text-gray-600">
-                              Avg: {averageScore}%
-                            </span>
-                          </div>
-                        </div>
-                        
-                        {/* Aspect Breakdown */}
-                        {validatedResources.length > 0 && (
-                          <div className="grid grid-cols-2 gap-1 text-xs">
-                            {Object.entries(aspectStats).map(([aspect, stats]) => {
-                              if (stats.total === 0) return null;
-                              const aspectName = aspect.replace(/-/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, str => str.toUpperCase());
-                              const hasIssues = stats.errors > 0 || stats.warnings > 0;
-                              const scoreColor = stats.score >= 90 ? 'text-green-600' : stats.score >= 70 ? 'text-yellow-600' : 'text-red-600';
-                              
-                              // Trend indicator
-                              const getTrendIcon = (trend: string) => {
-                                switch (trend) {
-                                  case 'excellent': return <TrendingUp className="h-3 w-3 text-green-500" />;
-                                  case 'good': return <TrendingUp className="h-3 w-3 text-green-400" />;
-                                  case 'stable': return <Minus className="h-3 w-3 text-gray-400" />;
-                                  case 'declining': return <TrendingDown className="h-3 w-3 text-red-400" />;
-                                  default: return <Minus className="h-3 w-3 text-gray-400" />;
-                                }
-                              };
-                              
-                              const getTrendColor = (trend: string) => {
-                                switch (trend) {
-                                  case 'excellent': return 'text-green-600';
-                                  case 'good': return 'text-green-500';
-                                  case 'stable': return 'text-gray-500';
-                                  case 'declining': return 'text-red-500';
-                                  default: return 'text-gray-500';
-                                }
-                              };
-                              
-                              return (
-                                <Tooltip key={aspect}>
-                                  <TooltipTrigger asChild>
-                                    <div className="flex items-center justify-between cursor-help">
-                                      <span className="text-gray-600">{aspectName}:</span>
-                                      <div className="flex items-center gap-1">
-                                        {getTrendIcon(stats.trend)}
-                                        <span className={scoreColor}>{stats.score}%</span>
-                                        {hasIssues && (
-                                          <span className="text-gray-400">
-                                            ({stats.errors > 0 && `${stats.errors}E`}{stats.warnings > 0 && `${stats.warnings}W`})
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <div className="space-y-1">
-                                      <p className="font-medium">{aspectName} Validation</p>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-sm">Score: {stats.score}%</span>
-                                        <span className={`text-xs ${getTrendColor(stats.trend)}`}>
-                                          ({stats.trend})
-                                        </span>
-                                      </div>
-                                      {stats.errors > 0 && <p className="text-sm text-red-500">Errors: {stats.errors}</p>}
-                                      {stats.warnings > 0 && <p className="text-sm text-yellow-500">Warnings: {stats.warnings}</p>}
-                                      {stats.info > 0 && <p className="text-sm text-blue-500">Info: {stats.info}</p>}
-                                      <p className="text-xs text-gray-400">Resources: {stats.total}</p>
-                                    </div>
-                                  </TooltipContent>
-                                </Tooltip>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Manual Validation Button */}
-              <Button
-                onClick={validateCurrentPage}
-                disabled={isValidating}
-                variant="outline"
-                size="sm"
-              >
-                {isValidating ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Validating...
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4 mr-2" />
-                    Revalidate
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
         </div>
 
+        {/* Validation Report and Filters */}
+        {resourcesData?.resources && resourcesData.resources.length > 0 && (
+          <ValidationReportAndFilters
+            validationSummary={validationSummary}
+            filters={validationFilters}
+            onFilterChange={handleFilterChange}
+            onRevalidate={handleRevalidate}
+            isRevalidating={isValidating}
+          />
+        )}
         
         {isLoading ? (
           <div className="space-y-4">
