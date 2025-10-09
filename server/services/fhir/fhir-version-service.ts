@@ -17,7 +17,7 @@
 
 import { FhirClient } from './fhir-client';
 import { storage } from '../../storage';
-import logger from '../utils/logger';
+import logger from '../../utils/logger';
 
 // ============================================================================
 // Types

@@ -13,7 +13,6 @@
 export { 
   ConsolidatedValidationService, 
   getConsolidatedValidationService, 
-  createConsolidatedValidationService, 
   resetConsolidatedValidationService 
 } from './consolidated-validation-service';
 

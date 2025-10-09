@@ -57,10 +57,12 @@
 
 ### ✅ 13.1 - FHIR version badges (Task 2.12)
 - **Files:** 
-  - `client/src/components/layout/sidebar.tsx` - Lines 85-95
-  - `client/src/components/settings/server-list.tsx` - Lines 120-130
+  - `client/src/components/layout/sidebar.tsx` - Lines 256-271
+  - `client/src/components/settings/server-list.tsx` - Lines 121-127
 - **Colors:** R4 (🔵 blue), R5 (🟢 green), R6 (🟣 purple)
-- **Status:** ✅ **VERIFIED**
+- **Browser Test:** ✅ **VERIFIED IN BROWSER** - Badge visible in sidebar "HAPI FHIR Server 🔵 R4"
+- **Screenshot:** `sidebar-fhir-version-badge.png`
+- **Status:** ✅ **FULLY VERIFIED**
 
 ### ✅ 13.2 - FHIR version in ResourceBrowser header (Task 2.12)
 - **Location:** Header displays active server's FHIR version
