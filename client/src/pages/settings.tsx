@@ -6,7 +6,8 @@ import {
   Server, 
   BarChart3, 
   Database,
-  Activity
+  Activity,
+  Code2
 } from 'lucide-react';
 
 // Import tab components
@@ -15,6 +16,7 @@ import { ServerManagementTab } from '@/components/settings/server-management-tab
 import { DashboardSettingsTab } from '@/components/settings/dashboard-settings-tab';
 import { SystemSettingsTab } from '@/components/settings/system-settings-tab';
 import { PollingSettingsTab } from '@/components/settings/polling-settings-tab';
+import { BusinessRulesTab } from '@/components/settings/business-rules-tab';
 
 // ============================================================================
 // Types
@@ -114,7 +116,7 @@ export default function SettingsPage() {
 
         {/* Settings Tabs */}
         <Tabs defaultValue="validation" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="validation" className="flex items-center gap-2">
               <Settings className="h-4 w-4" />
               Validation
@@ -122,6 +124,10 @@ export default function SettingsPage() {
             <TabsTrigger value="servers" className="flex items-center gap-2">
               <Server className="h-4 w-4" />
               Servers
+            </TabsTrigger>
+            <TabsTrigger value="business-rules" className="flex items-center gap-2">
+              <Code2 className="h-4 w-4" />
+              Rules
             </TabsTrigger>
             <TabsTrigger value="polling" className="flex items-center gap-2">
               <Activity className="h-4 w-4" />
@@ -145,6 +151,11 @@ export default function SettingsPage() {
           {/* Server Management Tab */}
           <TabsContent value="servers" className="space-y-6">
             <ServerManagementTab onServersChange={handleServersChange} />
+          </TabsContent>
+
+          {/* Business Rules Tab */}
+          <TabsContent value="business-rules" className="space-y-6">
+            <BusinessRulesTab />
           </TabsContent>
 
           {/* Polling Settings Tab */}
