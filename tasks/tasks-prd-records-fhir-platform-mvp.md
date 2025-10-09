@@ -907,7 +907,15 @@
     - ✅ Timeout protection in evaluateBoolean()
     - ✅ Execution time tracking
     - ✅ Error messages in validation issues
-  - [ ] 6.9 ⏭️ **OPTIONAL** - Create UI component for business rule management in Settings tab
+  - [x] 6.9 ✅ **COMPLETED** - Create UI component for business rule management in Settings tab
+    - BusinessRulesTab component (310 lines)
+    - View all rules with FHIRPath expressions
+    - Enable/disable rules with toggle
+    - Test rules against sample resources
+    - Delete rules with confirmation
+    - Severity badges (Error/Warning/Info)
+    - Resource type filtering
+    - Added as 6th tab in Settings page
   - [ ] 6.10 ⏭️ **OPTIONAL** - Implement visual FHIRPath editor with syntax highlighting (CodeMirror or Monaco)
   - [ ] 6.11 ⏭️ **OPTIONAL** - Add FHIRPath expression validation and test mode (evaluate against sample resource)
   - [ ] 6.12 ⏭️ **OPTIONAL** - Implement autocomplete for common FHIRPath functions and resource paths
