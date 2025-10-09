@@ -6,9 +6,10 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -27,7 +28,9 @@ import {
   Server,
   Database,
   Zap,
-  Users
+  Users,
+  Globe,
+  HardDrive
 } from 'lucide-react';
 import type { 
   ValidationSettings, 
@@ -269,6 +272,172 @@ export function ValidationSettingsTab() {
           </Button>
         </div>
       </div>
+
+      {/* Validation Mode (Online/Offline) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            {settings.mode === 'online' ? (
+              <Globe className="h-5 w-5 text-blue-500" />
+            ) : (
+              <HardDrive className="h-5 w-5 text-gray-500" />
+            )}
+            Validation Mode
+          </CardTitle>
+          <CardDescription>
+            Switch between online (remote terminology servers) and offline (local Ontoserver) validation
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Mode Toggle */}
+          <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
+            <div className="space-y-1">
+              <Label className="text-base font-semibold">Current Mode</Label>
+              <p className="text-sm text-muted-foreground">
+                {settings.mode === 'online' 
+                  ? 'Using remote terminology servers (tx.fhir.org)' 
+                  : 'Using local Ontoserver with fallback'}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge variant={settings.mode === 'online' ? 'default' : 'secondary'} className="px-3 py-1">
+                {settings.mode === 'online' ? (
+                  <>
+                    <Globe className="h-3 w-3 mr-1" />
+                    Online
+                  </>
+                ) : (
+                  <>
+                    <HardDrive className="h-3 w-3 mr-1" />
+                    Offline
+                  </>
+                )}
+              </Badge>
+              <Switch
+                checked={settings.mode === 'online'}
+                onCheckedChange={(checked) => {
+                  setSettings({
+                    ...settings,
+                    mode: checked ? 'online' : 'offline'
+                  });
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Terminology Fallback Configuration */}
+          <div className="space-y-3 pt-2">
+            <Label className="text-sm font-semibold">Terminology Server URLs</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="remote-url" className="text-sm">
+                  Remote Server (tx.fhir.org)
+                </Label>
+                <Input
+                  id="remote-url"
+                  value={settings.terminologyFallback?.remote || 'https://tx.fhir.org/r4'}
+                  onChange={(e) => {
+                    setSettings({
+                      ...settings,
+                      terminologyFallback: {
+                        ...settings.terminologyFallback,
+                        remote: e.target.value
+                      }
+                    });
+                  }}
+                  placeholder="https://tx.fhir.org/r4"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="local-url" className="text-sm">
+                  Local Server (Ontoserver)
+                </Label>
+                <Input
+                  id="local-url"
+                  value={settings.terminologyFallback?.local || 'http://localhost:8081/fhir'}
+                  onChange={(e) => {
+                    setSettings({
+                      ...settings,
+                      terminologyFallback: {
+                        ...settings.terminologyFallback,
+                        local: e.target.value
+                      }
+                    });
+                  }}
+                  placeholder="http://localhost:8081/fhir"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Offline Mode Configuration */}
+          {settings.mode === 'offline' && (
+            <div className="space-y-3 p-4 border rounded-lg bg-blue-50/50 dark:bg-blue-950/20">
+              <div className="flex items-center gap-2">
+                <HardDrive className="h-4 w-4 text-blue-600" />
+                <Label className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                  Offline Mode Configuration
+                </Label>
+              </div>
+              
+              <Alert className="bg-blue-50 border-blue-200">
+                <AlertTriangle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-900">
+                  Offline mode requires a local Ontoserver installation. Validation will fall back to cached ValueSets and finally tx.fhir.org if local server is unavailable.
+                </AlertDescription>
+              </Alert>
+
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="ontoserver-url" className="text-sm">
+                    Ontoserver URL
+                  </Label>
+                  <Input
+                    id="ontoserver-url"
+                    value={settings.offlineConfig?.ontoserverUrl || 'http://localhost:8081/fhir'}
+                    onChange={(e) => {
+                      setSettings({
+                        ...settings,
+                        offlineConfig: {
+                          ...settings.offlineConfig,
+                          ontoserverUrl: e.target.value
+                        }
+                      });
+                    }}
+                    placeholder="http://localhost:8081/fhir"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    URL of your local Ontoserver FHIR endpoint
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="profile-cache" className="text-sm">
+                    Profile Cache Path
+                  </Label>
+                  <Input
+                    id="profile-cache"
+                    value={settings.offlineConfig?.profileCachePath || '/opt/fhir/igs/'}
+                    onChange={(e) => {
+                      setSettings({
+                        ...settings,
+                        offlineConfig: {
+                          ...settings.offlineConfig,
+                          profileCachePath: e.target.value
+                        }
+                      });
+                    }}
+                    placeholder="/opt/fhir/igs/"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Local path where FHIR Implementation Guide packages are stored
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* FHIR Version & Resource Types */}
       <Card>
@@ -525,6 +694,37 @@ export function ValidationSettingsTab() {
                 Number of resources to process in each batch
               </p>
             </div>
+          </div>
+
+          {/* Auto-Revalidation Option */}
+          <Separator />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-semibold">Auto-Revalidation</Label>
+                <p className="text-sm text-muted-foreground">
+                  Automatically revalidate resources after editing
+                </p>
+              </div>
+              <Switch
+                checked={settings.autoRevalidateAfterEdit || false}
+                onCheckedChange={(checked) => {
+                  setSettings({
+                    ...settings,
+                    autoRevalidateAfterEdit: checked
+                  });
+                }}
+              />
+            </div>
+            {settings.autoRevalidateAfterEdit && (
+              <Alert className="bg-blue-50 border-blue-200">
+                <Info className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-900 text-xs">
+                  When enabled, resources will be automatically validated after any edit operation. 
+                  This ensures validation results are always up-to-date but may increase server load.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         </CardContent>
       </Card>

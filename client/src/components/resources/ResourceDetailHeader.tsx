@@ -37,6 +37,7 @@ export interface ResourceDetailHeaderProps {
   isValidating?: boolean;
   settingsSnapshotHash?: string;
   settingsSnapshotTime?: string;
+  fhirVersion?: string; // FHIR version (R4, R5, R6)
   onRevalidate?: () => void;
   onEdit?: () => void;
   isRevalidating?: boolean;
@@ -185,6 +186,7 @@ export function ResourceDetailHeader({
   isValidating = false,
   settingsSnapshotHash,
   settingsSnapshotTime,
+  fhirVersion,
   onRevalidate,
   onEdit,
   isRevalidating = false,
@@ -230,6 +232,23 @@ export function ResourceDetailHeader({
                 <h1 className="text-2xl font-bold text-gray-900 truncate">
                   {identity.resourceType}
                 </h1>
+                {fhirVersion && (
+                  <Badge 
+                    variant={fhirVersion === 'R5' ? 'default' : 'secondary'} 
+                    className={cn(
+                      "text-sm px-3 py-1 font-semibold",
+                      fhirVersion === 'R5' && "bg-blue-500 hover:bg-blue-600",
+                      fhirVersion === 'R6' && "bg-yellow-500 hover:bg-yellow-600 text-white"
+                    )}
+                  >
+                    FHIR {fhirVersion}
+                  </Badge>
+                )}
+                {fhirVersion === 'R6' && (
+                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+                    Preview
+                  </Badge>
+                )}
                 {isValidating && (
                   <Badge variant="outline" className="gap-1.5">
                     <Loader2 className="h-3 w-3 animate-spin" />

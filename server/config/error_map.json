@@ -1,0 +1,173 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2025-01-09",
+  "description": "Error mapping configuration for FHIR validation messages",
+  "mappings": {
+    "terminology-check-failed": {
+      "friendlyText": "Der Code konnte nicht im ValueSet gefunden werden",
+      "friendlyText_en": "Code not found in ValueSet",
+      "category": "terminology",
+      "severity": "warning",
+      "suggestions": [
+        "Prüfen Sie, ob der CodeSystem verfügbar ist",
+        "Verwenden Sie einen Code aus dem erlaubten ValueSet",
+        "Stellen Sie sicher, dass die Terminology-Server-Verbindung funktioniert"
+      ]
+    },
+    "profile-not-found": {
+      "friendlyText": "Das angegebene Profil ist nicht installiert",
+      "friendlyText_en": "Profile not installed",
+      "category": "profile",
+      "severity": "error",
+      "suggestions": [
+        "Installieren Sie das erforderliche Profil-Package",
+        "Prüfen Sie die Profil-URL auf Tippfehler",
+        "Stellen Sie sicher, dass die IG-Packages geladen sind"
+      ]
+    },
+    "invalid-reference": {
+      "friendlyText": "Die Referenz zeigt auf eine nicht existierende Ressource",
+      "friendlyText_en": "Reference points to non-existent resource",
+      "category": "reference",
+      "severity": "error",
+      "suggestions": [
+        "Stellen Sie sicher, dass die referenzierte Ressource existiert",
+        "Prüfen Sie die Referenz-ID auf Korrektheit",
+        "Verwenden Sie contained resources wenn nötig"
+      ]
+    },
+    "required-element-missing": {
+      "friendlyText": "Ein erforderliches Datenelement fehlt",
+      "friendlyText_en": "Required data element is missing",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Fügen Sie das erforderliche Element zur Ressource hinzu",
+        "Überprüfen Sie die Profil-Definition für Pflichtfelder",
+        "Konsultieren Sie die FHIR-Dokumentation"
+      ]
+    },
+    "cardinality-violation": {
+      "friendlyText": "Die Anzahl der Elemente entspricht nicht den Vorgaben",
+      "friendlyText_en": "Element cardinality violation",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Prüfen Sie die minimale und maximale Anzahl erlaubter Elemente",
+        "Entfernen Sie überzählige Elemente",
+        "Fügen Sie fehlende Pflichtelemente hinzu"
+      ]
+    },
+    "invalid-code-system": {
+      "friendlyText": "Das CodeSystem ist unbekannt oder nicht verfügbar",
+      "friendlyText_en": "Unknown or unavailable CodeSystem",
+      "category": "terminology",
+      "severity": "warning",
+      "suggestions": [
+        "Verwenden Sie ein standardisiertes CodeSystem (z.B. SNOMED CT, LOINC)",
+        "Stellen Sie sicher, dass das CodeSystem auf dem Terminology-Server verfügbar ist",
+        "Prüfen Sie die CodeSystem-URL auf Korrektheit"
+      ]
+    },
+    "business-rule-violation": {
+      "friendlyText": "Eine fachliche Geschäftsregel wurde verletzt",
+      "friendlyText_en": "Business rule violation",
+      "category": "businessRule",
+      "severity": "error",
+      "suggestions": [
+        "Prüfen Sie die fachlichen Anforderungen des Profils",
+        "Stellen Sie sicher, dass alle Abhängigkeiten erfüllt sind",
+        "Konsultieren Sie die Implementierungsleitfäden"
+      ]
+    },
+    "invalid-data-type": {
+      "friendlyText": "Der Datentyp entspricht nicht der Spezifikation",
+      "friendlyText_en": "Invalid data type",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Verwenden Sie den korrekten FHIR-Datentyp",
+        "Prüfen Sie die Elementdefinition im Profil",
+        "Konvertieren Sie den Wert in das richtige Format"
+      ]
+    },
+    "extension-not-allowed": {
+      "friendlyText": "Diese Extension ist im Profil nicht erlaubt",
+      "friendlyText_en": "Extension not allowed in profile",
+      "category": "profile",
+      "severity": "warning",
+      "suggestions": [
+        "Entfernen Sie die nicht erlaubte Extension",
+        "Verwenden Sie nur Profil-konforme Extensions",
+        "Prüfen Sie die Extension-URL"
+      ]
+    },
+    "slice-not-matching": {
+      "friendlyText": "Das Element entspricht keinem definierten Slice",
+      "friendlyText_en": "Element does not match any defined slice",
+      "category": "profile",
+      "severity": "error",
+      "suggestions": [
+        "Prüfen Sie die Slice-Diskriminatoren",
+        "Stellen Sie sicher, dass alle erforderlichen Eigenschaften gesetzt sind",
+        "Konsultieren Sie die Profil-Dokumentation"
+      ]
+    },
+    "metadata-incomplete": {
+      "friendlyText": "Wichtige Metadaten fehlen oder sind unvollständig",
+      "friendlyText_en": "Metadata incomplete or missing",
+      "category": "metadata",
+      "severity": "warning",
+      "suggestions": [
+        "Fügen Sie Meta.profile hinzu",
+        "Setzen Sie Meta.lastUpdated",
+        "Fügen Sie Meta.source hinzu wenn relevant"
+      ]
+    },
+    "circular-reference": {
+      "friendlyText": "Zirkuläre Referenz erkannt - Ressource referenziert sich selbst",
+      "friendlyText_en": "Circular reference detected",
+      "category": "reference",
+      "severity": "warning",
+      "suggestions": [
+        "Überprüfen Sie die Referenz-Struktur",
+        "Vermeiden Sie zirkuläre Abhängigkeiten",
+        "Verwenden Sie contained resources wenn angemessen"
+      ]
+    },
+    "version-mismatch": {
+      "friendlyText": "FHIR-Version stimmt nicht mit der Server-Version überein",
+      "friendlyText_en": "FHIR version mismatch",
+      "category": "structural",
+      "severity": "error",
+      "suggestions": [
+        "Stellen Sie sicher, dass die Ressource für die richtige FHIR-Version erstellt wurde",
+        "Migrieren Sie die Ressource zur Server-Version",
+        "Prüfen Sie Meta.versionId"
+      ]
+    },
+    "unknown-element": {
+      "friendlyText": "Unbekanntes oder nicht standardisiertes Element gefunden",
+      "friendlyText_en": "Unknown or non-standard element",
+      "category": "structural",
+      "severity": "warning",
+      "suggestions": [
+        "Entfernen Sie unbekannte Elemente",
+        "Verwenden Sie Extensions für benutzerdefinierte Daten",
+        "Prüfen Sie die FHIR-Spezifikation"
+      ]
+    },
+    "binding-strength-violation": {
+      "friendlyText": "Der Code entspricht nicht der erforderlichen Binding-Stärke",
+      "friendlyText_en": "Binding strength violation",
+      "category": "terminology",
+      "severity": "warning",
+      "suggestions": [
+        "Verwenden Sie einen Code aus dem required ValueSet",
+        "Prüfen Sie die Binding-Stärke (required, extensible, preferred)",
+        "Bei extensible: Geben Sie eine system+code Kombination an"
+      ]
+    }
+  }
+}
+

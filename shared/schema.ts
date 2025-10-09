@@ -8,6 +8,7 @@ export const fhirServers = pgTable("fhir_servers", {
   url: text("url").notNull(),
   isActive: boolean("is_active").default(false),
   authConfig: jsonb("auth_config"),
+  fhirVersion: text("fhir_version"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -119,6 +120,7 @@ export const validationResults = pgTable("validation_results", {
   resourceVersion: text("resource_version"),
   resourceSizeBytes: integer("resource_size_bytes"),
   resourceComplexityScore: integer("resource_complexity_score").default(0),
+  fhirVersion: text("fhir_version"), // FHIR version (R4, R5, R6) used during validation
   // Validation context
   validationContext: jsonb("validation_context").default({}),
   validationEnvironment: text("validation_environment").default("production"), // 'development', 'testing', 'production'
@@ -176,6 +178,7 @@ export const editAuditTrail = pgTable("edit_audit_trail", {
   fhirId: text("fhir_id").notNull(),
   beforeHash: text("before_hash").notNull(),
   afterHash: text("after_hash").notNull(),
+  fhirVersion: text("fhir_version"), // FHIR version (R4, R5, R6) of edited resource
   editedAt: timestamp("edited_at").notNull().defaultNow(),
   editedBy: text("edited_by").default("system"),
   operation: text("operation").notNull(), // 'single_edit' | 'batch_edit'

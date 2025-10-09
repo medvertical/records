@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { AlertCircle, Check, Copy, FileJson, Save, X } from 'lucide-react';
+import { AlertCircle, Check, Copy, FileJson, Save, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 // ============================================================================
 // Types
@@ -115,6 +117,8 @@ export function ResourceEditor({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [copiedToClipboard, setCopiedToClipboard] = useState(false);
+  const [autoRevalidate, setAutoRevalidate] = useState(false);
+  const [isRevalidating, setIsRevalidating] = useState(false);
 
   // Initialize JSON content when resource changes
   useEffect(() => {
@@ -317,18 +321,53 @@ export function ResourceEditor({
           </TabsContent>
         </Tabs>
 
+        {/* Auto-Revalidate Option */}
+        <div className="flex items-center space-x-2 pt-3 border-t">
+          <Checkbox
+            id="auto-revalidate"
+            checked={autoRevalidate}
+            onCheckedChange={(checked) => setAutoRevalidate(checked as boolean)}
+            disabled={isSaving || isRevalidating}
+          />
+          <Label 
+            htmlFor="auto-revalidate" 
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+          >
+            Automatically revalidate after save
+          </Label>
+        </div>
+
+        {/* Revalidating Indicator */}
+        {isRevalidating && (
+          <Alert className="mt-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <AlertDescription>
+              Validating changes... This may take a moment.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Footer */}
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={handleCancel} disabled={isSaving}>
+          <Button variant="outline" onClick={handleCancel} disabled={isSaving || isRevalidating}>
             <X className="h-4 w-4 mr-1" />
             Cancel
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!validation.valid || !hasChanges || isSaving}
+            disabled={!validation.valid || !hasChanges || isSaving || isRevalidating}
           >
-            <Save className="h-4 w-4 mr-1" />
-            {isSaving ? 'Saving...' : 'Save Changes'}
+            {isSaving || isRevalidating ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                {isSaving ? 'Saving...' : 'Revalidating...'}
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-1" />
+                Save Changes
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

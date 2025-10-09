@@ -711,6 +711,67 @@ export class FhirClient {
     }
   }
 
+  /**
+   * Detects and normalizes FHIR version from CapabilityStatement
+   * @returns Normalized FHIR version (R4, R5, R6) or null if detection fails
+   */
+  async getFhirVersion(): Promise<string | null> {
+    try {
+      const capability = await this.getCapabilityStatement();
+      
+      if (!capability) {
+        logger.warn('[FhirClient] Could not fetch CapabilityStatement for version detection');
+        return null;
+      }
+
+      const version = capability.fhirVersion;
+      
+      if (!version) {
+        logger.warn('[FhirClient] CapabilityStatement missing fhirVersion field');
+        return null;
+      }
+
+      // Normalize FHIR version to Rx format
+      const normalized = this.normalizeFhirVersion(version);
+      logger.info(`[FhirClient] Detected FHIR version: ${version} → ${normalized}`);
+      
+      return normalized;
+    } catch (error: any) {
+      logger.error('[FhirClient] Failed to detect FHIR version:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Normalizes FHIR version string to standard Rx format
+   * @param version - Raw FHIR version (e.g., "4.0.1", "5.0.0", "6.0.0-ballot1")
+   * @returns Normalized version (R4, R5, R6) or R4 as fallback
+   */
+  private normalizeFhirVersion(version: string): string {
+    if (!version) return 'R4';
+
+    // Extract major version number
+    const majorVersion = version.split('.')[0];
+
+    switch (majorVersion) {
+      case '4':
+        return 'R4';
+      case '5':
+        return 'R5';
+      case '6':
+        return 'R6';
+      default:
+        // Check if version string already contains R4/R5/R6
+        if (version.toUpperCase().includes('R4')) return 'R4';
+        if (version.toUpperCase().includes('R5')) return 'R5';
+        if (version.toUpperCase().includes('R6')) return 'R6';
+        
+        // Fallback to R4 for unknown versions
+        logger.warn(`[FhirClient] Unknown FHIR version ${version}, defaulting to R4`);
+        return 'R4';
+    }
+  }
+
   async scanInstalledPackages(): Promise<any[]> {
     try {
       const packages: any[] = [];

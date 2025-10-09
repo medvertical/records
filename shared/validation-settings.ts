@@ -45,6 +45,24 @@ export interface ValidationSettings {
     includedTypes: string[];    // List of resource types to validate (empty = all)
     excludedTypes: string[];    // List of resource types to exclude
   };
+
+  /** Validation Mode (Online/Offline) for terminology validation */
+  mode?: 'online' | 'offline'; // Default: 'online'
+  
+  /** Terminology Fallback Configuration */
+  terminologyFallback?: {
+    local?: string;  // Local terminology server URL (e.g., http://localhost:8081/fhir)
+    remote?: string; // Remote terminology server URL (e.g., https://tx.fhir.org)
+  };
+  
+  /** Offline Mode Configuration */
+  offlineConfig?: {
+    ontoserverUrl?: string;     // Local Ontoserver URL
+    profileCachePath?: string;  // Path to cached profile packages
+  };
+
+  /** Auto-Revalidation Settings */
+  autoRevalidateAfterEdit?: boolean; // Automatically revalidate after resource edit (default: false)
 }
 
 // ============================================================================
@@ -305,7 +323,17 @@ export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
     enabled: true,
     includedTypes: R4_DEFAULT_INCLUDED_RESOURCE_TYPES,
     excludedTypes: []
-  }
+  },
+  mode: 'online',
+  terminologyFallback: {
+    local: 'http://localhost:8081/fhir',
+    remote: 'https://tx.fhir.org/r4'
+  },
+  offlineConfig: {
+    ontoserverUrl: 'http://localhost:8081/fhir',
+    profileCachePath: '/opt/fhir/igs/'
+  },
+  autoRevalidateAfterEdit: false
 };
 
 export const DEFAULT_VALIDATION_SETTINGS_R5: ValidationSettings = {
@@ -325,7 +353,17 @@ export const DEFAULT_VALIDATION_SETTINGS_R5: ValidationSettings = {
     enabled: true,
     includedTypes: R5_DEFAULT_INCLUDED_RESOURCE_TYPES,
     excludedTypes: []
-  }
+  },
+  mode: 'online',
+  terminologyFallback: {
+    local: 'http://localhost:8081/fhir',
+    remote: 'https://tx.fhir.org/r5'
+  },
+  offlineConfig: {
+    ontoserverUrl: 'http://localhost:8081/fhir',
+    profileCachePath: '/opt/fhir/igs/'
+  },
+  autoRevalidateAfterEdit: false
 };
 
 // ============================================================================

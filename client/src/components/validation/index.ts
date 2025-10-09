@@ -43,9 +43,6 @@ export { SignatureBadge } from './SignatureBadge';
 export type { SignatureBadgeProps } from './SignatureBadge';
 
 // Settings components - Settings management UI
-export { ValidationSettingsAuditTrail } from './validation-settings-audit-trail';
-export { ValidationSettingsDashboardDemo } from './validation-settings-dashboard-demo';
-export { ValidationSettingsPollingDemo } from './validation-settings-polling-demo';
 export { ValidationSettingsRealtimeIndicator } from './validation-settings-realtime-indicator';
 
 // Progress components - Progress tracking and display

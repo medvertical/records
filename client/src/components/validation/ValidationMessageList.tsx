@@ -20,6 +20,11 @@ export interface ValidationMessage {
   signature: string;
   ruleId?: string;
   detectedAt?: string;
+  // Error mapping fields
+  mappedMessage?: string;      // Human-friendly mapped message
+  originalMessage?: string;     // Original technical message
+  suggestions?: string[];       // Helpful suggestions
+  hasMappedMessage?: boolean;   // Whether message was mapped
 }
 
 export interface ValidationMessageListProps {
@@ -137,15 +142,49 @@ function MessageItem({
           {/* Message Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-3 mb-1">
-              <p className="font-medium text-gray-900">{message.text}</p>
+              <div className="flex-1">
+                {/* Display mapped message if available, otherwise original */}
+                <p className="font-medium text-gray-900">
+                  {message.mappedMessage || message.text}
+                </p>
+                
+                {/* Show indicator if message was mapped */}
+                {message.hasMappedMessage && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="secondary" className="text-[10px] mt-1 cursor-help">
+                        📖 Übersetzt
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="font-semibold mb-1">Technische Originalmeldung:</p>
+                      <p className="text-xs font-mono text-gray-300 break-words">
+                        {message.originalMessage || message.text}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
               <Badge variant="outline" className={cn('text-xs flex-shrink-0', config.color)}>
                 {config.label}
               </Badge>
             </div>
 
+            {/* Suggestions (if available) */}
+            {message.suggestions && message.suggestions.length > 0 && (
+              <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs space-y-1">
+                <p className="font-semibold text-blue-900">💡 Lösungsvorschläge:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-blue-800">
+                  {message.suggestions.map((suggestion, idx) => (
+                    <li key={idx}>{suggestion}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Path */}
             <button
-              className="text-sm text-gray-600 hover:text-gray-900 hover:underline font-mono break-all text-left"
+              className="text-sm text-gray-600 hover:text-gray-900 hover:underline font-mono break-all text-left mt-2"
               onClick={(e) => {
                 e.stopPropagation();
                 onPathClick?.(message.canonicalPath);
@@ -160,8 +199,31 @@ function MessageItem({
       {/* Expanded Details */}
       {isExpanded && (
         <div className="px-4 pb-4 pt-2 border-t border-gray-200 bg-white bg-opacity-50 space-y-3">
-          {/* Code */}
-          {message.code && (
+          {/* Technical Details (for mapped messages) */}
+          {message.hasMappedMessage && message.originalMessage && (
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded space-y-2">
+              <p className="text-xs font-semibold text-gray-700">🔧 Technische Details:</p>
+              <div className="space-y-1">
+                <div className="flex items-start gap-2">
+                  <span className="text-xs font-medium text-gray-500 w-28 flex-shrink-0">Original:</span>
+                  <code className="text-xs text-gray-700 font-mono break-words flex-1">
+                    {message.originalMessage}
+                  </code>
+                </div>
+                {message.code && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-gray-500 w-28 flex-shrink-0">Error Code:</span>
+                    <Badge variant="outline" className="font-mono text-xs">
+                      {message.code}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Code (for non-mapped messages) */}
+          {!message.hasMappedMessage && message.code && (
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-gray-500 w-20">Code:</span>
               <Badge variant="outline" className="font-mono text-xs">

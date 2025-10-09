@@ -5,8 +5,10 @@ import { validationQueue } from '../../../services/validation/queue/validation-q
 import { securityMiddleware } from '../../../middleware/security-validation';
 import { rateLimiters } from '../../../middleware/security-config';
 import { db } from '../../../db';
-import { editAuditTrail } from '@shared/schema';
+import { editAuditTrail, validationSettings } from '@shared/schema';
+import { eq } from 'drizzle-orm';
 import logger from '../../../utils/logger';
+import type { ValidationSettings } from '@shared/validation-settings';
 
 const router = Router();
 
@@ -199,6 +201,14 @@ router.put(
       });
     }
     
+    // Get FHIR version from server
+    let fhirVersion: string | null = null;
+    try {
+      fhirVersion = await fhirClient.getFhirVersion();
+    } catch (error) {
+      logger.warn('[Edit] Could not detect FHIR version:', error);
+    }
+    
     // Create and persist audit record
     try {
       await db.insert(editAuditTrail).values({
@@ -207,6 +217,7 @@ router.put(
         fhirId: id,
         beforeHash,
         afterHash,
+        fhirVersion: fhirVersion || undefined,
         editedAt: new Date(),
         editedBy: 'system', // TODO: Get from auth context when authentication is implemented
         operation: 'single_edit',
@@ -215,20 +226,51 @@ router.put(
         versionAfter: updatedResource.meta?.versionId,
       });
       
-      logger.info(`[Audit] Recorded successful edit: ${resourceType}/${id}`);
+      logger.info(`[Audit] Recorded successful edit: ${resourceType}/${id}${fhirVersion ? ` (${fhirVersion})` : ''}`);
     } catch (auditError) {
       // Log audit error but don't fail the request
       logger.error('[Audit] Failed to record audit trail:', auditError);
     }
     
-    // Enqueue revalidation (higher priority than batch)
-    validationQueue.enqueue({
-      serverId,
-      resourceType,
-      fhirId: id,
-      priority: 'high',
-    });
-    const queuedRevalidation = true;
+    // Check auto-revalidation settings
+    let queuedRevalidation = false;
+    try {
+      const settingsResult = await db
+        .select()
+        .from(validationSettings)
+        .where(eq(validationSettings.serverId, serverId))
+        .limit(1);
+      
+      const settings: ValidationSettings | null = settingsResult.length > 0 
+        ? (settingsResult[0].settings as ValidationSettings)
+        : null;
+      
+      const shouldAutoRevalidate = settings?.autoRevalidateAfterEdit !== false; // Default to true if not set
+      
+      if (shouldAutoRevalidate) {
+        // Enqueue revalidation (higher priority than batch)
+        validationQueue.enqueue({
+          serverId,
+          resourceType,
+          fhirId: id,
+          priority: 'high',
+        });
+        queuedRevalidation = true;
+        logger.info(`[Edit] Auto-revalidation queued for ${resourceType}/${id}`);
+      } else {
+        logger.info(`[Edit] Auto-revalidation skipped (disabled in settings) for ${resourceType}/${id}`);
+      }
+    } catch (settingsError) {
+      // If settings check fails, default to revalidating (safer)
+      logger.warn('[Edit] Failed to check auto-revalidation settings, defaulting to revalidate:', settingsError);
+      validationQueue.enqueue({
+        serverId,
+        resourceType,
+        fhirId: id,
+        priority: 'high',
+      });
+      queuedRevalidation = true;
+    }
     
     res.json({
       success: true,

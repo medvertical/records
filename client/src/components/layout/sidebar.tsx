@@ -6,6 +6,7 @@ import { cn, formatCount } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import ServerConnectionModal from "@/components/settings/server-connection-modal";
 
 import { 
@@ -252,6 +253,18 @@ function SidebarContent({
               ) : (
                 <>
                   {activeServer?.name || "No Server"}
+                  {activeServer?.fhirVersion && (
+                    <Badge 
+                      variant={activeServer.fhirVersion === 'R5' ? 'default' : 'secondary'} 
+                      className={cn(
+                        "text-[10px] px-1.5 py-0 h-4 font-medium",
+                        activeServer.fhirVersion === 'R5' && "bg-blue-500 hover:bg-blue-600",
+                        activeServer.fhirVersion === 'R6' && "bg-yellow-500 hover:bg-yellow-600 text-white"
+                      )}
+                    >
+                      {activeServer.fhirVersion}
+                    </Badge>
+                  )}
                 </>
               )}
               {isLoading && activeServer && (

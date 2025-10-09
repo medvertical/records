@@ -18,6 +18,7 @@ export interface ServerConfig {
   name: string;
   url: string;
   isActive: boolean;
+  fhirVersion?: string; // FHIR version (R4, R5, R6)
   auth?: {
     type: 'none' | 'basic' | 'bearer' | 'oauth2';
     username?: string;
@@ -252,6 +253,18 @@ class ServerRepository {
 
       const capabilities = await response.json();
 
+      // Extract and normalize FHIR version
+      const fhirVersion = this.normalizeFhirVersion(capabilities.fhirVersion);
+      
+      // Update server with detected FHIR version
+      if (serverData.id && fhirVersion) {
+        await db.update(fhirServers)
+          .set({ fhirVersion })
+          .where(eq(fhirServers.id, serverData.id));
+        
+        console.log(`[ServerRepository] Detected FHIR version ${fhirVersion} for server ${serverData.name}`);
+      }
+
       // Update server status
       await this.updateServerStatus(serverData.id, {
         isOnline: true,
@@ -284,6 +297,36 @@ class ServerRepository {
         responseTime,
         error: errorMessage
       };
+    }
+  }
+
+  /**
+   * Normalizes FHIR version string to standard Rx format
+   * @param version - Raw FHIR version (e.g., "4.0.1", "5.0.0", "6.0.0-ballot1")
+   * @returns Normalized version (R4, R5, R6) or null
+   */
+  private normalizeFhirVersion(version: string | undefined): string | null {
+    if (!version) return null;
+
+    // Extract major version number
+    const majorVersion = version.split('.')[0];
+
+    switch (majorVersion) {
+      case '4':
+        return 'R4';
+      case '5':
+        return 'R5';
+      case '6':
+        return 'R6';
+      default:
+        // Check if version string already contains R4/R5/R6
+        if (version.toUpperCase().includes('R4')) return 'R4';
+        if (version.toUpperCase().includes('R5')) return 'R5';
+        if (version.toUpperCase().includes('R6')) return 'R6';
+        
+        // Return null for unknown versions
+        console.warn(`[ServerRepository] Unknown FHIR version ${version}`);
+        return null;
     }
   }
 
@@ -333,6 +376,7 @@ class ServerRepository {
       url: dbRecord.url,
       isActive: dbRecord.isActive,
       auth: dbRecord.authConfig || undefined,
+      fhirVersion: dbRecord.fhirVersion || undefined,
       timeoutMs: 30000, // Default value
       maxConcurrentRequests: 10, // Default value
       capabilities: undefined, // Not stored in current schema
