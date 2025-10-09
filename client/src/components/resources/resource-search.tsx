@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Search, Filter, ChevronDown, ChevronUp, X } from "lucide-react";
 import { SeverityIcon } from "@/components/ui/severity-icon";
 import type { SeverityLevel } from "@/components/ui/severity-icon";
+import { cn } from "@/lib/utils";
 
 export interface ValidationFilters {
   aspects: string[];
@@ -39,6 +40,11 @@ interface ResourceSearchProps {
       };
     };
   };
+  activeServer?: {
+    name: string;
+    url: string;
+    fhirVersion?: string;
+  };
 }
 
 const VALIDATION_ASPECTS = [
@@ -64,6 +70,7 @@ export default function ResourceSearch({
   filters = { aspects: [], severities: [], hasIssuesOnly: false },
   onFilterChange,
   validationSummary,
+  activeServer,
 }: ResourceSearchProps) {
   const [query, setQuery] = useState(defaultQuery);
   const [resourceType, setResourceType] = useState(defaultResourceType);
@@ -123,6 +130,25 @@ export default function ResourceSearch({
             className="pl-10"
           />
         </div>
+        
+        {/* FHIR Version Badge (Task 13.2) */}
+        {activeServer?.fhirVersion && (
+          <Badge 
+            variant="secondary"
+            className={cn(
+              "text-xs px-2.5 py-1 h-8 font-medium text-white whitespace-nowrap",
+              activeServer.fhirVersion === 'R4' && "bg-blue-500 hover:bg-blue-600",
+              activeServer.fhirVersion === 'R5' && "bg-green-500 hover:bg-green-600",
+              activeServer.fhirVersion === 'R6' && "bg-purple-500 hover:bg-purple-600"
+            )}
+            title={`FHIR Version ${activeServer.fhirVersion} - ${activeServer.name}`}
+          >
+            {activeServer.fhirVersion === 'R4' && '🔵'}
+            {activeServer.fhirVersion === 'R5' && '🟢'}
+            {activeServer.fhirVersion === 'R6' && '🟣'}
+            {' '}{activeServer.fhirVersion}
+          </Badge>
+        )}
         
                     <Select 
               value={resourceType || "all"} 

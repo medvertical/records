@@ -1080,6 +1080,7 @@ export default function ResourceBrowser() {
           filters={validationFilters}
           onFilterChange={handleFilterChange}
           validationSummary={validationSummaryWithStats}
+          activeServer={stableActiveServer}
         />
 
         {/* Validation Overview */}

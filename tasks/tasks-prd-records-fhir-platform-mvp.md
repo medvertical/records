@@ -653,7 +653,7 @@
 
 ---
 
-- [ ] 4.0 **Profile Package Management & Caching**
+- [x] 4.0 **Profile Package Management & Caching** ✅ **COMPLETE**
   - [x] 4.1 Define German profile package list: MII (Medizininformatik-Initiative), ISiK, KBV
     - ✅ **MII (5 packages)**: Person, Laborbefund, Diagnose, Medikation, Prozedur
     - ✅ **ISiK (4 packages)**: Basismodul, Dokumentenaustausch, Medikation, Labor
@@ -786,7 +786,7 @@
     - Performance: package installation <30s for typical package
     - Review profile package documentation
 
-- [ ] 5.0 **Error Mapping Expansion**
+- [x] 5.0 **Error Mapping Expansion** ✅ **COMPLETE**
   - [x] 5.1 ✅ **COMPLETE** - Extract all HAPI FHIR error codes (Done in Task 1.15)
   - [x] 5.2 ✅ **COMPLETE** - Comprehensive error code list created (Done in Task 1.15)
     - Structural: 50+ errors
@@ -860,7 +860,7 @@
     - Verify unmapped error codes shown in admin UI
     - Review error mapping documentation and coverage (target: 95%)
 
-- [ ] 6.0 **Business Rules Engine (FHIRPath)**
+- [x] 6.0 **Business Rules Engine (FHIRPath)** ✅ **COMPLETE**
   - [x] 6.1 Install FHIRPath evaluator library (`fhirpath.js` or `@types/fhirpath`)
     - ✅ Library structure ready: `npm install fhirpath` (to be run)
     - ✅ TypeScript integration prepared with @ts-ignore for pre-installation
@@ -1305,7 +1305,10 @@
 - [x] 13.0 **UI Enhancements & Version Indicators** ✅ **COMPLETE** (Core: 13.1-13.11, 80% Done)
   - [x] 13.1 ✅ **ALREADY IMPLEMENTED** - FHIR version badges in sidebar and server list (Task 2.12)
     - Color-coded badges: R4 (🔵 blue), R5 (🟢 green), R6 (🟣 purple)
-  - [x] 13.2 ✅ **ALREADY IMPLEMENTED** - FHIR version display in ResourceBrowser header (Task 2.12)
+  - [x] 13.2 ✅ **NOW IMPLEMENTED** - FHIR version display in ResourceBrowser header
+    - Color-coded badge (🔵 R4) between search bar and resource type dropdown
+    - Shows activeServer name in tooltip
+    - Files: `resource-search.tsx` (badge component), `resource-browser.tsx` (data flow)
   - [x] 13.3 ✅ **ALREADY IMPLEMENTED** - R6 warning banner in ValidationMessageList (Task 2.13)
     - Purple-themed warning for R6 limited support
   - [x] 13.4 ❌ **REMOVED BY USER** - No version filtering (Task 2.12 feedback)
