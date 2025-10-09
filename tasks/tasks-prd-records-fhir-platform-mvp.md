@@ -1346,7 +1346,14 @@
   - [x] 13.10 ⏭️ **OPTIONAL** - Settings snapshot popover
   - [x] 13.11 ✅ **ALREADY IMPLEMENTED** - Mode indicator badge (Task 3.8)
     - ValidationModeBadge with tooltip (🌐 Online / 📦 Offline)
-  - [ ] 13.12 ⏭️ **OPTIONAL** - Validation history timeline
+  - [x] 13.12 ✅ **COMPLETED** - Validation history timeline
+    - ValidationHistoryTimeline component (320 lines)
+    - Timeline view with status icons
+    - Filter by status (all/success/warning/error)
+    - Score trends and issue counts
+    - Aspect badges and duration tracking
+    - Auto-refresh every 30 seconds
+    - Integrated into Dashboard (bottom row)
   - [ ] 13.13 ⏭️ **OPTIONAL** - Compare versions feature
   - [x] 13.14 ✅ **COMPLETED** - Keyboard shortcuts (D, B, P, S, R, V, E, ?, Esc)
     - useKeyboardShortcuts hook with global event listeners
