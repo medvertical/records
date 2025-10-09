@@ -39,6 +39,7 @@ export type EngineValidationResult = {
   issues: EngineAspectIssue[];
   aspects: EngineAspectResult[];
   validatedAt: Date | string;
+  fhirVersion?: 'R4' | 'R5' | 'R6'; // Task 2.11: FHIR version
 };
 
 export type SimplifiedSettingsSnapshot = {
@@ -83,6 +84,9 @@ export async function persistEngineResultPerAspect(params: {
 }): Promise<void> {
   const { serverId, resourceType, fhirId, settingsSnapshot, engineResult } = params;
   const settingsHash = computeSettingsSnapshotHash(settingsSnapshot);
+  
+  // Task 2.11: Get FHIR version from engine result, default to R4
+  const fhirVersion = engineResult.fhirVersion || 'R4';
 
   for (const aspectResult of engineResult.aspects) {
     const aspect = aspectResult.aspect as ValidationAspectType;
@@ -103,12 +107,13 @@ export async function persistEngineResultPerAspect(params: {
       )
     );
 
-    // Insert new per-aspect row
+    // Insert new per-aspect row (Task 2.11: Include fhirVersion)
     const inserted = await db.insert(validationResultsPerAspect).values({
       serverId,
       resourceType,
       fhirId,
       aspect,
+      fhirVersion, // Task 2.11: Store FHIR version
       isValid: aspectResult.isValid,
       errorCount,
       warningCount,
@@ -145,12 +150,14 @@ export async function persistEngineResultPerAspect(params: {
         normalizedText: textNorm.normalized,
       });
 
+      // Task 2.11: Insert validation message with FHIR version
       await db.insert(validationMessages).values({
         validationResultId,
         serverId,
         resourceType,
         fhirId,
         aspect,
+        fhirVersion, // Task 2.11: Store FHIR version
         severity,
         code: issue.code || null,
         canonicalPath: pathNorm.normalized,

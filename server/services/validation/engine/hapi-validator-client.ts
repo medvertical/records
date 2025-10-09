@@ -9,6 +9,13 @@
  * - Parses OperationOutcome responses from HAPI
  * - Maps HAPI issues to ValidationIssue format (via hapi-issue-mapper.ts)
  * - Handles timeouts, errors, and cleanup
+ * - Version-specific initialization using fhir-package-versions.ts (Task 2.5)
+ * 
+ * Updates (Task 2.5):
+ * - Uses getCorePackage() and getVersionConfig() for version-specific setup
+ * - Validates version support before initialization
+ * - Provides version support info via getVersionSupport() and isVersionAvailable()
+ * - Logs version limitations and configuration details
  * 
  * File size: Target <400 lines (global.mdc compliance)
  */
@@ -24,6 +31,13 @@ import {
   FHIR_VERSION_IG_MAP,
   type HapiValidatorConfig
 } from '../../../config/hapi-validator-config';
+import {
+  getCorePackage,
+  getCorePackageId,
+  getVersionConfig,
+  isSupportedVersion,
+  hasFullSupport,
+} from '../../../config/fhir-package-versions';
 import type {
   HapiValidationOptions,
   HapiOperationOutcome,
@@ -54,6 +68,57 @@ export class HapiValidatorClient {
         `Run 'bash scripts/setup-hapi-validator.sh' to download it.`
       );
     }
+  }
+
+  /**
+   * Get version support information
+   * Task 2.5: Provides version-specific configuration and support details
+   * 
+   * @param version - FHIR version to check
+   * @returns Version configuration including support status, limitations, and packages
+   */
+  getVersionSupport(version: 'R4' | 'R5' | 'R6') {
+    if (!isSupportedVersion(version)) {
+      throw new Error(`Unsupported FHIR version: ${version}`);
+    }
+
+    const corePackage = getCorePackage(version);
+    const versionConfig = getVersionConfig(version);
+    
+    return {
+      version: version,
+      corePackage: corePackage.corePackage,
+      fhirVersion: corePackage.fhirVersion,
+      status: corePackage.status,
+      supportStatus: versionConfig.supportStatus,
+      limitations: versionConfig.limitations || [],
+      hasFullSupport: hasFullSupport(version),
+      isConfigured: (version === 'R5' ? this.config.supportR5 : version === 'R6' ? this.config.supportR6 : true),
+    };
+  }
+
+  /**
+   * Check if a FHIR version is supported and configured
+   * Task 2.5: Quick check for version availability
+   * 
+   * @param version - FHIR version to check
+   * @returns true if version is supported and configured, false otherwise
+   */
+  isVersionAvailable(version: 'R4' | 'R5' | 'R6'): boolean {
+    if (!isSupportedVersion(version)) {
+      return false;
+    }
+
+    // Check configuration settings
+    if (version === 'R5' && !this.config.supportR5) {
+      return false;
+    }
+
+    if (version === 'R6' && !this.config.supportR6) {
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -131,17 +196,43 @@ export class HapiValidatorClient {
   /**
    * Validate options
    */
+  /**
+   * Validate options and check version support
+   * Task 2.5: Version-specific validation using fhir-package-versions.ts
+   */
   private validateOptions(options: HapiValidationOptions): void {
-    if (!options.fhirVersion || !['R4', 'R5', 'R6'].includes(options.fhirVersion)) {
-      throw new Error(`Invalid FHIR version: ${options.fhirVersion}. Must be R4, R5, or R6.`);
+    // Validate FHIR version format
+    if (!options.fhirVersion) {
+      throw new Error('FHIR version is required for validation.');
     }
 
+    // Check if version is supported (using fhir-package-versions.ts)
+    if (!isSupportedVersion(options.fhirVersion)) {
+      throw new Error(
+        `Unsupported FHIR version: ${options.fhirVersion}. ` +
+        `Supported versions: R4, R5, R6.`
+      );
+    }
+
+    // Check configuration settings
     if (options.fhirVersion === 'R5' && !this.config.supportR5) {
       throw new Error('FHIR R5 support is disabled. Enable it in configuration.');
     }
 
     if (options.fhirVersion === 'R6' && !this.config.supportR6) {
       throw new Error('FHIR R6 support is disabled. Enable it in configuration.');
+    }
+
+    // Get version configuration
+    const versionConfig = getVersionConfig(options.fhirVersion);
+    
+    // Log version support status
+    if (!hasFullSupport(options.fhirVersion)) {
+      const limitations = versionConfig.limitations || [];
+      console.warn(
+        `[HapiValidatorClient] Warning: ${options.fhirVersion} has ${versionConfig.supportStatus} support. ` +
+        `Limitations: ${limitations.join(', ')}`
+      );
     }
   }
 
@@ -156,25 +247,46 @@ export class HapiValidatorClient {
 
   /**
    * Build HAPI validator CLI arguments
+   * Task 2.5: Version-specific initialization using fhir-package-versions.ts
+   * 
+   * Constructs HAPI CLI arguments based on:
+   * - FHIR version (R4, R5, R6)
+   * - Core package for version
+   * - Additional IG packages
+   * - Profile URL (if specified)
+   * - Terminology server (version-specific, mode-dependent)
    */
   private buildValidatorArgs(tempFilePath: string, options: HapiValidationOptions): string[] {
-    const versionInfo = FHIR_VERSION_IG_MAP[options.fhirVersion];
+    // Get version-specific core package (from fhir-package-versions.ts)
+    const corePackageId = getCorePackageId(options.fhirVersion);
+    const corePackage = getCorePackage(options.fhirVersion);
+    const versionConfig = getVersionConfig(options.fhirVersion);
+    
+    // Determine mode and terminology server
     const mode = options.mode || 'online';
-    const terminologyServer = options.terminologyServer || getTerminologyServerUrl(options.fhirVersion, mode, this.config);
+    const terminologyServer = options.terminologyServer || 
+      getTerminologyServerUrl(options.fhirVersion, mode, this.config);
 
+    // Base arguments
     const args = [
       '-jar', this.config.jarPath,
       tempFilePath,
-      '-version', versionInfo.version,
+      '-version', corePackage.version,  // Use version from fhir-package-versions
       '-output', 'json',
       '-locale', 'en',
     ];
 
-    // Add core IG package
-    args.push('-ig', versionInfo.corePackage);
+    // Add core IG package (version-specific)
+    args.push('-ig', corePackageId);
+
+    console.log(
+      `[HapiValidatorClient] Initializing HAPI validator for ${options.fhirVersion} ` +
+      `(${corePackage.status}) with core package: ${corePackageId}`
+    );
 
     // Add additional IG packages
     if (options.igPackages && options.igPackages.length > 0) {
+      console.log(`[HapiValidatorClient] Loading ${options.igPackages.length} additional IG packages`);
       options.igPackages.forEach(pkg => {
         args.push('-ig', pkg);
       });
@@ -183,10 +295,20 @@ export class HapiValidatorClient {
     // Add profile URL if specified
     if (options.profile) {
       args.push('-profile', options.profile);
+      console.log(`[HapiValidatorClient] Validating against profile: ${options.profile}`);
     }
 
-    // Add terminology server
+    // Add terminology server (version-specific)
     args.push('-tx', terminologyServer);
+    console.log(`[HapiValidatorClient] Using terminology server (${mode}): ${terminologyServer}`);
+
+    // Log limitations for non-stable versions
+    const limitations = versionConfig.limitations || [];
+    if (limitations.length > 0) {
+      console.warn(
+        `[HapiValidatorClient] ${options.fhirVersion} limitations: ${limitations.join(', ')}`
+      );
+    }
 
     return args;
   }

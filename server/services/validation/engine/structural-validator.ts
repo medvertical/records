@@ -37,15 +37,19 @@ export class StructuralValidator {
    * @param resourceType - Expected resource type
    * @returns Array of structural validation issues
    */
-  async validate(resource: any, resourceType: string): Promise<ValidationIssue[]> {
+  async validate(
+    resource: any, 
+    resourceType: string,
+    fhirVersion?: 'R4' | 'R5' | 'R6' // Task 2.4: Accept FHIR version parameter
+  ): Promise<ValidationIssue[]> {
     const startTime = Date.now();
 
     try {
       console.log(`[StructuralValidator] Validating ${resourceType} resource structure...`);
 
-      // Detect FHIR version from resource
-      const fhirVersion = this.detectFhirVersion(resource);
-      console.log(`[StructuralValidator] Detected FHIR version: ${fhirVersion}`);
+      // Task 2.4: Use provided version or detect from resource (fallback)
+      const version = fhirVersion || this.detectFhirVersion(resource);
+      console.log(`[StructuralValidator] FHIR version: ${version} (${fhirVersion ? 'provided' : 'detected'})`);
 
       // Basic pre-validation
       const preValidationIssues = this.performPreValidation(resource, resourceType);
@@ -63,16 +67,16 @@ export class StructuralValidator {
         // Use HAPI validator (primary)
         try {
           console.log(`[StructuralValidator] Using HAPI validator...`);
-          issues = await hapiStructuralValidator.validate(resource, resourceType, fhirVersion);
+          issues = await hapiStructuralValidator.validate(resource, resourceType, version);
         } catch (hapiError) {
           console.warn(`[StructuralValidator] HAPI validation failed, falling back to schema:`, hapiError);
           // Fall back to schema validator
-          issues = await schemaStructuralValidator.validate(resource, resourceType, fhirVersion);
+          issues = await schemaStructuralValidator.validate(resource, resourceType, version);
         }
       } else {
         // Use schema validator (fallback)
         console.log(`[StructuralValidator] Using schema validator (HAPI not available)...`);
-        issues = await schemaStructuralValidator.validate(resource, resourceType, fhirVersion);
+        issues = await schemaStructuralValidator.validate(resource, resourceType, version);
       }
 
       // Add any pre-validation issues

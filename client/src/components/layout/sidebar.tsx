@@ -255,14 +255,18 @@ function SidebarContent({
                   {activeServer?.name || "No Server"}
                   {activeServer?.fhirVersion && (
                     <Badge 
-                      variant={activeServer.fhirVersion === 'R5' ? 'default' : 'secondary'} 
+                      variant="secondary"
                       className={cn(
-                        "text-[10px] px-1.5 py-0 h-4 font-medium",
-                        activeServer.fhirVersion === 'R5' && "bg-blue-500 hover:bg-blue-600",
-                        activeServer.fhirVersion === 'R6' && "bg-yellow-500 hover:bg-yellow-600 text-white"
+                        "text-[10px] px-1.5 py-0 h-4 font-medium text-white",
+                        activeServer.fhirVersion === 'R4' && "bg-blue-500 hover:bg-blue-600",
+                        activeServer.fhirVersion === 'R5' && "bg-green-500 hover:bg-green-600",
+                        activeServer.fhirVersion === 'R6' && "bg-purple-500 hover:bg-purple-600"
                       )}
                     >
-                      {activeServer.fhirVersion}
+                      {activeServer.fhirVersion === 'R4' && '🔵'}
+                      {activeServer.fhirVersion === 'R5' && '🟢'}
+                      {activeServer.fhirVersion === 'R6' && '🟣'}
+                      {' '}{activeServer.fhirVersion}
                     </Badge>
                   )}
                 </>

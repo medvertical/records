@@ -20,6 +20,7 @@ export interface ValidationMessage {
   signature: string;
   ruleId?: string;
   detectedAt?: string;
+  fhirVersion?: 'R4' | 'R5' | 'R6';  // Task 2.13: FHIR version context
   // Error mapping fields
   mappedMessage?: string;      // Human-friendly mapped message
   originalMessage?: string;     // Original technical message
@@ -165,10 +166,39 @@ function MessageItem({
                   </Tooltip>
                 )}
               </div>
-              <Badge variant="outline" className={cn('text-xs flex-shrink-0', config.color)}>
-                {config.label}
-              </Badge>
+              <div className="flex items-center gap-2">
+                {/* Task 2.13: FHIR Version Badge */}
+                {message.fhirVersion && (
+                  <Badge 
+                    variant="secondary" 
+                    className={cn(
+                      'text-[10px] px-1.5 py-0 h-4 font-medium text-white flex-shrink-0',
+                      message.fhirVersion === 'R4' && 'bg-blue-500',
+                      message.fhirVersion === 'R5' && 'bg-green-500',
+                      message.fhirVersion === 'R6' && 'bg-purple-500'
+                    )}
+                  >
+                    {message.fhirVersion === 'R4' && '🔵'}
+                    {message.fhirVersion === 'R5' && '🟢'}
+                    {message.fhirVersion === 'R6' && '🟣'}
+                    {' '}{message.fhirVersion}
+                  </Badge>
+                )}
+                <Badge variant="outline" className={cn('text-xs flex-shrink-0', config.color)}>
+                  {config.label}
+                </Badge>
+              </div>
             </div>
+
+            {/* Task 2.13: R6 Limited Support Warning */}
+            {message.fhirVersion === 'R6' && (
+              <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded text-xs">
+                <p className="font-semibold text-purple-900">🟣 R6 Preview Notice:</p>
+                <p className="text-purple-800 mt-1">
+                  Limited validation support - Structural and Profile validation only. Terminology and Reference validation may be incomplete.
+                </p>
+              </div>
+            )}
 
             {/* Suggestions (if available) */}
             {message.suggestions && message.suggestions.length > 0 && (

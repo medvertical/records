@@ -11,11 +11,13 @@
  * - Integration with TerminologyAdapter for fallback chain
  * - Online/offline mode support (tx.fhir.org vs local Ontoserver)
  * - Proper caching to avoid performance issues
+ * - Task 2.9: Version-specific terminology server routing
  * 
  * Architecture:
  * - Primary: Uses HAPI FHIR Validator for comprehensive terminology validation
  * - Fallback: TerminologyAdapter for direct ValueSet/CodeSystem lookups
  * - Cache: Terminology cache with TTL (1 hour online, indefinite offline)
+ * - Version Routing: R4 → tx.fhir.org/r4, R5 → tx.fhir.org/r5, R6 → tx.fhir.org/r6
  * 
  * File size: Target <400 lines (global.mdc compliance)
  */
@@ -25,6 +27,8 @@ import { hapiValidatorClient } from './hapi-validator-client';
 import type { HapiValidationOptions } from './hapi-validator-types';
 import { TerminologyAdapter } from '../terminology/terminology-adapter';
 import type { ValidationSettings } from '@shared/validation-settings';
+import { getTerminologyServerUrl, hapiValidatorConfig } from '../../../config/hapi-validator-config';
+import { addR6WarningIfNeeded } from '../utils/r6-support-warnings';
 
 // ============================================================================
 // Terminology Validator
@@ -50,7 +54,8 @@ export class TerminologyValidator {
   async validate(
     resource: any,
     resourceType: string,
-    settings?: ValidationSettings
+    settings?: ValidationSettings,
+    fhirVersion?: 'R4' | 'R5' | 'R6' // Task 2.4: Accept FHIR version parameter
   ): Promise<ValidationIssue[]> {
     const startTime = Date.now();
     const issues: ValidationIssue[] = [];
@@ -91,11 +96,16 @@ export class TerminologyValidator {
       // Cache result
       this.cacheResult(cacheKey, issues, mode);
 
+      // Add R6 warning if needed (Task 2.10)
+      const issuesWithR6Warning = addR6WarningIfNeeded(issues, fhirVersion, 'terminology');
+
       const validationTime = Date.now() - startTime;
       console.log(
         `[TerminologyValidator] Validated ${resourceType} terminology in ${validationTime}ms ` +
-        `(${issues.length} issues, validator: ${this.hapiAvailable ? 'HAPI' : 'fallback'})`
+        `(${issuesWithR6Warning.length} issues, validator: ${this.hapiAvailable ? 'HAPI' : 'fallback'})`
       );
+
+      return issuesWithR6Warning;
 
     } catch (error) {
       console.error('[TerminologyValidator] Terminology validation failed:', error);
@@ -108,13 +118,15 @@ export class TerminologyValidator {
         path: '',
         timestamp: new Date(),
       });
-    }
 
-    return issues;
+      // Add R6 warning if needed (Task 2.10)
+      return addR6WarningIfNeeded(issues, fhirVersion, 'terminology');
+    }
   }
 
   /**
    * Validate using HAPI FHIR Validator
+   * Task 2.9: Enhanced with version-specific terminology server routing
    */
   private async validateWithHapi(
     resource: any,
@@ -123,12 +135,19 @@ export class TerminologyValidator {
     mode: 'online' | 'offline'
   ): Promise<ValidationIssue[]> {
     try {
-      console.log(`[TerminologyValidator] Using HAPI validator for terminology`);
+      // Get version-specific terminology server URL (Task 2.9)
+      const terminologyServerUrl = getTerminologyServerUrl(fhirVersion, mode, hapiValidatorConfig);
+      
+      console.log(
+        `[TerminologyValidator] Using HAPI validator for ${fhirVersion} terminology ` +
+        `(${mode}, server: ${terminologyServerUrl})`
+      );
 
-      // Build validation options
+      // Build validation options with version-specific terminology server
       const options: HapiValidationOptions = {
         fhirVersion,
         mode,
+        terminologyServerUrl, // Task 2.9: Version-specific terminology server
         // HAPI will validate terminology as part of comprehensive validation
       };
 
@@ -140,13 +159,13 @@ export class TerminologyValidator {
 
       console.log(
         `[TerminologyValidator] HAPI validation complete: ${terminologyIssues.length} terminology issues ` +
-        `(${allIssues.length} total)`
+        `(${allIssues.length} total, server: ${terminologyServerUrl})`
       );
 
       return terminologyIssues;
 
     } catch (error) {
-      console.error(`[TerminologyValidator] HAPI validation failed:`, error);
+      console.error(`[TerminologyValidator] HAPI validation failed for ${fhirVersion}:`, error);
       
       // Return error as validation issue
       return [{
@@ -154,7 +173,7 @@ export class TerminologyValidator {
         aspect: 'terminology',
         severity: 'warning',
         code: 'hapi-terminology-validation-error',
-        message: `HAPI terminology validation failed: ${error instanceof Error ? error.message : String(error)}`,
+        message: `HAPI terminology validation failed for ${fhirVersion}: ${error instanceof Error ? error.message : String(error)}`,
         path: '',
         timestamp: new Date(),
       }];
@@ -455,6 +474,51 @@ export class TerminologyValidator {
                          this.hapiAvailable === false ? 'fallback' : 
                          'unknown',
     };
+  }
+
+  /**
+   * Get terminology server URL for a specific version and mode
+   * Task 2.9: Public API for version-specific terminology server info
+   * 
+   * @param fhirVersion - FHIR version (R4, R5, R6)
+   * @param mode - Online or offline mode
+   * @returns Terminology server URL
+   */
+  getTerminologyServerUrl(fhirVersion: 'R4' | 'R5' | 'R6', mode: 'online' | 'offline'): string {
+    return getTerminologyServerUrl(fhirVersion, mode, hapiValidatorConfig);
+  }
+
+  /**
+   * Get all available terminology servers
+   * Task 2.9: Query available terminology servers by version and mode
+   * 
+   * @returns Information about available terminology servers
+   */
+  getAllTerminologyServers(): Array<{
+    fhirVersion: 'R4' | 'R5' | 'R6';
+    mode: 'online' | 'offline';
+    url: string;
+  }> {
+    const versions: Array<'R4' | 'R5' | 'R6'> = ['R4', 'R5', 'R6'];
+    const modes: Array<'online' | 'offline'> = ['online', 'offline'];
+    const servers: Array<{
+      fhirVersion: 'R4' | 'R5' | 'R6';
+      mode: 'online' | 'offline';
+      url: string;
+    }> = [];
+
+    for (const version of versions) {
+      for (const mode of modes) {
+        const url = getTerminologyServerUrl(version, mode, hapiValidatorConfig);
+        servers.push({
+          fhirVersion: version,
+          mode,
+          url,
+        });
+      }
+    }
+
+    return servers;
   }
 }
 

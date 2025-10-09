@@ -30,6 +30,37 @@ vi.mock('fs', () => ({
 }));
 vi.mock('fs/promises');
 vi.mock('child_process');
+
+// Mock fhir-package-versions (Task 2.5)
+vi.mock('../../../config/fhir-package-versions', () => ({
+  getCorePackage: (version: 'R4' | 'R5' | 'R6') => {
+    const packages = {
+      R4: { version: '4.0', corePackage: 'hl7.fhir.r4.core@4.0.1', fhirVersion: '4.0.1', status: 'stable' },
+      R5: { version: '5.0', corePackage: 'hl7.fhir.r5.core@5.0.0', fhirVersion: '5.0.0', status: 'trial-use' },
+      R6: { version: '6.0', corePackage: 'hl7.fhir.r6.core@6.0.0-ballot2', fhirVersion: '6.0.0-ballot2', status: 'ballot' },
+    };
+    return packages[version];
+  },
+  getCorePackageId: (version: 'R4' | 'R5' | 'R6') => {
+    const ids = {
+      R4: 'hl7.fhir.r4.core@4.0.1',
+      R5: 'hl7.fhir.r5.core@5.0.0',
+      R6: 'hl7.fhir.r6.core@6.0.0-ballot2',
+    };
+    return ids[version];
+  },
+  getVersionConfig: (version: 'R4' | 'R5' | 'R6') => {
+    const configs = {
+      R4: { supportStatus: 'full', limitations: [] },
+      R5: { supportStatus: 'full', limitations: [] },
+      R6: { supportStatus: 'partial', limitations: ['No terminology validation', 'Limited profile support'] },
+    };
+    return configs[version];
+  },
+  isSupportedVersion: (version: string) => ['R4', 'R5', 'R6'].includes(version),
+  hasFullSupport: (version: 'R4' | 'R5' | 'R6') => ['R4', 'R5'].includes(version),
+}));
+
 vi.mock('../../../config/hapi-validator-config', () => ({
   hapiValidatorConfig: {
     jarPath: '/mock/path/validator_cli.jar',
@@ -421,6 +452,72 @@ describe('HapiValidatorClient', () => {
         ]),
         expect.any(Object)
       );
+    });
+  });
+
+  describe('Version Support Information (Task 2.5)', () => {
+    it('should return version support info for R4', () => {
+      const support = client.getVersionSupport('R4');
+      
+      expect(support).toMatchObject({
+        version: 'R4',
+        corePackage: 'hl7.fhir.r4.core@4.0.1',
+        fhirVersion: '4.0.1',
+        status: 'stable',
+        supportStatus: 'full',
+        hasFullSupport: true,
+        isConfigured: true,
+      });
+      expect(support.limitations).toEqual([]);
+    });
+
+    it('should return version support info for R5', () => {
+      const support = client.getVersionSupport('R5');
+      
+      expect(support).toMatchObject({
+        version: 'R5',
+        corePackage: 'hl7.fhir.r5.core@5.0.0',
+        fhirVersion: '5.0.0',
+        status: 'trial-use',
+        supportStatus: 'full',
+        hasFullSupport: true,
+        isConfigured: true, // Config mock has supportR5: true
+      });
+    });
+
+    it('should return version support info for R6 with limitations', () => {
+      const support = client.getVersionSupport('R6');
+      
+      expect(support).toMatchObject({
+        version: 'R6',
+        corePackage: 'hl7.fhir.r6.core@6.0.0-ballot2',
+        status: 'ballot',
+        supportStatus: 'partial',
+        hasFullSupport: false,
+        isConfigured: false, // Config mock has supportR6: false
+      });
+      expect(support.limitations).toContain('No terminology validation');
+      expect(support.limitations).toContain('Limited profile support');
+    });
+
+    it('should throw error for unsupported version', () => {
+      expect(() => client.getVersionSupport('R3' as any)).toThrow('Unsupported FHIR version');
+    });
+
+    it('should check if R4 is available', () => {
+      expect(client.isVersionAvailable('R4')).toBe(true);
+    });
+
+    it('should check if R5 is available', () => {
+      expect(client.isVersionAvailable('R5')).toBe(true);
+    });
+
+    it('should check if R6 is available (disabled in config)', () => {
+      expect(client.isVersionAvailable('R6')).toBe(false); // supportR6: false in mock config
+    });
+
+    it('should return false for unsupported version', () => {
+      expect(client.isVersionAvailable('R3' as any)).toBe(false);
     });
   });
 });

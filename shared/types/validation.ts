@@ -1096,6 +1096,7 @@ export interface ValidationResult {
   validationTime: number;
   overallScore?: number;
   confidence?: number;
+  fhirVersion?: 'R4' | 'R5' | 'R6'; // Task 2.11: FHIR version
 }
 
 /**

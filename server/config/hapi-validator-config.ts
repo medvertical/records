@@ -88,6 +88,9 @@ export function getTerminologyServerUrl(
 
 /**
  * FHIR Version to IG Core Package mapping
+ * 
+ * For comprehensive package management, see: fhir-package-versions.ts
+ * This simplified mapping is kept for backward compatibility with HAPI validator
  */
 export const FHIR_VERSION_IG_MAP = {
   R4: {

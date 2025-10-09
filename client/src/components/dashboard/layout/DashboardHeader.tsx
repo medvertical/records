@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { DashboardHeaderProps } from '@/shared/types/dashboard-new';
 import { Settings, User, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { ValidationModeBadge } from '@/components/validation/ValidationModeBadge';
 
 /**
  * DashboardHeader Component - Single responsibility: Display server status and user menu
@@ -99,6 +100,13 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           >
             {connected ? "Connected" : "Disconnected"}
           </Badge>
+
+          {/* Task 3.8: Validation Mode Badge */}
+          <ValidationModeBadge 
+            clickable={true}
+            showTooltip={true}
+            size="md"
+          />
 
           {/* Action Buttons */}
           <div className="flex items-center space-x-2">

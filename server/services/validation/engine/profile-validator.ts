@@ -10,11 +10,13 @@
  * - StructureDefinition constraint validation
  * - Profile resolution from Simplifier/local cache
  * - Fallback to basic profile checking if HAPI unavailable
+ * - Task 2.8: Version-specific IG package loading
  * 
  * Architecture:
  * - Primary: Uses HAPI FHIR Validator for comprehensive profile validation
  * - Fallback: Basic profile constraint checking for known profiles
  * - Integrates with ProfileManager for IG package resolution
+ * - Version-aware IG package selection via fhir-package-versions.ts
  * 
  * File size: Target <400 lines (global.mdc compliance)
  */
@@ -22,6 +24,12 @@
 import type { ValidationIssue } from '../types/validation-types';
 import { hapiValidatorClient } from './hapi-validator-client';
 import type { HapiValidationOptions } from './hapi-validator-types';
+import {
+  getPackagesForVersion,
+  getGermanPackagesForVersion,
+  getCorePackageId,
+} from '../../../config/fhir-package-versions';
+import { addR6WarningIfNeeded } from '../utils/r6-support-warnings';
 
 // ============================================================================
 // Profile Validator
@@ -41,7 +49,8 @@ export class ProfileValidator {
   async validate(
     resource: any,
     resourceType: string,
-    profileUrl?: string
+    profileUrl?: string,
+    fhirVersion?: 'R4' | 'R5' | 'R6' // Task 2.4: Accept FHIR version parameter
   ): Promise<ValidationIssue[]> {
     const startTime = Date.now();
     const issues: ValidationIssue[] = [];
@@ -82,6 +91,9 @@ export class ProfileValidator {
         `(${issues.length} issues, validator: ${this.hapiAvailable ? 'HAPI' : 'basic'})`
       );
 
+      // Add R6 warning if needed (Task 2.10)
+      return addR6WarningIfNeeded(issues, fhirVersion, 'profile');
+
     } catch (error) {
       console.error('[ProfileValidator] Profile validation failed:', error);
       issues.push({
@@ -93,9 +105,10 @@ export class ProfileValidator {
         path: '',
         timestamp: new Date(),
       });
-    }
 
-    return issues;
+      // Add R6 warning if needed (Task 2.10)
+      return addR6WarningIfNeeded(issues, fhirVersion, 'profile');
+    }
   }
 
   /**
@@ -141,6 +154,7 @@ export class ProfileValidator {
 
   /**
    * Validate using HAPI FHIR Validator with profile
+   * Task 2.8: Enhanced with version-specific IG package loading
    */
   private async validateWithHapi(
     resource: any,
@@ -149,13 +163,24 @@ export class ProfileValidator {
     fhirVersion: 'R4' | 'R5' | 'R6'
   ): Promise<ValidationIssue[]> {
     try {
-      console.log(`[ProfileValidator] Using HAPI validator for profile: ${profileUrl}`);
+      console.log(`[ProfileValidator] Using HAPI validator for ${fhirVersion} profile: ${profileUrl}`);
 
-      // Build validation options with profile
+      // Load version-specific IG packages (Task 2.8)
+      const igPackages = this.getIgPackagesForProfile(profileUrl, fhirVersion);
+      
+      if (igPackages.length > 0) {
+        console.log(
+          `[ProfileValidator] Loading ${igPackages.length} version-specific IG package(s) for ${fhirVersion}: ` +
+          igPackages.join(', ')
+        );
+      }
+
+      // Build validation options with profile and IG packages
       const options: HapiValidationOptions = {
         fhirVersion,
         profile: profileUrl,
         mode: 'online', // Use online mode for better profile resolution
+        igPackages: igPackages.length > 0 ? igPackages : undefined,
       };
 
       // Call HAPI validator
@@ -166,7 +191,7 @@ export class ProfileValidator {
 
       console.log(
         `[ProfileValidator] HAPI validation complete: ${profileIssues.length} profile issues ` +
-        `(${allIssues.length} total)`
+        `(${allIssues.length} total, IG packages: ${igPackages.length})`
       );
 
       return profileIssues;
@@ -185,6 +210,72 @@ export class ProfileValidator {
         timestamp: new Date(),
       }];
     }
+  }
+
+  /**
+   * Get IG packages for a specific profile and FHIR version
+   * Task 2.8: Version-specific IG package selection
+   * 
+   * @param profileUrl - Profile URL to validate against
+   * @param fhirVersion - FHIR version (R4, R5, R6)
+   * @returns Array of IG package identifiers
+   */
+  private getIgPackagesForProfile(profileUrl: string, fhirVersion: 'R4' | 'R5' | 'R6'): string[] {
+    const packages: string[] = [];
+
+    // Check if profile URL indicates a specific IG package
+    const profileLower = profileUrl.toLowerCase();
+
+    // German healthcare profiles (MII, ISiK, KBV)
+    if (profileLower.includes('medizininformatik') || profileLower.includes('mii')) {
+      // MII profile
+      const miiPackages = getGermanPackagesForVersion(fhirVersion)
+        .filter(pkg => pkg.id.includes('medizininformatik'))
+        .map(pkg => `${pkg.id}@${pkg.version}`);
+      packages.push(...miiPackages);
+    }
+
+    if (profileLower.includes('isik') || profileLower.includes('gematik')) {
+      // ISiK profile
+      const isikPackages = getGermanPackagesForVersion(fhirVersion)
+        .filter(pkg => pkg.id.includes('isik') || pkg.id.includes('gematik'))
+        .map(pkg => `${pkg.id}@${pkg.version}`);
+      packages.push(...isikPackages);
+    }
+
+    if (profileLower.includes('kbv')) {
+      // KBV profile
+      const kbvPackages = getGermanPackagesForVersion(fhirVersion)
+        .filter(pkg => pkg.id.includes('kbv'))
+        .map(pkg => `${pkg.id}@${pkg.version}`);
+      packages.push(...kbvPackages);
+    }
+
+    // International profiles (UV Extensions, IPS)
+    if (profileLower.includes('hl7.fhir.uv') || profileLower.includes('/uv/')) {
+      const uvPackages = getPackagesForVersion(fhirVersion)
+        .filter(pkg => pkg.id.includes('hl7.fhir.uv'))
+        .map(pkg => `${pkg.id}@${pkg.version}`);
+      packages.push(...uvPackages);
+    }
+
+    // If no specific IG detected but profile is not from core spec,
+    // load common German profiles as a fallback (for German healthcare context)
+    if (packages.length === 0 && !profileLower.includes('hl7.org/fhir/StructureDefinition')) {
+      console.log(
+        `[ProfileValidator] Profile ${profileUrl} not matched to specific IG, ` +
+        `loading common German profiles for ${fhirVersion}`
+      );
+      
+      // Load top German profiles as fallback
+      const commonProfiles = getGermanPackagesForVersion(fhirVersion)
+        .filter(pkg => pkg.status === 'active')
+        .slice(0, 2) // Limit to top 2 to avoid overloading
+        .map(pkg => `${pkg.id}@${pkg.version}`);
+      packages.push(...commonProfiles);
+    }
+
+    return [...new Set(packages)]; // Remove duplicates
   }
 
   /**
@@ -339,6 +430,51 @@ export class ProfileValidator {
                          this.hapiAvailable === false ? 'basic' : 
                          'unknown',
     };
+  }
+
+  /**
+   * Get available IG packages for a profile and version
+   * Task 2.8: Public API for version-specific IG package information
+   * 
+   * @param profileUrl - Profile URL
+   * @param fhirVersion - FHIR version (R4, R5, R6)
+   * @returns Array of IG package identifiers
+   */
+  getAvailableIgPackages(profileUrl: string, fhirVersion: 'R4' | 'R5' | 'R6'): string[] {
+    return this.getIgPackagesForProfile(profileUrl, fhirVersion);
+  }
+
+  /**
+   * Get all IG packages available for a FHIR version
+   * Task 2.8: Query available packages by version
+   * 
+   * @param fhirVersion - FHIR version (R4, R5, R6)
+   * @returns Information about available packages
+   */
+  getAllAvailablePackages(fhirVersion: 'R4' | 'R5' | 'R6'): Array<{
+    id: string;
+    version: string;
+    name: string;
+    type: 'german' | 'international';
+  }> {
+    const germanPackages = getGermanPackagesForVersion(fhirVersion).map(pkg => ({
+      id: pkg.id,
+      version: pkg.version,
+      name: pkg.name,
+      type: 'german' as const,
+    }));
+
+    const allPackages = getPackagesForVersion(fhirVersion);
+    const internationalPackages = allPackages
+      .filter(pkg => !germanPackages.some(gp => gp.id === pkg.id))
+      .map(pkg => ({
+        id: pkg.id,
+        version: pkg.version,
+        name: pkg.name,
+        type: 'international' as const,
+      }));
+
+    return [...germanPackages, ...internationalPackages];
   }
 }
 

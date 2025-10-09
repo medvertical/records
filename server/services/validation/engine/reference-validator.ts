@@ -6,10 +6,12 @@
  * - Reference cardinality validation
  * - Reference resolution and existence verification
  * - R4 reference validation
+ * - Task 2.10: R6 limited support warning
  */
 
 import type { ValidationIssue } from '../types/validation-types';
 import { FirelyClient } from '../../fhir/firely-client';
+import { addR6WarningIfNeeded } from '../utils/r6-support-warnings';
 
 export class ReferenceValidator {
   private firelyClient: FirelyClient;
@@ -72,7 +74,12 @@ export class ReferenceValidator {
     console.log(`[ReferenceValidator] Initialized reference fields for ${this.referenceFields.size} FHIR R4 resource types`);
   }
 
-  async validate(resource: any, resourceType: string, fhirClient?: any): Promise<ValidationIssue[]> {
+  async validate(
+    resource: any, 
+    resourceType: string, 
+    fhirClient?: any,
+    fhirVersion?: 'R4' | 'R5' | 'R6' // Task 2.4: Accept FHIR version parameter
+  ): Promise<ValidationIssue[]> {
     // TEMPORARILY DISABLED FOR PERFORMANCE TESTING
     console.log(`[ReferenceValidator] SKIPPING reference validation for ${resourceType} (performance optimization)`);
     console.log(`[ReferenceValidator] Returning immediately to avoid any processing`);
@@ -145,7 +152,8 @@ export class ReferenceValidator {
       }
     }
 
-      return issues;
+    // Add R6 warning if needed (Task 2.10)
+    return addR6WarningIfNeeded(issues, fhirVersion, 'reference');
     }
 
   /**

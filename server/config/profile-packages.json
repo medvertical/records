@@ -1,0 +1,325 @@
+{
+  "$schema": "./profile-packages-schema.json",
+  "version": "1.0",
+  "lastUpdated": "2025-10-09",
+  "description": "FHIR Profile Package Configuration for Records Platform - German Healthcare Focus (MII, ISiK, KBV) + International Extensions",
+  
+  "germanProfiles": {
+    "mii": {
+      "name": "Medizininformatik-Initiative (MII)",
+      "description": "Core data set profiles for German Medical Informatics Initiative",
+      "publisher": "MII Consortium",
+      "packages": [
+        {
+          "id": "de.medizininformatikinitiative.kerndatensatz.person",
+          "name": "MII KDS Person",
+          "version": "2024.0.0",
+          "fhirVersion": "R4",
+          "canonical": "https://www.medizininformatik-initiative.de/fhir/core/modul-person",
+          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.person/2024.0.0",
+          "status": "active",
+          "priority": "high",
+          "description": "Person module containing Patient, Practitioner, Organization profiles"
+        },
+        {
+          "id": "de.medizininformatikinitiative.kerndatensatz.laborbefund",
+          "name": "MII KDS Laborbefund",
+          "version": "2024.0.0",
+          "fhirVersion": "R4",
+          "canonical": "https://www.medizininformatik-initiative.de/fhir/core/modul-labor",
+          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.laborbefund/2024.0.0",
+          "status": "active",
+          "priority": "high",
+          "description": "Laboratory findings profiles for diagnostics and lab results"
+        },
+        {
+          "id": "de.medizininformatikinitiative.kerndatensatz.diagnose",
+          "name": "MII KDS Diagnose",
+          "version": "2024.0.0",
+          "fhirVersion": "R4",
+          "canonical": "https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose",
+          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.diagnose/2024.0.0",
+          "status": "active",
+          "priority": "high",
+          "description": "Diagnosis profiles based on ICD-10-GM"
+        },
+        {
+          "id": "de.medizininformatikinitiative.kerndatensatz.medikation",
+          "name": "MII KDS Medikation",
+          "version": "2024.0.0",
+          "fhirVersion": "R4",
+          "canonical": "https://www.medizininformatik-initiative.de/fhir/core/modul-medikation",
+          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.medikation/2024.0.0",
+          "status": "active",
+          "priority": "medium",
+          "description": "Medication profiles for prescriptions and administration"
+        },
+        {
+          "id": "de.medizininformatikinitiative.kerndatensatz.prozedur",
+          "name": "MII KDS Prozedur",
+          "version": "2024.0.0",
+          "fhirVersion": "R4",
+          "canonical": "https://www.medizininformatik-initiative.de/fhir/core/modul-prozedur",
+          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.prozedur/2024.0.0",
+          "status": "active",
+          "priority": "medium",
+          "description": "Procedure profiles based on OPS codes"
+        }
+      ]
+    },
+    
+    "isik": {
+      "name": "ISiK (Informationstechnische Systeme im Krankenhaus)",
+      "description": "Interoperability standard for German hospital information systems",
+      "publisher": "gematik GmbH",
+      "packages": [
+        {
+          "id": "de.gematik.isik-basismodul",
+          "name": "ISiK Basismodul",
+          "version": "4.0.0",
+          "fhirVersion": "R4",
+          "canonical": "https://gematik.de/fhir/isik/v4/Basismodul",
+          "downloadUrl": "https://packages.simplifier.net/de.gematik.isik-basismodul/4.0.0",
+          "status": "active",
+          "priority": "high",
+          "description": "Base module for ISiK including core resources like Patient, Encounter, Coverage"
+        },
+        {
+          "id": "de.gematik.isik-dokumentenaustausch",
+          "name": "ISiK Dokumentenaustausch",
+          "version": "4.0.0",
+          "fhirVersion": "R4",
+          "canonical": "https://gematik.de/fhir/isik/v4/Dokumentenaustausch",
+          "downloadUrl": "https://packages.simplifier.net/de.gematik.isik-dokumentenaustausch/4.0.0",
+          "status": "active",
+          "priority": "medium",
+          "description": "Document exchange module for clinical documents"
+        },
+        {
+          "id": "de.gematik.isik-medikation",
+          "name": "ISiK Medikation",
+          "version": "4.0.0",
+          "fhirVersion": "R4",
+          "canonical": "https://gematik.de/fhir/isik/v4/Medikation",
+          "downloadUrl": "https://packages.simplifier.net/de.gematik.isik-medikation/4.0.0",
+          "status": "active",
+          "priority": "medium",
+          "description": "Medication module for prescriptions and administration"
+        },
+        {
+          "id": "de.gematik.isik-labor",
+          "name": "ISiK Labor",
+          "version": "4.0.0",
+          "fhirVersion": "R4",
+          "canonical": "https://gematik.de/fhir/isik/v4/Labor",
+          "downloadUrl": "https://packages.simplifier.net/de.gematik.isik-labor/4.0.0",
+          "status": "active",
+          "priority": "medium",
+          "description": "Laboratory module for diagnostic reports and observations"
+        }
+      ]
+    },
+    
+    "kbv": {
+      "name": "KBV (Kassenärztliche Bundesvereinigung)",
+      "description": "Profiles from the National Association of Statutory Health Insurance Physicians",
+      "publisher": "KBV",
+      "packages": [
+        {
+          "id": "kbv.basis",
+          "name": "KBV Basis Profile",
+          "version": "1.4.0",
+          "fhirVersion": "R4",
+          "canonical": "https://fhir.kbv.de/StructureDefinition/KBV_PR_BASE",
+          "downloadUrl": "https://packages.simplifier.net/kbv.basis/1.4.0",
+          "status": "active",
+          "priority": "high",
+          "description": "Base profiles for German ambulatory care"
+        },
+        {
+          "id": "kbv.ita.for",
+          "name": "KBV ITA FOR (Formularserver)",
+          "version": "1.1.0",
+          "fhirVersion": "R4",
+          "canonical": "https://fhir.kbv.de/StructureDefinition/KBV_PR_FOR",
+          "downloadUrl": "https://packages.simplifier.net/kbv.ita.for/1.1.0",
+          "status": "active",
+          "priority": "medium",
+          "description": "Forms and questionnaires for German healthcare"
+        },
+        {
+          "id": "kbv.ita.erp",
+          "name": "KBV ITA ERP (E-Rezept)",
+          "version": "1.1.0",
+          "fhirVersion": "R4",
+          "canonical": "https://fhir.kbv.de/StructureDefinition/KBV_PR_ERP",
+          "downloadUrl": "https://packages.simplifier.net/kbv.ita.erp/1.1.0",
+          "status": "active",
+          "priority": "high",
+          "description": "Electronic prescription profiles"
+        },
+        {
+          "id": "kbv.ita.eau",
+          "name": "KBV ITA EAU (Arbeitsunfähigkeit)",
+          "version": "1.1.0",
+          "fhirVersion": "R4",
+          "canonical": "https://fhir.kbv.de/StructureDefinition/KBV_PR_EAU",
+          "downloadUrl": "https://packages.simplifier.net/kbv.ita.eau/1.1.0",
+          "status": "active",
+          "priority": "low",
+          "description": "Certificate of incapacity for work"
+        }
+      ]
+    }
+  },
+  
+  "internationalProfiles": {
+    "hl7-core": {
+      "name": "HL7 FHIR Core Specifications",
+      "description": "Official HL7 FHIR core specification packages",
+      "publisher": "HL7 International",
+      "packages": [
+        {
+          "id": "hl7.fhir.r4.core",
+          "name": "FHIR R4 Core",
+          "version": "4.0.1",
+          "fhirVersion": "R4",
+          "canonical": "http://hl7.org/fhir",
+          "downloadUrl": "https://packages.simplifier.net/hl7.fhir.r4.core/4.0.1",
+          "status": "active",
+          "priority": "critical",
+          "description": "FHIR R4 core specification"
+        },
+        {
+          "id": "hl7.fhir.r5.core",
+          "name": "FHIR R5 Core",
+          "version": "5.0.0",
+          "fhirVersion": "R5",
+          "canonical": "http://hl7.org/fhir",
+          "downloadUrl": "https://packages.simplifier.net/hl7.fhir.r5.core/5.0.0",
+          "status": "active",
+          "priority": "critical",
+          "description": "FHIR R5 core specification"
+        },
+        {
+          "id": "hl7.fhir.r6.core",
+          "name": "FHIR R6 Core",
+          "version": "6.0.0-ballot2",
+          "fhirVersion": "R6",
+          "canonical": "http://hl7.org/fhir",
+          "downloadUrl": "https://packages.simplifier.net/hl7.fhir.r6.core/6.0.0-ballot2",
+          "status": "draft",
+          "priority": "medium",
+          "description": "FHIR R6 core specification (ballot)"
+        }
+      ]
+    },
+    
+    "uv-extensions": {
+      "name": "HL7 UV (Universal) Extensions",
+      "description": "Universal FHIR extensions for international use",
+      "publisher": "HL7 International",
+      "packages": [
+        {
+          "id": "hl7.fhir.uv.extensions.r4",
+          "name": "UV Extensions R4",
+          "version": "1.0.0",
+          "fhirVersion": "R4",
+          "canonical": "http://hl7.org/fhir/extensions",
+          "downloadUrl": "https://packages.simplifier.net/hl7.fhir.uv.extensions.r4/1.0.0",
+          "status": "active",
+          "priority": "high",
+          "description": "Standard extensions for FHIR R4"
+        },
+        {
+          "id": "hl7.fhir.uv.extensions.r5",
+          "name": "UV Extensions R5",
+          "version": "1.0.0",
+          "fhirVersion": "R5",
+          "canonical": "http://hl7.org/fhir/extensions",
+          "downloadUrl": "https://packages.simplifier.net/hl7.fhir.uv.extensions.r5/1.0.0",
+          "status": "active",
+          "priority": "high",
+          "description": "Standard extensions for FHIR R5"
+        }
+      ]
+    },
+    
+    "ips": {
+      "name": "International Patient Summary (IPS)",
+      "description": "HL7 International Patient Summary implementation guide",
+      "publisher": "HL7 International",
+      "packages": [
+        {
+          "id": "hl7.fhir.uv.ips",
+          "name": "International Patient Summary",
+          "version": "1.1.0",
+          "fhirVersion": "R4",
+          "canonical": "http://hl7.org/fhir/uv/ips",
+          "downloadUrl": "https://packages.simplifier.net/hl7.fhir.uv.ips/1.1.0",
+          "status": "active",
+          "priority": "medium",
+          "description": "Patient summary for cross-border care"
+        }
+      ]
+    }
+  },
+  
+  "quickInstall": {
+    "description": "Pre-defined package bundles for quick installation",
+    "bundles": [
+      {
+        "id": "german-hospital-complete",
+        "name": "German Hospital - Complete",
+        "description": "All German profiles for hospital use (MII + ISiK + KBV)",
+        "packages": [
+          "de.medizininformatikinitiative.kerndatensatz.person",
+          "de.medizininformatikinitiative.kerndatensatz.laborbefund",
+          "de.medizininformatikinitiative.kerndatensatz.diagnose",
+          "de.gematik.isik-basismodul",
+          "de.gematik.isik-labor",
+          "kbv.basis"
+        ]
+      },
+      {
+        "id": "german-ambulatory",
+        "name": "German Ambulatory Care",
+        "description": "KBV profiles for ambulatory care",
+        "packages": [
+          "kbv.basis",
+          "kbv.ita.for",
+          "kbv.ita.erp"
+        ]
+      },
+      {
+        "id": "mii-minimal",
+        "name": "MII Minimal",
+        "description": "Core MII profiles (Person, Lab, Diagnosis)",
+        "packages": [
+          "de.medizininformatikinitiative.kerndatensatz.person",
+          "de.medizininformatikinitiative.kerndatensatz.laborbefund",
+          "de.medizininformatikinitiative.kerndatensatz.diagnose"
+        ]
+      },
+      {
+        "id": "international-core",
+        "name": "International Core",
+        "description": "Core FHIR + UV Extensions + IPS",
+        "packages": [
+          "hl7.fhir.r4.core",
+          "hl7.fhir.uv.extensions.r4",
+          "hl7.fhir.uv.ips"
+        ]
+      }
+    ]
+  },
+  
+  "offlineCache": {
+    "enabled": true,
+    "cacheDirectory": "/opt/fhir/igs",
+    "autoDownload": false,
+    "updateCheckInterval": "weekly",
+    "maxCacheSize": "5GB"
+  }
+}
+

@@ -19,6 +19,9 @@ export const validationResultsPerAspect = pgTable("validation_results_per_aspect
   // Aspect identification
   aspect: varchar("aspect", { length: 50 }).notNull(), // 'structural' | 'profile' | 'terminology' | 'reference' | 'businessRule' | 'metadata'
   
+  // FHIR version (Task 2.11)
+  fhirVersion: varchar("fhir_version", { length: 10 }).default("R4").notNull(), // 'R4' | 'R5' | 'R6'
+  
   // Validation result
   isValid: boolean("is_valid").notNull(),
   
@@ -62,6 +65,16 @@ export const validationResultsPerAspect = pgTable("validation_results_per_aspect
   ),
   // Index for time-based queries
   validatedAtIdx: index("validation_results_validated_at_idx").on(table.validatedAt),
+  // Index for version + aspect queries (Task 2.11)
+  versionAspectIdx: index("idx_validation_results_per_aspect_version_aspect").on(
+    table.fhirVersion,
+    table.aspect
+  ),
+  // Index for server + version queries (Task 2.11)
+  serverVersionIdx: index("idx_validation_results_per_aspect_server_version").on(
+    table.serverId,
+    table.fhirVersion
+  ),
   // Unique constraint: one result per resource per aspect per settings snapshot
   uniqueResourceAspectSnapshot: uniqueIndex("validation_results_unique_resource_aspect").on(
     table.serverId,
@@ -89,6 +102,9 @@ export const validationMessages = pgTable("validation_messages", {
   resourceType: text("resource_type").notNull(),
   fhirId: text("fhir_id").notNull(),
   aspect: varchar("aspect", { length: 50 }).notNull(),
+  
+  // FHIR version (Task 2.11)
+  fhirVersion: varchar("fhir_version", { length: 10 }).default("R4").notNull(), // 'R4' | 'R5' | 'R6'
   
   // Message content
   severity: varchar("severity", { length: 20 }).notNull(), // 'error' | 'warning' | 'information'
@@ -127,6 +143,10 @@ export const validationMessages = pgTable("validation_messages", {
     table.serverId,
     table.resourceType,
     table.fhirId
+  ),
+  // Index for version-based filtering (Task 2.11)
+  versionIdx: index("idx_validation_messages_version").on(
+    table.fhirVersion
   ),
 }));
 

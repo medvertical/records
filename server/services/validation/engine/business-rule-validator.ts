@@ -81,7 +81,12 @@ export class BusinessRuleValidator {
     console.log(`[BusinessRuleValidator] Initialized business rules for ${this.businessRules.size} FHIR R4 resource types`);
   }
 
-  async validate(resource: any, resourceType: string, settings?: any): Promise<ValidationIssue[]> {
+  async validate(
+    resource: any, 
+    resourceType: string, 
+    settings?: any,
+    fhirVersion?: 'R4' | 'R5' | 'R6' // Task 2.4: Accept FHIR version parameter
+  ): Promise<ValidationIssue[]> {
     const issues: ValidationIssue[] = [];
     const startTime = Date.now();
 

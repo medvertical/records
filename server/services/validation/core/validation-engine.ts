@@ -42,15 +42,23 @@ export class ValidationEngine extends EventEmitter {
   private settingsService: any;
   private fhirClient?: FhirClient;
   private terminologyClient?: TerminologyClient;
+  private fhirVersion: 'R4' | 'R5' | 'R6'; // Task 2.3: Store detected FHIR version
 
-  constructor(fhirClient?: FhirClient, terminologyClient?: TerminologyClient) {
+  constructor(
+    fhirClient?: FhirClient, 
+    terminologyClient?: TerminologyClient,
+    fhirVersion?: 'R4' | 'R5' | 'R6' // Task 2.3: Accept FHIR version parameter
+  ) {
     super();
     
     console.log('[ValidationEngine] Constructor called');
     
     this.fhirClient = fhirClient;
     this.terminologyClient = terminologyClient;
+    this.fhirVersion = fhirVersion || 'R4'; // Task 2.3: Default to R4 if not provided
     this.settingsService = getValidationSettingsService();
+    
+    console.log(`[ValidationEngine] FHIR version: ${this.fhirVersion}`);
     
     // Initialize validators
     this.structuralValidator = new StructuralValidator();
@@ -59,6 +67,24 @@ export class ValidationEngine extends EventEmitter {
     this.referenceValidator = new ReferenceValidator();
     this.businessRuleValidator = new BusinessRuleValidator();
     this.metadataValidator = new MetadataValidator();
+  }
+
+  /**
+   * Get current FHIR version
+   * Task 2.3: Accessor for FHIR version
+   */
+  getFhirVersion(): 'R4' | 'R5' | 'R6' {
+    return this.fhirVersion;
+  }
+
+  /**
+   * Set FHIR version (for version switching)
+   * Task 2.3: Mutator for FHIR version
+   */
+  setFhirVersion(version: 'R4' | 'R5' | 'R6'): void {
+    console.log(`[ValidationEngine] Switching FHIR version: ${this.fhirVersion} → ${version}`);
+    this.fhirVersion = version;
+    this.emit('versionChanged', { oldVersion: this.fhirVersion, newVersion: version });
   }
 
   /**
@@ -84,7 +110,7 @@ export class ValidationEngine extends EventEmitter {
         same: Array.from(aspectsToExecute).length === Array.from(ALL_VALIDATION_ASPECTS).length
       });
       
-      // Initialize result
+      // Initialize result (Task 2.11: Include fhirVersion)
       const result: ValidationResult = {
         resourceId: request.resource.id || 'unknown',
         resourceType: request.resourceType,
@@ -92,7 +118,8 @@ export class ValidationEngine extends EventEmitter {
         issues: [],
         aspects: [],
         validatedAt: new Date(),
-        validationTime: 0
+        validationTime: 0,
+        fhirVersion: this.fhirVersion // Task 2.11: Store FHIR version from engine
       };
 
       const aspectResults: ValidationAspectResult[] = [];
@@ -150,6 +177,7 @@ export class ValidationEngine extends EventEmitter {
           code: 'VALIDATION_ERROR'
         };
 
+        // Task 2.11: Include fhirVersion in error result
         const errorResult: ValidationResult = {
           resourceId: request.resource?.id || 'unknown',
           resourceType: request.resourceType,
@@ -169,7 +197,8 @@ export class ValidationEngine extends EventEmitter {
             });
           }),
           validatedAt: new Date(),
-          validationTime: 0
+          validationTime: 0,
+          fhirVersion: this.fhirVersion // Task 2.11: Store FHIR version
         };
         results.push(errorResult);
       }
@@ -247,19 +276,20 @@ export class ValidationEngine extends EventEmitter {
       const timeoutMs = this.getAspectTimeoutMs(aspect, settings);
       const issues: ValidationIssue[] = await Promise.race([
         (async () => {
+          // Task 2.4: Pass fhirVersion to all validators
           switch (aspect) {
             case 'structural':
-              return await this.structuralValidator.validate(request.resource, request.resourceType);
+              return await this.structuralValidator.validate(request.resource, request.resourceType, this.fhirVersion);
             case 'profile':
-              return await this.profileValidator.validate(request.resource, request.resourceType, request.profileUrl);
+              return await this.profileValidator.validate(request.resource, request.resourceType, request.profileUrl, this.fhirVersion);
             case 'terminology':
-              return await this.terminologyValidator.validate(request.resource, request.resourceType, this.terminologyClient);
+              return await this.terminologyValidator.validate(request.resource, request.resourceType, settings, this.fhirVersion);
             case 'reference':
-              return await this.referenceValidator.validate(request.resource, request.resourceType, this.fhirClient);
+              return await this.referenceValidator.validate(request.resource, request.resourceType, this.fhirClient, this.fhirVersion);
             case 'businessRule':
-              return await this.businessRuleValidator.validate(request.resource, request.resourceType, settings);
+              return await this.businessRuleValidator.validate(request.resource, request.resourceType, settings, this.fhirVersion);
             case 'metadata':
-              return await this.metadataValidator.validate(request.resource, request.resourceType);
+              return await this.metadataValidator.validate(request.resource, request.resourceType, this.fhirVersion);
             default:
               // Graceful degradation: skip unknown aspects
               return [{

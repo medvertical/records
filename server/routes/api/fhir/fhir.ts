@@ -47,7 +47,7 @@ async function enhanceResourcesWithValidationData(resources: any[]): Promise<any
           } else {
             console.warn(`[FHIR API] No active server found, cannot create database entry for ${resource.resourceType}/${resource.id}`);
           }
-        } catch (createError) {
+        } catch (createError: any) {
           console.error(`[FHIR API] Failed to create database entry for ${resource.resourceType}/${resource.id}:`, createError);
           console.error(`[FHIR API] Error details:`, {
             message: createError.message,
@@ -80,7 +80,7 @@ async function enhanceResourcesWithValidationData(resources: any[]): Promise<any
             hasWarnings: (latestResult.warningCount || 0) > 0,
             errorCount: latestResult.errorCount || 0,
             warningCount: latestResult.warningCount || 0,
-            informationCount: latestResult.issues?.filter((issue: any) => issue.severity === 'info').length || 0,
+            informationCount: Array.isArray(latestResult.issues) ? latestResult.issues.filter((issue: any) => issue.severity === 'info').length : 0,
             lastValidated: latestResult.validatedAt,
             validationScore: latestResult.validationScore || 0,
             aspectBreakdown: latestResult.aspectBreakdown || {}
@@ -106,7 +106,7 @@ async function enhanceResourcesWithValidationData(resources: any[]): Promise<any
           _validationSummary: null
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.warn(`[FHIR API] Error enhancing resource ${resource.resourceType}/${resource.id} with validation data:`, error.message);
       // Add resource without validation data if enhancement fails
       enhancedResources.push({
@@ -219,7 +219,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
   app.put("/api/fhir/servers/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const server = await storage.updateFhirServer(id, req.body);
+      const server = await storage.updateFhirServer(parseInt(id), req.body);
       res.json(server);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -229,7 +229,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
   app.delete("/api/fhir/servers/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      await storage.deleteFhirServer(id);
+      await storage.deleteFhirServer(parseInt(id));
       res.json({ message: "Server deleted" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -242,7 +242,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       const { url, auth } = req.query;
       // Get the current FHIR client (may have been updated due to server activation)
       const currentFhirClient = getCurrentFhirClient(fhirClient);
-      const result = await currentFhirClient.testConnection(url as string, auth as any);
+      const result = await currentFhirClient.testConnection();
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -254,7 +254,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       const { url, auth } = req.query;
       // Get the current FHIR client (may have been updated due to server activation)
       const currentFhirClient = getCurrentFhirClient(fhirClient);
-      const result = await currentFhirClient.testConnection(url as string, auth as any);
+      const result = await currentFhirClient.testConnection();
       res.json(result);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -584,7 +584,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       }
 
       // Transform FHIR Bundle to expected frontend format
-      const resources = bundle.entry?.map(entry => entry.resource) || [];
+      const resources = bundle.entry?.map((entry: any) => entry.resource) || [];
       
       // Try to get total from various possible locations in the Bundle
       let total = 0;
@@ -689,11 +689,18 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       
       // Get the current FHIR client (may have been updated due to server activation)
       const currentFhirClient = getCurrentFhirClient(fhirClient);
+      const limitNum = typeof limit === 'string' ? parseInt(limit, 10) : (limit as number);
+      const offsetNum = typeof offset === 'string' ? parseInt(offset, 10) : (offset as number);
+      
+      // Build search params object
+      const searchParams: Record<string, string | number> = {};
+      if (search) searchParams._content = search as string;
+      if (offsetNum > 0) searchParams._offset = offsetNum;
+      
       const resources = await currentFhirClient.searchResources(
         resourceType,
-        search as string,
-        parseInt(limit as string),
-        parseInt(offset as string)
+        searchParams,
+        limitNum
       );
       
       res.json(resources);

@@ -7,6 +7,7 @@
 
 import type { Express } from "express";
 import { getServerRepository } from "../../repositories/server-repository";
+import { getFhirVersionService } from "../../services/fhir/fhir-version-service";
 
 export function setupServerRoutes(app: Express) {
   // Get all servers
@@ -45,6 +46,7 @@ export function setupServerRoutes(app: Express) {
   app.post("/api/servers", async (req, res) => {
     try {
       const serverRepo = getServerRepository();
+      const versionService = getFhirVersionService();
       const serverData = req.body;
       
       // Validate required fields
@@ -55,7 +57,23 @@ export function setupServerRoutes(app: Express) {
       }
       
       const server = await serverRepo.createServer(serverData);
-      res.status(201).json(server);
+      
+      // Detect and store FHIR version (Task 2.1)
+      console.log(`[ServerRoutes] Detecting FHIR version for new server ${server.id}...`);
+      const versionResult = await versionService.detectAndStoreVersion(
+        server.id,
+        server.url,
+        server.authConfig
+      );
+      
+      res.status(201).json({
+        ...server,
+        versionDetection: {
+          success: versionResult.success,
+          version: versionResult.version,
+          source: versionResult.source,
+        }
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -102,6 +120,7 @@ export function setupServerRoutes(app: Express) {
   app.post("/api/servers/:id/activate", async (req, res) => {
     try {
       const serverRepo = getServerRepository();
+      const versionService = getFhirVersionService();
       const serverId = req.params.id;
       
       const server = await serverRepo.activateServer(serverId);
@@ -110,9 +129,17 @@ export function setupServerRoutes(app: Express) {
         return res.status(404).json({ message: "Server not found" });
       }
       
+      // Detect/refresh FHIR version on activation (Task 2.1)
+      console.log(`[ServerActivation] Detecting FHIR version for server ${serverId}...`);
+      const versionResult = await versionService.detectAndStoreVersion(
+        server.id,
+        server.url,
+        server.authConfig
+      );
+      
       // Emit server activation event for app-wide rebind
       // This could be used by other services to update their configurations
-      console.log(`[ServerActivation] Server ${serverId} activated, triggering app-wide rebind`);
+      console.log(`[ServerActivation] Server ${serverId} activated (${versionResult.version}), triggering app-wide rebind`);
       
       // Emit server activation event for app-wide rebind
       // This notifies validation services, FHIR clients, etc. to rebind to the new server
@@ -120,13 +147,15 @@ export function setupServerRoutes(app: Express) {
         global.serverActivationEmitter.emit('serverActivated', {
           serverId,
           server,
+          fhirVersion: versionResult.version,
           timestamp: new Date().toISOString()
         });
       }
       
       res.json({
         ...server,
-        message: "Server activated successfully. App-wide rebind triggered."
+        fhirVersion: versionResult.version,
+        message: `Server activated successfully (FHIR ${versionResult.version}). App-wide rebind triggered.`
       });
     } catch (error: any) {
       res.status(500).json({ message: error.message });

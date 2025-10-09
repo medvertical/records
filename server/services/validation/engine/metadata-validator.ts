@@ -12,7 +12,11 @@ import type { ValidationIssue } from '../types/validation-types';
 import moment from 'moment';
 
 export class MetadataValidator {
-  async validate(resource: any, resourceType: string): Promise<ValidationIssue[]> {
+  async validate(
+    resource: any, 
+    resourceType: string,
+    fhirVersion?: 'R4' | 'R5' | 'R6' // Task 2.4: Accept FHIR version parameter
+  ): Promise<ValidationIssue[]> {
     const issues: ValidationIssue[] = [];
     const startTime = Date.now();
 

@@ -60,11 +60,16 @@ export interface TerminologyValidationResult {
 
 export class TerminologyAdapter {
   private cache: Map<string, ValueSet> = new Map();
-  private cacheExpiryMs: number = 60 * 60 * 1000; // 1 hour
+  private cacheExpiryMs: number = 60 * 60 * 1000; // 1 hour default
   private cacheTimestamps: Map<string, number> = new Map();
+  private currentMode: 'online' | 'offline' = 'online';
+
+  // Task 3.5/3.6: Mode-specific TTL configuration
+  private readonly ONLINE_TTL_MS = 60 * 60 * 1000; // 1 hour for online
+  private readonly OFFLINE_TTL_MS = Infinity; // Indefinite for offline
 
   constructor() {
-    logger.info('[TerminologyAdapter] Initialized');
+    logger.info('[TerminologyAdapter] Initialized with mode-specific caching');
   }
 
   /**
@@ -79,7 +84,10 @@ export class TerminologyAdapter {
   ): Promise<ValueSet> {
     const mode = settings.mode || 'online';
     
-    logger.debug(`[TerminologyAdapter] Resolving ValueSet: ${valueSetUrl} (mode: ${mode})`);
+    // Task 3.5: Update cache expiry based on mode
+    this.updateModeConfiguration(mode);
+    
+    logger.debug(`[TerminologyAdapter] Resolving ValueSet: ${valueSetUrl} (mode: ${mode}, TTL: ${this.getCacheTTLDescription()})`);
 
     if (mode === 'online') {
       return this.resolveOnline(valueSetUrl, settings);
@@ -302,14 +310,17 @@ export class TerminologyAdapter {
       return null;
     }
 
-    // Check expiry
-    if (Date.now() - timestamp > this.cacheExpiryMs) {
-      logger.debug(`[TerminologyAdapter] Cache expired for: ${url}`);
+    // Task 3.5/3.6: Check expiry based on current mode
+    // Offline mode: Indefinite cache (never expires)
+    // Online mode: 1 hour TTL
+    if (this.cacheExpiryMs !== Infinity && Date.now() - timestamp > this.cacheExpiryMs) {
+      logger.debug(`[TerminologyAdapter] Cache expired for: ${url} (TTL: ${this.cacheExpiryMs}ms)`);
       this.cache.delete(url);
       this.cacheTimestamps.delete(url);
       return null;
     }
 
+    logger.debug(`[TerminologyAdapter] Cache hit for: ${url} (age: ${Math.floor((Date.now() - timestamp) / 1000)}s)`);
     return cached;
   }
 
@@ -338,6 +349,58 @@ export class TerminologyAdapter {
   setCacheExpiry(ms: number): void {
     this.cacheExpiryMs = ms;
     logger.info(`[TerminologyAdapter] Cache expiry set to ${ms}ms`);
+  }
+
+  /**
+   * Task 3.5: Update mode configuration and cache expiry
+   */
+  private updateModeConfiguration(mode: 'online' | 'offline'): void {
+    if (this.currentMode === mode) {
+      return; // No change needed
+    }
+
+    const previousMode = this.currentMode;
+    this.currentMode = mode;
+
+    // Update TTL based on mode
+    if (mode === 'offline') {
+      this.cacheExpiryMs = this.OFFLINE_TTL_MS;
+      logger.info('[TerminologyAdapter] Switched to OFFLINE mode: Cache TTL set to indefinite');
+    } else {
+      this.cacheExpiryMs = this.ONLINE_TTL_MS;
+      logger.info('[TerminologyAdapter] Switched to ONLINE mode: Cache TTL set to 1 hour');
+    }
+
+    // Task 3.5: Invalidate cache on mode switch (optional, can be configured)
+    // For now, we keep the cache to avoid unnecessary fetches
+    logger.info(`[TerminologyAdapter] Mode changed: ${previousMode} → ${mode}`);
+  }
+
+  /**
+   * Get current cache TTL description
+   */
+  private getCacheTTLDescription(): string {
+    if (this.cacheExpiryMs === Infinity) {
+      return 'indefinite';
+    }
+    const hours = Math.floor(this.cacheExpiryMs / (60 * 60 * 1000));
+    const minutes = Math.floor((this.cacheExpiryMs % (60 * 60 * 1000)) / (60 * 1000));
+    return hours > 0 ? `${hours}h` : `${minutes}m`;
+  }
+
+  /**
+   * Task 3.5: Invalidate cache on mode switch (optional method)
+   */
+  invalidateCacheOnModeSwitch(): void {
+    logger.info('[TerminologyAdapter] Invalidating cache due to mode switch');
+    this.clearCache();
+  }
+
+  /**
+   * Get current mode
+   */
+  getCurrentMode(): 'online' | 'offline' {
+    return this.currentMode;
   }
 }
 
