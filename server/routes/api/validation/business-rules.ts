@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { db } from '../../../db.js';
 import { businessRules } from '@shared/schema-business-rules';
 import { eq, desc } from 'drizzle-orm';
-import logger from '../../../config/logger.js';
+import logger from '../../../config/logger';
 
 const router = Router();
 
