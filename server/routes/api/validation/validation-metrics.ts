@@ -6,6 +6,7 @@
 
 import type { Express } from "express";
 import { getTerminologyAdapter } from "../../../services/validation/terminology/terminology-adapter.js";
+import { getReferenceValidatorEnhanced } from "../../../services/validation/engine/reference-validator-enhanced.js";
 import { asyncHandler, ApiResponse } from "../../../utils/error-handler.js";
 import logger from "../../../utils/logger.js";
 
@@ -63,6 +64,40 @@ export function setupValidationMetricsRoutes(app: Express) {
     } catch (error: any) {
       logger.error('[ValidationMetrics] Failed to retrieve cache statistics:', error);
       ApiResponse.serviceError(res, 'Failed to retrieve cache statistics', error.message);
+    }
+  }));
+
+  /**
+   * Task 7.13: Get reference validation statistics
+   */
+  app.get("/api/validation/metrics/references", asyncHandler(async (req, res) => {
+    try {
+      const referenceValidator = getReferenceValidatorEnhanced();
+      const statistics = referenceValidator.getStatistics();
+      
+      logger.info('[ValidationMetrics] Reference validation statistics requested');
+      
+      ApiResponse.success(res, statistics, 'Reference validation statistics retrieved successfully');
+    } catch (error: any) {
+      logger.error('[ValidationMetrics] Failed to retrieve reference statistics:', error);
+      ApiResponse.serviceError(res, 'Failed to retrieve reference statistics', error.message);
+    }
+  }));
+
+  /**
+   * Task 7.13: Reset reference validation statistics
+   */
+  app.post("/api/validation/metrics/references/reset", asyncHandler(async (req, res) => {
+    try {
+      const referenceValidator = getReferenceValidatorEnhanced();
+      referenceValidator.resetStatistics();
+      
+      logger.info('[ValidationMetrics] Reference validation statistics reset');
+      
+      ApiResponse.success(res, null, 'Reference validation statistics reset successfully');
+    } catch (error: any) {
+      logger.error('[ValidationMetrics] Failed to reset reference statistics:', error);
+      ApiResponse.serviceError(res, 'Failed to reset reference statistics', error.message);
     }
   }));
 }

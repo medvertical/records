@@ -39,6 +39,26 @@ interface ReferenceValidationOptions {
   crossServer?: boolean;
 }
 
+// Task 7.13: Reference validation statistics interface
+export interface ReferenceValidationStatistics {
+  totalReferences: number;
+  validReferences: number;
+  invalidReferences: number;
+  byResourceType: Record<string, number>;
+  byIssueType: {
+    typeMismatch: number;
+    notFound: number;
+    circular: number;
+    versionMismatch: number;
+    invalidFormat: number;
+    containedIssues: number;
+  };
+  cacheHits: number;
+  cacheMisses: number;
+  averageValidationTime: number;
+  lastReset: string;
+}
+
 // ============================================================================
 // ReferenceValidatorEnhanced Class
 // ============================================================================
@@ -47,6 +67,27 @@ export class ReferenceValidatorEnhanced {
   private referenceCache: Map<string, { exists: boolean; resourceType?: string; timestamp: number }> = new Map();
   private cacheTTL = 300000; // 5 minutes
   private visitedReferences: Set<string> = new Set(); // For circular detection
+
+  // Task 7.13: Validation statistics tracking
+  private statistics = {
+    totalReferences: 0,
+    validReferences: 0,
+    invalidReferences: 0,
+    byResourceType: {} as Record<string, number>,
+    byIssueType: {
+      typeMismatch: 0,
+      notFound: 0,
+      circular: 0,
+      versionMismatch: 0,
+      invalidFormat: 0,
+      containedIssues: 0
+    },
+    cacheHits: 0,
+    cacheMisses: 0,
+    totalValidationTime: 0,
+    validationCount: 0,
+    lastReset: new Date().toISOString()
+  };
 
   constructor(private options: ReferenceValidationOptions = {}) {
     // Set default options
@@ -95,8 +136,17 @@ export class ReferenceValidatorEnhanced {
 
       console.log(`[ReferenceValidator] Found ${references.length} reference(s)`);
 
+      // Task 7.13: Track total references
+      this.statistics.totalReferences += references.length;
+      this.statistics.validationCount++;
+
       // Validate each reference
       for (const ref of references) {
+        // Task 7.13: Track by resource type
+        if (ref.resourceType) {
+          this.statistics.byResourceType[ref.resourceType] = 
+            (this.statistics.byResourceType[ref.resourceType] || 0) + 1;
+        }
         // Task 7.2: Type checking
         if (this.options.validateType) {
           const typeIssues = this.validateReferenceType(ref, resource);
@@ -136,6 +186,34 @@ export class ReferenceValidatorEnhanced {
 
       const duration = Date.now() - startTime;
       console.log(`[ReferenceValidator] Completed in ${duration}ms, found ${issues.length} issue(s)`);
+
+      // Task 7.13: Track validation time and results
+      this.statistics.totalValidationTime += duration;
+      
+      const references = this.extractReferences(resource, '');
+      if (issues.length === 0) {
+        this.statistics.validReferences += references.length;
+      } else {
+        this.statistics.invalidReferences += references.length;
+        
+        // Track by issue type
+        for (const issue of issues) {
+          const msg = issue.message.toLowerCase();
+          if (msg.includes('type mismatch')) {
+            this.statistics.byIssueType.typeMismatch++;
+          } else if (msg.includes('not found') || msg.includes('does not exist')) {
+            this.statistics.byIssueType.notFound++;
+          } else if (msg.includes('circular')) {
+            this.statistics.byIssueType.circular++;
+          } else if (msg.includes('version')) {
+            this.statistics.byIssueType.versionMismatch++;
+          } else if (msg.includes('invalid format') || msg.includes('malformed')) {
+            this.statistics.byIssueType.invalidFormat++;
+          } else if (msg.includes('contained')) {
+            this.statistics.byIssueType.containedIssues++;
+          }
+        }
+      }
 
       // Clear circular detection set for next validation
       this.visitedReferences.clear();
@@ -290,11 +368,17 @@ export class ReferenceValidatorEnhanced {
     const now = Date.now();
 
     if (cached && (now - cached.timestamp) < this.cacheTTL) {
+      // Task 7.13: Track cache hit
+      this.statistics.cacheHits++;
+      
       if (!cached.exists) {
         issues.push(this.createReferenceNotFoundIssue(ref));
       }
       return issues;
     }
+    
+    // Task 7.13: Track cache miss
+    this.statistics.cacheMisses++;
 
     // Fetch resource (simplified - would need actual implementation)
     try {
@@ -455,6 +539,52 @@ export class ReferenceValidatorEnhanced {
       size: this.referenceCache.size,
       ttl: this.cacheTTL
     };
+  }
+
+  /**
+   * Task 7.13: Get reference validation statistics
+   */
+  getStatistics(): ReferenceValidationStatistics {
+    return {
+      totalReferences: this.statistics.totalReferences,
+      validReferences: this.statistics.validReferences,
+      invalidReferences: this.statistics.invalidReferences,
+      byResourceType: { ...this.statistics.byResourceType },
+      byIssueType: { ...this.statistics.byIssueType },
+      cacheHits: this.statistics.cacheHits,
+      cacheMisses: this.statistics.cacheMisses,
+      averageValidationTime: 
+        this.statistics.validationCount > 0 
+          ? this.statistics.totalValidationTime / this.statistics.validationCount 
+          : 0,
+      lastReset: this.statistics.lastReset
+    };
+  }
+
+  /**
+   * Task 7.13: Reset validation statistics
+   */
+  resetStatistics(): void {
+    this.statistics = {
+      totalReferences: 0,
+      validReferences: 0,
+      invalidReferences: 0,
+      byResourceType: {},
+      byIssueType: {
+        typeMismatch: 0,
+        notFound: 0,
+        circular: 0,
+        versionMismatch: 0,
+        invalidFormat: 0,
+        containedIssues: 0
+      },
+      cacheHits: 0,
+      cacheMisses: 0,
+      totalValidationTime: 0,
+      validationCount: 0,
+      lastReset: new Date().toISOString()
+    };
+    console.log('[ReferenceValidator] Statistics reset');
   }
 }
 
