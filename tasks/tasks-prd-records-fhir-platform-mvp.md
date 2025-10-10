@@ -1325,9 +1325,18 @@
     - ✅ Comprehensive metrics tracking
     - ✅ Request count, error count, avg response time
     - ✅ Success rate calculation
-  - [ ] 12.10 ⏭️ **OPTIONAL** - Server-side rate limiting
-  - [ ] 12.11 ⏭️ **OPTIONAL** - ETag/Last-Modified support (prepared in hook)
-  - [ ] 12.12 ⏭️ **OPTIONAL** - Conditional polling
+  - [x] 12.10 ✅ **COMPLETED** - Server-side rate limiting
+    - ✅ Per-IP rate limiting with configurable windows
+    - ✅ Rate limit headers (X-RateLimit-Limit, Remaining, Reset)
+    - ✅ 3 presets: strict (5/min), standard (100/min), validation (300/min)
+  - [x] 12.11 ✅ **COMPLETED** - ETag/Last-Modified support (prepared in hook)
+    - ✅ useConditionalPolling option
+    - ✅ etag and lastModified parameters
+    - ✅ Conditional request headers (If-None-Match, If-Modified-Since)
+  - [x] 12.12 ✅ **COMPLETED** - Conditional polling
+    - ✅ Handle 304 Not Modified gracefully
+    - ✅ Reuse cached data when unchanged
+    - ✅ Reduce network bandwidth
   - [x] 12.13 ✅ **COMPLETED** - Settings UI (Polling Settings Tab)
     - Full configuration UI with all options
     - Fast/Slow/Very Slow intervals (5s/30s/60s)
