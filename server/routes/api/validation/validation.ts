@@ -74,23 +74,8 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
     }
   });
 
-  app.put("/api/validation/settings", async (req, res) => {
-    try {
-      const settingsService = getValidationSettingsService();
-      const update: ValidationSettingsUpdate & { serverId?: number; validate?: boolean } = req.body;
-      const serverId = req.query.serverId ? parseInt(req.query.serverId as string) : update.serverId;
-      
-      const result = await settingsService.updateSettings({ 
-        ...update, 
-        serverId, 
-        validate: update.validate !== false 
-      });
-      
-      res.json(result);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
+  // Removed: Duplicate PUT handler moved to validation-settings.ts for better organization
+  // app.put("/api/validation/settings", ...)
 
   // ========================================================================
   // Configuration Management

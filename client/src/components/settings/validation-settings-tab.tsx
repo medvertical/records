@@ -63,6 +63,8 @@ export function ValidationSettingsTab() {
   const [saving, setSaving] = useState(false);
   const [fhirVersion, setFhirVersion] = useState<FHIRVersion>('R4');
   const [availableResourceTypes, setAvailableResourceTypes] = useState<string[]>([]);
+  const [resourceTypesSource, setResourceTypesSource] = useState<'server' | 'static' | 'filtered' | null>(null);
+  const [serverVersion, setServerVersion] = useState<string | null>(null);
   const [showMigrationWarning, setShowMigrationWarning] = useState(false);
   const [originalFhirVersion, setOriginalFhirVersion] = useState<FHIRVersion>('R4');
   const [showModeConfirmDialog, setShowModeConfirmDialog] = useState(false);
@@ -115,10 +117,42 @@ export function ValidationSettingsTab() {
       const response = await fetch(`/api/validation/resource-types/${version}`);
       if (response.ok) {
         const data = await response.json();
-        setAvailableResourceTypes(data.resourceTypes || []);
+        // Handle ApiResponse.success() wrapper format
+        const resourceTypes = data.success && data.data 
+          ? data.data.resourceTypes 
+          : data.resourceTypes;
+        
+        setAvailableResourceTypes(resourceTypes || []);
+        
+        // Store server integration info
+        if (data.data?.source) {
+          setResourceTypesSource(data.data.source);
+          setServerVersion(data.data.serverVersion || null);
+          
+          console.log(`[Resource Types] Source: ${data.data.source}, Server Version: ${data.data.serverVersion || 'N/A'}`);
+          if (data.data.source === 'filtered') {
+            console.log(`[Resource Types] Filtered ${data.data.totalServerTypes} server types to ${data.data.filteredCount} for FHIR ${version}`);
+          }
+        } else if (data.source) {
+          // Handle non-wrapped response format
+          setResourceTypesSource(data.source);
+          setServerVersion(data.serverVersion || null);
+        }
+      } else {
+        console.error('Failed to load resource types:', response.statusText);
+        toast({
+          title: 'Error',
+          description: 'Failed to load available resource types',
+          variant: 'destructive'
+        });
       }
     } catch (error) {
       console.error('Error loading resource types:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to connect to server for resource types',
+        variant: 'destructive'
+      });
     }
   };
 
@@ -128,7 +162,16 @@ export function ValidationSettingsTab() {
     try {
       setSaving(true);
       const serverId = activeServer?.id;
-      const response = await fetch(`/api/validation/settings${serverId ? `?serverId=${serverId}` : ''}`, {
+      const url = `/api/validation/settings${serverId ? `?serverId=${serverId}` : ''}`;
+      
+      console.log('[ValidationSettings] Saving settings:', {
+        url,
+        serverId,
+        settings,
+        timestamp: new Date().toISOString()
+      });
+      
+      const response = await fetch(url, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -136,19 +179,70 @@ export function ValidationSettingsTab() {
         body: JSON.stringify(settings)
       });
       
+      console.log('[ValidationSettings] Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: {
+          contentType: response.headers.get('content-type'),
+          contentLength: response.headers.get('content-length')
+        }
+      });
+      
       if (!response.ok) {
-        throw new Error('Failed to save settings');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[ValidationSettings] Save failed:', errorData);
+        throw new Error(errorData.message || 'Failed to save settings');
       }
+      
+      // Check if response has content before parsing
+      const contentType = response.headers.get('content-type');
+      const contentLength = response.headers.get('content-length');
+      
+      console.log('[ValidationSettings] Response details:', {
+        contentType,
+        contentLength,
+        hasContent: contentLength && parseInt(contentLength) > 0
+      });
+      
+      if (!contentType || !contentType.includes('application/json')) {
+        console.warn('[ValidationSettings] Response is not JSON:', contentType);
+        const text = await response.text();
+        console.log('[ValidationSettings] Response text:', text);
+        // Still show success since status is 200
+        toast({
+          title: 'Success',
+          description: 'Validation settings saved successfully'
+        });
+        return;
+      }
+      
+      // Check if response body is empty
+      if (!contentLength || parseInt(contentLength) === 0) {
+        console.warn('[ValidationSettings] Response body is empty (Content-Length: 0)');
+        toast({
+          title: 'Success',
+          description: 'Validation settings saved successfully'
+        });
+        return;
+      }
+      
+      const result = await response.json().catch((err) => {
+        console.error('[ValidationSettings] Failed to parse JSON:', err);
+        // Still show success since status is 200
+        return null;
+      });
+      console.log('[ValidationSettings] Save successful:', result);
       
       toast({
         title: 'Success',
         description: 'Validation settings saved successfully'
       });
     } catch (error) {
-      console.error('Error saving settings:', error);
+      console.error('[ValidationSettings] Error saving settings:', error);
       toast({
         title: 'Error',
-        description: 'Failed to save validation settings',
+        description: error instanceof Error ? error.message : 'Failed to save validation settings',
         variant: 'destructive'
       });
     } finally {
@@ -672,11 +766,31 @@ export function ValidationSettingsTab() {
           {settings.resourceTypes.enabled && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label>Available Resource Types ({availableResourceTypes.length})</Label>
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <Server className="h-3 w-3" />
-                  FHIR {fhirVersion}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Label>Available Resource Types ({availableResourceTypes.length})</Label>
+                  {resourceTypesSource && (
+                    <Badge 
+                      variant={resourceTypesSource === 'filtered' ? 'default' : 'secondary'}
+                      className="flex items-center gap-1 text-xs"
+                    >
+                      {resourceTypesSource === 'filtered' && <Database className="h-3 w-3" />}
+                      {resourceTypesSource === 'static' && <HardDrive className="h-3 w-3" />}
+                      {resourceTypesSource === 'filtered' ? 'From Server' : 'Static List'}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {serverVersion && (
+                    <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                      <Server className="h-3 w-3" />
+                      Server: {serverVersion}
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    <Server className="h-3 w-3" />
+                    FHIR {fhirVersion}
+                  </Badge>
+                </div>
               </div>
               
               {availableResourceTypes.length === 0 && (

@@ -171,17 +171,9 @@ function MessageItem({
                 {message.fhirVersion && (
                   <Badge 
                     variant="secondary" 
-                    className={cn(
-                      'text-[10px] px-1.5 py-0 h-4 font-medium text-white flex-shrink-0',
-                      message.fhirVersion === 'R4' && 'bg-blue-500',
-                      message.fhirVersion === 'R5' && 'bg-green-500',
-                      message.fhirVersion === 'R6' && 'bg-purple-500'
-                    )}
+                    className="text-[10px] px-1.5 py-0 h-4 font-medium bg-gray-100 text-gray-700 hover:bg-gray-100 flex-shrink-0"
                   >
-                    {message.fhirVersion === 'R4' && '🔵'}
-                    {message.fhirVersion === 'R5' && '🟢'}
-                    {message.fhirVersion === 'R6' && '🟣'}
-                    {' '}{message.fhirVersion}
+                    {message.fhirVersion}
                   </Badge>
                 )}
                 <Badge variant="outline" className={cn('text-xs flex-shrink-0', config.color)}>
@@ -192,9 +184,9 @@ function MessageItem({
 
             {/* Task 2.13: R6 Limited Support Warning */}
             {message.fhirVersion === 'R6' && (
-              <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded text-xs">
-                <p className="font-semibold text-purple-900">🟣 R6 Preview Notice:</p>
-                <p className="text-purple-800 mt-1">
+              <div className="mt-2 p-2 bg-gray-50 border border-gray-200 rounded text-xs">
+                <p className="font-semibold text-gray-900">R6 Preview Notice:</p>
+                <p className="text-gray-800 mt-1">
                   Limited validation support - Structural and Profile validation only. Terminology and Reference validation may be incomplete.
                 </p>
               </div>

@@ -115,6 +115,11 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
   const saveDashboardSettings = async () => {
     setIsSaving(true);
     try {
+      console.log('[DashboardSettings] Saving settings:', {
+        settings: dashboardSettings,
+        timestamp: new Date().toISOString()
+      });
+      
       const response = await fetch('/api/dashboard-settings', {
         method: 'PUT',
         headers: {
@@ -123,19 +128,29 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
         body: JSON.stringify(dashboardSettings),
       });
 
+      console.log('[DashboardSettings] Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
       if (response.ok) {
+        const result = await response.json();
+        console.log('[DashboardSettings] Save successful:', result);
         toast({
           title: "Success",
           description: "Dashboard settings saved successfully",
         });
       } else {
-        throw new Error('Failed to save settings');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[DashboardSettings] Save failed:', errorData);
+        throw new Error(errorData.message || 'Failed to save settings');
       }
     } catch (error) {
-      console.error('Failed to save dashboard settings:', error);
+      console.error('[DashboardSettings] Error saving settings:', error);
       toast({
         title: "Error",
-        description: "Failed to save dashboard settings",
+        description: error instanceof Error ? error.message : "Failed to save dashboard settings",
         variant: "destructive",
       });
     } finally {

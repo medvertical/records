@@ -1,23 +1,9 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import logger from '../../../utils/logger';
+import { getDashboardSettingsRepository } from '../../../repositories/dashboard-settings-repository';
 
 const router = Router();
-
-// Default dashboard settings
-const defaultSettings = {
-  theme: 'system',
-  cardLayout: 'grid',
-  enableAutoRefresh: true,
-  refreshInterval: 30,
-  showResourceStatistics: true,
-  showValidationProgress: true,
-  showErrorSummary: true,
-  showPerformanceMetrics: false,
-  enableAutoValidation: false,
-};
-
-let currentSettings = { ...defaultSettings };
 
 /**
  * GET /api/dashboard-settings
@@ -25,34 +11,59 @@ let currentSettings = { ...defaultSettings };
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    logger.info('[API] Fetching dashboard settings');
-    res.json(currentSettings);
+    logger.info('[DashboardSettings] Fetching settings');
+    
+    const repository = getDashboardSettingsRepository();
+    const settings = await repository.getCurrentSettings();
+    
+    logger.info('[DashboardSettings] Settings fetched successfully');
+    res.json(settings);
   } catch (error) {
-    logger.error('[API] Error fetching dashboard settings:', error);
-    res.status(500).json({ error: 'Failed to fetch dashboard settings' });
+    logger.error('[DashboardSettings] Error fetching settings:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch dashboard settings',
+      message: error instanceof Error ? error.message : String(error)
+    });
   }
 });
 
 /**
- * POST /api/dashboard-settings
- * Update dashboard settings
+ * Update dashboard settings handler
  */
-router.post('/', async (req: Request, res: Response) => {
+const updateSettings = async (req: Request, res: Response) => {
   try {
     const updates = req.body;
-    logger.info('[API] Updating dashboard settings:', updates);
+    logger.info('[DashboardSettings] Update request received:', {
+      updates,
+      method: req.method,
+      timestamp: new Date().toISOString()
+    });
     
-    currentSettings = {
-      ...currentSettings,
-      ...updates,
-    };
+    const repository = getDashboardSettingsRepository();
+    const updatedSettings = await repository.updateSettings(updates);
     
-    res.json(currentSettings);
+    logger.info('[DashboardSettings] Settings updated successfully:', updatedSettings);
+    res.json(updatedSettings);
   } catch (error) {
-    logger.error('[API] Error updating dashboard settings:', error);
-    res.status(500).json({ error: 'Failed to update dashboard settings' });
+    logger.error('[DashboardSettings] Error updating settings:', error);
+    res.status(500).json({ 
+      error: 'Failed to update dashboard settings',
+      message: error instanceof Error ? error.message : String(error)
+    });
   }
-});
+};
+
+/**
+ * POST /api/dashboard-settings
+ * Update dashboard settings (legacy)
+ */
+router.post('/', updateSettings);
+
+/**
+ * PUT /api/dashboard-settings
+ * Update dashboard settings
+ */
+router.put('/', updateSettings);
 
 export default router;
 

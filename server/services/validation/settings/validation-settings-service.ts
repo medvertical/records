@@ -151,12 +151,47 @@ export class ValidationSettingsService extends EventEmitter {
     try {
       // Get current settings for the server
       const currentSettings = await this.getCurrentSettings(update.serverId);
+      console.log('[ValidationSettings] Current settings:', JSON.stringify(currentSettings.aspects?.structural, null, 2));
+      console.log('[ValidationSettings] Update:', JSON.stringify(update.aspects?.structural, null, 2));
       
-      // Merge with update
+      // Deep merge with update (not shallow merge!)
       const updatedSettings: ValidationSettings = {
         ...currentSettings,
-        ...update
+        // Deep merge nested objects - these must come AFTER currentSettings to override properly
+        aspects: update.aspects ? {
+          ...currentSettings.aspects,
+          // Deep merge individual aspects
+          ...(update.aspects.structural && {structural: {...currentSettings.aspects.structural, ...update.aspects.structural}}),
+          ...(update.aspects.profile && {profile: {...currentSettings.aspects.profile, ...update.aspects.profile}}),
+          ...(update.aspects.terminology && {terminology: {...currentSettings.aspects.terminology, ...update.aspects.terminology}}),
+          ...(update.aspects.reference && {reference: {...currentSettings.aspects.reference, ...update.aspects.reference}}),
+          ...(update.aspects.businessRules && {businessRules: {...currentSettings.aspects.businessRules, ...update.aspects.businessRules}}),
+          ...(update.aspects.metadata && {metadata: {...currentSettings.aspects.metadata, ...update.aspects.metadata}}),
+        } : currentSettings.aspects,
+        performance: update.performance ? {
+          ...currentSettings.performance,
+          ...update.performance
+        } : currentSettings.performance,
+        resourceTypes: update.resourceTypes ? {
+          ...currentSettings.resourceTypes,
+          ...update.resourceTypes
+        } : currentSettings.resourceTypes,
+        // Primitive/top-level fields from update
+        ...(update.mode && { mode: update.mode }),
+        ...(update.useFhirValidateOperation !== undefined && { useFhirValidateOperation: update.useFhirValidateOperation }),
+        ...(update.autoRevalidateAfterEdit !== undefined && { autoRevalidateAfterEdit: update.autoRevalidateAfterEdit }),
+        terminologyFallback: update.terminologyFallback ? {
+          ...currentSettings.terminologyFallback,
+          ...update.terminologyFallback
+        } : currentSettings.terminologyFallback,
+        offlineConfig: update.offlineConfig ? {
+          ...currentSettings.offlineConfig,
+          ...update.offlineConfig
+        } : currentSettings.offlineConfig,
+        ...(update.profileSources && { profileSources: update.profileSources }),
       };
+      
+      console.log('[ValidationSettings] Merged settings:', JSON.stringify(updatedSettings.aspects?.structural, null, 2));
       
       // Validate settings if requested
       if (update.validate !== false) {
@@ -167,7 +202,9 @@ export class ValidationSettingsService extends EventEmitter {
       }
       
       // Save to database
+      console.log('[ValidationSettings] Saving to DB, structural:', JSON.stringify(updatedSettings.aspects?.structural, null, 2));
       const savedSettings = await this.repository.createOrUpdate(updatedSettings, update.serverId);
+      console.log('[ValidationSettings] Saved to DB, structural:', JSON.stringify(savedSettings.aspects?.structural, null, 2));
       
       // Update cache
       this.currentSettings = savedSettings;
@@ -605,6 +642,80 @@ export class ValidationSettingsService extends EventEmitter {
   async getAvailableResourceTypes(fhirVersion?: FHIRVersion): Promise<string[]> {
     const version = fhirVersion || this.config.defaultFhirVersion;
     return [...getAllResourceTypesForVersion(version)];
+  }
+
+  /**
+   * Get available resource types from connected FHIR server, filtered by FHIR version
+   * This combines server capabilities with FHIR version specifications
+   * 
+   * @param fhirVersion - FHIR version to filter by (R4 or R5)
+   * @returns Array of resource types available in both server and version spec
+   */
+  async getAvailableResourceTypesFromServer(fhirVersion?: FHIRVersion): Promise<{
+    resourceTypes: string[];
+    source: 'server' | 'static' | 'filtered';
+    serverVersion?: string;
+    totalServerTypes?: number;
+    filteredCount?: number;
+  }> {
+    const version = fhirVersion || this.config.defaultFhirVersion;
+    const versionResourceTypes = getAllResourceTypesForVersion(version);
+    
+    try {
+      // Import storage and get active FHIR server
+      const { storage } = await import('../../../storage.js');
+      const activeServer = await storage.getActiveFhirServer();
+      
+      if (!activeServer) {
+        console.log('[ValidationSettingsService] No active FHIR server, using static resource types');
+        return {
+          resourceTypes: [...versionResourceTypes],
+          source: 'static'
+        };
+      }
+      
+      // Import server activation service to get FHIR client
+      const { serverActivationService } = await import('../../../services/server-activation-service');
+      const fhirClient = serverActivationService.getFhirClient();
+      
+      if (!fhirClient) {
+        console.log('[ValidationSettingsService] No FHIR client available, using static resource types');
+        return {
+          resourceTypes: [...versionResourceTypes],
+          source: 'static'
+        };
+      }
+      
+      // Fetch resource types from server's CapabilityStatement
+      console.log('[ValidationSettingsService] Fetching resource types from FHIR server...');
+      const serverResourceTypes = await fhirClient.getAllResourceTypes();
+      const serverVersion = await fhirClient.getFhirVersion();
+      
+      console.log(`[ValidationSettingsService] Server reports ${serverResourceTypes.length} resource types, version: ${serverVersion}`);
+      
+      // Filter server types by requested FHIR version (intersection)
+      const filteredTypes = serverResourceTypes.filter(type => 
+        isResourceTypeAvailableInVersion(type, version)
+      );
+      
+      console.log(`[ValidationSettingsService] Filtered to ${filteredTypes.length} types for FHIR ${version}`);
+      
+      return {
+        resourceTypes: filteredTypes,
+        source: 'filtered',
+        serverVersion: serverVersion || undefined,
+        totalServerTypes: serverResourceTypes.length,
+        filteredCount: filteredTypes.length
+      };
+      
+    } catch (error: any) {
+      console.error('[ValidationSettingsService] Error fetching resource types from server:', error.message);
+      // Fall back to static types on error
+      return {
+        resourceTypes: [...versionResourceTypes],
+        source: 'static'
+      };
+    }
   }
 
   async getResourceTypeValidationReport(

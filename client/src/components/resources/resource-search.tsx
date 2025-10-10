@@ -135,18 +135,10 @@ export default function ResourceSearch({
         {activeServer?.fhirVersion && (
           <Badge 
             variant="secondary"
-            className={cn(
-              "text-xs px-2.5 py-1 h-8 font-medium text-white whitespace-nowrap",
-              activeServer.fhirVersion === 'R4' && "bg-blue-500 hover:bg-blue-600",
-              activeServer.fhirVersion === 'R5' && "bg-green-500 hover:bg-green-600",
-              activeServer.fhirVersion === 'R6' && "bg-purple-500 hover:bg-purple-600"
-            )}
+            className="text-xs px-2.5 py-1 h-8 font-medium bg-gray-100 text-gray-700 hover:bg-gray-100 whitespace-nowrap"
             title={`FHIR Version ${activeServer.fhirVersion} - ${activeServer.name}`}
           >
-            {activeServer.fhirVersion === 'R4' && '🔵'}
-            {activeServer.fhirVersion === 'R5' && '🟢'}
-            {activeServer.fhirVersion === 'R6' && '🟣'}
-            {' '}{activeServer.fhirVersion}
+            {activeServer.fhirVersion}
           </Badge>
         )}
         

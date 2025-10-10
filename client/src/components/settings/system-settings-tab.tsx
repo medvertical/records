@@ -119,6 +119,11 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
   const saveSystemSettings = async () => {
     setIsSaving(true);
     try {
+      console.log('[SystemSettings] Saving settings:', {
+        settings: systemSettings,
+        timestamp: new Date().toISOString()
+      });
+      
       const response = await fetch('/api/system-settings', {
         method: 'PUT',
         headers: {
@@ -127,19 +132,29 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
         body: JSON.stringify(systemSettings),
       });
 
+      console.log('[SystemSettings] Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok
+      });
+
       if (response.ok) {
+        const result = await response.json();
+        console.log('[SystemSettings] Save successful:', result);
         toast({
           title: "Success",
           description: "System settings saved successfully",
         });
       } else {
-        throw new Error('Failed to save settings');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('[SystemSettings] Save failed:', errorData);
+        throw new Error(errorData.message || 'Failed to save settings');
       }
     } catch (error) {
-      console.error('Failed to save system settings:', error);
+      console.error('[SystemSettings] Error saving settings:', error);
       toast({
         title: "Error",
-        description: "Failed to save system settings",
+        description: error instanceof Error ? error.message : "Failed to save system settings",
         variant: "destructive",
       });
     } finally {

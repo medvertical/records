@@ -119,12 +119,9 @@ export function ServerList({
                       <h4 className="font-medium flex items-center gap-2">
                         {server.name}
                         {server.fhirVersion && (
-                          <span className="text-xs">
-                            {server.fhirVersion === 'R4' && '🔵'}
-                            {server.fhirVersion === 'R5' && '🟢'}
-                            {server.fhirVersion === 'R6' && '🟣'}
-                            {' '}{server.fhirVersion}
-                          </span>
+                          <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-700 hover:bg-gray-100">
+                            {server.fhirVersion}
+                          </Badge>
                         )}
                         {(isConnectingThis || isDisconnectingThis) && (
                           <Loader2 className="h-3 w-3 animate-spin text-blue-500" />

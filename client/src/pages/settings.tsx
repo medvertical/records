@@ -173,54 +173,6 @@ export default function SettingsPage() {
             <SystemSettingsTab onSettingsChange={handleSystemSettingsChange} />
           </TabsContent>
         </Tabs>
-
-        {/* Settings Summary Card */}
-        {(validationSettings || servers.length > 0 || dashboardSettings || systemSettings) && (
-          <Card className="mt-8">
-            <CardHeader>
-              <CardTitle>Settings Summary</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {validationSettings && (
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-sm">Validation Settings</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {Object.values(validationSettings).filter(v => typeof v === 'object' && v.enabled).length} aspects enabled
-                    </p>
-                  </div>
-                )}
-                
-                {servers.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-sm">FHIR Servers</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {servers.length} server{servers.length !== 1 ? 's' : ''} configured
-                    </p>
-                  </div>
-                )}
-                
-                {dashboardSettings && (
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-sm">Dashboard</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {dashboardSettings.theme} theme, {dashboardSettings.cardLayout} layout
-                    </p>
-                  </div>
-                )}
-                
-                {systemSettings && (
-                  <div className="space-y-2">
-                    <h4 className="font-medium text-sm">System</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {systemSettings.logLevel} logging, {systemSettings.dataRetentionDays} days retention
-                    </p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
     </div>
   );

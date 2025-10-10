@@ -383,6 +383,18 @@ export interface ValidationSettingsUpdate {
   aspects?: Partial<ValidationSettings['aspects']>;
   performance?: Partial<ValidationSettings['performance']>;
   resourceTypes?: Partial<ValidationSettings['resourceTypes']>;
+  mode?: 'online' | 'offline';
+  useFhirValidateOperation?: boolean;
+  terminologyFallback?: {
+    local?: string;
+    remote?: string;
+  };
+  offlineConfig?: {
+    ontoserverUrl?: string;
+    profileCachePath?: string;
+  };
+  profileSources?: 'local' | 'simplifier' | 'both';
+  autoRevalidateAfterEdit?: boolean;
 }
 
 // ============================================================================

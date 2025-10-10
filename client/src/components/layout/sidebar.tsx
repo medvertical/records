@@ -242,55 +242,25 @@ function SidebarContent({
             </span>
           </div>
         </div>
-        <div className={cn(
-          "flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-2 rounded transition-all duration-200",
-          isLoading && "bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700"
-        )}>
+        <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-2 rounded transition-all duration-200">
           <div className="min-w-0 flex-1">
             <div className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate flex items-center gap-1">
-              {isLoading && !activeServer ? (
-                <span className="text-gray-500 dark:text-gray-400">Switching servers...</span>
-              ) : (
-                <>
-                  {activeServer?.name || "No Server"}
-                  {activeServer?.fhirVersion && (
-                    <Badge 
-                      variant="secondary"
-                      className={cn(
-                        "text-[10px] px-1.5 py-0 h-4 font-medium text-white",
-                        activeServer.fhirVersion === 'R4' && "bg-blue-500 hover:bg-blue-600",
-                        activeServer.fhirVersion === 'R5' && "bg-green-500 hover:bg-green-600",
-                        activeServer.fhirVersion === 'R6' && "bg-purple-500 hover:bg-purple-600"
-                      )}
-                    >
-                      {activeServer.fhirVersion === 'R4' && '🔵'}
-                      {activeServer.fhirVersion === 'R5' && '🟢'}
-                      {activeServer.fhirVersion === 'R6' && '🟣'}
-                      {' '}{activeServer.fhirVersion}
-                    </Badge>
-                  )}
-                </>
+              {activeServer?.name || "No Server"}
+              {activeServer?.fhirVersion && (
+                <Badge 
+                  variant="secondary"
+                  className="text-[10px] px-1.5 py-0 h-4 font-medium bg-gray-100 text-gray-700 hover:bg-gray-100"
+                >
+                  {activeServer.fhirVersion}
+                </Badge>
               )}
               {isLoading && activeServer && (
                 <div className="w-2 h-2 border border-gray-300 dark:border-gray-600 border-t-transparent rounded-full animate-spin"></div>
               )}
             </div>
             <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-              {isLoading && !activeServer ? (
-                <span className="text-gray-400 dark:text-gray-500">Updating connection...</span>
-              ) : (
-                <>
-                  {activeServer?.url || "Not connected"}
-                </>
-              )}
+              {activeServer?.url || "Not connected"}
             </div>
-            {isLoading && !activeServer ? (
-              <div className="flex items-center gap-2 mt-1">
-                <div className="text-xs px-2 py-1 rounded-full font-medium bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
-                  🔄 Switching...
-                </div>
-              </div>
-            ) : null}
           </div>
           <div className="flex items-center gap-1">
             <Button 

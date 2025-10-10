@@ -49,11 +49,24 @@ export function setupValidationSettingsRoutes(app: Express) {
       const version = req.params.version as FHIRVersion;
       InputValidator.validateEnum(version, 'version', ['R4', 'R5']);
       
-      const resourceTypes = await settingsService.getAvailableResourceTypes(version);
+      // Fetch resource types from server with version filtering
+      const result = await settingsService.getAvailableResourceTypesFromServer(version);
+      
+      logger.info('[ValidationSettings] Resource types retrieved', {
+        version,
+        count: result.resourceTypes.length,
+        source: result.source,
+        serverVersion: result.serverVersion
+      });
+      
       ApiResponse.success(res, {
         version,
-        resourceTypes,
-        count: resourceTypes.length
+        resourceTypes: result.resourceTypes,
+        count: result.resourceTypes.length,
+        source: result.source,
+        serverVersion: result.serverVersion,
+        totalServerTypes: result.totalServerTypes,
+        filteredCount: result.filteredCount
       }, 'Resource types retrieved successfully');
     } catch (error: any) {
       if (error instanceof ValidationError) {
@@ -78,11 +91,17 @@ export function setupValidationSettingsRoutes(app: Express) {
         });
       }
       
-      const resourceTypes = await settingsService.getAvailableResourceTypes(version);
+      // Fetch resource types from server with version filtering
+      const result = await settingsService.getAvailableResourceTypesFromServer(version);
+      
       res.json({ 
         version, 
-        resourceTypes,
-        count: resourceTypes.length,
+        resourceTypes: result.resourceTypes,
+        count: result.resourceTypes.length,
+        source: result.source,
+        serverVersion: result.serverVersion,
+        totalServerTypes: result.totalServerTypes,
+        filteredCount: result.filteredCount,
         timestamp: new Date().toISOString()
       });
     } catch (error: any) {
@@ -97,10 +116,15 @@ export function setupValidationSettingsRoutes(app: Express) {
   // Update Validation Settings (Partial Updates Supported)
   app.put("/api/validation/settings", async (req, res) => {
     try {
+      console.log('[ValidationSettings] ===== PUT REQUEST RECEIVED =====');
+      console.log('[ValidationSettings] Request body:', JSON.stringify(req.body, null, 2));
+      console.log('[ValidationSettings] Query params:', req.query);
+      
       const settingsService = getValidationSettingsService();
       
       // Validate request body
       if (!req.body || typeof req.body !== 'object') {
+        logger.error('[ValidationSettings] Invalid request body');
         return res.status(400).json({ 
           error: 'Invalid request body',
           message: 'Request body must be a valid object',
@@ -121,44 +145,65 @@ export function setupValidationSettingsRoutes(app: Express) {
       }
       
       // Validate update object structure - allow partial updates
-      const hasValidFields = update.aspects || update.performance || update.resourceTypes;
+      const hasValidFields = update.aspects || update.performance || update.resourceTypes || 
+        update.mode !== undefined || update.useFhirValidateOperation !== undefined ||
+        update.terminologyFallback || update.offlineConfig || update.profileSources || 
+        update.autoRevalidateAfterEdit !== undefined;
+      
       if (!hasValidFields) {
         return res.status(400).json({
           error: 'Invalid update payload',
-          message: 'Update must contain at least one of: aspects, performance, resourceTypes',
+          message: 'Update must contain at least one valid settings field',
           code: 'INVALID_UPDATE_PAYLOAD'
         });
       }
       
       // Perform partial update with validation
+      logger.info('[ValidationSettings] Updating settings...');
       const result = await settingsService.updateSettings({ 
         ...update, 
         serverId, 
         validate: update.validate !== false // Default to true, allow override
       });
+      logger.info('[ValidationSettings] Settings updated, result:', result);
       
       // AFTER settings update, invalidate all results for this server
       // This ensures deterministic revalidation with new settings
-      const { validationEnginePerAspect } = await import('../../../services/validation/engine/validation-engine-per-aspect');
-      
       let invalidatedCount = 0;
-      if (serverId) {
-        const invalidationResult = await validationEnginePerAspect.invalidateAllResults(serverId);
-        invalidatedCount = invalidationResult.deleted;
-        logger.info(`[Settings] Invalidated ${invalidatedCount} validation results for server ${serverId}`);
+      try {
+        const { validationEnginePerAspect } = await import('../../../services/validation/engine/validation-engine-per-aspect');
+        
+        if (serverId) {
+          logger.info(`[ValidationSettings] Invalidating results for server ${serverId}...`);
+          const invalidationResult = await validationEnginePerAspect.invalidateAllResults(serverId);
+          invalidatedCount = invalidationResult.deleted;
+          logger.info(`[ValidationSettings] Invalidated ${invalidatedCount} validation results for server ${serverId}`);
+        }
+      } catch (invalidationError) {
+        // Log but don't fail the request if invalidation fails
+        logger.error('[ValidationSettings] Error during invalidation (non-fatal):', invalidationError);
       }
       
       // Note: Background revalidation would be started here
       // For MVP, we rely on automatic revalidation when resources are browsed
       // Future: Enqueue background batch revalidation job
       
-      res.json({
+      const responseData = {
         ...result,
         invalidated: true,
         invalidatedCount,
         revalidationStarted: false, // MVP: Manual/on-demand revalidation
         message: `Settings updated successfully. ${invalidatedCount} validation results invalidated. Resources will be revalidated when browsed.`
-      });
+      };
+      
+      logger.info('[ValidationSettings] Sending response:', JSON.stringify(responseData, null, 2));
+      
+      // Ensure response is sent
+      if (!res.headersSent) {
+        res.status(200).json(responseData);
+      } else {
+        logger.error('[ValidationSettings] Headers already sent! Response may not be delivered.');
+      }
     } catch (error: any) {
       logger.error('[ValidationSettings] Update error:', error);
       

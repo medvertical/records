@@ -189,6 +189,38 @@ export const editAuditTrail = pgTable("edit_audit_trail", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const dashboardSettings = pgTable("dashboard_settings", {
+  id: serial("id").primaryKey(),
+  settings: jsonb("settings").notNull().default({
+    autoRefresh: true,
+    refreshInterval: 30,
+    showResourceStats: true,
+    showValidationProgress: true,
+    showErrorSummary: true,
+    showPerformanceMetrics: false,
+    cardLayout: "grid",
+    theme: "system",
+    autoValidateEnabled: false
+  }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const systemSettings = pgTable("system_settings", {
+  id: serial("id").primaryKey(),
+  settings: jsonb("settings").notNull().default({
+    logLevel: "info",
+    enableAnalytics: false,
+    enableCrashReporting: true,
+    enableSSE: true,
+    dataRetentionDays: 30,
+    maxLogFileSize: 100,
+    enableAutoUpdates: true
+  }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Audit trail table removed - no longer needed in simplified schema
 
 // Legacy validation settings table removed - no longer needed

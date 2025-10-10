@@ -1,21 +1,9 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import logger from '../../../utils/logger';
+import { getSystemSettingsRepository } from '../../../repositories/system-settings-repository';
 
 const router = Router();
-
-// Default system settings
-const defaultSettings = {
-  logLevel: 'info',
-  enableAnalytics: false,
-  enableCrashReporting: true,
-  enableSSE: true,
-  dataRetentionDays: 30,
-  maxLogFileSize: 100,
-  enableAutoUpdates: true,
-};
-
-let currentSettings = { ...defaultSettings };
 
 /**
  * GET /api/system-settings
@@ -23,34 +11,59 @@ let currentSettings = { ...defaultSettings };
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    logger.info('[API] Fetching system settings');
-    res.json(currentSettings);
+    logger.info('[SystemSettings] Fetching settings');
+    
+    const repository = getSystemSettingsRepository();
+    const settings = await repository.getCurrentSettings();
+    
+    logger.info('[SystemSettings] Settings fetched successfully');
+    res.json(settings);
   } catch (error) {
-    logger.error('[API] Error fetching system settings:', error);
-    res.status(500).json({ error: 'Failed to fetch system settings' });
+    logger.error('[SystemSettings] Error fetching settings:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch system settings',
+      message: error instanceof Error ? error.message : String(error)
+    });
   }
 });
 
 /**
- * POST /api/system-settings
- * Update system settings
+ * Update system settings handler
  */
-router.post('/', async (req: Request, res: Response) => {
+const updateSettings = async (req: Request, res: Response) => {
   try {
     const updates = req.body;
-    logger.info('[API] Updating system settings:', updates);
+    logger.info('[SystemSettings] Update request received:', {
+      updates,
+      method: req.method,
+      timestamp: new Date().toISOString()
+    });
     
-    currentSettings = {
-      ...currentSettings,
-      ...updates,
-    };
+    const repository = getSystemSettingsRepository();
+    const updatedSettings = await repository.updateSettings(updates);
     
-    res.json(currentSettings);
+    logger.info('[SystemSettings] Settings updated successfully:', updatedSettings);
+    res.json(updatedSettings);
   } catch (error) {
-    logger.error('[API] Error updating system settings:', error);
-    res.status(500).json({ error: 'Failed to update system settings' });
+    logger.error('[SystemSettings] Error updating settings:', error);
+    res.status(500).json({ 
+      error: 'Failed to update system settings',
+      message: error instanceof Error ? error.message : String(error)
+    });
   }
-});
+};
+
+/**
+ * POST /api/system-settings
+ * Update system settings (legacy)
+ */
+router.post('/', updateSettings);
+
+/**
+ * PUT /api/system-settings
+ * Update system settings
+ */
+router.put('/', updateSettings);
 
 /**
  * GET /api/system-settings/export
@@ -58,10 +71,13 @@ router.post('/', async (req: Request, res: Response) => {
  */
 router.get('/export', async (req: Request, res: Response) => {
   try {
-    logger.info('[API] Exporting system settings');
+    logger.info('[SystemSettings] Exporting settings');
+    
+    const repository = getSystemSettingsRepository();
+    const settings = await repository.getCurrentSettings();
     
     const exportData = {
-      ...currentSettings,
+      ...settings,
       exportedAt: new Date().toISOString(),
       version: '1.0',
     };
@@ -70,8 +86,11 @@ router.get('/export', async (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', 'attachment; filename="system-settings.json"');
     res.json(exportData);
   } catch (error) {
-    logger.error('[API] Error exporting system settings:', error);
-    res.status(500).json({ error: 'Failed to export system settings' });
+    logger.error('[SystemSettings] Error exporting settings:', error);
+    res.status(500).json({ 
+      error: 'Failed to export system settings',
+      message: error instanceof Error ? error.message : String(error)
+    });
   }
 });
 

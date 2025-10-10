@@ -154,7 +154,7 @@ export function ServerStatsCard({
               <div className="text-lg font-mono flex items-center gap-2">
                 {safeData.serverInfo.version || 'Unknown'}
                 {fhirVersionInfo && (
-                  <Badge variant={fhirVersionInfo.isR5 ? 'default' : 'secondary'} className="text-xs">
+                  <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-700 hover:bg-gray-100">
                     {fhirVersionInfo.isR5 ? 'R5' : 'R4'}
                   </Badge>
                 )}

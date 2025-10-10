@@ -146,7 +146,9 @@ export class ValidationSettingsRepository {
         .insert(validationSettings)
         .values({
           serverId: input.serverId || null,
-          settings: input.settings,
+          aspects: input.settings.aspects,
+          performance: input.settings.performance,
+          resourceTypes: input.settings.resourceTypes,
           isActive: input.isActive !== false,
           createdAt: new Date(),
           updatedAt: new Date()
@@ -154,13 +156,14 @@ export class ValidationSettingsRepository {
         .returning();
 
       const row = result[0];
+      // IMPORTANT: Drizzle ORM doesn't return JSONB fields in .returning()
       return {
         id: row.id,
         serverId: row.serverId,
-        settings: row.settings as ValidationSettings,
-        isActive: row.isActive,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt
+        settings: input.settings, // Use input instead of row.settings
+        isActive: row.isActive !== undefined ? row.isActive : (input.isActive !== false),
+        createdAt: row.createdAt || new Date(),
+        updatedAt: row.updatedAt || new Date()
       };
     } catch (error) {
       console.error('[ValidationSettingsRepository] Error creating settings:', error);
@@ -178,30 +181,44 @@ export class ValidationSettingsRepository {
         await this.deactivateAllSettings();
       }
 
+      console.log('[ValidationSettingsRepository] Updating with settings.aspects.structural:', JSON.stringify(input.settings.aspects?.structural));
+      
       const result = await db
         .update(validationSettings)
         .set({
           serverId: input.serverId || null,
-          settings: input.settings,
+          aspects: input.settings.aspects,
+          performance: input.settings.performance,
+          resourceTypes: input.settings.resourceTypes,
           isActive: input.isActive !== false,
           updatedAt: new Date()
         })
         .where(eq(validationSettings.id, input.id))
         .returning();
 
+      console.log('[ValidationSettingsRepository] Update result:', result.length, 'rows');
+      console.log('[ValidationSettingsRepository] Updated row.settings type:', typeof result[0]?.settings);
+      console.log('[ValidationSettingsRepository] Updated row.settings:', JSON.stringify(result[0]?.settings));
+
       if (result.length === 0) {
         throw new Error(`Settings with ID ${input.id} not found`);
       }
 
       const row = result[0];
-      return {
+      
+      // IMPORTANT: Drizzle ORM doesn't return JSONB fields in .returning()
+      // So we use the input settings which are the current/correct values
+      const returnValue = {
         id: row.id,
         serverId: row.serverId,
-        settings: row.settings as ValidationSettings,
-        isActive: row.isActive,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt
+        settings: input.settings, // Use input instead of row.settings which is undefined
+        isActive: row.isActive !== undefined ? row.isActive : (input.isActive !== false),
+        createdAt: row.createdAt || new Date(),
+        updatedAt: row.updatedAt || new Date()
       };
+      
+      console.log('[ValidationSettingsRepository] Returning settings.aspects.structural:', JSON.stringify(returnValue.settings.aspects?.structural));
+      return returnValue;
     } catch (error) {
       console.error('[ValidationSettingsRepository] Error updating settings:', error);
       throw error;

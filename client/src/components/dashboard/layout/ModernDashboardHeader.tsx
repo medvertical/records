@@ -67,7 +67,7 @@ export const ModernDashboardHeader: React.FC<ModernDashboardHeaderProps> = ({
                 <span className="text-sm font-medium text-foreground">
                   {serverName}
                 </span>
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="secondary" className="text-xs bg-gray-100 text-gray-700 hover:bg-gray-100">
                   {serverVersion}
                 </Badge>
               </div>

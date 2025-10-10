@@ -234,19 +234,10 @@ export function ResourceDetailHeader({
                 </h1>
                 {fhirVersion && (
                   <Badge 
-                    variant={fhirVersion === 'R5' ? 'default' : 'secondary'} 
-                    className={cn(
-                      "text-sm px-3 py-1 font-semibold",
-                      fhirVersion === 'R5' && "bg-blue-500 hover:bg-blue-600",
-                      fhirVersion === 'R6' && "bg-yellow-500 hover:bg-yellow-600 text-white"
-                    )}
+                    variant="secondary" 
+                    className="text-sm px-3 py-1 font-semibold bg-gray-100 text-gray-700 hover:bg-gray-100"
                   >
                     FHIR {fhirVersion}
-                  </Badge>
-                )}
-                {fhirVersion === 'R6' && (
-                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
-                    Preview
                   </Badge>
                 )}
                 {isValidating && (
