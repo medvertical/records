@@ -283,40 +283,42 @@ export function ValidationSettingsTab() {
               <AlertTriangle className="h-5 w-5 text-orange-500" />
               Confirm Mode Change
             </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-3 pt-2">
-              {pendingMode === 'online' ? (
-                <>
-                  <p>You are switching to <strong>Online Mode</strong>.</p>
-                  <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
-                    <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">Online Mode will:</p>
-                    <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 ml-4 list-disc">
-                      <li>Use remote terminology servers (tx.fhir.org)</li>
-                      <li>Require active internet connection</li>
-                      <li>Provide access to latest CodeSystems and ValueSets</li>
-                      <li>May have slightly higher latency</li>
-                    </ul>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p>You are switching to <strong>Offline Mode</strong>.</p>
-                  <div className="bg-green-50 dark:bg-green-950 p-3 rounded-lg">
-                    <p className="text-sm font-semibold text-green-900 dark:text-green-100 mb-1">Offline Mode will:</p>
-                    <ul className="text-sm text-green-800 dark:text-green-200 space-y-1 ml-4 list-disc">
-                      <li>Use local Ontoserver instance</li>
-                      <li>Work without internet connection</li>
-                      <li>Provide faster terminology validation</li>
-                      <li>Fallback to cached ValueSets if Ontoserver unavailable</li>
-                    </ul>
-                  </div>
-                </>
-              )}
-              <Alert className="mt-3">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription className="text-sm">
-                  Active validations will use the new mode after the switch. Results may vary between modes.
-                </AlertDescription>
-              </Alert>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 pt-2">
+                {pendingMode === 'online' ? (
+                  <>
+                    <p className="text-sm">You are switching to <strong>Online Mode</strong>.</p>
+                    <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
+                      <div className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-1">Online Mode will:</div>
+                      <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 ml-4 list-disc">
+                        <li>Use remote terminology servers (tx.fhir.org)</li>
+                        <li>Require active internet connection</li>
+                        <li>Provide access to latest CodeSystems and ValueSets</li>
+                        <li>May have slightly higher latency</li>
+                      </ul>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm">You are switching to <strong>Offline Mode</strong>.</p>
+                    <div className="bg-green-50 dark:bg-green-950 p-3 rounded-lg">
+                      <div className="text-sm font-semibold text-green-900 dark:text-green-100 mb-1">Offline Mode will:</div>
+                      <ul className="text-sm text-green-800 dark:text-green-200 space-y-1 ml-4 list-disc">
+                        <li>Use local Ontoserver instance</li>
+                        <li>Work without internet connection</li>
+                        <li>Provide faster terminology validation</li>
+                        <li>Fallback to cached ValueSets if Ontoserver unavailable</li>
+                      </ul>
+                    </div>
+                  </>
+                )}
+                <Alert className="mt-3">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-sm">
+                    Active validations will use the new mode after the switch. Results may vary between modes.
+                  </AlertDescription>
+                </Alert>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
