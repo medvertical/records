@@ -62,12 +62,8 @@ export const ResourceBreakdownCard: React.FC<ResourceBreakdownCardProps> = ({
     );
   }
 
-  const totalResources = Array.isArray(resourceBreakdown) 
-    ? resourceBreakdown.reduce((sum, item) => sum + item.count, 0) 
-    : 0;
-  const topResources = Array.isArray(resourceBreakdown) 
-    ? resourceBreakdown.slice(0, 5) 
-    : [];
+  const totalResources = resourceBreakdown?.totalResources || 0;
+  const topResources = resourceBreakdown?.topResourceTypes || [];
 
   return (
     <Card className={className}>

@@ -402,11 +402,7 @@ export function ServerForm({
           disabled={isSubmitting}
           className="flex items-center gap-2"
         >
-          {isSubmitting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Key className="h-4 w-4" />
-          )}
+          {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
           {isSubmitting ? 'Saving...' : editingServer ? 'Update Server' : 'Add Server'}
         </Button>
       </div>

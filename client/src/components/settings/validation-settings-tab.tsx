@@ -425,10 +425,10 @@ export function ValidationSettingsTab() {
       </AlertDialog>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between">
         <div>
           <h2 className="text-2xl font-bold">Validation Settings</h2>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground mt-1">
             Configure validation aspects, performance, and resource type filtering
           </p>
         </div>
@@ -472,7 +472,7 @@ export function ValidationSettingsTab() {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Mode Toggle */}
-          <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/50">
+          <div className="space-y-4">
             <div className="space-y-1">
               <Label className="text-base font-semibold">Current Mode</Label>
               <p className="text-sm text-muted-foreground">
@@ -481,28 +481,47 @@ export function ValidationSettingsTab() {
                   : 'Using local Ontoserver with fallback'}
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <Badge variant={settings.mode === 'online' ? 'default' : 'secondary'} className="px-3 py-1">
-                {settings.mode === 'online' ? (
-                  <>
-                    <Globe className="h-3 w-3 mr-1" />
-                    Online
-                  </>
-                ) : (
-                  <>
-                    <HardDrive className="h-3 w-3 mr-1" />
-                    Offline
-                  </>
-                )}
-              </Badge>
-              <Switch
-                checked={settings.mode === 'online'}
-                onCheckedChange={(checked) => {
-                  const newMode = checked ? 'online' : 'offline';
-                  setPendingMode(newMode);
-                  setShowModeConfirmDialog(true);
+            
+            {/* Tab-like Toggle */}
+            <div className="inline-flex items-center rounded-lg bg-muted p-1 gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  if (settings.mode !== 'online') {
+                    setPendingMode('online');
+                    setShowModeConfirmDialog(true);
+                  }
                 }}
-              />
+                className={`
+                  inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all
+                  ${settings.mode === 'online' 
+                    ? 'bg-blue-600 text-white shadow-lg' 
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-800'
+                  }
+                `}
+              >
+                <Globe className="h-4 w-4" />
+                Online
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (settings.mode !== 'offline') {
+                    setPendingMode('offline');
+                    setShowModeConfirmDialog(true);
+                  }
+                }}
+                className={`
+                  inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-semibold transition-all
+                  ${settings.mode === 'offline' 
+                    ? 'bg-blue-600 text-white shadow-lg' 
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-800'
+                  }
+                `}
+              >
+                <HardDrive className="h-4 w-4" />
+                Offline
+              </button>
             </div>
           </div>
 
@@ -870,7 +889,10 @@ export function ValidationSettingsTab() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant={aspect.enabled ? 'default' : 'secondary'}>
+                <Badge 
+                  variant={aspect.enabled ? 'default' : 'secondary'}
+                  className={aspect.enabled ? 'bg-green-500 hover:bg-green-600 text-white' : ''}
+                >
                   {aspect.enabled ? (
                     <CheckCircle className="h-3 w-3 mr-1" />
                   ) : (
@@ -885,13 +907,28 @@ export function ValidationSettingsTab() {
                       updateAspect(aspectKey as keyof ValidationSettings['aspects'], 'severity', value)
                     }
                   >
-                    <SelectTrigger className="w-24">
+                    <SelectTrigger className="w-36">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="error">Error</SelectItem>
-                      <SelectItem value="warning">Warning</SelectItem>
-                      <SelectItem value="info">Info</SelectItem>
+                      <SelectItem value="error">
+                        <div className="flex items-center gap-2">
+                          <XCircle className="h-4 w-4 text-red-500" />
+                          <span>Error</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="warning">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-orange-500" />
+                          <span>Warning</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="info">
+                        <div className="flex items-center gap-2">
+                          <Info className="h-4 w-4 text-blue-500" />
+                          <span>Info</span>
+                        </div>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 )}
@@ -914,11 +951,11 @@ export function ValidationSettingsTab() {
             <div className="space-y-2">
               <Label htmlFor="max-concurrent">Max Concurrent Validations</Label>
               <Select
-                value={settings.performance.maxConcurrent.toString()}
+                value={(settings.performance?.maxConcurrent || 5).toString()}
                 onValueChange={(value) => updatePerformance('maxConcurrent', parseInt(value))}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select concurrent validations" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="1">1</SelectItem>
@@ -936,11 +973,11 @@ export function ValidationSettingsTab() {
             <div className="space-y-2">
               <Label htmlFor="batch-size">Batch Size</Label>
               <Select
-                value={settings.performance.batchSize.toString()}
+                value={(settings.performance?.batchSize || 50).toString()}
                 onValueChange={(value) => updatePerformance('batchSize', parseInt(value))}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select batch size" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="10">10</SelectItem>

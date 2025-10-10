@@ -33,7 +33,7 @@ interface FhirServer {
 
 interface ServerOperationsProps {
   existingServers: FhirServer[];
-  refreshServerData: () => void;
+  refreshServerData?: () => void; // Optional now, kept for compatibility
 }
 
 // ============================================================================
@@ -76,8 +76,6 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
         variant: "default",
         duration: 4000,
       });
-      
-      refreshServerData();
     },
     onError: (error: any) => {
       console.error('Server creation error:', error);
@@ -125,8 +123,6 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
         variant: "default",
         duration: 4000,
       });
-      
-      refreshServerData();
     },
     onError: (error: any) => {
       console.error('Server update error:', error);
@@ -165,8 +161,6 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
         variant: "default",
         duration: 4000,
       });
-      
-      refreshServerData();
     },
     onError: (error: any) => {
       console.error('Server deletion error:', error);
@@ -233,6 +227,7 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
     onSuccess: (data, serverId) => {
       console.log('Connect mutation successful, refreshing data...', data);
       
+      // Refetch to get the final state from server
       queryClient.refetchQueries({ 
         predicate: (query) => 
           query.queryKey[0] === "/api/fhir/servers" || 
@@ -248,8 +243,6 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
         variant: "default",
         duration: 4000,
       });
-      
-      refreshServerData();
     },
     onError: (err, serverId) => {
       console.error('Server connection error:', err);
@@ -321,6 +314,7 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
     onSuccess: (data, serverId) => {
       console.log('Disconnect mutation successful, refreshing data...', data);
       
+      // Refetch to get the final state from server
       queryClient.refetchQueries({ 
         predicate: (query) => 
           query.queryKey[0] === "/api/fhir/servers" || 
@@ -336,8 +330,6 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
         variant: "default",
         duration: 4000,
       });
-      
-      refreshServerData();
     },
     onError: (err, serverId) => {
       console.error('Server disconnection error:', err);

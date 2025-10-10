@@ -15,7 +15,8 @@ import {
   Save,
   RefreshCw,
   Info,
-  Activity
+  Activity,
+  Loader2
 } from 'lucide-react';
 
 interface PollingSettings {
@@ -122,64 +123,48 @@ export function PollingSettingsTab() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Loading Settings...</CardTitle>
-            <CardDescription>Please wait while polling settings are being loaded.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RefreshCw className="h-8 w-8 animate-spin text-fhir-blue" />
-          </CardContent>
-        </Card>
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading polling settings...</span>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Polling Settings</h2>
+          <p className="text-muted-foreground mt-1">
+            Configure adaptive polling intervals and behavior for validation progress updates
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            onClick={handleReset}
+            variant="outline"
+            disabled={saving}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Reset Defaults
+          </Button>
+          <Button
+            onClick={handleSaveSettings}
+            disabled={saving}
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Save Settings
+          </Button>
+        </div>
+      </div>
+
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5" /> Polling Settings
-              </CardTitle>
-              <CardDescription>
-                Configure adaptive polling intervals and behavior for validation progress updates
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={handleReset}
-                variant="outline"
-                size="sm"
-                disabled={saving}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Reset Defaults
-              </Button>
-              <Button
-                onClick={handleSaveSettings}
-                size="sm"
-                disabled={saving}
-              >
-                {saving ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Settings
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-6 pt-6">
           {/* Enable Polling */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">

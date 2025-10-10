@@ -383,7 +383,11 @@ async function processValidationResources(jobId: string, requestPayload: StartRe
       resourceTypesToValidate = ['Patient', 'Observation', 'Encounter', 'Condition', 'Procedure', 'Medication', 'DiagnosticReport'];
     }
     
-    console.log(`[BulkValidation] Resource types to validate: ${resourceTypesToValidate.join(', ')}`);
+    console.log(`[BulkValidation] Resource types to validate (${resourceTypesToValidate.length} types): ${resourceTypesToValidate.join(', ')}`);
+    
+    // Initialize total resources count to 0 to show UI that we're loading
+    globalValidationState.totalResources = 0;
+    globalValidationState.lastUpdateTime = Date.now();
     
     // Fetch resources from FHIR server by type
     for (const resourceType of resourceTypesToValidate) {
@@ -393,15 +397,19 @@ async function processValidationResources(jobId: string, requestPayload: StartRe
         const typeResources = await fhirClient.searchAllResources(resourceType, {}, 10000); // Limit to 10k per type for performance
         console.log(`[BulkValidation] Found ${typeResources.length} ${resourceType} resources from FHIR server`);
         resources.push(...typeResources);
+        
+        // Update total resources count incrementally so UI shows progress
+        globalValidationState.totalResources = resources.length;
+        globalValidationState.lastUpdateTime = Date.now();
       } catch (error) {
         console.error(`[BulkValidation] Error fetching ${resourceType} resources from FHIR server:`, error);
         // Continue with other resource types
       }
     }
     
-    console.log(`[BulkValidation] Total resources fetched from FHIR server: ${resources.length}`);
+    console.log(`[BulkValidation] Total resources fetched from FHIR server: ${resources.length} (from ${resourceTypesToValidate.length} resource types)`);
     
-    // Update total resources count
+    // Final update of total resources count
     globalValidationState.totalResources = resources.length;
     globalValidationState.lastUpdateTime = Date.now();
     

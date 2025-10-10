@@ -164,47 +164,38 @@ export function BusinessRulesTab() {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Loading Business Rules...</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Loader2 className="h-8 w-8 animate-spin text-fhir-blue" />
-          </CardContent>
-        </Card>
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading business rules...</span>
       </div>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Business Rules</h2>
+          <p className="text-muted-foreground mt-1">
+            Manage FHIRPath-based business rules for advanced validation
+          </p>
+        </div>
+        <Button
+          onClick={() => {
+            toast({
+              title: 'Coming Soon',
+              description: 'Visual rule editor is under development',
+            });
+          }}
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add Rule
+        </Button>
+      </div>
+
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Code2 className="h-5 w-5" /> Business Rules Management
-              </CardTitle>
-              <CardDescription>
-                Manage FHIRPath-based business rules for advanced validation
-              </CardDescription>
-            </div>
-            <Button
-              onClick={() => {
-                toast({
-                  title: 'Coming Soon',
-                  description: 'Visual rule editor is under development',
-                });
-              }}
-              size="sm"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Rule
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 pt-6">
           {/* Info Alert */}
           <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
             <div className="flex items-start gap-3">

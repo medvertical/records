@@ -133,7 +133,7 @@ export function ServerList({
                   
                   <div className="flex items-center gap-2">
                     {server.isActive && (
-                      <Badge variant="default">
+                      <Badge className="bg-green-500 hover:bg-green-600 text-white">
                         <CheckCircle className="h-3 w-3 mr-1" />
                         Active
                       </Badge>

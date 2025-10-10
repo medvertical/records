@@ -27,7 +27,9 @@ import {
   Activity,
   Bell,
   Globe,
-  HardDrive
+  HardDrive,
+  Monitor,
+  Palette
 } from 'lucide-react';
 
 // ============================================================================
@@ -42,6 +44,8 @@ interface SystemSettings {
   dataRetentionDays: number;
   maxLogFileSize: number;
   enableAutoUpdates: boolean;
+  theme: 'light' | 'dark' | 'system';
+  cardLayout: 'grid' | 'list';
 }
 
 interface SystemSettingsTabProps {
@@ -63,7 +67,9 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
     enableSSE: true,
     dataRetentionDays: 30,
     maxLogFileSize: 100,
-    enableAutoUpdates: true
+    enableAutoUpdates: true,
+    theme: 'system',
+    cardLayout: 'grid'
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -170,7 +176,9 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
       enableSSE: true,
       dataRetentionDays: 30,
       maxLogFileSize: 100,
-      enableAutoUpdates: true
+      enableAutoUpdates: true,
+      theme: 'system',
+      cardLayout: 'grid'
     });
   };
 
@@ -333,6 +341,114 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
 
   return (
     <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">System Settings</h2>
+          <p className="text-muted-foreground mt-1">
+            Configure logging, analytics, data retention, and system preferences
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={resetToDefaults}
+            disabled={isSaving}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Reset Defaults
+          </Button>
+          <Button
+            onClick={saveSystemSettings}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Save Settings
+          </Button>
+        </div>
+      </div>
+
+      {/* Display Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Monitor className="h-5 w-5" />
+            Display Settings
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Theme */}
+          <div className="space-y-2">
+            <Label htmlFor="theme">Theme</Label>
+            <Select
+              value={systemSettings.theme}
+              onValueChange={(value) => updateSetting('theme', value)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="light">
+                  <div className="flex items-center gap-2">
+                    <Monitor className="h-4 w-4" />
+                    Light
+                  </div>
+                </SelectItem>
+                <SelectItem value="dark">
+                  <div className="flex items-center gap-2">
+                    <Monitor className="h-4 w-4" />
+                    Dark
+                  </div>
+                </SelectItem>
+                <SelectItem value="system">
+                  <div className="flex items-center gap-2">
+                    <Monitor className="h-4 w-4" />
+                    System
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Choose your preferred color theme
+            </p>
+          </div>
+
+          {/* Card Layout */}
+          <div className="space-y-2">
+            <Label htmlFor="card-layout">Card Layout</Label>
+            <Select
+              value={systemSettings.cardLayout}
+              onValueChange={(value) => updateSetting('cardLayout', value)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="grid">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4" />
+                    Grid Layout
+                  </div>
+                </SelectItem>
+                <SelectItem value="list">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-4 w-4" />
+                    List Layout
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Choose how dashboard cards are displayed
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Logging Settings */}
       <Card>
         <CardHeader>
@@ -529,28 +645,6 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
           )}
         </CardContent>
       </Card>
-
-      {/* Action Buttons */}
-      <div className="flex justify-between">
-        <Button variant="outline" onClick={resetToDefaults}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Reset to Defaults
-        </Button>
-        
-        <Button onClick={saveSystemSettings} disabled={isSaving}>
-          {isSaving ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              Save Settings
-            </>
-          )}
-        </Button>
-      </div>
     </div>
   );
 }

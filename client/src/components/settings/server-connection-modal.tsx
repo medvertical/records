@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useServerData } from '@/hooks/use-server-data';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Server, Loader2 } from 'lucide-react';
+import { Server, Loader2, Plus } from 'lucide-react';
 import { ServerList } from './server-list';
 import { ServerForm } from './server-form';
 import { useServerOperations } from './server-operations';
@@ -143,10 +143,12 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Server className="h-5 w-5" />
-            Configure FHIR Server Connection
+            {isAddingNew || editingServer ? (editingServer ? 'Edit Server' : 'Add New Server') : 'Configure FHIR Server Connection'}
           </DialogTitle>
           <DialogDescription>
-            Manage your FHIR server connections and test connectivity.
+            {isAddingNew || editingServer 
+              ? (editingServer ? 'Update server configuration' : 'Configure a new FHIR server connection')
+              : 'Manage your FHIR server connections and test connectivity.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -163,7 +165,7 @@ export default function ServerConnectionModal({ open, onOpenChange }: ServerConn
                   {createServerMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
-                    <Server className="h-4 w-4" />
+                    <Plus className="h-4 w-4" />
                   )}
                   {createServerMutation.isPending ? "Adding..." : "Add Server"}
                 </Button>

@@ -34,16 +34,11 @@ export function useServerData() {
       return response.json();
     },
     refetchInterval: false, // Disable automatic polling
-    // Keep previous data to prevent undefined states during refetches
-    keepPreviousData: true,
+    refetchOnWindowFocus: false,
+    // Keep previous data visible during refetches to prevent UI flickering
+    placeholderData: (previousData) => previousData,
     // Consider data fresh for 2 minutes to reduce unnecessary refetches
-    staleTime: 120000,
-    onSuccess: (data) => {
-      console.log('Server data fetched:', data);
-    },
-    onError: (error) => {
-      console.error('Server data fetch error:', error);
-    }
+    staleTime: 120000
   });
 
   const activeServer = useMemo(() => servers?.find(server => server.isActive), [servers]);
@@ -76,8 +71,8 @@ export function useServerData() {
     },
     refetchInterval: false, // Disable automatic polling
     refetchOnWindowFocus: false, // Don't refetch on window focus
-    // Keep previous data to prevent undefined states during refetches
-    keepPreviousData: true,
+    // Keep previous data visible during refetches
+    placeholderData: (previousData) => previousData,
     staleTime: 10 * 60 * 1000, // 10 minutes - only refresh manually
     // Auto-connect when there's an active server
     enabled: !!activeServer,

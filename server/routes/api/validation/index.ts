@@ -19,3 +19,7 @@ export { default as singleRevalidateRoutes } from './revalidate-single';
 
 // Export validate-by-ids route
 export { default as validateByIdsRoutes } from './validate-by-ids';
+
+// Export cache management routes
+export { default as cacheClearRoutes } from './cache-clear';
+export { default as analyticsCacheRoutes } from './analytics-cache';

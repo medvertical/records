@@ -47,15 +47,19 @@ export const ModernDashboardLayout: React.FC<ModernDashboardLayoutProps> = ({
             </DashboardErrorBoundary>
           </div>
 
-        {/* Bottom Row - Two Cards */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-          <DashboardErrorBoundary context="ResourceBreakdownCard">
-            <ResourceBreakdownCard />
-          </DashboardErrorBoundary>
-          <DashboardErrorBoundary context="ValidationHistoryTimeline">
-            <ValidationHistoryTimeline />
-          </DashboardErrorBoundary>
-        </div>
+          {/* Resource Breakdown Card */}
+          <div className="mb-6">
+            <DashboardErrorBoundary context="ResourceBreakdownCard">
+              <ResourceBreakdownCard />
+            </DashboardErrorBoundary>
+          </div>
+
+          {/* Validation History Timeline - Full Width */}
+          <div className="mb-6">
+            <DashboardErrorBoundary context="ValidationHistoryTimeline">
+              <ValidationHistoryTimeline />
+            </DashboardErrorBoundary>
+          </div>
         </div>
       </div>
     </DashboardProvider>

@@ -6,6 +6,9 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   BarChart3, 
   CheckCircle, 
@@ -16,12 +19,11 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
-  Monitor,
-  Smartphone,
-  Palette,
   Clock,
   TrendingUp,
-  Activity
+  Activity,
+  Zap,
+  Info
 } from 'lucide-react';
 
 // ============================================================================
@@ -35,9 +37,17 @@ interface DashboardSettings {
   showValidationProgress: boolean;
   showErrorSummary: boolean;
   showPerformanceMetrics: boolean;
-  cardLayout: 'grid' | 'list';
-  theme: 'light' | 'dark' | 'system';
   autoValidateEnabled: boolean;
+  polling: {
+    enabled: boolean;
+    fastIntervalMs: number;
+    slowIntervalMs: number;
+    verySlowIntervalMs: number;
+    maxRetries: number;
+    backoffMultiplier: number;
+    jitterEnabled: boolean;
+    pauseOnHidden: boolean;
+  };
 }
 
 interface DashboardSettingsTabProps {
@@ -59,9 +69,17 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
     showValidationProgress: true,
     showErrorSummary: true,
     showPerformanceMetrics: false,
-    cardLayout: 'grid',
-    theme: 'system',
-    autoValidateEnabled: false
+    autoValidateEnabled: false,
+    polling: {
+      enabled: true,
+      fastIntervalMs: 5000,
+      slowIntervalMs: 30000,
+      verySlowIntervalMs: 60000,
+      maxRetries: 3,
+      backoffMultiplier: 2,
+      jitterEnabled: true,
+      pauseOnHidden: true
+    }
   });
 
   const [isLoading, setIsLoading] = useState(false);
@@ -166,32 +184,23 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
       showValidationProgress: true,
       showErrorSummary: true,
       showPerformanceMetrics: false,
-      cardLayout: 'grid',
-      theme: 'system',
-      autoValidateEnabled: false
+      autoValidateEnabled: false,
+      polling: {
+        enabled: true,
+        fastIntervalMs: 5000,
+        slowIntervalMs: 30000,
+        verySlowIntervalMs: 60000,
+        maxRetries: 3,
+        backoffMultiplier: 2,
+        jitterEnabled: true,
+        pauseOnHidden: true
+      }
     });
   };
 
   // ========================================================================
   // Render Helpers
   // ========================================================================
-
-  const getThemeIcon = (theme: string) => {
-    switch (theme) {
-      case 'light': return <Monitor className="h-4 w-4" />;
-      case 'dark': return <Monitor className="h-4 w-4" />;
-      case 'system': return <Smartphone className="h-4 w-4" />;
-      default: return <Monitor className="h-4 w-4" />;
-    }
-  };
-
-  const getLayoutIcon = (layout: string) => {
-    switch (layout) {
-      case 'grid': return <BarChart3 className="h-4 w-4" />;
-      case 'list': return <Activity className="h-4 w-4" />;
-      default: return <BarChart3 className="h-4 w-4" />;
-    }
-  };
 
   const renderToggleSetting = (
     field: keyof DashboardSettings,
@@ -230,76 +239,36 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
 
   return (
     <div className="space-y-6">
-      {/* Display Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
-            Display Settings
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="theme">Theme</Label>
-              <Select
-                value={dashboardSettings.theme}
-                onValueChange={(value) => updateSetting('theme', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="light">
-                    <div className="flex items-center gap-2">
-                      {getThemeIcon('light')}
-                      Light
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="dark">
-                    <div className="flex items-center gap-2">
-                      {getThemeIcon('dark')}
-                      Dark
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="system">
-                    <div className="flex items-center gap-2">
-                      {getThemeIcon('system')}
-                      System
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="card-layout">Card Layout</Label>
-              <Select
-                value={dashboardSettings.cardLayout}
-                onValueChange={(value) => updateSetting('cardLayout', value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="grid">
-                    <div className="flex items-center gap-2">
-                      {getLayoutIcon('grid')}
-                      Grid Layout
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="list">
-                    <div className="flex items-center gap-2">
-                      {getLayoutIcon('list')}
-                      List Layout
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-bold">Dashboard Settings</h2>
+          <p className="text-muted-foreground mt-1">
+            Configure dashboard display, refresh settings, and components visibility
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={resetToDefaults}
+            disabled={isSaving}
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Reset Defaults
+          </Button>
+          <Button
+            onClick={saveDashboardSettings}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Save Settings
+          </Button>
+        </div>
+      </div>
 
       {/* Auto-Refresh Settings */}
       <Card>
@@ -397,27 +366,166 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
         </CardContent>
       </Card>
 
-      {/* Action Buttons */}
-      <div className="flex justify-between">
-        <Button variant="outline" onClick={resetToDefaults}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Reset to Defaults
-        </Button>
-        
-        <Button onClick={saveDashboardSettings} disabled={isSaving}>
-          {isSaving ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              Save Settings
-            </>
-          )}
-        </Button>
-      </div>
+      {/* Polling Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Polling Settings
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Enable Polling */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Activity className="h-5 w-5" />
+              <div className="space-y-1">
+                <Label htmlFor="polling-enabled">Enable Polling</Label>
+                <p className="text-sm text-muted-foreground">Enable automatic polling for validation progress updates</p>
+              </div>
+            </div>
+            <Switch
+              id="polling-enabled"
+              checked={dashboardSettings.polling.enabled}
+              onCheckedChange={(checked) => setDashboardSettings({ 
+                ...dashboardSettings, 
+                polling: { ...dashboardSettings.polling, enabled: checked } 
+              })}
+            />
+          </div>
+
+          <Separator />
+
+          {/* Polling Intervals */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+              <h4 className="text-sm font-semibold">Polling Intervals</h4>
+            </div>
+            
+            <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+              <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <AlertDescription className="text-blue-900 dark:text-blue-200 text-xs">
+                Adaptive polling automatically adjusts intervals based on activity level. 
+                Fast intervals are used during active validation, slow intervals when idle.
+              </AlertDescription>
+            </Alert>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="fast-interval" className="text-sm">
+                  Fast Interval (ms)
+                  <Badge variant="secondary" className="ml-2 text-xs">Active</Badge>
+                </Label>
+                <Input
+                  id="fast-interval"
+                  type="number"
+                  value={dashboardSettings.polling.fastIntervalMs}
+                  onChange={(e) => setDashboardSettings({ 
+                    ...dashboardSettings, 
+                    polling: { ...dashboardSettings.polling, fastIntervalMs: parseInt(e.target.value) } 
+                  })}
+                  min="1000"
+                  max="10000"
+                  step="1000"
+                  disabled={!dashboardSettings.polling.enabled}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used during active validation (default: 5s)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="slow-interval" className="text-sm">
+                  Slow Interval (ms)
+                  <Badge variant="secondary" className="ml-2 text-xs">Idle</Badge>
+                </Label>
+                <Input
+                  id="slow-interval"
+                  type="number"
+                  value={dashboardSettings.polling.slowIntervalMs}
+                  onChange={(e) => setDashboardSettings({ 
+                    ...dashboardSettings, 
+                    polling: { ...dashboardSettings.polling, slowIntervalMs: parseInt(e.target.value) } 
+                  })}
+                  min="10000"
+                  max="60000"
+                  step="5000"
+                  disabled={!dashboardSettings.polling.enabled}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used when validation is idle (default: 30s)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="very-slow-interval" className="text-sm">
+                  Very Slow Interval (ms)
+                  <Badge variant="secondary" className="ml-2 text-xs">Complete</Badge>
+                </Label>
+                <Input
+                  id="very-slow-interval"
+                  type="number"
+                  value={dashboardSettings.polling.verySlowIntervalMs}
+                  onChange={(e) => setDashboardSettings({ 
+                    ...dashboardSettings, 
+                    polling: { ...dashboardSettings.polling, verySlowIntervalMs: parseInt(e.target.value) } 
+                  })}
+                  min="30000"
+                  max="300000"
+                  step="10000"
+                  disabled={!dashboardSettings.polling.enabled}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used when validation is complete (default: 60s)
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Advanced Options */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+              <h4 className="text-sm font-semibold">Advanced Options</h4>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="jitter-enabled">Enable Jitter</Label>
+                <p className="text-sm text-muted-foreground">Add random variance to polling intervals to prevent server load spikes</p>
+              </div>
+              <Switch
+                id="jitter-enabled"
+                checked={dashboardSettings.polling.jitterEnabled}
+                onCheckedChange={(checked) => setDashboardSettings({ 
+                  ...dashboardSettings, 
+                  polling: { ...dashboardSettings.polling, jitterEnabled: checked } 
+                })}
+                disabled={!dashboardSettings.polling.enabled}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="pause-on-hidden">Pause When Hidden</Label>
+                <p className="text-sm text-muted-foreground">Automatically pause polling when the browser tab is hidden</p>
+              </div>
+              <Switch
+                id="pause-on-hidden"
+                checked={dashboardSettings.polling.pauseOnHidden}
+                onCheckedChange={(checked) => setDashboardSettings({ 
+                  ...dashboardSettings, 
+                  polling: { ...dashboardSettings.polling, pauseOnHidden: checked } 
+                })}
+                disabled={!dashboardSettings.polling.enabled}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

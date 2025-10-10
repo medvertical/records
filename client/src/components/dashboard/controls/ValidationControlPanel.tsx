@@ -1816,12 +1816,6 @@ export const ValidationControlPanel: React.FC<ValidationControlPanelProps> = ({
         </CardContent>
       </Card>
       
-      {/* Performance Monitoring Dashboard */}
-      <div className="mt-4 p-4 border rounded">
-        <h3>Performance Monitoring</h3>
-        <p>Performance monitoring is working!</p>
-      </div>
-      
       {/* ValidationSettingsModal removed - settings are now in the settings tab */}
       {isSettingsModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
