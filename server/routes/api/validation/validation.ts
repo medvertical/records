@@ -16,6 +16,7 @@ import { setupValidationPipelineRoutes } from "./validation-pipeline";
 import { setupValidationProfilesRoutes } from "./validation-profiles";
 import { setupValidationBackupsRoutes } from "./validation-backups";
 import { setupValidationMetricsRoutes } from "./validation-metrics";
+import businessRulesRouter from "./business-rules";
 
 // ============================================================================
 // Main Validation Routes Setup
@@ -52,6 +53,11 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
   // Validation Metrics (Task 3.12)
   // ========================================================================
   setupValidationMetricsRoutes(app);
+
+  // ========================================================================
+  // Business Rules Management (Task 6.6)
+  // ========================================================================
+  app.use("/api/validation/business-rules", businessRulesRouter);
 
   // ========================================================================
   // Settings Management (Delegated to validation-settings.ts)

@@ -1,62 +1,54 @@
-/**
- * Business Rules CRUD API
- * 
- * Task 6.6: REST API for managing custom business rules
- * 
- * Endpoints:
- * - POST   /api/validation/business-rules      - Create rule
- * - GET    /api/validation/business-rules      - List all rules
- * - GET    /api/validation/business-rules/:id  - Get rule by ID
- * - PUT    /api/validation/business-rules/:id  - Update rule
- * - DELETE /api/validation/business-rules/:id  - Delete rule
- * - POST   /api/validation/business-rules/:id/test - Test rule
- */
-
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
+import type { Request, Response } from 'express';
 import { db } from '../../../db';
-import { businessRules, InsertBusinessRule } from '@shared/schema-business-rules';
-import { eq, and, inArray, sql } from 'drizzle-orm';
-import { getFHIRPathEvaluator } from '../../../services/validation/engine/fhirpath-evaluator';
+import { businessRules } from '../../../db/schema';
+import { eq, desc } from 'drizzle-orm';
+import logger from '../../../config/logger';
 
 const router = Router();
-const fhirpathEvaluator = getFHIRPathEvaluator();
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
+/**
+ * GET /api/validation/business-rules
+ * Get all business rules
+ */
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    const rules = await db
+      .select()
+      .from(businessRules)
+      .orderBy(desc(businessRules.createdAt));
 
-function validateBusinessRule(rule: any): { valid: boolean; error?: string } {
-  if (!rule.name || rule.name.trim().length === 0) {
-    return { valid: false, error: 'Rule name is required' };
+    logger.info('[API] Fetched business rules', { count: rules.length });
+    res.json(rules);
+  } catch (error) {
+    logger.error('[API] Error fetching business rules:', error);
+    res.status(500).json({ error: 'Failed to fetch business rules' });
   }
+});
 
-  if (!rule.ruleId || rule.ruleId.trim().length === 0) {
-    return { valid: false, error: 'Rule ID is required' };
+/**
+ * GET /api/validation/business-rules/:id
+ * Get a single business rule by ID
+ */
+router.get('/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const [rule] = await db
+      .select()
+      .from(businessRules)
+      .where(eq(businessRules.id, parseInt(id)));
+
+    if (!rule) {
+      return res.status(404).json({ error: 'Business rule not found' });
+    }
+
+    logger.info('[API] Fetched business rule', { ruleId: id });
+    res.json(rule);
+  } catch (error) {
+    logger.error('[API] Error fetching business rule:', error);
+    res.status(500).json({ error: 'Failed to fetch business rule' });
   }
-
-  if (!rule.expression || rule.expression.trim().length === 0) {
-    return { valid: false, error: 'FHIRPath expression is required' };
-  }
-
-  if (!rule.resourceTypes || !Array.isArray(rule.resourceTypes) || rule.resourceTypes.length === 0) {
-    return { valid: false, error: 'At least one resource type is required' };
-  }
-
-  // Validate FHIRPath expression syntax
-  const expressionValidation = fhirpathEvaluator.validateExpression(rule.expression);
-  if (!expressionValidation.valid) {
-    return { 
-      valid: false, 
-      error: `Invalid FHIRPath expression: ${expressionValidation.error}` 
-    };
-  }
-
-  return { valid: true };
-}
-
-// ============================================================================
-// Routes
-// ============================================================================
+});
 
 /**
  * POST /api/validation/business-rules
@@ -64,228 +56,60 @@ function validateBusinessRule(rule: any): { valid: boolean; error?: string } {
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const ruleData = req.body;
+    const { name, resourceType, expression, severity, message, description } = req.body;
 
-    // Validate input
-    const validation = validateBusinessRule(ruleData);
-    if (!validation.valid) {
-      return res.status(400).json({
-        success: false,
-        message: validation.error
-      });
+    if (!name || !resourceType || !expression) {
+      return res.status(400).json({ error: 'Missing required fields: name, resourceType, expression' });
     }
 
-    // Check for duplicate rule ID
-    const existing = await db
-      .select()
-      .from(businessRules)
-      .where(eq(businessRules.ruleId, ruleData.ruleId))
-      .limit(1);
-
-    if (existing.length > 0) {
-      return res.status(409).json({
-        success: false,
-        message: `Rule with ID ${ruleData.ruleId} already exists`
-      });
-    }
-
-    // Insert new rule
-    const newRule: InsertBusinessRule = {
-      name: ruleData.name,
-      description: ruleData.description,
-      ruleId: ruleData.ruleId,
-      expression: ruleData.expression,
-      severity: ruleData.severity || 'error',
-      enabled: ruleData.enabled !== undefined ? ruleData.enabled : true,
-      resourceTypes: ruleData.resourceTypes,
-      fhirVersions: ruleData.fhirVersions || ['R4'],
-      validationMessage: ruleData.validationMessage,
-      suggestions: ruleData.suggestions,
-      category: ruleData.category,
-      tags: ruleData.tags || [],
-      createdBy: ruleData.createdBy || 'system'
-    };
-
-    const [created] = await db
+    const [newRule] = await db
       .insert(businessRules)
-      .values(newRule)
+      .values({
+        name,
+        resourceType,
+        expression,
+        severity: severity || 'error',
+        message: message || `Business rule ${name} failed`,
+        description,
+        enabled: true,
+      })
       .returning();
 
-    res.status(201).json({
-      success: true,
-      message: 'Business rule created successfully',
-      data: created
-    });
-
-  } catch (error: any) {
-    console.error('[BusinessRulesAPI] Create failed:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to create business rule',
-      error: error.message
-    });
+    logger.info('[API] Created business rule', { ruleId: newRule.id, name });
+    res.status(201).json(newRule);
+  } catch (error) {
+    logger.error('[API] Error creating business rule:', error);
+    res.status(500).json({ error: 'Failed to create business rule' });
   }
 });
 
 /**
- * GET /api/validation/business-rules
- * Get all business rules (with optional filtering)
+ * PATCH /api/validation/business-rules/:id
+ * Update an existing business rule
  */
-router.get('/', async (req: Request, res: Response) => {
+router.patch('/:id', async (req: Request, res: Response) => {
   try {
-    const { 
-      enabled, 
-      resourceType, 
-      category,
-      fhirVersion 
-    } = req.query;
-
-    let query = db.select().from(businessRules);
-
-    // Apply filters
-    const conditions = [];
-
-    if (enabled !== undefined) {
-      conditions.push(eq(businessRules.enabled, enabled === 'true'));
-    }
-
-    if (resourceType) {
-      conditions.push(sql`${resourceType} = ANY(${businessRules.resourceTypes})`);
-    }
-
-    if (category) {
-      conditions.push(eq(businessRules.category, category as string));
-    }
-
-    if (fhirVersion) {
-      conditions.push(sql`${fhirVersion} = ANY(${businessRules.fhirVersions})`);
-    }
-
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions));
-    }
-
-    const rules = await query;
-
-    res.json({
-      success: true,
-      data: {
-        total: rules.length,
-        rules
-      }
-    });
-
-  } catch (error: any) {
-    console.error('[BusinessRulesAPI] List failed:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to list business rules',
-      error: error.message
-    });
-  }
-});
-
-/**
- * GET /api/validation/business-rules/:id
- * Get a specific business rule by ID
- */
-router.get('/:id', async (req: Request, res: Response) => {
-  try {
-    const id = parseInt(req.params.id);
-
-    if (isNaN(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid rule ID'
-      });
-    }
-
-    const [rule] = await db
-      .select()
-      .from(businessRules)
-      .where(eq(businessRules.id, id))
-      .limit(1);
-
-    if (!rule) {
-      return res.status(404).json({
-        success: false,
-        message: 'Business rule not found'
-      });
-    }
-
-    res.json({
-      success: true,
-      data: rule
-    });
-
-  } catch (error: any) {
-    console.error('[BusinessRulesAPI] Get failed:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get business rule',
-      error: error.message
-    });
-  }
-});
-
-/**
- * PUT /api/validation/business-rules/:id
- * Update a business rule
- */
-router.put('/:id', async (req: Request, res: Response) => {
-  try {
-    const id = parseInt(req.params.id);
+    const { id } = req.params;
     const updates = req.body;
 
-    if (isNaN(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid rule ID'
-      });
-    }
-
-    // Validate if expression is being updated
-    if (updates.expression) {
-      const validation = fhirpathEvaluator.validateExpression(updates.expression);
-      if (!validation.valid) {
-        return res.status(400).json({
-          success: false,
-          message: `Invalid FHIRPath expression: ${validation.error}`
-        });
-      }
-    }
-
-    // Update rule
-    const [updated] = await db
+    const [updatedRule] = await db
       .update(businessRules)
       .set({
         ...updates,
         updatedAt: new Date(),
-        updatedBy: updates.updatedBy || 'system'
       })
-      .where(eq(businessRules.id, id))
+      .where(eq(businessRules.id, parseInt(id)))
       .returning();
 
-    if (!updated) {
-      return res.status(404).json({
-        success: false,
-        message: 'Business rule not found'
-      });
+    if (!updatedRule) {
+      return res.status(404).json({ error: 'Business rule not found' });
     }
 
-    res.json({
-      success: true,
-      message: 'Business rule updated successfully',
-      data: updated
-    });
-
-  } catch (error: any) {
-    console.error('[BusinessRulesAPI] Update failed:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update business rule',
-      error: error.message
-    });
+    logger.info('[API] Updated business rule', { ruleId: id });
+    res.json(updatedRule);
+  } catch (error) {
+    logger.error('[API] Error updating business rule:', error);
+    res.status(500).json({ error: 'Failed to update business rule' });
   }
 });
 
@@ -295,112 +119,74 @@ router.put('/:id', async (req: Request, res: Response) => {
  */
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const { id } = req.params;
 
-    if (isNaN(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid rule ID'
-      });
-    }
-
-    const [deleted] = await db
+    const [deletedRule] = await db
       .delete(businessRules)
-      .where(eq(businessRules.id, id))
+      .where(eq(businessRules.id, parseInt(id)))
       .returning();
 
-    if (!deleted) {
-      return res.status(404).json({
-        success: false,
-        message: 'Business rule not found'
-      });
+    if (!deletedRule) {
+      return res.status(404).json({ error: 'Business rule not found' });
     }
 
-    res.json({
-      success: true,
-      message: 'Business rule deleted successfully',
-      data: deleted
-    });
-
-  } catch (error: any) {
-    console.error('[BusinessRulesAPI] Delete failed:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to delete business rule',
-      error: error.message
-    });
+    logger.info('[API] Deleted business rule', { ruleId: id });
+    res.json({ success: true, id: parseInt(id) });
+  } catch (error) {
+    logger.error('[API] Error deleting business rule:', error);
+    res.status(500).json({ error: 'Failed to delete business rule' });
   }
 });
 
 /**
  * POST /api/validation/business-rules/:id/test
- * Test a business rule against a sample resource
+ * Test a business rule against sample data
  */
 router.post('/:id/test', async (req: Request, res: Response) => {
   try {
-    const id = parseInt(req.params.id);
+    const { id } = req.params;
     const { resource } = req.body;
 
-    if (isNaN(id)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid rule ID'
-      });
-    }
-
-    if (!resource) {
-      return res.status(400).json({
-        success: false,
-        message: 'Sample resource is required for testing'
-      });
-    }
-
-    // Get rule
     const [rule] = await db
       .select()
       .from(businessRules)
-      .where(eq(businessRules.id, id))
-      .limit(1);
+      .where(eq(businessRules.id, parseInt(id)));
 
     if (!rule) {
-      return res.status(404).json({
-        success: false,
-        message: 'Business rule not found'
-      });
+      return res.status(404).json({ error: 'Business rule not found' });
     }
 
-    // Execute rule
-    const result = await fhirpathEvaluator.evaluateBoolean(
-      resource,
-      rule.expression,
-      { timeout: 2000 }
-    );
+    // Import FHIRPath evaluator
+    const { evaluateExpression } = await import('../../../services/validation/engine/business-rule-validator-enhanced');
 
-    res.json({
-      success: true,
-      data: {
-        ruleId: rule.ruleId,
+    try {
+      const result = await evaluateExpression(rule.expression, resource);
+      
+      logger.info('[API] Tested business rule', { ruleId: id, passed: result });
+      res.json({
+        ruleId: parseInt(id),
         ruleName: rule.name,
         expression: rule.expression,
-        passed: result.result,
-        executionTimeMs: result.executionTime,
-        error: result.error,
-        message: result.result 
-          ? 'Rule passed ✅' 
-          : rule.validationMessage || 'Rule failed ❌',
-        suggestions: result.result ? [] : (rule.suggestions || [])
-      }
-    });
-
-  } catch (error: any) {
-    console.error('[BusinessRulesAPI] Test failed:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to test business rule',
-      error: error.message
-    });
+        result,
+        passed: result === true,
+        message: result === true ? 'Rule passed' : rule.message,
+      });
+    } catch (evalError: any) {
+      logger.warn('[API] Business rule evaluation failed', { ruleId: id, error: evalError.message });
+      res.json({
+        ruleId: parseInt(id),
+        ruleName: rule.name,
+        expression: rule.expression,
+        result: false,
+        passed: false,
+        error: evalError.message,
+        message: `Evaluation error: ${evalError.message}`,
+      });
+    }
+  } catch (error) {
+    logger.error('[API] Error testing business rule:', error);
+    res.status(500).json({ error: 'Failed to test business rule' });
   }
 });
 
 export default router;
-
