@@ -58,6 +58,22 @@ export interface TerminologyValidationResult {
 // Terminology Adapter
 // ============================================================================
 
+// Task 3.12: Fallback metrics interface
+export interface FallbackMetrics {
+  total: number;
+  bySource: {
+    ontoserver: number;
+    cache: number;
+    'tx.fhir.org': number;
+  };
+  successRate: {
+    ontoserver: number; // 0-1
+    cache: number;
+    'tx.fhir.org': number;
+  };
+  lastReset: string;
+}
+
 export class TerminologyAdapter {
   private cache: Map<string, ValueSet> = new Map();
   private cacheExpiryMs: number = 60 * 60 * 1000; // 1 hour default
@@ -68,8 +84,20 @@ export class TerminologyAdapter {
   private readonly ONLINE_TTL_MS = 60 * 60 * 1000; // 1 hour for online
   private readonly OFFLINE_TTL_MS = Infinity; // Indefinite for offline
 
+  // Task 3.12: Fallback metrics tracking
+  private metrics = {
+    total: 0,
+    ontoserver: { success: 0, failure: 0 },
+    cache: { success: 0, failure: 0 },
+    txFhir: { success: 0, failure: 0 },
+    lastReset: new Date().toISOString()
+  };
+
+  // Track the source of the last resolution
+  private lastResolvedSource: 'ontoserver' | 'cache' | 'tx.fhir.org' = 'tx.fhir.org';
+
   constructor() {
-    logger.info('[TerminologyAdapter] Initialized with mode-specific caching');
+    logger.info('[TerminologyAdapter] Initialized with mode-specific caching and metrics tracking');
   }
 
   /**
@@ -133,7 +161,7 @@ export class TerminologyAdapter {
           display: found.display,
           code,
           system,
-          source: 'tx.fhir.org' // We'd track the actual source
+          source: this.lastResolvedSource // Task 3.12: Track actual source
         };
       }
 
@@ -183,6 +211,10 @@ export class TerminologyAdapter {
 
       const valueSet: ValueSet = await response.json();
       
+      // Task 3.12: Track metrics - tx.fhir.org success
+      this.trackSuccess('tx.fhir.org');
+      this.lastResolvedSource = 'tx.fhir.org';
+      
       // Cache the result
       this.cacheValueSet(valueSetUrl, valueSet);
       
@@ -190,10 +222,16 @@ export class TerminologyAdapter {
     } catch (error: any) {
       logger.warn(`[TerminologyAdapter] Online resolve failed: ${error.message}`);
       
+      // Task 3.12: Track metrics - tx.fhir.org failure
+      this.trackFailure('tx.fhir.org');
+      
       // Try cache as fallback
       const cached = this.getCachedValueSet(valueSetUrl);
       if (cached) {
         logger.info('[TerminologyAdapter] Returning cached ValueSet');
+        // Task 3.12: Track metrics - cache success (fallback)
+        this.trackSuccess('cache');
+        this.lastResolvedSource = 'cache';
         return cached;
       }
       
@@ -218,9 +256,17 @@ export class TerminologyAdapter {
         );
         logger.info('[TerminologyAdapter] Resolved from Ontoserver');
         this.cacheValueSet(valueSetUrl, valueSet);
+        
+        // Task 3.12: Track metrics - ontoserver success
+        this.trackSuccess('ontoserver');
+        this.lastResolvedSource = 'ontoserver';
+        
         return valueSet;
       } catch (ontoError: any) {
         logger.warn(`[TerminologyAdapter] Ontoserver failed: ${ontoError.message}`);
+        
+        // Task 3.12: Track metrics - ontoserver failure
+        this.trackFailure('ontoserver');
       }
     }
 
@@ -228,6 +274,11 @@ export class TerminologyAdapter {
     const cached = this.getCachedValueSet(valueSetUrl);
     if (cached) {
       logger.info('[TerminologyAdapter] Returning cached ValueSet');
+      
+      // Task 3.12: Track metrics - cache success
+      this.trackSuccess('cache');
+      this.lastResolvedSource = 'cache';
+      
       return cached;
     }
 
@@ -254,9 +305,17 @@ export class TerminologyAdapter {
       const valueSet: ValueSet = await response.json();
       this.cacheValueSet(valueSetUrl, valueSet);
       
+      // Task 3.12: Track metrics - tx.fhir.org success (fallback)
+      this.trackSuccess('tx.fhir.org');
+      this.lastResolvedSource = 'tx.fhir.org';
+      
       return valueSet;
     } catch (txError: any) {
       logger.error(`[TerminologyAdapter] All fallback methods failed: ${txError.message}`);
+      
+      // Task 3.12: Track metrics - tx.fhir.org failure
+      this.trackFailure('tx.fhir.org');
+      
       throw new Error(`Failed to resolve ValueSet ${valueSetUrl}: No sources available`);
     }
   }
@@ -401,6 +460,76 @@ export class TerminologyAdapter {
    */
   getCurrentMode(): 'online' | 'offline' {
     return this.currentMode;
+  }
+
+  /**
+   * Task 3.12: Track successful terminology lookup
+   */
+  private trackSuccess(source: 'ontoserver' | 'cache' | 'tx.fhir.org'): void {
+    this.metrics.total++;
+    
+    if (source === 'ontoserver') {
+      this.metrics.ontoserver.success++;
+    } else if (source === 'cache') {
+      this.metrics.cache.success++;
+    } else {
+      this.metrics.txFhir.success++;
+    }
+    
+    logger.debug(`[TerminologyAdapter] Metrics: ${source} success (total: ${this.metrics.total})`);
+  }
+
+  /**
+   * Task 3.12: Track failed terminology lookup
+   */
+  private trackFailure(source: 'ontoserver' | 'cache' | 'tx.fhir.org'): void {
+    if (source === 'ontoserver') {
+      this.metrics.ontoserver.failure++;
+    } else if (source === 'cache') {
+      this.metrics.cache.failure++;
+    } else {
+      this.metrics.txFhir.failure++;
+    }
+    
+    logger.debug(`[TerminologyAdapter] Metrics: ${source} failure`);
+  }
+
+  /**
+   * Task 3.12: Get fallback metrics
+   */
+  getFallbackMetrics(): FallbackMetrics {
+    const ontoTotal = this.metrics.ontoserver.success + this.metrics.ontoserver.failure;
+    const cacheTotal = this.metrics.cache.success + this.metrics.cache.failure;
+    const txTotal = this.metrics.txFhir.success + this.metrics.txFhir.failure;
+
+    return {
+      total: this.metrics.total,
+      bySource: {
+        ontoserver: this.metrics.ontoserver.success,
+        cache: this.metrics.cache.success,
+        'tx.fhir.org': this.metrics.txFhir.success
+      },
+      successRate: {
+        ontoserver: ontoTotal > 0 ? this.metrics.ontoserver.success / ontoTotal : 0,
+        cache: cacheTotal > 0 ? this.metrics.cache.success / cacheTotal : 1, // Cache hits are always success
+        'tx.fhir.org': txTotal > 0 ? this.metrics.txFhir.success / txTotal : 0
+      },
+      lastReset: this.metrics.lastReset
+    };
+  }
+
+  /**
+   * Task 3.12: Reset fallback metrics
+   */
+  resetMetrics(): void {
+    this.metrics = {
+      total: 0,
+      ontoserver: { success: 0, failure: 0 },
+      cache: { success: 0, failure: 0 },
+      txFhir: { success: 0, failure: 0 },
+      lastReset: new Date().toISOString()
+    };
+    logger.info('[TerminologyAdapter] Metrics reset');
   }
 }
 

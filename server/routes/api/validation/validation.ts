@@ -15,6 +15,7 @@ import { setupResourceValidationRoutes } from "./validation-resource";
 import { setupValidationPipelineRoutes } from "./validation-pipeline";
 import { setupValidationProfilesRoutes } from "./validation-profiles";
 import { setupValidationBackupsRoutes } from "./validation-backups";
+import { setupValidationMetricsRoutes } from "./validation-metrics";
 
 // ============================================================================
 // Main Validation Routes Setup
@@ -46,6 +47,11 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
   // Validation Backups (Delegated)
   // ========================================================================
   setupValidationBackupsRoutes(app);
+
+  // ========================================================================
+  // Validation Metrics (Task 3.12)
+  // ========================================================================
+  setupValidationMetricsRoutes(app);
 
   // ========================================================================
   // Settings Management (Delegated to validation-settings.ts)
