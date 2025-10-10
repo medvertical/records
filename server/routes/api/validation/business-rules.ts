@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { db } from '../../../db';
-import { businessRules } from '../../../db/schema';
+import { db } from '../../../db.js';
+import { businessRules } from '../../../db/schema.js';
 import { eq, desc } from 'drizzle-orm';
-import logger from '../../../config/logger';
+import logger from '../../../config/logger.js';
 
 const router = Router();
 
