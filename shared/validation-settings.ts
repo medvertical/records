@@ -64,6 +64,9 @@ export interface ValidationSettings {
     profileCachePath?: string;  // Path to cached profile packages
   };
 
+  /** Task 4.13: Profile Package Sources Configuration */
+  profileSources?: 'local' | 'simplifier' | 'both'; // Default: 'both'
+
   /** Auto-Revalidation Settings */
   autoRevalidateAfterEdit?: boolean; // Automatically revalidate after resource edit (default: false)
 }
@@ -336,6 +339,7 @@ export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
     ontoserverUrl: 'http://localhost:8081/fhir',
     profileCachePath: '/opt/fhir/igs/'
   },
+  profileSources: 'both', // Task 4.13: Default to both local and Simplifier
   autoRevalidateAfterEdit: false
 };
 
@@ -366,6 +370,7 @@ export const DEFAULT_VALIDATION_SETTINGS_R5: ValidationSettings = {
     ontoserverUrl: 'http://localhost:8081/fhir',
     profileCachePath: '/opt/fhir/igs/'
   },
+  profileSources: 'both', // Task 4.13: Default to both local and Simplifier
   autoRevalidateAfterEdit: false
 };
 
