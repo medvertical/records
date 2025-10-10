@@ -363,9 +363,9 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
                 </SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-sm text-muted-foreground">
+            <div className="text-sm text-muted-foreground">
               Current level: {getLogLevelBadge(systemSettings.logLevel)}
-            </p>
+            </div>
           </div>
 
           <div className="space-y-2">
