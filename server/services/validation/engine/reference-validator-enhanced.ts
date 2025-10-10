@@ -190,7 +190,7 @@ export class ReferenceValidatorEnhanced {
       // Task 7.13: Track validation time and results
       this.statistics.totalValidationTime += duration;
       
-      const references = this.extractReferences(resource, '');
+      // Use the already extracted references (from line 130)
       if (issues.length === 0) {
         this.statistics.validReferences += references.length;
       } else {
