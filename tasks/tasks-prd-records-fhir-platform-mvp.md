@@ -631,7 +631,10 @@
     - ✅ File exists: `server/services/validation/modes/validation-mode-manager.ts`
     - ✅ Coordinates mode switches, health monitoring, automatic detection
     - ✅ Event emission, mode history, system health API
-  - [ ] 3.12 ⏭️ **OPTIONAL** - Add fallback metrics: track success rate of local vs remote terminology lookups
+  - [x] 3.12 ✅ **COMPLETED** - Add fallback metrics: track success rate of local vs remote terminology lookups
+    - ✅ Track ontoserver, cache, tx.fhir.org success/failure
+    - ✅ GET /api/validation/metrics/fallback + /reset
+    - ✅ FallbackMetrics interface with per-source stats
   - [ ] 3.13 ⏭️ **OPTIONAL** - Unit tests for fallback chain with mock network failures
   - [ ] 3.14 ⏭️ **OPTIONAL** - Integration test: validate resource in online mode, switch to offline, verify continuation
   - [x] 3.15 ✅ **COMPLETED** - Document Ontoserver setup requirements in deployment guide
@@ -759,7 +762,10 @@
     - ✅ Profile count display (X profiles will be updated)
     - ✅ Success/error alerts with detailed messages
     - ✅ File: `client/src/components/profiles/PackageUpdateDialog.tsx`
-  - [ ] 4.13 ⏭️ **OPTIONAL** - Add validation settings option: `profileSources` (local cache, Simplifier, both)
+  - [x] 4.13 ✅ **COMPLETED** - Add validation settings option: `profileSources` (local cache, Simplifier, both)
+    - ✅ profileSources: 'local' | 'simplifier' | 'both'
+    - ✅ UI select dropdown in ValidationSettingsTab
+    - ✅ Default: 'both' (local → Simplifier fallback)
   - [x] 4.14 ✅ **COMPLETED** - Document profile package installation process in `docs/deployment/profile-packages.md`
     - ✅ File: `docs/deployment/profile-packages.md` (530 lines)
     - ✅ Installation via UI, API, manual methods
@@ -1004,7 +1010,10 @@
     - ✅ Generates errors for missing IDs
   - [x] 7.11 ✅ **ALREADY IN** error_map.json - Reference error messages (10+ mappings)
   - [ ] 7.12 ⏭️ **OPTIONAL** - Batch reference validation (parallel fetching)
-  - [ ] 7.13 ⏭️ **OPTIONAL** - Reference validation statistics
+  - [x] 7.13 ✅ **COMPLETED** - Reference validation statistics
+    - ✅ ReferenceValidationStatistics interface
+    - ✅ Track by resource type, issue type, cache performance
+    - ✅ GET /api/validation/metrics/references + /reset
   - [ ] 7.14 ⏭️ **OPTIONAL** - Unit tests
   - [ ] 7.15 ⏭️ **OPTIONAL** - Integration tests
   - [ ] 7.16 ⏭️ **OPTIONAL** - E2E integration test
@@ -1059,12 +1068,17 @@
     - ✅ 10-second timeout per validation
     - ✅ Error handling with graceful fallback
     - ✅ Duration tracking
-  - [ ] 8.8 ⏭️ **OPTIONAL** - Store $validate results with source tracking
+  - [x] 8.8 ✅ **COMPLETED** - Store $validate results with source tracking
+    - ✅ Already implemented via 'source' field in ValidateOperationResult
+    - ✅ Source: 'fhir-server-validate' | 'hapi' | 'basic'
   - [x] 8.9 ✅ **COMPLETED** - UI toggle (useFhirValidateOperation in ValidationSettings)
     - Switch component with Info alert explaining functionality
     - Falls back to HAPI validator if not available in Settings
   - [ ] 8.10 ⏭️ **OPTIONAL** - Comparison view ($validate vs HAPI)
-  - [ ] 8.11 ⏭️ **OPTIONAL** - Metrics tracking
+  - [x] 8.11 ✅ **COMPLETED** - Metrics tracking
+    - ✅ ValidateOperationMetrics interface
+    - ✅ Track count, success rate, avg response time per source
+    - ✅ GET /api/validation/metrics/validate-operation + /reset
   - [ ] 8.12 ⏭️ **OPTIONAL** - Settings validation warnings
   - [ ] 8.13 ⏭️ **OPTIONAL** - Unit tests
   - [ ] 8.14 ⏭️ **OPTIONAL** - Integration tests
