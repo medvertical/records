@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { db } from '../../../db.js';
-import { businessRules } from '../../../db/schema.js';
+import { businessRules } from '@shared/schema-business-rules';
 import { eq, desc } from 'drizzle-orm';
 import logger from '../../../config/logger.js';
 
