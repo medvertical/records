@@ -7,6 +7,7 @@
 import type { Express } from "express";
 import { getTerminologyAdapter } from "../../../services/validation/terminology/terminology-adapter.js";
 import { getReferenceValidatorEnhanced } from "../../../services/validation/engine/reference-validator-enhanced.js";
+import { getFhirValidateOperation } from "../../../services/fhir/fhir-validate-operation.js";
 import { asyncHandler, ApiResponse } from "../../../utils/error-handler.js";
 import logger from "../../../utils/logger.js";
 
@@ -98,6 +99,40 @@ export function setupValidationMetricsRoutes(app: Express) {
     } catch (error: any) {
       logger.error('[ValidationMetrics] Failed to reset reference statistics:', error);
       ApiResponse.serviceError(res, 'Failed to reset reference statistics', error.message);
+    }
+  }));
+
+  /**
+   * Task 8.11: Get $validate operation metrics
+   */
+  app.get("/api/validation/metrics/validate-operation", asyncHandler(async (req, res) => {
+    try {
+      const validateOperation = getFhirValidateOperation();
+      const metrics = validateOperation.getMetrics();
+      
+      logger.info('[ValidationMetrics] $validate operation metrics requested');
+      
+      ApiResponse.success(res, metrics, '$validate operation metrics retrieved successfully');
+    } catch (error: any) {
+      logger.error('[ValidationMetrics] Failed to retrieve $validate metrics:', error);
+      ApiResponse.serviceError(res, 'Failed to retrieve $validate metrics', error.message);
+    }
+  }));
+
+  /**
+   * Task 8.11: Reset $validate operation metrics
+   */
+  app.post("/api/validation/metrics/validate-operation/reset", asyncHandler(async (req, res) => {
+    try {
+      const validateOperation = getFhirValidateOperation();
+      validateOperation.resetMetrics();
+      
+      logger.info('[ValidationMetrics] $validate operation metrics reset');
+      
+      ApiResponse.success(res, null, '$validate operation metrics reset successfully');
+    } catch (error: any) {
+      logger.error('[ValidationMetrics] Failed to reset $validate metrics:', error);
+      ApiResponse.serviceError(res, 'Failed to reset $validate metrics', error.message);
     }
   }));
 }

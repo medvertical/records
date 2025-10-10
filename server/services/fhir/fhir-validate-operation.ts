@@ -45,6 +45,27 @@ interface ValidationIssue {
   expression?: string[];
 }
 
+// Task 8.11: $validate operation metrics interface
+export interface ValidateOperationMetrics {
+  totalValidations: number;
+  bySource: {
+    'fhir-server-validate': number;
+    hapi: number;
+    basic: number;
+  };
+  successRate: {
+    'fhir-server-validate': number;
+    hapi: number;
+    basic: number;
+  };
+  averageResponseTime: {
+    'fhir-server-validate': number;
+    hapi: number;
+    basic: number;
+  };
+  lastReset: string;
+}
+
 // ============================================================================
 // FhirValidateOperation Class
 // ============================================================================
@@ -53,6 +74,17 @@ export class FhirValidateOperation {
   private validateSupportCache = new Map<string, boolean>();
   private cacheTTL = 3600000; // 1 hour
   private lastCacheUpdate = 0;
+
+  // Task 8.11: Metrics tracking
+  private metrics = {
+    total: 0,
+    bySource: {
+      'fhir-server-validate': { count: 0, success: 0, totalTime: 0 },
+      hapi: { count: 0, success: 0, totalTime: 0 },
+      basic: { count: 0, success: 0, totalTime: 0 }
+    },
+    lastReset: new Date().toISOString()
+  };
 
   // ==========================================================================
   // Main Validation Method
@@ -111,6 +143,9 @@ export class FhirValidateOperation {
       const operationOutcome = response.data;
       const issues = this.parseOperationOutcome(operationOutcome);
 
+      // Task 8.11: Track metrics
+      this.trackMetrics('fhir-server-validate', response.status === 200, duration);
+
       return {
         success: response.status === 200,
         source: 'fhir-server-validate',
@@ -122,6 +157,9 @@ export class FhirValidateOperation {
 
     } catch (error: any) {
       const duration = Date.now() - startTime;
+
+      // Task 8.11: Track metrics - failure
+      this.trackMetrics('fhir-server-validate', false, duration);
 
       if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
         return {
@@ -295,6 +333,76 @@ export class FhirValidateOperation {
       size: this.validateSupportCache.size,
       age: Date.now() - this.lastCacheUpdate
     };
+  }
+
+  /**
+   * Task 8.11: Track validation metrics
+   */
+  private trackMetrics(
+    source: 'fhir-server-validate' | 'hapi' | 'basic',
+    success: boolean,
+    duration: number
+  ): void {
+    this.metrics.total++;
+    this.metrics.bySource[source].count++;
+    this.metrics.bySource[source].totalTime += duration;
+    
+    if (success) {
+      this.metrics.bySource[source].success++;
+    }
+    
+    console.log(`[FhirValidateOperation] Metrics tracked: ${source}, success: ${success}, duration: ${duration}ms`);
+  }
+
+  /**
+   * Task 8.11: Get validation metrics
+   */
+  getMetrics(): ValidateOperationMetrics {
+    const calculateSuccessRate = (source: 'fhir-server-validate' | 'hapi' | 'basic') => {
+      const { count, success } = this.metrics.bySource[source];
+      return count > 0 ? success / count : 0;
+    };
+
+    const calculateAvgTime = (source: 'fhir-server-validate' | 'hapi' | 'basic') => {
+      const { count, totalTime } = this.metrics.bySource[source];
+      return count > 0 ? totalTime / count : 0;
+    };
+
+    return {
+      totalValidations: this.metrics.total,
+      bySource: {
+        'fhir-server-validate': this.metrics.bySource['fhir-server-validate'].count,
+        hapi: this.metrics.bySource.hapi.count,
+        basic: this.metrics.bySource.basic.count
+      },
+      successRate: {
+        'fhir-server-validate': calculateSuccessRate('fhir-server-validate'),
+        hapi: calculateSuccessRate('hapi'),
+        basic: calculateSuccessRate('basic')
+      },
+      averageResponseTime: {
+        'fhir-server-validate': calculateAvgTime('fhir-server-validate'),
+        hapi: calculateAvgTime('hapi'),
+        basic: calculateAvgTime('basic')
+      },
+      lastReset: this.metrics.lastReset
+    };
+  }
+
+  /**
+   * Task 8.11: Reset validation metrics
+   */
+  resetMetrics(): void {
+    this.metrics = {
+      total: 0,
+      bySource: {
+        'fhir-server-validate': { count: 0, success: 0, totalTime: 0 },
+        hapi: { count: 0, success: 0, totalTime: 0 },
+        basic: { count: 0, success: 0, totalTime: 0 }
+      },
+      lastReset: new Date().toISOString()
+    };
+    console.log('[FhirValidateOperation] Metrics reset');
   }
 }
 
