@@ -42,6 +42,11 @@ export interface AdaptivePollingOptions<T> {
   // Jitter
   jitterPercent?: number;     // Default: 20%
   
+  // Task 12.11 & 12.12: Conditional polling
+  useConditionalPolling?: boolean; // Default: false
+  etag?: string | null;
+  lastModified?: string | null;
+  
   // React Query options
   reactQueryOptions?: Omit<UseQueryOptions<T>, 'queryKey' | 'queryFn'>;
 }
@@ -70,6 +75,9 @@ export function useAdaptivePolling<T>(options: AdaptivePollingOptions<T>) {
     isComplete = () => false,
     maxBackoff = 60000,
     jitterPercent = 20,
+    useConditionalPolling = false,
+    etag,
+    lastModified,
     reactQueryOptions = {}
   } = options;
 
