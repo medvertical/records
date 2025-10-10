@@ -615,9 +615,12 @@
     - ✅ Optional click-to-toggle functionality
     - ✅ Integrated into `DashboardHeader.tsx`
     - ✅ Files: `client/src/hooks/use-validation-mode.ts`, `client/src/components/validation/ValidationModeBadge.tsx`
-  - [ ] 3.9 ⏭️ **OPTIONAL** - Implement manual mode toggle in Settings tab with confirmation dialog
-    - **Note:** Mode switching already available via badge click (Task 3.8)
-    - Full Settings UI panel can be added post-MVP
+  - [x] 3.9 ✅ **COMPLETED** - Implement manual mode toggle in Settings tab with confirmation dialog
+    - ✅ AlertDialog component with detailed mode information (Online vs Offline)
+    - ✅ Shows benefits of each mode (tx.fhir.org vs Ontoserver)
+    - ✅ Warning about active validations
+    - ✅ Cancel/Confirm buttons with toast notification
+    - ✅ Fixed DOM nesting warnings (asChild pattern)
   - [x] 3.10 Add mode change event emission to refresh active validations
     - ✅ Implemented in `ValidationModeManager` (EventEmitter)
     - ✅ Events: 'modeChanged', 'ontoserverUnavailable', 'offlineModeImpaired', 'noTerminologyServerAvailable'
@@ -631,7 +634,10 @@
   - [ ] 3.12 ⏭️ **OPTIONAL** - Add fallback metrics: track success rate of local vs remote terminology lookups
   - [ ] 3.13 ⏭️ **OPTIONAL** - Unit tests for fallback chain with mock network failures
   - [ ] 3.14 ⏭️ **OPTIONAL** - Integration test: validate resource in online mode, switch to offline, verify continuation
-  - [ ] 3.15 ⏭️ **OPTIONAL** - Document Ontoserver setup requirements in deployment guide
+  - [x] 3.15 ✅ **COMPLETED** - Document Ontoserver setup requirements in deployment guide
+    - ✅ File: `docs/deployment/ontoserver-setup.md` (440 lines)
+    - ✅ Installation methods (Docker, Docker Compose, native)
+    - ✅ Configuration, troubleshooting, performance optimization
   - [ ] 3.16 ⏭️ **OPTIONAL** - **INTEGRATION TEST:** Validate hybrid mode end-to-end
     - Start in online mode → validate resource → verify tx.fhir.org used
     - Switch to offline mode → validate resource → verify local Ontoserver used
@@ -754,7 +760,10 @@
     - ✅ Success/error alerts with detailed messages
     - ✅ File: `client/src/components/profiles/PackageUpdateDialog.tsx`
   - [ ] 4.13 ⏭️ **OPTIONAL** - Add validation settings option: `profileSources` (local cache, Simplifier, both)
-  - [ ] 4.14 ⏭️ **OPTIONAL** - Document profile package installation process in `docs/deployment/profile-packages.md`
+  - [x] 4.14 ✅ **COMPLETED** - Document profile package installation process in `docs/deployment/profile-packages.md`
+    - ✅ File: `docs/deployment/profile-packages.md` (530 lines)
+    - ✅ Installation via UI, API, manual methods
+    - ✅ Common packages (MII, ISiK, KBV, IPS)
   - [ ] 4.15 ⏭️ **OPTIONAL** - Integration test: install MII package, validate resource against MII profile
   - [ ] 4.16 ⏭️ **OPTIONAL** - **INTEGRATION TEST:** Validate profile package management end-to-end
 
@@ -836,7 +845,10 @@
     - ✅ Auto-refresh every 30s
     - ✅ File: `client/src/components/admin/UnmappedErrorCodesPanel.tsx`
   - [ ] 5.14 ⏭️ **OPTIONAL** - Unit tests for pattern matching and placeholder substitution
-  - [ ] 5.15 ⏭️ **OPTIONAL** - Document error mapping process in `docs/technical/validation/error-mapping.md`
+  - [x] 5.15 ✅ **COMPLETED** - Document error mapping process in `docs/technical/validation/error-mapping.md`
+    - ✅ File: `docs/technical/validation/error-mapping.md` (569 lines)
+    - ✅ Error categories, pattern matching, transformation, enrichment
+    - ✅ Best practices, troubleshooting, common patterns
   - [ ] 5.16 ⏭️ **OPTIONAL** - **INTEGRATION TEST:** Validate error mapping expansion end-to-end
 
 **✅ Task 5.0 Summary - COMPLETE (Core: 5.1-5.13, 95% Done):**
@@ -924,7 +936,10 @@
     - Already implemented in BusinessRuleValidatorEnhanced.validate()
   - [ ] 6.15 ⏭️ **OPTIONAL** - Unit tests for FHIRPath evaluator with complex expressions
   - [ ] 6.16 ⏭️ **OPTIONAL** - Integration test: create custom rule, validate resource, verify rule execution
-  - [ ] 6.17 ⏭️ **OPTIONAL** - Document FHIRPath rule authoring guide in `docs/technical/validation/business-rules.md`
+  - [x] 6.17 ✅ **COMPLETED** - Document FHIRPath rule authoring guide in `docs/technical/validation/business-rules.md`
+    - ✅ File: `docs/technical/validation/business-rules.md` (674 lines)
+    - ✅ FHIRPath basics, 20+ examples, advanced features
+    - ✅ Best practices, troubleshooting, quick reference
   - [ ] 6.18 ⏭️ **OPTIONAL** - **INTEGRATION TEST:** Validate business rules engine end-to-end
 
 **✅ Task 6.0 Summary - COMPLETE (Core: 6.1-6.8 + 6.14, 85% Done):**
