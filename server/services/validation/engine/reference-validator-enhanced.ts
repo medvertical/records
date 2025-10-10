@@ -404,6 +404,45 @@ export class ReferenceValidatorEnhanced {
     return issues;
   }
 
+  /**
+   * Task 7.12: Batch reference validation with parallel fetching
+   * 
+   * Validates multiple references in parallel for better performance
+   */
+  async validateReferencesBatch(
+    references: ExtractedReference[],
+    fhirClient: any
+  ): Promise<ValidationIssue[]> {
+    console.log(`[ReferenceValidator] Batch validating ${references.length} references in parallel...`);
+    
+    // Filter out cached references
+    const uncachedRefs = references.filter(ref => {
+      if (!ref.resourceType || !ref.resourceId) return false;
+      
+      const cacheKey = `${ref.resourceType}/${ref.resourceId}`;
+      const cached = this.referenceCache.get(cacheKey);
+      const now = Date.now();
+      
+      return !cached || (now - cached.timestamp) >= this.cacheTTL;
+    });
+
+    console.log(`[ReferenceValidator] ${references.length - uncachedRefs.length} cached, ${uncachedRefs.length} need fetching`);
+
+    // Validate all references in parallel
+    const validationPromises = references.map(ref => 
+      this.validateReferenceExistence(ref, fhirClient)
+    );
+
+    const resultsArrays = await Promise.all(validationPromises);
+    
+    // Flatten results
+    const allIssues = resultsArrays.flat();
+    
+    console.log(`[ReferenceValidator] Batch validation complete, found ${allIssues.length} issue(s)`);
+    
+    return allIssues;
+  }
+
   private createReferenceNotFoundIssue(ref: ExtractedReference): ValidationIssue {
     return {
       id: `reference-not-found-${Date.now()}-${Math.random()}`,
