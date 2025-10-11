@@ -44,15 +44,30 @@ router.get('/resources/:resourceType/:id/messages', async (req: Request, res: Re
       });
     }
     
+    logger.info(`[ResourceMessages] Fetching messages for ${resourceType}/${id} (serverId: ${serverId})`);
+    
     const result = await ValidationGroupsRepository.getResourceMessages(serverId, resourceType, id);
+    
+    // If no validation data found, return empty result instead of error
+    if (!result || !result.aspects || result.aspects.length === 0) {
+      logger.info(`[ResourceMessages] No validation data found for ${resourceType}/${id} (serverId: ${serverId})`);
+      return res.json({
+        serverId,
+        resourceType,
+        fhirId: id,
+        aspects: [],
+      });
+    }
     
     res.json(result);
   } catch (error: any) {
     logger.error('Error fetching resource messages:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch resource messages',
-      message: error.message || 'Unknown error',
+    // Return empty result instead of error to avoid UI crashes
+    res.json({
+      serverId: parseInt(req.query.serverId as string) || 1,
+      resourceType: req.params.resourceType,
+      fhirId: req.params.id,
+      aspects: [],
     });
   }
 });

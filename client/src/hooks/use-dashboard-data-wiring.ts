@@ -59,6 +59,7 @@ export interface DashboardDataWiring {
 
   // Resource Breakdown Data
   resourceBreakdown: ResourceBreakdownData | undefined;
+  fhirServerStats: any;
   resourceBreakdownLoading: boolean;
   resourceBreakdownError: string | null;
   refreshResourceBreakdown: () => void;
@@ -283,6 +284,7 @@ export function useDashboardDataWiring(
 
     // Resource Breakdown Data
     resourceBreakdown,
+    fhirServerStats,
     resourceBreakdownLoading,
     resourceBreakdownError,
     refreshResourceBreakdown,

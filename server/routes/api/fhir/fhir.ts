@@ -630,19 +630,40 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       // Get the current FHIR client (may have been updated due to server activation)
       const currentFhirClient = getCurrentFhirClient(fhirClient);
       
-      // Add timeout to the entire operation
+      // Get validation settings to check filtering
+      const { ValidationSettingsService } = await import('../../../services/validation/settings/validation-settings-service');
+      const settingsService = new ValidationSettingsService();
+      await settingsService.initialize();
+      const settings = await settingsService.getCurrentSettings();
+      
+      let resourceTypesToQuery: string[] | undefined = undefined;
+      
+      // Check if resource type filtering is enabled
+      // When enabled=false, it means "Validate All" - ignore includedTypes
+      if (settings?.resourceTypes?.enabled === true) {
+        const includedTypes = settings.resourceTypes.includedTypes || [];
+        resourceTypesToQuery = includedTypes.length > 0 ? includedTypes : undefined;
+        console.log(`[Resource Counts] Filtering enabled: ${includedTypes.length} types included`);
+      } else {
+        console.log('[Resource Counts] Filtering disabled (Validate All) - using all server types from CapabilityStatement');
+        resourceTypesToQuery = undefined; // Will use getAllResourceTypes() from CapabilityStatement
+      }
+      
+      // Add timeout to the entire operation (30s for more resource types)
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Request timeout')), 15000); // 15 second timeout
+        setTimeout(() => reject(new Error('Request timeout')), 30000);
       });
       
-      const countsPromise = currentFhirClient.getResourceCounts();
+      const countsPromise = currentFhirClient.getResourceCounts(resourceTypesToQuery);
       const counts = await Promise.race([countsPromise, timeoutPromise]) as Record<string, number>;
       
-      // Transform the counts into the expected format
-      const resourceTypes = Object.entries(counts).map(([resourceType, count]) => ({
-        resourceType,
-        count
-      }));
+      // Transform the counts into the expected format (only include types with data)
+      const resourceTypes = Object.entries(counts)
+        .filter(([_, count]) => count > 0)
+        .map(([resourceType, count]) => ({
+          resourceType,
+          count
+        }));
       
       const totalResources = Object.values(counts).reduce((sum, count) => sum + count, 0);
       
@@ -651,19 +672,12 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
         totalResources
       });
     } catch (error: any) {
-      console.warn('Failed to get resource counts, using fallback:', error.message);
-      // Return default resource counts as fallback
-      const defaultCounts = {
-        resourceTypes: [
-          { resourceType: 'Patient', count: 0 },
-          { resourceType: 'Observation', count: 0 },
-          { resourceType: 'Encounter', count: 0 },
-          { resourceType: 'DiagnosticReport', count: 0 },
-          { resourceType: 'Medication', count: 0 }
-        ],
+      console.warn('Failed to get resource counts:', error.message);
+      // Return empty counts on error
+      res.json({
+        resourceTypes: [],
         totalResources: 0
-      };
-      res.json(defaultCounts);
+      });
     }
   });
 

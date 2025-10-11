@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, AlertCircle } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { SeverityIcon, getSeverityVariant } from '@/components/ui/severity-icon';
 import type { SeverityLevel } from '@/components/ui/severity-icon';

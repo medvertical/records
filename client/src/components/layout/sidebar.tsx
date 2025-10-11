@@ -56,7 +56,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
   const { data: resourceCounts } = useQuery<Record<string, number>>({
     queryKey: ["/api/fhir/resource-counts"],
     // Keep previous data to prevent flickering during refetches
-    keepPreviousData: true,
+    placeholderData: (previousData) => previousData,
     staleTime: 10 * 60 * 1000, // Consider data fresh for 10 minutes
     refetchInterval: false, // Disable automatic refetching
     refetchOnWindowFocus: false, // Don't refetch when window gains focus
@@ -363,17 +363,6 @@ function SidebarContent({
                 
                 // Force re-render by referencing urlVersion
                 const _ = urlVersion;
-                
-                // Debug logging
-                if (item.resourceType === 'Encounter' || item.resourceType === 'Patient' || item.resourceType === 'Observation') {
-                  console.log('[Sidebar] Quick access item:', {
-                    resourceType: item.resourceType,
-                    selectedType,
-                    isSelected,
-                    urlVersion,
-                    search: window.location.search
-                  });
-                }
                 
                 return (
                   <li key={item.href}>

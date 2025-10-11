@@ -857,21 +857,25 @@ export class FhirClient {
   }
 
   // Get resource counts for multiple resource types (optimized for performance)
-  async getResourceCounts(): Promise<Record<string, number>> {
+  async getResourceCounts(resourceTypes?: string[]): Promise<Record<string, number>> {
     try {
-      console.log('[FhirClient] Getting resource counts for common resource types...');
+      console.log('[FhirClient] Getting resource counts...');
       
-      // Only get counts for the most common resource types to avoid timeouts
-      const commonResourceTypes = [
-        'Patient', 'Observation', 'Encounter', 'Condition', 'DiagnosticReport',
-        'Medication', 'MedicationRequest', 'Procedure', 'AllergyIntolerance',
-        'Immunization', 'DocumentReference', 'Organization', 'Practitioner'
-      ];
+      // If no resource types provided, get all from CapabilityStatement
+      let typesToQuery: string[];
+      if (resourceTypes && resourceTypes.length > 0) {
+        typesToQuery = resourceTypes;
+        console.log(`[FhirClient] Using provided ${typesToQuery.length} resource types`);
+      } else {
+        // Use getAllResourceTypes which reads from CapabilityStatement
+        typesToQuery = await this.getAllResourceTypes();
+        console.log(`[FhirClient] Using ${typesToQuery.length} resource types from CapabilityStatement`);
+      }
       
       const counts: Record<string, number> = {};
       
-      // Use simpler approach - just get counts directly without complex batching
-      for (const resourceType of commonResourceTypes) {
+      // Get counts for each resource type
+      for (const resourceType of typesToQuery) {
         try {
           console.log(`[FhirClient] Getting count for ${resourceType}...`);
           

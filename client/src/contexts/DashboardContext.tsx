@@ -22,6 +22,7 @@ interface DashboardContextType {
   
   // Resource Breakdown Data
   resourceBreakdown: any;
+  fhirServerStats: any;
   refreshResourceBreakdown: () => void;
   
   // Validation Data
