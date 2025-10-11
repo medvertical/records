@@ -20,7 +20,7 @@ export { useFHIRVersionDetection } from '../use-fhir-version-detection';
 export { useValidationSettingsMigration } from '../use-validation-settings-migration';
 
 // Enhanced validation hooks - Normalized results
-export { useValidationResults, useValidationResultsBatch } from '../use-validation-results';
+// NOTE: useValidationResults removed - use per-aspect validation methods instead
 export { useValidationAspects, useValidationAspectsForResource } from '../use-validation-aspects';
 
 // Settings hooks - Settings management
@@ -41,7 +41,7 @@ export { useValidationControls as useValidationControlsSimple } from '../use-val
 // Type exports - Hook types and interfaces
 export type { ValidationProgress } from '../use-validation-polling';
 export type { ValidationSettingsPollingState, ValidationSettingsPollingOptions } from '../use-validation-settings-polling';
-export type { ValidationResultsState, ValidationResultsActions, ValidationResultsOptions } from '../use-validation-results';
+// NOTE: ValidationResultsState types removed - use per-aspect validation methods instead
 export type { ValidationAspectData, ValidationAspectsState, ValidationAspectsActions, ValidationAspectsOptions } from '../use-validation-aspects';
 export type { DashboardDataWiring, UseDashboardDataWiringOptions } from '../use-dashboard-data-wiring';
 export type { ValidationControlsState, ValidationControlsActions } from '../use-validation-controls';

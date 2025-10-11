@@ -51,6 +51,10 @@ export const validationProfiles = pgTable("validation_profiles", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+/**
+ * @deprecated LEGACY TABLE - Use validation_results_per_aspect and validation_messages instead
+ * This table is kept for backward compatibility but should not be used for new code.
+ */
 export const validationResults = pgTable("validation_results", {
   id: serial("id").primaryKey(),
   resourceId: integer("resource_id").references(() => fhirResources.id), // Keep for backward compatibility

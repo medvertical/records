@@ -56,16 +56,10 @@ export interface IStorage {
   updateValidationProfile(id: number, updates: Partial<ValidationProfile>): Promise<void>;
   deleteValidationProfile(id: number): Promise<void>;
 
-  // Validation Results
+  // Validation Results (LEGACY - Use ValidationGroupsRepository for per-aspect validation)
   getValidationResultsByResourceId(resourceId: number): Promise<ValidationResult[]>;
-  getValidationResultsByFhirIdentity(serverId: number, resourceType: string, fhirResourceId: string): Promise<ValidationResult[]>;
-  getValidationResultsDualMode(serverId: number, resourceType: string, fhirResourceId: string, resourceId?: number): Promise<ValidationResult[]>;
   createValidationResult(result: InsertValidationResult): Promise<ValidationResult>;
   createValidationResultWithFhirIdentity(result: InsertValidationResult, serverId: number, resourceType: string, fhirResourceId: string): Promise<ValidationResult>;
-  getRecentValidationErrors(limit?: number, serverId?: number): Promise<ValidationResult[]>;
-  getLatestValidationResults(options?: { limit?: number; offset?: number; resourceType?: string }): Promise<ValidationResult[]>;
-  clearValidationResultsForResource(resourceId: number): Promise<void>;
-  clearValidationResultsForFhirIdentity(serverId: number, resourceType: string, fhirResourceId: string): Promise<void>;
   
   // Enhanced Validation Result Caching
   getLatestValidationResult(resourceId: number, settingsHash?: string): Promise<ValidationResult | undefined>;
@@ -242,7 +236,19 @@ export class DatabaseStorage implements IStorage {
     const [resource] = await db.select().from(fhirResources).where(eq(fhirResources.id, id));
     if (!resource) return undefined;
 
-    const validationResults = await this.getValidationResultsByResourceId(id);
+    // Try to get validation results from legacy table, but handle gracefully if table doesn't exist
+    // (migration to per-aspect validation tables may have dropped legacy table)
+    let validationResults: ValidationResult[] = [];
+    try {
+      validationResults = await this.getValidationResultsByResourceId(id);
+    } catch (error: any) {
+      // If the validation_results table doesn't exist (code 42P01), just return empty array
+      // Validation will use the new per-aspect tables instead
+      if (error.code !== '42P01') {
+        console.error('[Storage] Error loading validation results for resource:', error);
+      }
+    }
+    
     return {
       ...resource,
       validationResults,
@@ -325,34 +331,13 @@ export class DatabaseStorage implements IStorage {
     return await queryOptimizer.getValidationResults(resourceId);
   }
 
-  async getValidationResultsByFhirIdentity(serverId: number, resourceType: string, fhirResourceId: string): Promise<ValidationResult[]> {
-    return await queryOptimizer.getValidationResultsByFhirIdentity(serverId, resourceType, fhirResourceId);
-  }
-
-  async getValidationResultsDualMode(serverId: number, resourceType: string, fhirResourceId: string, resourceId?: number): Promise<ValidationResult[]> {
-    return await queryOptimizer.getValidationResultsDualMode(serverId, resourceType, fhirResourceId, resourceId);
-  }
-
   async clearAllValidationResults(): Promise<void> {
     await db.delete(validationResults);
     console.log('[Storage] Cleared all validation results');
   }
 
-  async clearValidationResultsForResource(resourceId: number): Promise<void> {
-    await db.delete(validationResults)
-      .where(eq(validationResults.resourceId, resourceId));
-    console.log(`[Storage] Cleared validation results for resource ${resourceId}`);
-  }
-
-  async clearValidationResultsForFhirIdentity(serverId: number, resourceType: string, fhirResourceId: string): Promise<void> {
-    await db.delete(validationResults)
-      .where(and(
-        eq(validationResults.serverId, serverId),
-        eq(validationResults.resourceType, resourceType),
-        eq(validationResults.fhirResourceId, fhirResourceId)
-      ));
-    console.log(`[Storage] Cleared validation results for FHIR identity ${serverId}:${resourceType}:${fhirResourceId}`);
-  }
+  // REMOVED: Legacy methods clearValidationResultsForResource and clearValidationResultsForFhirIdentity
+  // Use ValidationGroupsRepository for per-aspect validation
 
   async createValidationResult(result: InsertValidationResult): Promise<ValidationResult> {
     const [newResult] = await db
@@ -375,27 +360,8 @@ export class DatabaseStorage implements IStorage {
     return newResult;
   }
 
-  async getRecentValidationErrors(limit = 10, serverId?: number): Promise<ValidationResult[]> {
-    return await queryOptimizer.getRecentValidationErrors(limit, serverId);
-  }
-
-  async getLatestValidationResults(options: { limit?: number, offset?: number, resourceType?: string } = {}): Promise<ValidationResult[]> {
-    const { limit = 50, offset = 0, resourceType } = options;
-    
-    let query = db
-      .select()
-      .from(validationResults)
-      .orderBy(desc(validationResults.validatedAt))
-      .limit(limit)
-      .offset(offset);
-    
-    // Filter by resource type if specified
-    if (resourceType) {
-      query = query.where(eq(validationResults.resourceType, resourceType));
-    }
-    
-    return await query;
-  }
+  // REMOVED: Legacy methods getRecentValidationErrors and getLatestValidationResults
+  // Use ValidationGroupsRepository for per-aspect validation
 
   async getLatestValidationResult(resourceId: number, settingsHash?: string): Promise<ValidationResult | undefined> {
     const conditions = [eq(validationResults.resourceId, resourceId)];
@@ -519,62 +485,20 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
+  /**
+   * @deprecated Legacy method - Use ValidationGroupsRepository for per-aspect validation metrics
+   */
   async getValidationPerformanceMetrics(resourceType?: string, days = 30): Promise<any> {
-    const cutoffDate = new Date(Date.now() - (days * 24 * 60 * 60 * 1000));
-    
-    let query = db.select({
-      resourceType: validationResults.resourceType,
-      validationStatus: validationResults.validationStatus,
-      totalValidations: sql<number>`count(*)`,
-      avgDurationMs: sql<number>`avg(${validationResults.validationDurationMs})`,
-      minDurationMs: sql<number>`min(${validationResults.validationDurationMs})`,
-      maxDurationMs: sql<number>`max(${validationResults.validationDurationMs})`,
-      avgValidationScore: sql<number>`avg(${validationResults.validationScore})`,
-      avgConfidenceScore: sql<number>`avg(${validationResults.confidenceScore})`,
-      avgCompletenessScore: sql<number>`avg(${validationResults.completenessScore})`,
-      validCount: sql<number>`count(case when ${validationResults.isValid} = true then 1 end)`,
-      invalidCount: sql<number>`count(case when ${validationResults.isValid} = false then 1 end)`,
-      errorCount: sql<number>`count(case when ${validationResults.errorCount} > 0 then 1 end)`,
-      warningCount: sql<number>`count(case when ${validationResults.warningCount} > 0 then 1 end)`
-    })
-    .from(validationResults)
-    .where(gt(validationResults.validatedAt, cutoffDate));
-
-    if (resourceType) {
-      query = query.where(eq(validationResults.resourceType, resourceType));
-    }
-
-    return await query.groupBy(validationResults.resourceType, validationResults.validationStatus);
+    console.warn('[Storage] getValidationPerformanceMetrics is deprecated - use ValidationGroupsRepository');
+    return [];
   }
 
+  /**
+   * @deprecated Legacy method - Use ValidationGroupsRepository for per-aspect validation breakdown
+   */
   async getValidationAspectBreakdown(resourceType?: string, days = 30): Promise<any> {
-    const cutoffDate = new Date(Date.now() - (days * 24 * 60 * 60 * 1000));
-    
-    let query = db.select({
-      resourceType: validationResults.resourceType,
-      validationStatus: validationResults.validationStatus,
-      totalValidations: sql<number>`count(*)`,
-      structuralValidCount: sql<number>`count(case when (${validationResults.structuralValidationResult}->>'isValid')::boolean = true then 1 end)`,
-      profileValidCount: sql<number>`count(case when (${validationResults.profileValidationResult}->>'isValid')::boolean = true then 1 end)`,
-      terminologyValidCount: sql<number>`count(case when (${validationResults.terminologyValidationResult}->>'isValid')::boolean = true then 1 end)`,
-      referenceValidCount: sql<number>`count(case when (${validationResults.referenceValidationResult}->>'isValid')::boolean = true then 1 end)`,
-      businessRuleValidCount: sql<number>`count(case when (${validationResults.businessRuleValidationResult}->>'isValid')::boolean = true then 1 end)`,
-      metadataValidCount: sql<number>`count(case when (${validationResults.metadataValidationResult}->>'isValid')::boolean = true then 1 end)`,
-      avgStructuralDurationMs: sql<number>`avg((${validationResults.structuralValidationResult}->>'durationMs')::integer)`,
-      avgProfileDurationMs: sql<number>`avg((${validationResults.profileValidationResult}->>'durationMs')::integer)`,
-      avgTerminologyDurationMs: sql<number>`avg((${validationResults.terminologyValidationResult}->>'durationMs')::integer)`,
-      avgReferenceDurationMs: sql<number>`avg((${validationResults.referenceValidationResult}->>'durationMs')::integer)`,
-      avgBusinessRuleDurationMs: sql<number>`avg((${validationResults.businessRuleValidationResult}->>'durationMs')::integer)`,
-      avgMetadataDurationMs: sql<number>`avg((${validationResults.metadataValidationResult}->>'durationMs')::integer)`
-    })
-    .from(validationResults)
-    .where(gt(validationResults.validatedAt, cutoffDate));
-
-    if (resourceType) {
-      query = query.where(eq(validationResults.resourceType, resourceType));
-    }
-
-    return await query.groupBy(validationResults.resourceType, validationResults.validationStatus);
+    console.warn('[Storage] getValidationAspectBreakdown is deprecated - use ValidationGroupsRepository');
+    return [];
   }
 
   async getDashboardCards(): Promise<DashboardCard[]> {
@@ -704,13 +628,13 @@ export class DatabaseStorage implements IStorage {
       profile: { enabled: settings.aspects?.profile?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
       terminology: { enabled: settings.aspects?.terminology?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
       reference: { enabled: settings.aspects?.reference?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      businessRule: { enabled: settings.aspects?.businessRule?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      businessRule: { enabled: settings.aspects?.businessRules?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
       metadata: { enabled: settings.aspects?.metadata?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 }
     };
 
     // Aggregate issues by aspect from all validation results
     allValidationResults.forEach(result => {
-      const issues = result.issues || [];
+      const issues = (result.issues as any[]) || [];
       issues.forEach((issue: any) => {
         const aspect = issue.aspect || issue.category || 'structural';
         if (aspectBreakdown[aspect]) {

@@ -7,8 +7,11 @@ import ResourceSearch, { type ValidationFilters } from "@/components/resources/r
 import ResourceList from "@/components/resources/resource-list";
 import { ValidationOverview, type ValidationSummary } from "@/components/resources/validation-overview";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { getFilteredValidationSummary } from '@/lib/validation-filtering-utils';
+import { InfoIcon, X } from "lucide-react";
 
 // Simple client-side cache to track validated resources
 const validatedResourcesCache = new Set<string>();
@@ -31,6 +34,7 @@ if (typeof window !== 'undefined') {
 interface ResourcesResponse {
   resources: any[];
   total: number;
+  availableResourceTypes?: string[];
 }
 
 interface ValidationUpdateMessage {
@@ -63,6 +67,7 @@ export default function ResourceBrowser() {
     severities: [],
     hasIssuesOnly: false,
   });
+  const [showRevalidationNotice, setShowRevalidationNotice] = useState(true);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -1101,6 +1106,30 @@ export default function ResourceBrowser() {
           validationSummary={validationSummaryWithStats}
           activeServer={stableActiveServer}
         />
+
+        {/* Revalidation Notice Banner */}
+        {showRevalidationNotice && validationSummary.validatedCount === 0 && resourcesData?.resources && resourcesData.resources.length > 0 && (
+          <Alert className="bg-blue-50 border-blue-200">
+            <InfoIcon className="h-4 w-4 text-blue-600" />
+            <div className="flex items-start justify-between w-full">
+              <div className="flex-1">
+                <AlertTitle className="text-blue-900">Validation Data Needs to be Rebuilt</AlertTitle>
+                <AlertDescription className="text-blue-800">
+                  Resources are showing as "Not Validated" because the validation system was upgraded to a new per-aspect storage architecture. 
+                  Click "Validate All" below to rebuild validation data for all resources with the current settings.
+                </AlertDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 text-blue-600 hover:text-blue-900 hover:bg-blue-100 ml-2"
+                onClick={() => setShowRevalidationNotice(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </Alert>
+        )}
 
         {/* Validation Overview */}
         {resourcesData?.resources && resourcesData.resources.length > 0 && (

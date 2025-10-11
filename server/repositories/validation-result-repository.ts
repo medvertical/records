@@ -1,6 +1,9 @@
 /**
  * Validation Result Repository
  * 
+ * @deprecated This repository uses the LEGACY validation_results table.
+ * Use ValidationGroupsRepository for per-aspect validation instead.
+ * 
  * Handles database operations for validation results
  */
 

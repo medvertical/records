@@ -94,8 +94,8 @@ export class BatchValidationOrchestrator {
       forceRevalidation
     );
 
-    // Process and persist results
-    const results = await this.processBatchResults(resources, validationResults);
+    // Process and persist results (pass settings for per-aspect persistence)
+    const results = await this.processBatchResults(resources, validationResults, settings);
 
     // Calculate summary
     const summary = this.calculateSummary(results, filterStats);
@@ -159,7 +159,8 @@ export class BatchValidationOrchestrator {
 
   private async processBatchResults(
     resources: any[],
-    validationResults: EngineValidationResult[]
+    validationResults: EngineValidationResult[],
+    settings?: ValidationSettings
   ): Promise<BatchValidationResult[]> {
     const results: BatchValidationResult[] = [];
 
@@ -168,7 +169,7 @@ export class BatchValidationOrchestrator {
       const validationResult = validationResults[i];
 
       try {
-        const result = await this.processSingleResult(resource, validationResult);
+        const result = await this.processSingleResult(resource, validationResult, settings);
         results.push(result);
       } catch (error) {
         console.error(`[BatchValidationOrchestrator] Failed to process resource ${resource.id}:`, error);
@@ -181,7 +182,8 @@ export class BatchValidationOrchestrator {
 
   private async processSingleResult(
     resource: any,
-    validationResult: EngineValidationResult | undefined
+    validationResult: EngineValidationResult | undefined,
+    settings?: ValidationSettings
   ): Promise<BatchValidationResult> {
     // Save resource to database
     const resourceHash = this.cacheHelper.createResourceHash(resource);
@@ -192,12 +194,13 @@ export class BatchValidationOrchestrator {
     let wasRevalidated = false;
 
     if (validationResult && dbResource?.id) {
-      // Build and persist new validation result
+      // Build and persist new validation result (pass settings for per-aspect persistence)
       const result = await this.persistValidationResult(
         dbResource.id,
         resource,
         validationResult,
-        resourceHash
+        resourceHash,
+        settings
       );
       storedResults = result.storedResults;
       detailedResult = result.detailedResult;
@@ -260,7 +263,8 @@ export class BatchValidationOrchestrator {
     dbResourceId: number,
     resource: any,
     validationResult: EngineValidationResult,
-    resourceHash: string
+    resourceHash: string,
+    settingsUsed?: ValidationSettings
   ): Promise<{
     storedResults: StoredValidationResult[];
     detailedResult: DetailedValidationResult;
@@ -281,26 +285,85 @@ export class BatchValidationOrchestrator {
     const activeServer = await storage.getActiveFhirServer();
     const serverId = activeServer?.id || 1;
 
-    const savedResult = await storage.createValidationResultWithFhirIdentity(
-      insertData,
-      serverId,
-      resource.resourceType,
-      resource.id
-    );
+    // LEGACY TABLE INSERT - COMMENTED OUT (we now use per-aspect tables)
+    // The validation_results table is deprecated in favor of validation_results_per_aspect
+    // const savedResult = await storage.createValidationResultWithFhirIdentity(
+    //   insertData,
+    //   serverId,
+    //   resource.resourceType,
+    //   resource.id
+    // );
     
     await storage.updateFhirResourceLastValidated(dbResourceId, detailedResult.validatedAt);
+    
+    // Persist per-aspect results with actual settings
+    await this.persistPerAspectResults(serverId, resource, validationResult, settingsUsed);
     
     // Clear cache
     cacheManager.clear();
 
     // Reload to get fresh data
     const refreshed = await storage.getFhirResourceById(dbResourceId);
-    const storedResults = refreshed?.validationResults || [savedResult];
+    const storedResults = refreshed?.validationResults || [];
 
     return {
       storedResults,
       detailedResult,
     };
+  }
+
+  private async persistPerAspectResults(
+    serverId: number,
+    resource: any,
+    engineResult: EngineValidationResult,
+    settingsUsed?: ValidationSettings
+  ): Promise<void> {
+    try {
+      const { persistEngineResultPerAspect } = await import('../persistence/per-aspect-persistence');
+      const { getValidationSettingsService } = await import('../settings/validation-settings-service');
+      
+      // Use provided settings, or fall back to current settings
+      let settingsSnapshot;
+      if (settingsUsed) {
+        // Convert to simplified snapshot format expected by persistence
+        settingsSnapshot = {
+          aspects: {
+            structural: { enabled: settingsUsed.aspects?.structural?.enabled ?? true },
+            profile: { enabled: settingsUsed.aspects?.profile?.enabled ?? true },
+            terminology: { enabled: settingsUsed.aspects?.terminology?.enabled ?? true },
+            reference: { enabled: settingsUsed.aspects?.reference?.enabled ?? true },
+            businessRule: { enabled: settingsUsed.aspects?.businessRule?.enabled ?? settingsUsed.aspects?.businessRules?.enabled ?? true },
+            metadata: { enabled: settingsUsed.aspects?.metadata?.enabled ?? true },
+          },
+        } as any;
+      } else {
+        // Fall back to current settings if not provided
+        const settingsService = getValidationSettingsService();
+        const currentSettings = await settingsService.getCurrentSettings();
+        settingsSnapshot = {
+          aspects: {
+            structural: { enabled: currentSettings?.aspects?.structural?.enabled ?? true },
+            profile: { enabled: currentSettings?.aspects?.profile?.enabled ?? true },
+            terminology: { enabled: currentSettings?.aspects?.terminology?.enabled ?? true },
+            reference: { enabled: currentSettings?.aspects?.reference?.enabled ?? true },
+            businessRule: { enabled: currentSettings?.aspects?.businessRule?.enabled ?? currentSettings?.aspects?.businessRules?.enabled ?? true },
+            metadata: { enabled: currentSettings?.aspects?.metadata?.enabled ?? true },
+          },
+        } as any;
+      }
+      
+      console.log('[BatchValidationOrchestrator] Using settings snapshot for persistence:', JSON.stringify(settingsSnapshot));
+      
+      await persistEngineResultPerAspect({
+        serverId,
+        resourceType: resource.resourceType,
+        fhirId: resource.id,
+        settingsSnapshot,
+        engineResult: engineResult as any,
+      });
+    } catch (e) {
+      console.error('[BatchValidationOrchestrator] Failed to persist per-aspect results:', e);
+    }
   }
 
   private async loadCachedResult(

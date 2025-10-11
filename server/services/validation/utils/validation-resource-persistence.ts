@@ -91,8 +91,11 @@ export class ValidationResourcePersistence {
     resource: any,
     detailedResult: DetailedValidationResult,
     resourceHash: string,
-    engineResult: EngineValidationResult
+    engineResult: EngineValidationResult,
+    settingsUsed?: any
   ): Promise<void> {
+    console.error(`[ValidationResourcePersistence] *** STARTING PERSISTENCE for ${resource.resourceType}/${resource.id} (dbId: ${dbResourceId}) ***`);
+    
     const insertData = this.resultBuilder.buildInsertResult(
       dbResourceId,
       detailedResult,
@@ -106,20 +109,25 @@ export class ValidationResourcePersistence {
 
     console.log(`[ValidationResourcePersistence] Saving validation result for resource ID: ${dbResourceId}`);
     
-    // Save validation result
-    await storage.createValidationResultWithFhirIdentity(
-      insertData,
-      serverId,
-      resource.resourceType,
-      resource.id
-    );
+    // LEGACY TABLE INSERT - COMMENTED OUT (we now use per-aspect tables)
+    // The validation_results table is deprecated in favor of validation_results_per_aspect
+    // await storage.createValidationResultWithFhirIdentity(
+    //   insertData,
+    //   serverId,
+    //   resource.resourceType,
+    //   resource.id
+    // );
     
     // Update lastValidated timestamp
     await storage.updateFhirResourceLastValidated(dbResourceId, detailedResult.validatedAt);
 
-    // Persist per-aspect results
-    await this.persistPerAspectResults(serverId, resource, engineResult);
+    console.error(`[ValidationResourcePersistence] *** CALLING persistPerAspectResults with settingsUsed: ${settingsUsed ? 'YES' : 'NO'} ***`);
+    
+    // Persist per-aspect results with actual settings
+    await this.persistPerAspectResults(serverId, resource, engineResult, settingsUsed);
 
+    console.error(`[ValidationResourcePersistence] *** PERSISTENCE COMPLETE for ${resource.resourceType}/${resource.id} ***`);
+    
     // Clear cache
     cacheManager.clear();
     console.log(`[ValidationResourcePersistence] Cleared cache for resource ID: ${dbResourceId}`);
@@ -131,21 +139,45 @@ export class ValidationResourcePersistence {
   private async persistPerAspectResults(
     serverId: number,
     resource: any,
-    engineResult: EngineValidationResult
+    engineResult: EngineValidationResult,
+    settingsUsed?: any
   ): Promise<void> {
     try {
       const { persistEngineResultPerAspect } = await import('../persistence/per-aspect-persistence');
+      const { getValidationSettingsService } = await import('../settings/validation-settings-service');
       
-      const settingsSnapshot = {
-        aspects: {
-          structural: { enabled: true },
-          profile: { enabled: true },
-          terminology: { enabled: true },
-          reference: { enabled: true },
-          businessRule: { enabled: true },
-          metadata: { enabled: true },
-        },
-      } as any;
+      // Use provided settings, or fall back to current settings
+      let settingsSnapshot;
+      if (settingsUsed) {
+        // Convert to simplified snapshot format expected by persistence
+        settingsSnapshot = {
+          aspects: {
+            structural: { enabled: settingsUsed.aspects?.structural?.enabled ?? true },
+            profile: { enabled: settingsUsed.aspects?.profile?.enabled ?? true },
+            terminology: { enabled: settingsUsed.aspects?.terminology?.enabled ?? true },
+            reference: { enabled: settingsUsed.aspects?.reference?.enabled ?? true },
+            businessRule: { enabled: settingsUsed.aspects?.businessRule?.enabled ?? settingsUsed.aspects?.businessRules?.enabled ?? true },
+            metadata: { enabled: settingsUsed.aspects?.metadata?.enabled ?? true },
+          },
+        } as any;
+      } else {
+        // Fall back to current settings if not provided
+        const settingsService = getValidationSettingsService();
+        const currentSettings = await settingsService.getCurrentSettings();
+        settingsSnapshot = {
+          aspects: {
+            structural: { enabled: currentSettings?.aspects?.structural?.enabled ?? true },
+            profile: { enabled: currentSettings?.aspects?.profile?.enabled ?? true },
+            terminology: { enabled: currentSettings?.aspects?.terminology?.enabled ?? true },
+            reference: { enabled: currentSettings?.aspects?.reference?.enabled ?? true },
+            businessRule: { enabled: currentSettings?.aspects?.businessRule?.enabled ?? currentSettings?.aspects?.businessRules?.enabled ?? true },
+            metadata: { enabled: currentSettings?.aspects?.metadata?.enabled ?? true },
+          },
+        } as any;
+      }
+      
+      console.error('[ValidationResourcePersistence] *** SETTINGS SNAPSHOT:', JSON.stringify(settingsSnapshot));
+      console.error(`[ValidationResourcePersistence] *** CALLING persistEngineResultPerAspect for ${resource.resourceType}/${resource.id} ***`);
       
       await persistEngineResultPerAspect({
         serverId,
@@ -154,8 +186,11 @@ export class ValidationResourcePersistence {
         settingsSnapshot,
         engineResult: engineResult as any,
       });
+      
+      console.error(`[ValidationResourcePersistence] *** PER-ASPECT PERSISTENCE COMPLETE for ${resource.resourceType}/${resource.id} ***`);
     } catch (e) {
-      console.error('[ValidationResourcePersistence] Failed to persist per-aspect results:', e);
+      console.error('[ValidationResourcePersistence] *** FAILED to persist per-aspect results:', e);
+      throw e; // Re-throw so we can see the error
     }
   }
 }

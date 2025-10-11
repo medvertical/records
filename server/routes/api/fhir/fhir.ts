@@ -4,6 +4,7 @@ import { FhirClient } from "../../../services/fhir/fhir-client";
 import { profileManager } from "../../../services/fhir/profile-manager";
 import { FeatureFlags } from "../../../config/feature-flags";
 import { serverActivationService } from "../../../services/server-activation-service";
+import * as ValidationGroupsRepository from "../../../repositories/validation-groups-repository";
 
 // Helper function to get the current FHIR client from server activation service
 function getCurrentFhirClient(fhirClient: FhirClient): FhirClient {
@@ -59,36 +60,18 @@ async function enhanceResourcesWithValidationData(resources: any[]): Promise<any
       }
       
       if (dbResource) {
-        // Get validation results for this resource using dual-mode lookup (FHIR identity first, then database ID fallback)
+        // Get validation summary from per-aspect tables
         const activeServer = await storage.getActiveFhirServer();
-        const validationResults = await storage.getValidationResultsDualMode(
+        const validationSummary = await ValidationGroupsRepository.getResourceValidationSummary(
           activeServer?.id || 0,
           resource.resourceType,
-          resource.id,
-          dbResource.id
+          resource.id
         );
         
-        // Create validation summary from the latest validation result
-        let validationSummary = null;
-        if (validationResults && validationResults.length > 0) {
-          const latestResult = validationResults[0]; // Assuming results are ordered by date
-          
-          // Always include validation data - UI will handle filtering based on settings
-          validationSummary = {
-            isValid: latestResult.isValid || false,
-            hasErrors: (latestResult.errorCount || 0) > 0,
-            hasWarnings: (latestResult.warningCount || 0) > 0,
-            errorCount: latestResult.errorCount || 0,
-            warningCount: latestResult.warningCount || 0,
-            informationCount: Array.isArray(latestResult.issues) ? latestResult.issues.filter((issue: any) => issue.severity === 'info').length : 0,
-            lastValidated: latestResult.validatedAt,
-            validationScore: latestResult.validationScore || 0,
-            aspectBreakdown: latestResult.aspectBreakdown || {}
-          };
-          
-          console.log(`[FHIR API] Enhanced ${resource.resourceType}/${resource.id} with validation data:`, validationSummary);
+        if (validationSummary) {
+          console.log(`[FHIR API] Enhanced ${resource.resourceType}/${resource.id} with per-aspect validation data:`, validationSummary);
         } else {
-          console.log(`[FHIR API] No validation results found for ${resource.resourceType}/${resource.id}`);
+          console.log(`[FHIR API] No per-aspect validation results found for ${resource.resourceType}/${resource.id}`);
         }
         
         // Enhance the resource with database ID and validation data

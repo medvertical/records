@@ -146,16 +146,19 @@ export class ConsolidatedValidationService extends EventEmitter {
     detailedResult: DetailedValidationResult;
     wasRevalidated: boolean;
   }> {
-    console.log(`[ConsolidatedValidation] validateResource called for ${resource.resourceType}/${resource.id}`);
+    console.error(`[ConsolidatedValidation] *** VALIDATE RESOURCE CALLED: ${resource.resourceType}/${resource.id} (forceRevalidation: ${forceRevalidation}) ***`);
     
     // Check resource type filtering
     const filterResult = await this.checkResourceFiltering(resource);
     if (!filterResult.shouldValidate) {
+      console.error(`[ConsolidatedValidation] *** RESOURCE FILTERED OUT: ${filterResult.reason} ***`);
       return this.createFilteredResult(resource, filterResult.reason);
     }
     
     const resourceHash = this.cacheHelper.createResourceHash(resource);
     const { dbResource, dbResourceId } = await this.resourcePersistence.ensureResourceStored(resource, resourceHash);
+
+    console.error(`[ConsolidatedValidation] *** DB RESOURCE ID: ${dbResourceId} ***`);
 
     // Check if revalidation is needed
     const needsRevalidation = this.determineRevalidationNeed(
@@ -164,10 +167,19 @@ export class ConsolidatedValidationService extends EventEmitter {
       skipUnchanged
     );
 
+    console.error(`[ConsolidatedValidation] *** NEEDS REVALIDATION: ${needsRevalidation} (force: ${forceRevalidation}, skip: ${skipUnchanged}) ***`);
+
     let wasRevalidated = false;
     let detailedResult: DetailedValidationResult | null = null;
 
     if (needsRevalidation) {
+      console.error(`[ConsolidatedValidation] *** STARTING VALIDATION FOR ${resource.resourceType}/${resource.id} ***`);
+      
+      // Get settings that will be used for validation
+      const settingsUsed = options.validationSettingsOverride || await this.getCurrentSettings();
+      
+      console.error(`[ConsolidatedValidation] *** SETTINGS OVERRIDE: ${options.validationSettingsOverride ? 'YES' : 'NO'} ***`);
+      
       // Execute validation
       const validationResult = await this.executeValidation(resource, options);
       detailedResult = this.resultBuilder.buildFromEngine(
@@ -177,17 +189,23 @@ export class ConsolidatedValidationService extends EventEmitter {
       );
       wasRevalidated = true;
 
-      // Persist results
+      // Persist results with the settings that were actually used
       if (dbResourceId) {
+        console.error(`[ConsolidatedValidation] *** CALLING persistValidationResult FOR ${resource.resourceType}/${resource.id} ***`);
         await this.resourcePersistence.persistValidationResult(
           dbResourceId,
           resource,
           detailedResult,
           resourceHash,
-          validationResult
+          validationResult,
+          settingsUsed
         );
+        console.error(`[ConsolidatedValidation] *** PERSISTENCE CALL COMPLETED FOR ${resource.resourceType}/${resource.id} ***`);
+      } else {
+        console.error(`[ConsolidatedValidation] *** NO DB RESOURCE ID - SKIPPING PERSISTENCE ***`);
       }
     } else {
+      console.error(`[ConsolidatedValidation] *** USING CACHED RESULTS FOR ${resource.resourceType}/${resource.id} ***`);
       // Use cached results
       detailedResult = this.buildResultFromCached(dbResource, resource);
     }

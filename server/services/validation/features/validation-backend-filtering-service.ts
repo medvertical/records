@@ -139,7 +139,7 @@ class ValidationBackendFilteringService extends EventEmitter {
       }
 
       // Apply validation status filtering
-      filteredResources = this.applyValidationStatusFiltering(filteredResources, validationStatus);
+      filteredResources = await this.applyValidationStatusFiltering(filteredResources, validationStatus);
       console.log(`[BackendFiltering] After validation status filtering: ${filteredResources.length} resources`);
 
       // Apply text search if provided
@@ -162,7 +162,7 @@ class ValidationBackendFilteringService extends EventEmitter {
       const enhancedResources = await this.enhanceResourcesWithValidationData(paginatedResources);
 
       // Calculate filter summary
-      const filterSummary = this.calculateFilterSummary(allResources, resourceTypes, validationStatus);
+      const filterSummary = await this.calculateFilterSummary(allResources, resourceTypes, validationStatus);
 
       return {
         resources: enhancedResources,
@@ -332,7 +332,7 @@ class ValidationBackendFilteringService extends EventEmitter {
       allResources = Array.from(resourceMap.values());
 
       // Apply validation status filtering
-      let filteredResources = this.applyValidationStatusFiltering(allResources, validationStatus);
+      let filteredResources = await this.applyValidationStatusFiltering(allResources, validationStatus);
       console.log(`[BackendFiltering] After validation status filtering: ${filteredResources.length} resources`);
 
       // Apply text search if provided
@@ -345,7 +345,7 @@ class ValidationBackendFilteringService extends EventEmitter {
       filteredResources = this.applySorting(filteredResources, sorting);
 
       // Calculate filter summary
-      const filterSummary = this.calculateFilterSummary(filteredResources, resourceTypes, validationStatus);
+      const filterSummary = await this.calculateFilterSummary(filteredResources, resourceTypes, validationStatus);
 
       // Apply pagination
       const totalCount = filteredResources.length;
@@ -374,43 +374,58 @@ class ValidationBackendFilteringService extends EventEmitter {
     }
   }
 
-  private applyValidationStatusFiltering(
+  private async applyValidationStatusFiltering(
     resources: any[],
     validationStatus: BackendFilterOptions['validationStatus']
-  ): any[] {
+  ): Promise<any[]> {
     if (!validationStatus || Object.keys(validationStatus).length === 0) {
       return resources;
     }
 
-    return resources.filter(resource => {
-      const validationResults = resource.validationResults || [];
-      if (validationResults.length === 0) {
+    const { getResourceValidationSummary } = await import('../../../repositories/validation-groups-repository');
+    const activeServer = await storage.getActiveFhirServer();
+    const serverId = activeServer?.id || 1;
+
+    // Filter resources asynchronously by fetching validation data
+    const filteredResources = [];
+    for (const resource of resources) {
+      const validationSummary = await getResourceValidationSummary(
+        serverId,
+        resource.resourceType,
+        resource.resourceId
+      );
+
+      if (!validationSummary) {
         // No validation data - include if isValid is requested
-        return validationStatus.isValid === true;
+        if (validationStatus.isValid === true) {
+          filteredResources.push(resource);
+        }
+        continue;
       }
 
-      const latestValidation = validationResults[0]; // Assuming results are sorted by date desc
-      const hasErrors = latestValidation.errorCount > 0;
-      const hasWarnings = latestValidation.warningCount > 0;
-      const hasInformation = latestValidation.informationCount > 0;
-      const isValid = latestValidation.isValid;
+      const hasErrors = validationSummary.errorCount > 0;
+      const hasWarnings = validationSummary.warningCount > 0;
+      const hasInformation = validationSummary.informationCount > 0;
+      const isValid = validationSummary.isValid;
 
       // Apply validation status filters
       if (validationStatus.hasErrors !== undefined && validationStatus.hasErrors !== hasErrors) {
-        return false;
+        continue;
       }
       if (validationStatus.hasWarnings !== undefined && validationStatus.hasWarnings !== hasWarnings) {
-        return false;
+        continue;
       }
       if (validationStatus.hasInformation !== undefined && validationStatus.hasInformation !== hasInformation) {
-        return false;
+        continue;
       }
       if (validationStatus.isValid !== undefined && validationStatus.isValid !== isValid) {
-        return false;
+        continue;
       }
 
-      return true;
-    });
+      filteredResources.push(resource);
+    }
+
+    return filteredResources;
   }
 
   private applyTextSearch(resources: any[], search: string): any[] {
@@ -489,25 +504,44 @@ class ValidationBackendFilteringService extends EventEmitter {
 
   private async enhanceResourcesWithValidationData(resources: any[]): Promise<any[]> {
     const enhancedResources = [];
+    const { getResourceValidationSummary } = await import('../../../repositories/validation-groups-repository');
+    const activeServer = await storage.getActiveFhirServer();
+    const serverId = activeServer?.id || 1;
 
     for (const resource of resources) {
       try {
-        const validationResults = resource.validationResults || [];
-        const latestValidation = validationResults[0];
+        // Fetch validation summary from per-aspect tables
+        const validationSummary = await getResourceValidationSummary(
+          serverId,
+          resource.resourceType,
+          resource.resourceId
+        );
 
-        // Create validation summary
-        const validationSummary: ResourceValidationSummary = {
+        // Transform to the format expected by the UI
+        const formattedSummary: ResourceValidationSummary = validationSummary ? {
           resourceId: resource.resourceId,
           resourceType: resource.resourceType,
-          isValid: latestValidation?.isValid || false,
-          errorCount: latestValidation?.errorCount || 0,
-          warningCount: latestValidation?.warningCount || 0,
-          informationCount: latestValidation?.informationCount || 0,
-          validationScore: latestValidation?.validationScore || 0,
-          lastValidated: latestValidation?.validatedAt ? new Date(latestValidation.validatedAt) : null,
-          hasValidationData: validationResults.length > 0,
-          hasErrors: (latestValidation?.errorCount || 0) > 0,
-          hasWarnings: (latestValidation?.warningCount || 0) > 0
+          isValid: validationSummary.isValid,
+          errorCount: validationSummary.errorCount,
+          warningCount: validationSummary.warningCount,
+          informationCount: validationSummary.informationCount,
+          validationScore: validationSummary.validationScore,
+          lastValidated: validationSummary.lastValidated,
+          hasValidationData: true,
+          hasErrors: validationSummary.hasErrors,
+          hasWarnings: validationSummary.hasWarnings
+        } : {
+          resourceId: resource.resourceId,
+          resourceType: resource.resourceType,
+          isValid: false,
+          errorCount: 0,
+          warningCount: 0,
+          informationCount: 0,
+          validationScore: 0,
+          lastValidated: null,
+          hasValidationData: false,
+          hasErrors: false,
+          hasWarnings: false
         };
 
         // Enhance resource with validation data
@@ -515,7 +549,7 @@ class ValidationBackendFilteringService extends EventEmitter {
         const enhancedResource = {
           ...resource.data,
           resourceId: resource.resourceId, // Map FHIR id to resourceId for consistency
-          _validationSummary: validationSummary,
+          _validationSummary: formattedSummary,
           _dbId: resource.id
         };
 
@@ -545,7 +579,7 @@ class ValidationBackendFilteringService extends EventEmitter {
     return enhancedResources;
   }
 
-  private calculateFilterSummary(
+  private async calculateFilterSummary(
     allResources: any[],
     resourceTypes: string[],
     validationStatus: BackendFilterOptions['validationStatus']
@@ -561,15 +595,23 @@ class ValidationBackendFilteringService extends EventEmitter {
       totalMatching: 0
     };
 
+    const { getResourceValidationSummary } = await import('../../../repositories/validation-groups-repository');
+    const activeServer = await storage.getActiveFhirServer();
+    const serverId = activeServer?.id || 1;
+
     // Count validation status across all resources
     for (const resource of allResources) {
-      const validationResults = resource.validationResults || [];
-      if (validationResults.length > 0) {
-        const latestValidation = validationResults[0];
-        if (latestValidation.errorCount > 0) summary.validationStatus.hasErrors++;
-        if (latestValidation.warningCount > 0) summary.validationStatus.hasWarnings++;
-        if (latestValidation.informationCount > 0) summary.validationStatus.hasInformation++;
-        if (latestValidation.isValid) summary.validationStatus.isValid++;
+      const validationSummary = await getResourceValidationSummary(
+        serverId,
+        resource.resourceType,
+        resource.resourceId
+      );
+      
+      if (validationSummary) {
+        if (validationSummary.errorCount > 0) summary.validationStatus.hasErrors++;
+        if (validationSummary.warningCount > 0) summary.validationStatus.hasWarnings++;
+        if (validationSummary.informationCount > 0) summary.validationStatus.hasInformation++;
+        if (validationSummary.isValid) summary.validationStatus.isValid++;
       }
     }
 
@@ -609,6 +651,9 @@ class ValidationBackendFilteringService extends EventEmitter {
 
     try {
       const resources = await storage.getFhirResources();
+      const { getResourceValidationSummary } = await import('../../../repositories/validation-groups-repository');
+      const activeServer = await storage.getActiveFhirServer();
+      const serverId = activeServer?.id || 1;
       
       let withValidationData = 0;
       let hasErrors = 0;
@@ -617,14 +662,18 @@ class ValidationBackendFilteringService extends EventEmitter {
       let isValid = 0;
 
       for (const resource of resources) {
-        const validationResults = resource.validationResults || [];
-        if (validationResults.length > 0) {
+        const validationSummary = await getResourceValidationSummary(
+          serverId,
+          resource.resourceType,
+          resource.resourceId
+        );
+        
+        if (validationSummary) {
           withValidationData++;
-          const latestValidation = validationResults[0];
-          if (latestValidation.errorCount > 0) hasErrors++;
-          if (latestValidation.warningCount > 0) hasWarnings++;
-          if (latestValidation.informationCount > 0) hasInformation++;
-          if (latestValidation.isValid) isValid++;
+          if (validationSummary.errorCount > 0) hasErrors++;
+          if (validationSummary.warningCount > 0) hasWarnings++;
+          if (validationSummary.informationCount > 0) hasInformation++;
+          if (validationSummary.isValid) isValid++;
         }
       }
 

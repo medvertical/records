@@ -26,7 +26,7 @@ export { useDashboardState } from './use-dashboard-state';
 export { useValidationPolling } from './use-validation-polling';
 export { useValidationSettings } from './use-validation-settings';
 export { useValidationSettingsPolling } from './use-validation-settings-polling';
-export { useValidationResults, useValidationResultsBatch } from './use-validation-results';
+// NOTE: useValidationResults removed - use per-aspect validation methods instead
 export { useValidationAspects, useValidationAspectsForResource } from './use-validation-aspects';
 export { useValidationCompleteness } from './use-validation-completeness';
 export { useValidationConfidence } from './use-validation-confidence';
@@ -59,7 +59,7 @@ export type { PerformanceMetric, UsePerformanceTrackingOptions } from './use-per
 export type { ServerStatus } from './use-server-data';
 export type { ValidationProgress } from './use-validation-polling';
 export type { ValidationSettingsPollingState, ValidationSettingsPollingOptions } from './use-validation-settings-polling';
-export type { ValidationResultsState, ValidationResultsActions, ValidationResultsOptions } from './use-validation-results';
+// NOTE: ValidationResultsState types removed - use per-aspect validation methods instead
 export type { ValidationAspectData, ValidationAspectsState, ValidationAspectsActions, ValidationAspectsOptions } from './use-validation-aspects';
 export type { DashboardDataWiring, UseDashboardDataWiringOptions } from './use-dashboard-data-wiring';
 export type { ValidationControlsState, ValidationControlsActions } from './use-validation-controls';

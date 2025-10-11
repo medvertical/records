@@ -6,7 +6,6 @@ import {
   validationMessages, 
   validationMessageGroups 
 } from '../../../shared/schema-validation-per-aspect';
-import { validationResults } from '../../../shared/schema';
 import { sql } from 'drizzle-orm';
 import * as readline from 'readline';
 
@@ -81,28 +80,12 @@ async function clearPerAspectData(force: boolean = false) {
 
 /**
  * Clear legacy validation results (old monolithic table)
+ * @deprecated Legacy validation_results table has been removed. This function is kept for compatibility.
  */
 async function clearLegacyData(force: boolean = false) {
-  try {
-    console.log('🗑️  Clearing legacy validation data...');
-    
-    if (!force) {
-      const confirmed = await confirm('Are you sure you want to delete all legacy validation results?');
-      if (!confirmed) {
-        console.log('Operation cancelled.');
-        return { success: false, cleared: 0 };
-      }
-    }
-    
-    const [result] = await db.execute(sql`DELETE FROM ${validationResults}`);
-    const cleared = result.rowCount || 0;
-    console.log(`✅ Cleared ${cleared} legacy validation results`);
-    
-    return { success: true, cleared };
-  } catch (error) {
-    console.error('❌ Failed to clear legacy data:', error);
-    throw error;
-  }
+  console.log('ℹ️  Legacy validation_results table has been removed.');
+  console.log('ℹ️  No legacy data to clear.');
+  return { success: true, cleared: 0 };
 }
 
 /**
@@ -147,13 +130,12 @@ async function getValidationStats() {
     const [perAspectCount] = await db.execute(sql`SELECT COUNT(*) as count FROM ${validationResultsPerAspect}`);
     const [messagesCount] = await db.execute(sql`SELECT COUNT(*) as count FROM ${validationMessages}`);
     const [groupsCount] = await db.execute(sql`SELECT COUNT(*) as count FROM ${validationMessageGroups}`);
-    const [legacyCount] = await db.execute(sql`SELECT COUNT(*) as count FROM ${validationResults}`);
     
     return {
       perAspectResults: parseInt(perAspectCount.rows[0]?.count || '0'),
       messages: parseInt(messagesCount.rows[0]?.count || '0'),
       groups: parseInt(groupsCount.rows[0]?.count || '0'),
-      legacyResults: parseInt(legacyCount.rows[0]?.count || '0'),
+      legacyResults: 0, // Legacy table has been removed
     };
   } catch (error) {
     console.error('❌ Failed to get stats:', error);

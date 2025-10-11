@@ -1,7 +1,5 @@
 import { Router } from 'express';
 import { logger } from '../../../utils/logger.js';
-import { db } from '../../../db/index.js';
-import { validationResults, validationGroups } from '../../../db/schema.js';
 
 const router = Router();
 

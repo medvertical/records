@@ -211,9 +211,20 @@ export async function getResourceMessages(
   resourceType: string,
   fhirId: string
 ): Promise<any> {
+  console.log(`[getResourceMessages] Querying for serverId=${serverId}, resourceType=${resourceType}, fhirId=${fhirId}`);
+  
   // Get all validation results for this resource
   const results = await db
-    .select()
+    .select({
+      id: validationResultsPerAspect.id,
+      aspect: validationResultsPerAspect.aspect,
+      isValid: validationResultsPerAspect.isValid,
+      errorCount: validationResultsPerAspect.errorCount,
+      warningCount: validationResultsPerAspect.warningCount,
+      informationCount: validationResultsPerAspect.informationCount,
+      score: validationResultsPerAspect.score,
+      validatedAt: validationResultsPerAspect.validatedAt,
+    })
     .from(validationResultsPerAspect)
     .where(
       and(
@@ -222,6 +233,8 @@ export async function getResourceMessages(
         eq(validationResultsPerAspect.fhirId, fhirId)
       )
     );
+  
+  console.log(`[getResourceMessages] Found ${results.length} validation result records for ${resourceType}/${fhirId}`);
   
   // For each result, get its messages
   const aspects = await Promise.all(
@@ -268,8 +281,120 @@ export async function getResourceMessages(
   };
 }
 
+/**
+ * Get aggregated validation summary for a resource from per-aspect tables
+ * This is used for resource list enhancement to show validation status
+ */
+export async function getResourceValidationSummary(
+  serverId: number,
+  resourceType: string,
+  fhirId: string
+): Promise<{
+  isValid: boolean;
+  hasErrors: boolean;
+  hasWarnings: boolean;
+  errorCount: number;
+  warningCount: number;
+  informationCount: number;
+  validationScore: number;
+  lastValidated: Date | null;
+  aspectBreakdown: Record<string, {
+    isValid: boolean;
+    errorCount: number;
+    warningCount: number;
+    informationCount: number;
+    score: number;
+  }>;
+} | null> {
+  console.log(`[getResourceValidationSummary] Querying for serverId=${serverId}, resourceType=${resourceType}, fhirId=${fhirId}`);
+  
+  // Get all validation results for this resource
+  const results = await db
+    .select({
+      aspect: validationResultsPerAspect.aspect,
+      isValid: validationResultsPerAspect.isValid,
+      errorCount: validationResultsPerAspect.errorCount,
+      warningCount: validationResultsPerAspect.warningCount,
+      informationCount: validationResultsPerAspect.informationCount,
+      score: validationResultsPerAspect.score,
+      validatedAt: validationResultsPerAspect.validatedAt,
+    })
+    .from(validationResultsPerAspect)
+    .where(
+      and(
+        eq(validationResultsPerAspect.serverId, serverId),
+        eq(validationResultsPerAspect.resourceType, resourceType),
+        eq(validationResultsPerAspect.fhirId, fhirId)
+      )
+    )
+    .orderBy(desc(validationResultsPerAspect.validatedAt));
+  
+  console.log(`[getResourceValidationSummary] Found ${results.length} validation results for ${resourceType}/${fhirId}`);
+  
+  if (results.length === 0) {
+    console.log(`[getResourceValidationSummary] No validation data found for ${resourceType}/${fhirId}`);
+    return null;
+  }
+  
+  // Aggregate counts across all aspects
+  // Note: Results are ordered by validatedAt DESC, so we get most recent first
+  // We should only use the FIRST (most recent) result for each aspect
+  let totalErrorCount = 0;
+  let totalWarningCount = 0;
+  let totalInformationCount = 0;
+  let latestValidatedAt: Date | null = null;
+  const aspectBreakdown: Record<string, any> = {};
+  const seenAspects = new Set<string>();
+  
+  for (const result of results) {
+    // Skip if we've already processed this aspect (we want the most recent one)
+    if (seenAspects.has(result.aspect)) {
+      console.log(`[getResourceValidationSummary] Skipping duplicate aspect ${result.aspect} (keeping most recent)`);
+      continue;
+    }
+    seenAspects.add(result.aspect);
+    
+    totalErrorCount += result.errorCount || 0;
+    totalWarningCount += result.warningCount || 0;
+    totalInformationCount += result.informationCount || 0;
+    
+    if (!latestValidatedAt || (result.validatedAt && new Date(result.validatedAt) > latestValidatedAt)) {
+      latestValidatedAt = result.validatedAt ? new Date(result.validatedAt) : null;
+    }
+    
+    aspectBreakdown[result.aspect] = {
+      isValid: result.isValid || false,
+      errorCount: result.errorCount || 0,
+      warningCount: result.warningCount || 0,
+      informationCount: result.informationCount || 0,
+      score: result.score || 0,
+    };
+  }
+  
+  // Calculate overall validation score
+  // Start at 100 and deduct points for issues
+  let validationScore = 100;
+  validationScore -= totalErrorCount * 15;  // Error issues: -15 points each
+  validationScore -= totalWarningCount * 5; // Warning issues: -5 points each
+  validationScore -= totalInformationCount * 1; // Information issues: -1 point each
+  validationScore = Math.max(0, Math.round(validationScore));
+  
+  return {
+    isValid: totalErrorCount === 0,
+    hasErrors: totalErrorCount > 0,
+    hasWarnings: totalWarningCount > 0,
+    errorCount: totalErrorCount,
+    warningCount: totalWarningCount,
+    informationCount: totalInformationCount,
+    validationScore,
+    lastValidated: latestValidatedAt,
+    aspectBreakdown,
+  };
+}
+
 export const ValidationGroupsRepository = {
   getValidationGroups,
   getGroupMembers,
   getResourceMessages,
+  getResourceValidationSummary,
 };

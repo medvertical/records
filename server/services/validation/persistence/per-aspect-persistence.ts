@@ -85,11 +85,24 @@ export async function persistEngineResultPerAspect(params: {
   const { serverId, resourceType, fhirId, settingsSnapshot, engineResult } = params;
   const settingsHash = computeSettingsSnapshotHash(settingsSnapshot);
   
+  console.log(`[persistEngineResultPerAspect] Starting persistence for ${resourceType}/${fhirId}`, {
+    serverId,
+    settingsHash,
+    aspectCount: engineResult.aspects?.length || 0,
+    hasAspects: !!engineResult.aspects,
+  });
+  
   // Task 2.11: Get FHIR version from engine result, default to R4
   const fhirVersion = engineResult.fhirVersion || 'R4';
 
+  if (!engineResult.aspects || engineResult.aspects.length === 0) {
+    console.warn(`[persistEngineResultPerAspect] No aspects found in engine result for ${resourceType}/${fhirId}`);
+    return;
+  }
+
   for (const aspectResult of engineResult.aspects) {
     const aspect = aspectResult.aspect as ValidationAspectType;
+    console.log(`[persistEngineResultPerAspect] Persisting aspect ${aspect} for ${resourceType}/${fhirId}`);
 
     // Severity counts
     const errorCount = aspectResult.issues.filter(i => i.severity === 'error').length;
@@ -126,7 +139,12 @@ export async function persistEngineResultPerAspect(params: {
     }).returning({ id: validationResultsPerAspect.id });
 
     const validationResultId = inserted[0]?.id;
-    if (!validationResultId) continue;
+    if (!validationResultId) {
+      console.error(`[persistEngineResultPerAspect] Failed to insert validation result for ${aspect} aspect of ${resourceType}/${fhirId}`);
+      continue;
+    }
+    
+    console.log(`[persistEngineResultPerAspect] Successfully inserted ${aspect} aspect (id: ${validationResultId}) for ${resourceType}/${fhirId}`);
 
     // Remove previous messages for this result + aspect (optional; can keep history)
     await db.delete(validationMessages).where(
