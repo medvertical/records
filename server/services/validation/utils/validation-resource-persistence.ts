@@ -95,6 +95,12 @@ export class ValidationResourcePersistence {
     settingsUsed?: any
   ): Promise<void> {
     console.error(`[ValidationResourcePersistence] *** STARTING PERSISTENCE for ${resource.resourceType}/${resource.id} (dbId: ${dbResourceId}) ***`);
+    console.error(`[ValidationResourcePersistence] *** engineResult.aspects count: ${engineResult.aspects?.length || 0} ***`);
+    console.error(`[ValidationResourcePersistence] *** engineResult.aspects:`, JSON.stringify(engineResult.aspects?.map(a => ({
+      aspect: a.aspect,
+      isValid: a.isValid,
+      issuesCount: a.issues?.length || 0
+    })), null, 2));
     
     const insertData = this.resultBuilder.buildInsertResult(
       dbResourceId,
@@ -107,7 +113,8 @@ export class ValidationResourcePersistence {
     const activeServer = await storage.getActiveFhirServer();
     const serverId = activeServer?.id || 1;
 
-    console.log(`[ValidationResourcePersistence] Saving validation result for resource ID: ${dbResourceId}`);
+    console.error(`[ValidationResourcePersistence] *** serverId: ${serverId} ***`);
+    console.error(`[ValidationResourcePersistence] Saving validation result for resource ID: ${dbResourceId}`);
     
     // LEGACY TABLE INSERT - COMMENTED OUT (we now use per-aspect tables)
     // The validation_results table is deprecated in favor of validation_results_per_aspect
@@ -156,7 +163,7 @@ export class ValidationResourcePersistence {
             profile: { enabled: settingsUsed.aspects?.profile?.enabled ?? true },
             terminology: { enabled: settingsUsed.aspects?.terminology?.enabled ?? true },
             reference: { enabled: settingsUsed.aspects?.reference?.enabled ?? true },
-            businessRule: { enabled: settingsUsed.aspects?.businessRule?.enabled ?? settingsUsed.aspects?.businessRules?.enabled ?? true },
+            businessRule: { enabled: (settingsUsed.aspects as any)?.businessRule?.enabled ?? (settingsUsed.aspects as any)?.businessRules?.enabled ?? true },
             metadata: { enabled: settingsUsed.aspects?.metadata?.enabled ?? true },
           },
         } as any;
@@ -170,7 +177,7 @@ export class ValidationResourcePersistence {
             profile: { enabled: currentSettings?.aspects?.profile?.enabled ?? true },
             terminology: { enabled: currentSettings?.aspects?.terminology?.enabled ?? true },
             reference: { enabled: currentSettings?.aspects?.reference?.enabled ?? true },
-            businessRule: { enabled: currentSettings?.aspects?.businessRule?.enabled ?? currentSettings?.aspects?.businessRules?.enabled ?? true },
+            businessRule: { enabled: (currentSettings?.aspects as any)?.businessRule?.enabled ?? (currentSettings?.aspects as any)?.businessRules?.enabled ?? true },
             metadata: { enabled: currentSettings?.aspects?.metadata?.enabled ?? true },
           },
         } as any;

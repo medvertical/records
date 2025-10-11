@@ -63,7 +63,7 @@ async function enhanceResourcesWithValidationData(resources: any[]): Promise<any
         // Get validation summary from per-aspect tables
         const activeServer = await storage.getActiveFhirServer();
         const validationSummary = await ValidationGroupsRepository.getResourceValidationSummary(
-          activeServer?.id || 0,
+          activeServer?.id || 1,
           resource.resourceType,
           resource.id
         );

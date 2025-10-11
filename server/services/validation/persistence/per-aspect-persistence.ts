@@ -85,18 +85,31 @@ export async function persistEngineResultPerAspect(params: {
   const { serverId, resourceType, fhirId, settingsSnapshot, engineResult } = params;
   const settingsHash = computeSettingsSnapshotHash(settingsSnapshot);
   
-  console.log(`[persistEngineResultPerAspect] Starting persistence for ${resourceType}/${fhirId}`, {
-    serverId,
-    settingsHash,
-    aspectCount: engineResult.aspects?.length || 0,
-    hasAspects: !!engineResult.aspects,
-  });
+  console.error(`[persistEngineResultPerAspect] *** STARTING PERSISTENCE for ${resourceType}/${fhirId} ***`);
+  console.error(`[persistEngineResultPerAspect] *** serverId: ${serverId} ***`);
+  console.error(`[persistEngineResultPerAspect] *** settingsHash: ${settingsHash} ***`);
+  console.error(`[persistEngineResultPerAspect] *** aspectCount: ${engineResult.aspects?.length || 0} ***`);
+  console.error(`[persistEngineResultPerAspect] *** hasAspects: ${!!engineResult.aspects} ***`);
+  console.error(`[persistEngineResultPerAspect] *** engineResult structure:`, JSON.stringify({
+    resourceId: engineResult.resourceId,
+    resourceType: engineResult.resourceType,
+    isValid: engineResult.isValid,
+    issuesCount: engineResult.issues?.length || 0,
+    aspectsCount: engineResult.aspects?.length || 0,
+    aspectsIsArray: Array.isArray(engineResult.aspects),
+    aspects: engineResult.aspects?.map(a => ({
+      aspect: a.aspect,
+      isValid: a.isValid,
+      issuesCount: a.issues?.length || 0
+    }))
+  }, null, 2));
   
   // Task 2.11: Get FHIR version from engine result, default to R4
   const fhirVersion = engineResult.fhirVersion || 'R4';
 
   if (!engineResult.aspects || engineResult.aspects.length === 0) {
-    console.warn(`[persistEngineResultPerAspect] No aspects found in engine result for ${resourceType}/${fhirId}`);
+    console.error(`[persistEngineResultPerAspect] *** WARNING: No aspects found in engine result for ${resourceType}/${fhirId} - RETURNING EARLY ***`);
+    console.error(`[persistEngineResultPerAspect] *** Full engineResult:`, JSON.stringify(engineResult, null, 2));
     return;
   }
 

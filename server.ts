@@ -5,6 +5,7 @@ import { serveStatic, log } from "./server/static";
 import { logger } from "./server/utils/logger.js";
 import { FeatureFlags, assertProductionSafety, logFeatureFlags } from "./server/config/feature-flags";
 import { getValidationPerformanceMonitor } from "./server/services/performance/validation-performance-monitor";
+import { setupAllRoutes } from "./server/routes/index.js";
 
 const app = express();
 app.use(express.json());
@@ -22,6 +23,9 @@ app.use((req, res, next) => {
     next();
   }
 });
+
+// Setup all API routes (validation, FHIR, dashboard, etc.)
+setupAllRoutes(app, null, null, null);
 
 /**
  * Helper function to return mock data or error based on DEMO_MOCKS flag

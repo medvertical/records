@@ -14,6 +14,12 @@ import {
   normalizeMessageText,
   computeValidationScore 
 } from '../../../../shared/validation-types';
+import { StructuralValidator } from './structural-validator';
+import { ProfileValidator } from './profile-validator';
+import { TerminologyValidator } from './terminology-validator';
+import { ReferenceValidator } from './reference-validator';
+import { BusinessRuleValidator } from './business-rule-validator';
+import { MetadataValidator } from './metadata-validator';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -109,6 +115,33 @@ export interface PerAspectValidationResult {
  * Orchestrates validation across all 6 aspects and persists results
  */
 export class ValidationEnginePerAspect {
+  private structuralValidator: StructuralValidator;
+  private profileValidator: ProfileValidator;
+  private terminologyValidator: TerminologyValidator;
+  private referenceValidator: ReferenceValidator;
+  private businessRuleValidator: BusinessRuleValidator;
+  private metadataValidator: MetadataValidator;
+  private fhirClient?: any;
+  private terminologyClient?: any;
+  private fhirVersion: 'R4' | 'R5' | 'R6';
+
+  constructor(
+    fhirClient?: any,
+    terminologyClient?: any,
+    fhirVersion: 'R4' | 'R5' | 'R6' = 'R4'
+  ) {
+    this.fhirClient = fhirClient;
+    this.terminologyClient = terminologyClient;
+    this.fhirVersion = fhirVersion;
+    
+    this.structuralValidator = new StructuralValidator();
+    this.profileValidator = new ProfileValidator();
+    this.terminologyValidator = new TerminologyValidator();
+    this.referenceValidator = new ReferenceValidator();
+    this.businessRuleValidator = new BusinessRuleValidator();
+    this.metadataValidator = new MetadataValidator();
+  }
+
   /**
    * Validate a resource across enabled aspects
    */
@@ -117,7 +150,8 @@ export class ValidationEnginePerAspect {
     resourceType: string,
     fhirId: string,
     resource: any,
-    settings: ValidationSettingsSnapshot
+    settings: ValidationSettingsSnapshot,
+    profileUrl?: string
   ): Promise<{ success: boolean; results: PerAspectValidationResult[] }> {
     const settingsHash = computeSettingsSnapshotHash(settings);
     const results: PerAspectValidationResult[] = [];
@@ -139,7 +173,7 @@ export class ValidationEnginePerAspect {
       }
       
       try {
-        const result = await this.validateAspect(aspect, resource, settings);
+        const result = await this.validateAspect(aspect, resource, settings, profileUrl);
         results.push(result);
         
         // Persist result
@@ -180,7 +214,8 @@ export class ValidationEnginePerAspect {
   private async validateAspect(
     aspect: ValidationAspectType,
     resource: any,
-    settings: ValidationSettingsSnapshot
+    settings: ValidationSettingsSnapshot,
+    profileUrl?: string
   ): Promise<PerAspectValidationResult> {
     const startTime = Date.now();
     const timeoutMs = settings.aspects[aspect]?.timeoutMs || ASPECT_TIMEOUTS[aspect];
@@ -188,7 +223,7 @@ export class ValidationEnginePerAspect {
     try {
       // Wrap validation in timeout promise
       const result = await Promise.race([
-        this.performAspectValidation(aspect, resource),
+        this.performAspectValidation(aspect, resource, settings, profileUrl),
         this.timeoutPromise(timeoutMs, aspect),
       ]);
       
@@ -218,24 +253,103 @@ export class ValidationEnginePerAspect {
   }
   
   /**
-   * Perform actual aspect validation (placeholder)
+   * Perform actual aspect validation
    */
   private async performAspectValidation(
     aspect: ValidationAspectType,
-    resource: any
+    resource: any,
+    settings: ValidationSettingsSnapshot,
+    profileUrl?: string
   ): Promise<Omit<PerAspectValidationResult, 'durationMs'>> {
-    // TODO: Implement actual validation logic per aspect
-    // For now, return mock results
     const issues: RawValidationIssue[] = [];
     
-    // Placeholder: Generate sample issues based on aspect
-    if (aspect === 'structural' && !resource.id) {
+    // Call the appropriate validator based on aspect
+    let validationIssues: any[] = [];
+    
+    try {
+      console.log(`[PerAspect] Validating aspect: ${aspect} for ${resource.resourceType}/${resource.id}`);
+      
+      switch (aspect) {
+        case 'structural':
+          console.log(`[PerAspect] Calling structural validator with fhirVersion: ${this.fhirVersion}`);
+          validationIssues = await this.structuralValidator.validate(
+            resource,
+            resource.resourceType,
+            this.fhirVersion
+          );
+          console.log(`[PerAspect] Structural validation found ${validationIssues.length} issues`);
+          break;
+        case 'profile':
+          console.log(`[PerAspect] Calling profile validator with profileUrl: ${profileUrl}, fhirVersion: ${this.fhirVersion}`);
+          validationIssues = await this.profileValidator.validate(
+            resource,
+            resource.resourceType,
+            profileUrl,
+            this.fhirVersion
+          );
+          console.log(`[PerAspect] Profile validation found ${validationIssues.length} issues`);
+          break;
+        case 'terminology':
+          console.log(`[PerAspect] Calling terminology validator with settings, fhirVersion: ${this.fhirVersion}`);
+          validationIssues = await this.terminologyValidator.validate(
+            resource,
+            resource.resourceType,
+            settings as any,
+            this.fhirVersion
+          );
+          console.log(`[PerAspect] Terminology validation found ${validationIssues.length} issues`);
+          break;
+        case 'reference':
+          console.log(`[PerAspect] Calling reference validator with fhirClient: ${!!this.fhirClient}, fhirVersion: ${this.fhirVersion}`);
+          validationIssues = await this.referenceValidator.validate(
+            resource,
+            resource.resourceType,
+            this.fhirClient,
+            this.fhirVersion
+          );
+          console.log(`[PerAspect] Reference validation found ${validationIssues.length} issues`);
+          break;
+        case 'businessRule':
+          console.log(`[PerAspect] Calling businessRule validator with settings, fhirVersion: ${this.fhirVersion}`);
+          validationIssues = await this.businessRuleValidator.validate(
+            resource,
+            resource.resourceType,
+            settings as any,
+            this.fhirVersion
+          );
+          console.log(`[PerAspect] BusinessRule validation found ${validationIssues.length} issues`);
+          break;
+        case 'metadata':
+          console.log(`[PerAspect] Calling metadata validator with fhirVersion: ${this.fhirVersion}`);
+          validationIssues = await this.metadataValidator.validate(
+            resource,
+            resource.resourceType,
+            this.fhirVersion
+          );
+          console.log(`[PerAspect] Metadata validation found ${validationIssues.length} issues`);
+          break;
+      }
+      
+      console.log(`[PerAspect] ${aspect} validation complete. Issues:`, validationIssues);
+      
+      // Transform ValidationIssue[] to RawValidationIssue[] format
+      for (const issue of validationIssues) {
+        issues.push({
+          severity: issue.severity as 'error' | 'warning' | 'information',
+          code: issue.code,
+          path: issue.path,
+          diagnostics: issue.message,
+          expression: issue.expression,
+          ruleId: issue.ruleId,
+        });
+      }
+    } catch (error) {
+      console.error(`[ValidationEnginePerAspect] Error calling ${aspect} validator:`, error);
+      // Add error as validation issue
       issues.push({
         severity: 'error',
-        code: 'required',
-        path: `${resource.resourceType?.toLowerCase()}.id`,
-        diagnostics: `${resource.resourceType}.id: required element is missing`,
-        ruleId: 'dom-1',
+        code: 'validator-error',
+        diagnostics: `Validator failed: ${error instanceof Error ? error.message : String(error)}`,
       });
     }
     

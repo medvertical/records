@@ -84,19 +84,31 @@ export default function ResourceDetail() {
   const handleRevalidate = async () => {
     if (!resource) return;
 
+    console.log('[Revalidate] Button clicked, resource:', resource);
+    console.log('[Revalidate] Resource type:', resource.resourceType);
+    console.log('[Revalidate] Resource ID:', resource.resourceId);
+    
     setIsRevalidating(true);
     
     try {
-      const response = await fetch(
-        `/api/validation/resources/${resource.resourceType}/${resource.resourceId}/revalidate?serverId=${activeServer?.id || 1}`,
-        { method: 'POST' }
-      );
+      const url = `/api/validation/resources/${resource.resourceType}/${resource.resourceId}/revalidate?serverId=${activeServer?.id || 1}`;
+      console.log('[Revalidate] Calling URL:', url);
+      
+      const response = await fetch(url, { method: 'POST' });
+      console.log('[Revalidate] Response status:', response.status);
+      console.log('[Revalidate] Response ok:', response.ok);
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Revalidate] Error response:', errorText);
         throw new Error('Revalidation failed');
       }
 
       const result = await response.json();
+      console.log('[Revalidate] Full response data:', result);
+      console.log('[Revalidate] Validation result:', result.validationResult);
+      console.log('[Revalidate] Is valid:', result.validationResult?.isValid);
+      console.log('[Revalidate] Aspects:', result.validationResult?.aspects);
 
       // Optimistic update: Keep resource visible, only update validation status
       const currentData = queryClient.getQueryData(['/api/fhir/resources', id]);
@@ -113,17 +125,30 @@ export default function ResourceDetail() {
 
       toast({
         title: "Revalidation queued",
-        description: `Resource has been enqueued for validation.`,
+        description: `Resource has been enqueued for validation. Results will appear shortly.`,
       });
 
-      // Soft refetch after 3 seconds to get updated validation results
-      // This won't trigger loading state since we already have data in cache
-      setTimeout(() => {
-        queryClient.refetchQueries({
-          queryKey: ['/api/fhir/resources', id],
-          exact: true,
-        });
-      }, 3000);
+      // Poll for updated validation results multiple times
+      // Background validation jobs may take several seconds to complete
+      const refetchDelays = [2000, 4000, 6000, 10000]; // 2s, 4s, 6s, 10s
+      refetchDelays.forEach((delay) => {
+        setTimeout(() => {
+          // Refetch resource data
+          queryClient.refetchQueries({
+            queryKey: ['/api/fhir/resources', id],
+            exact: true,
+          });
+          // Also refetch validation messages to update the right panel immediately
+          const serverKey = activeServer?.id || 1;
+          queryClient.invalidateQueries({
+            queryKey: ['/api/validation/resources', resource.resourceType, resource.resourceId, 'messages', serverKey],
+          });
+          queryClient.refetchQueries({
+            queryKey: ['/api/validation/resources', resource.resourceType, resource.resourceId, 'messages', serverKey],
+            exact: true,
+          });
+        }, delay);
+      });
       
     } catch (error) {
       console.error('Revalidation error:', error);
@@ -193,92 +218,20 @@ export default function ResourceDetail() {
     );
   }
 
-  const hasValidationResults = resource.validationResults && Array.isArray(resource.validationResults) && resource.validationResults.length > 0;
-  const hasErrors = hasValidationResults && resource.validationResults?.some(r => !r.isValid);
+  // Use _validationSummary from the API (matches how list view works)
+  const validationSummary = resource._validationSummary;
   const currentSettings = validationSettingsData?.settings;
   
-  // Calculate validation summary from filtered validation results
-  const validationSummary = hasValidationResults ? (() => {
-    // Use the filtered validation results from the server
-    const latestResult = resource.validationResults![0]; // Server already filters to latest result
-    const allIssues = Array.isArray(latestResult.issues) ? latestResult.issues : [];
-    
-    // Filter issues based on enabled aspects
-    const filteredIssues = allIssues.filter((issue: any) => {
-      const aspect = issue.aspect || 'structural';
-      switch (aspect) {
-        case 'structural':
-          return currentSettings?.aspects?.structural?.enabled !== false;
-        case 'profile':
-          return currentSettings?.aspects?.profile?.enabled !== false;
-        case 'terminology':
-          return currentSettings?.aspects?.terminology?.enabled !== false;
-        case 'reference':
-          return currentSettings?.aspects?.reference?.enabled !== false;
-        case 'businessRule':
-          return currentSettings?.aspects?.businessRule?.enabled !== false;
-        case 'metadata':
-          return currentSettings?.aspects?.metadata?.enabled !== false;
-        default:
-          return currentSettings?.aspects?.structural?.enabled !== false; // Default to structural
-      }
-    });
-    
-    // Calculate counts from filtered issues
-    const errorCount = filteredIssues.filter((issue: any) => 
-      issue.severity === 'error' || issue.severity === 'fatal'
-    ).length;
-    const warningCount = filteredIssues.filter((issue: any) => 
-      issue.severity === 'warning'
-    ).length;
-    const informationCount = filteredIssues.filter((issue: any) => 
-      issue.severity === 'information'
-    ).length;
-    
-    // Calculate aspect-specific breakdowns
-    const aspectBreakdown = {
-      structural: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.aspects?.structural?.enabled !== false },
-      profile: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.aspects?.profile?.enabled !== false },
-      terminology: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.aspects?.terminology?.enabled !== false },
-      reference: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.aspects?.reference?.enabled !== false },
-      businessRule: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.aspects?.businessRule?.enabled !== false },
-      metadata: { issues: 0, errors: 0, warnings: 0, info: 0, enabled: currentSettings?.aspects?.metadata?.enabled !== false }
-    };
-    
-    // Count issues by aspect
-    filteredIssues.forEach((issue: any) => {
-      const aspect = issue.aspect || 'structural';
-      if (aspectBreakdown[aspect as keyof typeof aspectBreakdown]) {
-        const breakdown = aspectBreakdown[aspect as keyof typeof aspectBreakdown];
-        breakdown.issues++;
-        if (issue.severity === 'error' || issue.severity === 'fatal') {
-          breakdown.errors++;
-        } else if (issue.severity === 'warning') {
-          breakdown.warnings++;
-        } else if (issue.severity === 'information') {
-          breakdown.info++;
-        }
-      }
-    });
-    
-    // Calculate filtered validation score based on enabled aspects
-    let filteredScore = 100;
-    filteredScore -= errorCount * 15;  // Error issues: -15 points each
-    filteredScore -= warningCount * 5; // Warning issues: -5 points each
-    filteredScore -= informationCount * 1; // Information issues: -1 point each
-    filteredScore = Math.max(0, Math.round(filteredScore));
-    
-    return {
-      totalIssues: filteredIssues.length,
-      errorCount,
-      warningCount,
-      informationCount,
-      score: filteredScore, // Use filtered score that reflects enabled aspects
-      isValid: errorCount === 0,
-      aspectBreakdown,
-      lastValidated: latestResult.validatedAt
-    };
-  })() : null;
+  // Check if resource has validation data
+  const hasValidationData = validationSummary && validationSummary.lastValidated;
+  const hasErrors = hasValidationData && !validationSummary.isValid;
+  
+  // Calculate total issues from the summary counts
+  const totalIssues = validationSummary ? (
+    (validationSummary.errorCount || 0) + 
+    (validationSummary.warningCount || 0) + 
+    (validationSummary.informationCount || 0)
+  ) : 0;
 
   return (
     <div className="p-6 h-full overflow-y-auto">
@@ -356,7 +309,7 @@ export default function ResourceDetail() {
                 {validationSummary ? 'Revalidate' : 'Validate'}
               </Button>
               <CircularProgress 
-                value={validationSummary?.score || 0} 
+                value={validationSummary?.validationScore || 0} 
                 size="lg"
                 showValue={true}
               />
@@ -364,7 +317,7 @@ export default function ResourceDetail() {
                 <p className="text-sm font-medium text-gray-900">Validation Score</p>
                 <p className="text-xs text-gray-500">
                   {validationSummary 
-                    ? `${validationSummary.totalIssues} issue${validationSummary.totalIssues !== 1 ? 's' : ''} found`
+                    ? `${totalIssues} issue${totalIssues !== 1 ? 's' : ''} found`
                     : 'Not validated'
                   }
                 </p>

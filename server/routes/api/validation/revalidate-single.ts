@@ -42,12 +42,12 @@ router.post('/resources/:resourceType/:id/revalidate', async (req: Request, res:
     const { fhirResources } = await import('@shared/schema');
     const { eq, and } = await import('drizzle-orm');
     
+    // Query for the resource - don't filter by serverId since many resources have null serverId
     const resources = await db
       .select()
       .from(fhirResources)
       .where(
         and(
-          eq(fhirResources.serverId, serverId),
           eq(fhirResources.resourceType, resourceType),
           eq(fhirResources.resourceId, id)
         )
@@ -66,74 +66,88 @@ router.post('/resources/:resourceType/:id/revalidate', async (req: Request, res:
     const resource = resources[0];
     logger.info(`[Single Revalidate] Found resource with DB ID: ${resource.id}`);
     
-    // Invalidate existing validation results
-    const { validationEnginePerAspect } = await import('../../../services/validation/engine/validation-engine-per-aspect');
+    // Use ConsolidatedValidationService (same as list view revalidation)
+    const { getConsolidatedValidationService } = await import('../../../services/validation');
+    const { getValidationSettingsService } = await import('../../../services/validation/settings/validation-settings-service');
     
-    const invalidationResult = await validationEnginePerAspect.invalidateResourceResults(
-      serverId,
-      resourceType,
-      id
-    );
+    const validationService = getConsolidatedValidationService();
+    const settingsService = getValidationSettingsService();
     
-    logger.info(`[Single Revalidate] Invalidated ${invalidationResult.deleted} validation results`);
+    if (!validationService) {
+      logger.error('[Single Revalidate] Validation service not available');
+      return res.status(503).json({
+        success: false,
+        error: 'Validation service not available',
+      });
+    }
     
-    // Trigger immediate validation
+    // Get current settings and fix businessRules -> businessRule mapping
+    const currentSettings = await settingsService.getCurrentSettings();
+    logger.info('[Single Revalidate] Current settings:', JSON.stringify(currentSettings, null, 2));
+    
+    const settingsOverride = currentSettings ? {
+      ...currentSettings,
+      aspects: {
+        ...currentSettings.aspects,
+        // Map businessRules (plural) to businessRule (singular) for backward compatibility
+        businessRule: (currentSettings.aspects as any)?.businessRules || (currentSettings.aspects as any)?.businessRule
+      }
+    } : undefined;
+    
+    logger.info('[Single Revalidate] Settings override:', JSON.stringify(settingsOverride, null, 2));
+    
+    // Trigger validation using ConsolidatedValidationService (same as list view)
     try {
-      const validationResult = await validationEnginePerAspect.validateResource(
-        serverId,
-        resourceType,
-        id,
-        resource.data
+      logger.info(`[Single Revalidate] Calling ConsolidatedValidationService.validateResource...`);
+      logger.info(`[Single Revalidate] ServerId: ${serverId}`);
+      logger.info(`[Single Revalidate] Resource type: ${resource.resourceType}`);
+      logger.info(`[Single Revalidate] Resource id: ${resource.resourceId}`);
+      logger.info(`[Single Revalidate] Resource FHIR id: ${(resource.data as any).id}`);
+      
+      const validationResult = await validationService.validateResource(
+        resource.data,
+        false, // skipUnchanged
+        true,  // forceRevalidation
+        0,     // retryAttempt
+        {      // options
+          validationSettingsOverride: settingsOverride
+        }
       );
       
       logger.info(`[Single Revalidate] Validation completed successfully for ${resourceType}/${id}`);
+      logger.info(`[Single Revalidate] ValidationResult:`, JSON.stringify({
+        wasRevalidated: validationResult.wasRevalidated,
+        isValid: validationResult.detailedResult.isValid,
+        issuesCount: validationResult.detailedResult.issues.length,
+        aspectsCount: validationResult.detailedResult.aspects?.length || 0,
+        aspects: validationResult.detailedResult.aspects?.map(a => ({
+          aspect: a.aspect,
+          isValid: a.isValid,
+          issuesCount: a.issues?.length || 0
+        }))
+      }, null, 2));
       
       res.json({
         success: true,
         resourceType,
         resourceId: id,
-        validationResult: {
-          isValid: validationResult.isValid,
-          aspects: validationResult.aspects.map(a => ({
-            aspect: a.aspect,
-            isValid: a.isValid,
-            messageCount: a.messageCount,
-          })),
-          timestamp: validationResult.timestamp,
-        },
         message: `Resource ${resourceType}/${id} revalidated successfully`,
+        validationResult: validationResult.detailedResult,
       });
       
     } catch (validationError) {
       logger.error(`[Single Revalidate] Validation failed for ${resourceType}/${id}:`, validationError);
+      logger.error(`[Single Revalidate] Error details:`, {
+        message: validationError instanceof Error ? validationError.message : String(validationError),
+        stack: validationError instanceof Error ? validationError.stack : undefined,
+      });
       
-      // If immediate validation fails, queue it for background processing
-      const { ValidationQueueService, ValidationPriority } = await import('../../../services/validation/performance/validation-queue-service');
-      const queueService = ValidationQueueService.getInstance();
-      
-      const jobId = await queueService.queueValidation(
-        {
-          resource: resource.data,
-          resourceType: resource.resourceType,
-          resourceId: resource.resourceId,
-          profileUrl: undefined,
-        },
-        {
-          requestId: `single_revalidate_${Date.now()}`,
-          requestedBy: 'single-revalidate-api',
-          timestamp: new Date(),
-        },
-        ValidationPriority.HIGH
-      );
-      
-      logger.info(`[Single Revalidate] Queued for background validation with job ID: ${jobId}`);
-      
-      res.json({
-        success: true,
+      res.status(500).json({
+        success: false,
+        error: 'Validation failed',
+        message: validationError instanceof Error ? validationError.message : 'Unknown validation error',
         resourceType,
         resourceId: id,
-        jobId,
-        message: `Resource ${resourceType}/${id} queued for validation`,
       });
     }
     
