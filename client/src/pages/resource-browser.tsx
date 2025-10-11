@@ -112,16 +112,16 @@ export default function ResourceBrowser() {
   // Get current validation settings for filtering
   const currentSettings = validationSettingsData;
 
-  // Listen for validation settings changes and refresh resource list
+  // Listen for validation settings changes
+  // Note: Settings changes only affect UI filtering, not data fetching
   useEffect(() => {
     if (lastChange) {
-      console.log('[ResourceBrowser] Validation settings changed, refreshing resource list');
+      console.log('[ResourceBrowser] Validation settings changed');
       // Reset validation flag when settings change to allow re-validation with new settings
       setHasValidatedCurrentPage(false);
-      // Invalidate resource queries to refresh with new validation settings
-      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
       // Clear validation cache to force revalidation with new settings
       validatedResourcesCache.clear();
+      // No need to refetch - settings only affect UI filtering, not the data itself
     }
   }, [lastChange, queryClient]);
 
@@ -214,9 +214,8 @@ export default function ResourceBrowser() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
-          console.log('[ResourceBrowser] Validation settings updated, invalidating resource cache');
-          // Invalidate resource queries to refresh with new validation settings
-          queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+          console.log('[ResourceBrowser] Validation settings updated');
+          // No need to refetch - settings only affect UI filtering, not the data itself
         }
       } catch (error) {
         // Ignore non-JSON messages
@@ -333,6 +332,7 @@ export default function ResourceBrowser() {
     refetchInterval: false, // Don't auto-refetch
     refetchOnWindowFocus: false, // Don't refetch on window focus
     refetchOnMount: false, // Don't refetch on component mount if data is fresh
+    placeholderData: (previousData) => previousData, // Keep previous data visible during refetch
     queryFn: async ({ queryKey }) => {
       const [url, params] = queryKey as [string, { resourceType?: string; search?: string; page: number; location: string; filters: ValidationFilters }];
       const searchParams = new URLSearchParams();
@@ -711,12 +711,8 @@ export default function ResourceBrowser() {
         resourceIds.forEach(id => removeResourceValidation(id));
       }, 1500);
 
-      // Invalidate both resource endpoints to refresh with new validation results
-      // Add a small delay to ensure validation results are saved to database
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources/filtered'] });
-      }, 1000);
+      // No need to refetch - validation results are already in the server response
+      // and will be reflected on the next natural data update
 
     } catch (error) {
       console.error('[ResourceBrowser] Validation error:', error);
@@ -882,12 +878,8 @@ export default function ResourceBrowser() {
         resourceIds.forEach(id => removeResourceValidation(id));
       }, 1500);
 
-      // Invalidate both resource endpoints to refresh with new validation results
-      // Add a small delay to ensure validation results are saved to database
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources/filtered'] });
-      }, 1000);
+      // No need to refetch - validation results are already in the server response
+      // and will be reflected on the next natural data update
 
       // Mark this page as validated only after successful validation
       setHasValidatedCurrentPage(true);
@@ -1017,12 +1009,9 @@ export default function ResourceBrowser() {
         description: `Queued ${result.queuedCount} resources for revalidation.`,
       });
 
-      // Refresh resources after a delay to allow validation to complete
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
-        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources/filtered'] });
-        setIsValidating(false);
-      }, 2000);
+      // No need to refetch - validation results will be updated automatically
+      // The resources remain visible and will show updated validation status naturally
+      setIsValidating(false);
 
     } catch (error) {
       console.error('Revalidation error:', error);
@@ -1181,7 +1170,8 @@ export default function ResourceBrowser() {
           />
         )}
         
-        {isLoading ? (
+        {/* Only show skeleton on initial load, not during refetch */}
+        {isLoading && !resourcesData ? (
           <div className="space-y-4">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(i => (
               <div key={i} className="border rounded-lg p-4 bg-white shadow-sm">

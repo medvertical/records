@@ -13,17 +13,31 @@ const router = Router();
  */
 router.get('/', async (req: Request, res: Response) => {
   try {
-    const rules = await db
+    const dbRules = await db
       .select()
       .from(businessRules)
       .orderBy(desc(businessRules.createdAt));
 
+    // Transform field names to match frontend expectations
+    const rules = dbRules.map(rule => ({
+      id: rule.id,
+      name: rule.name,
+      description: rule.description,
+      fhirPath: rule.expression, // Backend uses 'expression', frontend expects 'fhirPath'
+      severity: rule.severity,
+      message: rule.validationMessage || `Rule ${rule.name} failed`, // Backend uses 'validationMessage', frontend expects 'message'
+      enabled: rule.enabled,
+      resourceType: rule.resourceTypes?.[0] || null, // Frontend expects single resourceType string
+      createdAt: rule.createdAt,
+      updatedAt: rule.updatedAt,
+    }));
+
     logger.info('[API] Fetched business rules', { count: rules.length });
-    res.json(rules);
+    res.json({ rules });
   } catch (error) {
     logger.error('[API] Error fetching business rules:', error);
     // Return empty array instead of error to prevent UI crashes
-    res.json([]);
+    res.json({ rules: [] });
   }
 });
 

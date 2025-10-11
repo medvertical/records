@@ -951,7 +951,7 @@ export function ValidationSettingsTab() {
             <div className="space-y-2">
               <Label htmlFor="max-concurrent">Max Concurrent Validations</Label>
               <Select
-                value={(settings.performance?.maxConcurrent || 5).toString()}
+                value={(settings.performance?.maxConcurrent || 4).toString()}
                 onValueChange={(value) => updatePerformance('maxConcurrent', parseInt(value))}
               >
                 <SelectTrigger>

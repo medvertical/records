@@ -157,7 +157,7 @@ export const validationSettings = pgTable("validation_settings", {
   }),
   
   performance: jsonb("performance").notNull().default({
-    maxConcurrent: 5,
+    maxConcurrent: 4,
     batchSize: 50
   }),
   
@@ -202,9 +202,17 @@ export const dashboardSettings = pgTable("dashboard_settings", {
     showValidationProgress: true,
     showErrorSummary: true,
     showPerformanceMetrics: false,
-    cardLayout: "grid",
-    theme: "system",
-    autoValidateEnabled: false
+    autoValidateEnabled: false,
+    polling: {
+      enabled: true,
+      fastIntervalMs: 5000,
+      slowIntervalMs: 30000,
+      verySlowIntervalMs: 60000,
+      maxRetries: 3,
+      backoffMultiplier: 2,
+      jitterEnabled: true,
+      pauseOnHidden: true
+    }
   }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -219,7 +227,9 @@ export const systemSettings = pgTable("system_settings", {
     enableSSE: true,
     dataRetentionDays: 30,
     maxLogFileSize: 100,
-    enableAutoUpdates: true
+    enableAutoUpdates: true,
+    theme: "system",
+    cardLayout: "grid"
   }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

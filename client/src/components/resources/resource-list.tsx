@@ -179,8 +179,8 @@ export default function ResourceList({
     const resourceId = resource._dbId || resource.id;
     const isValidating = validatingResourceIds.has(resourceId);
     
-    // If currently validating, show as validating
-    if (isValidating) {
+    // If currently validating (either from state or optimistic update flag), show as validating
+    if (isValidating || resource._isRevalidating) {
       return 'validating';
     }
     
@@ -245,7 +245,7 @@ export default function ResourceList({
     const legacyValidationSummary = resource._validationSummary;
     const status = getValidationStatus(resource);
     const resourceId = resource._dbId || resource.id;
-    const isValidating = validatingResourceIds.has(resourceId);
+    const isValidating = validatingResourceIds.has(resourceId) || resource._isRevalidating;
     const progress = validationProgress.get(resourceId);
     
     // Use enhanced validation data if available, otherwise fallback to legacy
@@ -547,11 +547,6 @@ export default function ResourceList({
             const validationStatus = getValidationStatus(resource);
             const resourceId = resource._dbId || resource.id;
             const isValidating = validatingResourceIds.has(resourceId);
-            
-            // Show skeleton for resources that are being validated
-            if (isValidating) {
-              return renderResourceCardSkeleton(index);
-            }
             
             return (
               <div key={resource.id || `${resource.resourceType}-${index}`} className="mb-4 last:mb-0">

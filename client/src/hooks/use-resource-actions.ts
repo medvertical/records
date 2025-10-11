@@ -57,14 +57,18 @@ export function useResourceActions({
         throw new Error(error.message || 'Failed to enqueue resource for validation');
       }
 
-      // Invalidate resource queries to trigger refetch
-      queryClient.invalidateQueries({
-        queryKey: ['/api/fhir/resources', resourceId],
-      });
-
-      queryClient.invalidateQueries({
-        queryKey: ['/api/validation/resources', resourceType, resourceId],
-      });
+      // Optimistic update: Keep resource visible, only update validation status
+      const currentData = queryClient.getQueryData(['/api/fhir/resources', resourceId]);
+      if (currentData) {
+        queryClient.setQueryData(['/api/fhir/resources', resourceId], {
+          ...currentData,
+          _isRevalidating: true,
+          _validationSummary: {
+            ...(currentData as any)._validationSummary,
+            status: 'validating',
+          },
+        });
+      }
 
       toast({
         title: 'Validation Queued',
@@ -72,6 +76,19 @@ export function useResourceActions({
       });
 
       onRevalidateSuccess?.();
+
+      // Soft refetch after 3 seconds to get updated validation results
+      // This won't trigger loading state since we already have data in cache
+      setTimeout(() => {
+        queryClient.refetchQueries({
+          queryKey: ['/api/fhir/resources', resourceId],
+          exact: true,
+        });
+        queryClient.refetchQueries({
+          queryKey: ['/api/validation/resources', resourceType, resourceId],
+          exact: true,
+        });
+      }, 3000);
     } catch (error) {
       console.error('Failed to revalidate resource:', error);
       

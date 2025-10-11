@@ -20,6 +20,8 @@ export interface SystemSettings {
   dataRetentionDays: number;
   maxLogFileSize: number;
   enableAutoUpdates: boolean;
+  theme: 'light' | 'dark' | 'system';
+  cardLayout: 'grid' | 'list';
 }
 
 const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
@@ -30,6 +32,8 @@ const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   dataRetentionDays: 30,
   maxLogFileSize: 100,
   enableAutoUpdates: true,
+  theme: 'system',
+  cardLayout: 'grid',
 };
 
 // ============================================================================
@@ -50,7 +54,12 @@ export class SystemSettingsRepository {
         .limit(1);
 
       if (result.length > 0) {
-        return result[0].settings as SystemSettings;
+        const dbSettings = result[0].settings as any;
+        // Merge with defaults to ensure all fields exist (including new theme/cardLayout)
+        return {
+          ...DEFAULT_SYSTEM_SETTINGS,
+          ...dbSettings,
+        } as SystemSettings;
       }
       return DEFAULT_SYSTEM_SETTINGS;
     } catch (error) {

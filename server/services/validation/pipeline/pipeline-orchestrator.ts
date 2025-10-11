@@ -139,7 +139,7 @@ export class PipelineOrchestrator extends EventEmitter {
             metadata: { enabled: true, severity: 'error' }
           },
           performance: {
-            maxConcurrent: 5,
+            maxConcurrent: 4,
             batchSize: 50
           },
           resourceTypes: {

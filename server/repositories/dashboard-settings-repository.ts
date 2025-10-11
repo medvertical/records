@@ -19,9 +19,17 @@ export interface DashboardSettings {
   showValidationProgress: boolean;
   showErrorSummary: boolean;
   showPerformanceMetrics: boolean;
-  cardLayout: 'grid' | 'list';
-  theme: 'light' | 'dark' | 'system';
   autoValidateEnabled: boolean;
+  polling: {
+    enabled: boolean;
+    fastIntervalMs: number;
+    slowIntervalMs: number;
+    verySlowIntervalMs: number;
+    maxRetries: number;
+    backoffMultiplier: number;
+    jitterEnabled: boolean;
+    pauseOnHidden: boolean;
+  };
 }
 
 const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
@@ -31,9 +39,17 @@ const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   showValidationProgress: true,
   showErrorSummary: true,
   showPerformanceMetrics: false,
-  cardLayout: 'grid',
-  theme: 'system',
   autoValidateEnabled: false,
+  polling: {
+    enabled: true,
+    fastIntervalMs: 5000,
+    slowIntervalMs: 30000,
+    verySlowIntervalMs: 60000,
+    maxRetries: 3,
+    backoffMultiplier: 2,
+    jitterEnabled: true,
+    pauseOnHidden: true,
+  },
 };
 
 // ============================================================================
@@ -54,7 +70,13 @@ export class DashboardSettingsRepository {
         .limit(1);
 
       if (result.length > 0) {
-        return result[0].settings as DashboardSettings;
+        const dbSettings = result[0].settings as any;
+        // Merge with defaults to ensure all fields exist and remove deprecated fields
+        const { theme, cardLayout, ...validSettings } = dbSettings;
+        return {
+          ...DEFAULT_DASHBOARD_SETTINGS,
+          ...validSettings,
+        } as DashboardSettings;
       }
       return DEFAULT_DASHBOARD_SETTINGS;
     } catch (error) {

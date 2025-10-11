@@ -49,24 +49,23 @@ export default function ResourceDetail() {
     refetchInterval: false,
   });
 
-  // Listen for validation settings changes from polling and refresh resource detail
+  // Listen for validation settings changes from polling
+  // Note: Settings changes only affect UI filtering, not data fetching
   useEffect(() => {
     if (lastChange) {
-      console.log('[ResourceDetail] Validation settings changed, refreshing resource detail');
-      // Invalidate resource queries to refresh with new validation settings
-      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources', id] });
+      console.log('[ResourceDetail] Validation settings changed');
+      // No need to refetch - settings only affect UI filtering of validation results
     }
   }, [lastChange, queryClient, id]);
   
-  // Listen for validation settings changes to invalidate resource cache
+  // Listen for validation settings changes
   useEffect(() => {
     const handleSSEMessage = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
-          console.log('[ResourceDetail] Validation settings updated, invalidating resource cache');
-          // Invalidate resource queries to refresh with new validation settings
-          queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources', id] });
+          console.log('[ResourceDetail] Validation settings updated');
+          // No need to refetch - settings only affect UI filtering of validation results
         }
       } catch (error) {
         // Ignore non-JSON messages
@@ -99,13 +98,32 @@ export default function ResourceDetail() {
 
       const result = await response.json();
 
+      // Optimistic update: Keep resource visible, only update validation status
+      const currentData = queryClient.getQueryData(['/api/fhir/resources', id]);
+      if (currentData) {
+        queryClient.setQueryData(['/api/fhir/resources', id], {
+          ...currentData,
+          _isRevalidating: true,
+          _validationSummary: {
+            ...(currentData as any)._validationSummary,
+            status: 'validating',
+          },
+        });
+      }
+
       toast({
-        title: "Revalidation completed",
-        description: `Resource has been revalidated successfully.`,
+        title: "Revalidation queued",
+        description: `Resource has been enqueued for validation.`,
       });
 
-      // Refresh resource data
-      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources', id] });
+      // Soft refetch after 3 seconds to get updated validation results
+      // This won't trigger loading state since we already have data in cache
+      setTimeout(() => {
+        queryClient.refetchQueries({
+          queryKey: ['/api/fhir/resources', id],
+          exact: true,
+        });
+      }, 3000);
       
     } catch (error) {
       console.error('Revalidation error:', error);
@@ -286,6 +304,13 @@ export default function ResourceDetail() {
                 {validationSummary && (
                   <div className="flex items-center space-x-4 mt-2">
                     <div className="flex items-center space-x-2">
+                      {/* Show revalidating badge when validation is in progress */}
+                      {(isRevalidating || (resource as any)._isRevalidating) && (
+                        <Badge className="bg-blue-50 text-blue-600 border-blue-200">
+                          <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                          Revalidating...
+                        </Badge>
+                      )}
                       {validationSummary.isValid ? (
                         <Badge className="bg-green-50 text-green-600 border-green-200">
                           <CheckCircle className="h-3 w-3 mr-1" />

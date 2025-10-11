@@ -105,7 +105,27 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
       const response = await fetch('/api/dashboard-settings');
       if (response.ok) {
         const data = await response.json();
-        setDashboardSettings(data);
+        // Merge with defaults to ensure all properties exist (defensive coding)
+        const mergedSettings: DashboardSettings = {
+          autoRefresh: data.autoRefresh ?? true,
+          refreshInterval: data.refreshInterval ?? 30,
+          showResourceStats: data.showResourceStats ?? true,
+          showValidationProgress: data.showValidationProgress ?? true,
+          showErrorSummary: data.showErrorSummary ?? true,
+          showPerformanceMetrics: data.showPerformanceMetrics ?? false,
+          autoValidateEnabled: data.autoValidateEnabled ?? false,
+          polling: {
+            enabled: data.polling?.enabled ?? true,
+            fastIntervalMs: data.polling?.fastIntervalMs ?? 5000,
+            slowIntervalMs: data.polling?.slowIntervalMs ?? 30000,
+            verySlowIntervalMs: data.polling?.verySlowIntervalMs ?? 60000,
+            maxRetries: data.polling?.maxRetries ?? 3,
+            backoffMultiplier: data.polling?.backoffMultiplier ?? 2,
+            jitterEnabled: data.polling?.jitterEnabled ?? true,
+            pauseOnHidden: data.polling?.pauseOnHidden ?? true,
+          },
+        };
+        setDashboardSettings(mergedSettings);
       }
     } catch (error) {
       console.error('Failed to load dashboard settings:', error);

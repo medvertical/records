@@ -35,7 +35,7 @@ export interface ValidationSettings {
   
   /** Performance Settings (only 2 essential fields) */
   performance: {
-    maxConcurrent: number; // 1-20, default: 5
+    maxConcurrent: number; // 1-20, default: 4
     batchSize: number;     // 10-100, default: 50
   };
   
@@ -290,7 +290,7 @@ export const VALIDATION_CONFIGS = {
       metadata: { enabled: true, severity: 'error' as const }
     },
     performance: {
-      maxConcurrent: 5,
+      maxConcurrent: 4,
       batchSize: 50
     }
   },

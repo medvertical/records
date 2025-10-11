@@ -91,10 +91,18 @@ export class ValidationSettingsRepository {
         return null;
       }
 
+      // Merge performance with defaults to ensure new fields get default values
+      const dbPerformance = result[0].performance as any;
+      const mergedPerformance = {
+        batchSize: dbPerformance?.batchSize ?? 50,
+        // Fix old default of 5 to new default of 4 (to match dropdown options)
+        maxConcurrent: dbPerformance?.maxConcurrent === 5 ? 4 : (dbPerformance?.maxConcurrent ?? 4),
+      };
+
       // Return with default values for optional fields that aren't persisted in DB
       return {
         aspects: result[0].aspects,
-        performance: result[0].performance,
+        performance: mergedPerformance,
         resourceTypes: result[0].resourceTypes,
         // Default optional fields that aren't stored in DB
         mode: 'online' as const, // Default to online mode

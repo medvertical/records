@@ -643,9 +643,8 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
       const duration = Date.now() - startTime;
       console.log(`[Resource Counts] Completed in ${duration}ms`);
       
-      // Transform the counts into the expected format (only include types with data)
+      // Transform the counts into the expected format
       const resourceTypes = Object.entries(counts)
-        .filter(([_, count]) => count > 0)
         .map(([resourceType, count]) => ({
           resourceType,
           count
