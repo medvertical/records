@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useServerData } from "@/hooks/use-server-data";
@@ -7,11 +7,10 @@ import ResourceSearch, { type ValidationFilters } from "@/components/resources/r
 import ResourceList from "@/components/resources/resource-list";
 import { ValidationOverview, type ValidationSummary } from "@/components/resources/validation-overview";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { getFilteredValidationSummary } from '@/lib/validation-filtering-utils';
-import { InfoIcon, X } from "lucide-react";
+import { useValidationActivity } from "@/contexts/validation-activity-context";
 
 // Simple client-side cache to track validated resources
 const validatedResourcesCache = new Set<string>();
@@ -67,9 +66,28 @@ export default function ResourceBrowser() {
     severities: [],
     hasIssuesOnly: false,
   });
-  const [showRevalidationNotice, setShowRevalidationNotice] = useState(true);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  
+  // Activity context for reporting individual resource validations
+  const { addResourceValidation, updateResourceValidation, removeResourceValidation, clearAllActivity } = useValidationActivity();
+  
+  // Keep a ref to validating resource IDs for cleanup on unmount
+  const validatingIdsRef = useRef<Set<number>>(validatingResourceIds);
+  validatingIdsRef.current = validatingResourceIds;
+  
+  // Cleanup: Remove all individual validations when component unmounts
+  useEffect(() => {
+    return () => {
+      // Clear all validations from activity context when unmounting
+      if (validatingIdsRef.current.size > 0) {
+        console.log('[ResourceBrowser] Cleaning up validations on unmount:', validatingIdsRef.current.size);
+        validatingIdsRef.current.forEach(id => {
+          removeResourceValidation(id);
+        });
+      }
+    };
+  }, [removeResourceValidation]); // Only on unmount
 
   // Use validation settings polling to detect changes and refresh resource list
   const { lastChange, isPolling, error: pollingError } = useValidationSettingsPolling({
@@ -456,20 +474,26 @@ export default function ResourceBrowser() {
   };
 
   // Function to simulate validation progress updates
-  const simulateValidationProgress = useCallback((resourceIds: number[]) => {
+  const simulateValidationProgress = useCallback((resourceIds: number[], resources: any[]) => {
     const aspects = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'];
     const totalAspects = aspects.length;
     
     // Initialize progress for all resources
     const initialProgress = new Map<number, any>();
     resourceIds.forEach(id => {
-      initialProgress.set(id, {
+      const resource = resources.find(r => (r._dbId || r.id) === id);
+      const progressData = {
         resourceId: id,
+        resourceType: resource?.resourceType || 'Unknown',
         progress: 0,
         currentAspect: 'Starting validation...',
         completedAspects: [],
         totalAspects: totalAspects
-      });
+      };
+      initialProgress.set(id, progressData);
+      
+      // Report to activity context
+      addResourceValidation(id, progressData);
     });
     setValidationProgress(initialProgress);
 
@@ -491,11 +515,20 @@ export default function ResourceBrowser() {
             
             const completedAspects = aspects.slice(0, currentAspectIndex);
             
-            updated.set(id, {
+            const updatedData = {
               ...current,
               progress: Math.min(progress, 99), // Don't show 100% until actually complete
               currentAspect: currentAspectIndex < totalAspects ? `Validating ${aspects[currentAspectIndex]}...` : 'Completing...',
               completedAspects: completedAspects
+            };
+            
+            updated.set(id, updatedData);
+            
+            // Update activity context
+            updateResourceValidation(id, {
+              progress: updatedData.progress,
+              currentAspect: updatedData.currentAspect,
+              completedAspects: updatedData.completedAspects
             });
 
             if (currentAspectIndex < totalAspects) {
@@ -514,14 +547,23 @@ export default function ResourceBrowser() {
       currentAspectIndex++;
     }, 600); // Faster updates to prevent hanging
 
-    // Don't timeout the progress simulation - let the actual validation control completion
-    // The progress simulation will continue until validation actually completes or fails
+    // Safety timeout: force cleanup after 30 seconds to prevent indefinite hanging
+    const safetyTimeout = setTimeout(() => {
+      console.warn('[ResourceBrowser] Validation progress simulation timed out, forcing cleanup');
+      clearInterval(updateInterval);
+      // Remove all resources from activity context
+      resourceIds.forEach(id => {
+        removeResourceValidation(id);
+      });
+      setValidationProgress(new Map());
+    }, 30000); // 30 second timeout
 
     // Return cleanup function
     return () => {
       clearInterval(updateInterval);
+      clearTimeout(safetyTimeout);
     };
-  }, []);
+  }, [addResourceValidation, updateResourceValidation, removeResourceValidation]);
 
   // Function to validate resources on the current page
   const validateCurrentPage = useCallback(async () => {
@@ -537,7 +579,7 @@ export default function ResourceBrowser() {
     setValidatingResourceIds(new Set(resourceIds));
     
     // Start progress simulation
-    const progressCleanup = simulateValidationProgress(resourceIds);
+    const progressCleanup = simulateValidationProgress(resourceIds, resourcesData.resources);
     
     try {
       console.log('[ResourceBrowser] Starting validation for current page resources:', {
@@ -652,6 +694,12 @@ export default function ResourceBrowser() {
               currentAspect: 'Validation complete'
             });
           }
+          
+          // Update activity context with completion
+          updateResourceValidation(id, {
+            progress: 100,
+            currentAspect: 'Validation complete'
+          });
         });
         return completed;
       });
@@ -659,6 +707,8 @@ export default function ResourceBrowser() {
       // Clear progress after showing completion
       setTimeout(() => {
         setValidationProgress(new Map());
+        // Remove from activity context
+        resourceIds.forEach(id => removeResourceValidation(id));
       }, 1500);
 
       // Invalidate both resource endpoints to refresh with new validation results
@@ -675,12 +725,16 @@ export default function ResourceBrowser() {
         progressCleanup();
       }
       setValidationProgress(new Map());
+      // Remove from activity context on error - make sure to clear immediately
+      resourceIds.forEach(id => {
+        removeResourceValidation(id);
+      });
       // You could add a toast notification here for user feedback
     } finally {
       setIsValidating(false);
       setValidatingResourceIds(new Set()); // Clear validating state
     }
-  }, [resourcesData, resourceType, page, queryClient, simulateValidationProgress]);
+  }, [resourcesData, resourceType, page, queryClient, simulateValidationProgress, updateResourceValidation, removeResourceValidation]);
 
   // Function to check if resources need validation and validate them automatically
   const validateUnvalidatedResources = useCallback(async () => {
@@ -733,7 +787,7 @@ export default function ResourceBrowser() {
     setValidatingResourceIds(new Set(resourceIds));
 
     // Start progress simulation for background validation
-    const progressCleanup = simulateValidationProgress(resourceIds);
+    const progressCleanup = simulateValidationProgress(resourceIds, unvalidatedResources);
 
     // Use the new validate-by-ids endpoint with batching for background validation
     try {
@@ -804,8 +858,15 @@ export default function ResourceBrowser() {
         resourceIds.forEach(id => {
           const current = completed.get(id);
           if (current) {
-            completed.set(id, {
+            const completedData = {
               ...current,
+              progress: 100,
+              currentAspect: 'Validation complete'
+            };
+            completed.set(id, completedData);
+            
+            // Update activity context with completion
+            updateResourceValidation(id, {
               progress: 100,
               currentAspect: 'Validation complete'
             });
@@ -817,6 +878,8 @@ export default function ResourceBrowser() {
       // Clear progress after showing completion
       setTimeout(() => {
         setValidationProgress(new Map());
+        // Remove from activity context
+        resourceIds.forEach(id => removeResourceValidation(id));
       }, 1500);
 
       // Invalidate both resource endpoints to refresh with new validation results
@@ -835,11 +898,13 @@ export default function ResourceBrowser() {
         progressCleanup();
       }
       setValidationProgress(new Map());
+      // Remove from activity context on error
+      resourceIds.forEach(id => removeResourceValidation(id));
       // Don't show error to user for background validation
     } finally {
       setValidatingResourceIds(new Set()); // Clear validating state
     }
-  }, [resourcesData, queryClient, simulateValidationProgress]);
+  }, [resourcesData, queryClient, simulateValidationProgress, removeResourceValidation, updateResourceValidation]);
 
   // Reset validation flag when page or resource type changes
   useEffect(() => {
@@ -1106,30 +1171,6 @@ export default function ResourceBrowser() {
           validationSummary={validationSummaryWithStats}
           activeServer={stableActiveServer}
         />
-
-        {/* Revalidation Notice Banner */}
-        {showRevalidationNotice && validationSummary.validatedCount === 0 && resourcesData?.resources && resourcesData.resources.length > 0 && (
-          <Alert className="bg-blue-50 border-blue-200">
-            <InfoIcon className="h-4 w-4 text-blue-600" />
-            <div className="flex items-start justify-between w-full">
-              <div className="flex-1">
-                <AlertTitle className="text-blue-900">Validation Data Needs to be Rebuilt</AlertTitle>
-                <AlertDescription className="text-blue-800">
-                  Resources are showing as "Not Validated" because the validation system was upgraded to a new per-aspect storage architecture. 
-                  Click "Validate All" below to rebuild validation data for all resources with the current settings.
-                </AlertDescription>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0 text-blue-600 hover:text-blue-900 hover:bg-blue-100 ml-2"
-                onClick={() => setShowRevalidationNotice(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </Alert>
-        )}
 
         {/* Validation Overview */}
         {resourcesData?.resources && resourcesData.resources.length > 0 && (

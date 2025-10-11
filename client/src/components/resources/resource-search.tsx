@@ -131,18 +131,7 @@ export default function ResourceSearch({
           />
         </div>
         
-        {/* FHIR Version Badge (Task 13.2) */}
-        {activeServer?.fhirVersion && (
-          <Badge 
-            variant="secondary"
-            className="text-xs px-2.5 py-1 h-8 font-medium bg-gray-100 text-gray-700 hover:bg-gray-100 whitespace-nowrap"
-            title={`FHIR Version ${activeServer.fhirVersion} - ${activeServer.name}`}
-          >
-            {activeServer.fhirVersion}
-          </Badge>
-        )}
-        
-                    <Select 
+        <Select 
               value={resourceType || "all"} 
               onValueChange={(value) => {
                 setResourceType(value);

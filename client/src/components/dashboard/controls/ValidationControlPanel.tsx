@@ -17,6 +17,7 @@ import ErrorRecoveryDisplay from './ErrorRecoveryDisplay';
 // Change detection is now handled by the settings hook
 import { useToast } from '@/hooks/use-toast';
 import { TimeoutUtils } from '@/lib/timeout-handling';
+import { useValidationActivity } from '@/contexts/validation-activity-context';
 
 // Placeholder for DegradationUtils
 const DegradationUtils = {
@@ -188,6 +189,8 @@ export const ValidationControlPanel: React.FC<ValidationControlPanelProps> = ({
     syncWithApi,
   } = useDashboard();
 
+  // Activity context for reporting batch validation state
+  const { updateBatchValidation } = useValidationActivity();
 
   // Map validation status from progress data - show "initializing" when starting
   const validationStatus = isInitializing ? 'initializing' : (progress?.status || 'idle');
@@ -198,6 +201,43 @@ export const ValidationControlPanel: React.FC<ValidationControlPanelProps> = ({
       setIsInitializing(false);
     }
   }, [validationStatus]);
+
+  // Update activity context when batch validation progress changes
+  React.useEffect(() => {
+    if (progress && (validationStatus === 'running' || validationStatus === 'paused')) {
+      // Only show as active when running or paused
+      const progressPercentage = progress.totalResources > 0 
+        ? (progress.processedResources / progress.totalResources) * 100 
+        : 0;
+
+      updateBatchValidation({
+        isActive: true,
+        status: validationStatus as any,
+        progress: progressPercentage,
+        processedResources: progress.processedResources || 0,
+        totalResources: progress.totalResources || 0,
+        currentResourceType: progress.currentResourceType || null,
+        estimatedTimeRemaining: progress.estimatedTimeRemaining || null,
+        startTime: progress.startTime ? new Date(progress.startTime) : null,
+        validResources: progress.validResources || 0,
+        errorResources: progress.errorResources || 0,
+      });
+    } else {
+      // Clear batch validation when completed, idle, or no progress
+      updateBatchValidation({
+        isActive: false,
+        status: 'idle',
+        progress: 0,
+        processedResources: 0,
+        totalResources: 0,
+        currentResourceType: null,
+        estimatedTimeRemaining: null,
+        startTime: null,
+        validResources: 0,
+        errorResources: 0,
+      });
+    }
+  }, [progress, validationStatus, updateBatchValidation]);
   
   // Placeholder functions for compatibility
   const resetProgress = () => {};

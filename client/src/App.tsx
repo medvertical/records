@@ -18,6 +18,7 @@ import NotFound from "@/pages/not-found";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { ValidationActivityProvider } from "@/contexts/validation-activity-context";
 import { ShortcutsHelpDialog } from "@/components/keyboard-shortcuts/shortcuts-help-dialog";
 
 // ConnectionStatus interface is now imported from use-server-data
@@ -211,8 +212,10 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <Toaster />
-        <Router />
+        <ValidationActivityProvider>
+          <Toaster />
+          <Router />
+        </ValidationActivityProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

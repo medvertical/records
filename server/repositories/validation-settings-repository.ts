@@ -91,10 +91,19 @@ export class ValidationSettingsRepository {
         return null;
       }
 
+      // Return with default values for optional fields that aren't persisted in DB
       return {
         aspects: result[0].aspects,
         performance: result[0].performance,
-        resourceTypes: result[0].resourceTypes
+        resourceTypes: result[0].resourceTypes,
+        // Default optional fields that aren't stored in DB
+        mode: 'online' as const, // Default to online mode
+        terminologyFallback: {
+          local: 'http://localhost:8081/fhir',
+          remote: 'https://tx.fhir.org/r4'
+        },
+        useFhirValidateOperation: false,
+        autoRevalidateAfterEdit: false,
       } as ValidationSettings;
     } catch (error) {
       console.error('[ValidationSettingsRepository] Error getting active settings:', error);
@@ -118,10 +127,26 @@ export class ValidationSettingsRepository {
       }
 
       const row = result[0];
+      
+      // Build settings with defaults for optional fields
+      const settings: ValidationSettings = {
+        aspects: row.aspects as any,
+        performance: row.performance as any,
+        resourceTypes: row.resourceTypes as any,
+        // Default optional fields that aren't stored in DB
+        mode: 'online' as const,
+        terminologyFallback: {
+          local: 'http://localhost:8081/fhir',
+          remote: 'https://tx.fhir.org/r4'
+        },
+        useFhirValidateOperation: false,
+        autoRevalidateAfterEdit: false,
+      };
+      
       return {
         id: row.id,
         serverId: row.serverId,
-        settings: row.settings as ValidationSettings,
+        settings,
         isActive: row.isActive,
         createdAt: row.createdAt,
         updatedAt: row.updatedAt

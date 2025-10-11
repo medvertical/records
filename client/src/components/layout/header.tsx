@@ -9,6 +9,7 @@ import AppIcon from "@/components/ui/app-icon";
 import { ValidationAspectsDropdown } from "@/components/ui/validation-aspects-dropdown";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import type { ServerStatus as ConnectionStatus } from "@/hooks/use-server-data";
+import { ActivityWidget } from "@/components/layout/activity-widget";
 
 interface HeaderProps {
   title: string;
@@ -138,6 +139,9 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
         <div className="flex items-center space-x-4">
           {/* Validation Aspects Dropdown */}
           <ValidationAspectsDropdown />
+          
+          {/* Activity Widget */}
+          <ActivityWidget />
           
           {/* Cache Clear Button */}
           <Button 
