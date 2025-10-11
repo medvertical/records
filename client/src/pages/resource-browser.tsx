@@ -8,6 +8,7 @@ import ResourceList from "@/components/resources/resource-list";
 import { ValidationOverview, type ValidationSummary } from "@/components/resources/validation-overview";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { getFilteredValidationSummary } from '@/lib/validation-filtering-utils';
 
 // Simple client-side cache to track validated resources
 const validatedResourcesCache = new Set<string>();
@@ -72,6 +73,21 @@ export default function ResourceBrowser() {
     showNotifications: false, // Don't show toast notifications in resource browser
     invalidateCache: true, // Invalidate cache when settings change
   });
+
+  // Fetch current validation settings for filtering
+  const { data: validationSettingsData } = useQuery({
+    queryKey: ['/api/validation/settings'],
+    queryFn: async () => {
+      const response = await fetch('/api/validation/settings');
+      if (!response.ok) throw new Error('Failed to fetch validation settings');
+      return response.json();
+    },
+    staleTime: 30 * 1000, // 30 seconds
+    refetchInterval: false,
+  });
+
+  // Get current validation settings for filtering
+  const currentSettings = validationSettingsData;
 
   // Listen for validation settings changes and refresh resource list
   useEffect(() => {
@@ -990,9 +1006,12 @@ export default function ResourceBrowser() {
 
     validatedResources.forEach((r: any) => {
       if (r._validationSummary) {
-        const resourceErrors = r._validationSummary.errorCount || 0;
-        const resourceWarnings = r._validationSummary.warningCount || 0;
-        const resourceInfo = r._validationSummary.informationCount || 0;
+        // Apply filtering to only count issues from enabled aspects
+        const filteredSummary = getFilteredValidationSummary(r._validationSummary, currentSettings);
+        
+        const resourceErrors = filteredSummary.errorCount || 0;
+        const resourceWarnings = filteredSummary.warningCount || 0;
+        const resourceInfo = filteredSummary.informationCount || 0;
 
         errorCount += resourceErrors;
         warningCount += resourceWarnings;
@@ -1012,8 +1031,8 @@ export default function ResourceBrowser() {
           severityStats.information.resourceCount += 1;
         }
 
-        // Process aspect breakdown for this resource
-        if (r._validationSummary.aspectBreakdown && typeof r._validationSummary.aspectBreakdown === 'object') {
+        // Process aspect breakdown for this resource (use filtered data)
+        if (filteredSummary.aspectBreakdown && typeof filteredSummary.aspectBreakdown === 'object') {
           // Map backend aspect keys to frontend keys
           const aspectMapping: { [key: string]: string } = {
             'structural': 'structural',
@@ -1025,9 +1044,9 @@ export default function ResourceBrowser() {
             'metadata': 'metadata',
           };
 
-          Object.keys(r._validationSummary.aspectBreakdown).forEach((backendAspect: string) => {
+          Object.keys(filteredSummary.aspectBreakdown).forEach((backendAspect: string) => {
             const frontendAspect = aspectMapping[backendAspect] || backendAspect;
-            const aspectData = r._validationSummary.aspectBreakdown[backendAspect];
+            const aspectData = filteredSummary.aspectBreakdown?.[backendAspect];
             
             if (aspectData && typeof aspectData === 'object' && aspectStats[frontendAspect]) {
               const hasErrors = (Number(aspectData.errorCount) || 0) > 0;
@@ -1057,7 +1076,7 @@ export default function ResourceBrowser() {
       aspectStats,
       severityStats,
     };
-  }, [resourcesData]);
+  }, [resourcesData, currentSettings]);
 
   // Create simplified validation summary for overview (without stats)
   const validationSummary: ValidationSummary = useMemo(() => ({

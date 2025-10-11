@@ -266,11 +266,15 @@ export class FhirClient {
       const url = `${this.baseUrl}/${resourceType}?${searchParams.toString()}`;
       console.log(`[FhirClient] Calling URL: ${url}`);
       
+      // Use shorter timeout for count-only queries (when _count is 1 or 0)
+      const isCountQuery = params._count === '1' || params._count === 1 || params._count === '0' || params._count === 0;
+      const timeout = isCountQuery ? 5000 : 8000; // 5s for counts, 8s for normal queries
+      
       const response: AxiosResponse<FhirBundle> = await axios.get(
         url,
         { 
           headers: this.headers,
-          timeout: 8000 // 8 second timeout for faster response
+          timeout
         }
       );
 
@@ -872,28 +876,34 @@ export class FhirClient {
         console.log(`[FhirClient] Using ${typesToQuery.length} resource types from CapabilityStatement`);
       }
       
-      const counts: Record<string, number> = {};
-      
-      // Get counts for each resource type
-      for (const resourceType of typesToQuery) {
+      // Fetch all resource counts in parallel for better performance
+      console.log(`[FhirClient] Fetching counts for ${typesToQuery.length} resource types in parallel...`);
+      const countPromises = typesToQuery.map(async (resourceType) => {
         try {
-          console.log(`[FhirClient] Getting count for ${resourceType}...`);
-          
           // Use the same approach as the working resource fetch
           const response = await this.searchResources(resourceType, { _count: '1', _total: 'accurate' });
           
           if (response.total !== undefined && response.total !== null) {
-            counts[resourceType] = response.total;
             console.log(`[FhirClient] ${resourceType}: ${response.total}`);
+            return { resourceType, count: response.total };
           } else {
             console.warn(`[FhirClient] No total available for ${resourceType}`);
-            counts[resourceType] = 0;
+            return { resourceType, count: 0 };
           }
-        } catch (error) {
+        } catch (error: any) {
           console.warn(`[FhirClient] Failed to get count for ${resourceType}:`, error.message);
-          counts[resourceType] = 0;
+          return { resourceType, count: 0 };
         }
-      }
+      });
+      
+      // Wait for all promises to resolve
+      const results = await Promise.all(countPromises);
+      
+      // Convert results array to counts object
+      const counts: Record<string, number> = {};
+      results.forEach(({ resourceType, count }) => {
+        counts[resourceType] = count;
+      });
       
       console.log(`[FhirClient] Completed resource counts for ${Object.keys(counts).length} resource types`);
       return counts;

@@ -53,7 +53,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
   // Use actual connection status if available, otherwise fall back to isActive
   const isServerConnected = serverStatus ? serverStatus.connected : (activeServer?.isActive || false);
 
-  const { data: resourceCounts } = useQuery<Record<string, number>>({
+  const { data: resourceCounts, isLoading: isCountsLoading, isError: isCountsError } = useQuery<Record<string, number>>({
     queryKey: ["/api/fhir/resource-counts"],
     // Keep previous data to prevent flickering during refetches
     placeholderData: (previousData) => previousData,
@@ -63,19 +63,41 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
     refetchOnMount: false, // Don't refetch on component mount if data exists
     // Only fetch resource counts when there's an active server
     enabled: isServerConnected,
+    retry: 2, // Retry failed requests 2 times
     queryFn: async () => {
-      const response = await fetch('/api/fhir/resource-counts');
-      const data = await response.json();
+      // Add timeout to prevent hanging forever
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
       
-      // Transform the API response format to the expected format
-      const counts: Record<string, number> = {};
-      if (data.resourceTypes && Array.isArray(data.resourceTypes)) {
-        data.resourceTypes.forEach((item: { resourceType: string; count: number }) => {
-          counts[item.resourceType] = item.count;
+      try {
+        const response = await fetch('/api/fhir/resource-counts', {
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch resource counts: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Transform the API response format to the expected format
+        const counts: Record<string, number> = {};
+        if (data.resourceTypes && Array.isArray(data.resourceTypes)) {
+          data.resourceTypes.forEach((item: { resourceType: string; count: number }) => {
+            counts[item.resourceType] = item.count;
+          });
+        }
+        
+        return counts;
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          console.error('[Sidebar] Resource counts request timed out after 15 seconds');
+          throw new Error('Request timed out');
+        }
+        throw error;
       }
-      
-      return counts;
     },
   });
 
@@ -97,7 +119,9 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
         )}>
         <SidebarContent 
           serverStatus={serverStatus} 
-          resourceCounts={resourceCounts} 
+          resourceCounts={resourceCounts}
+          isCountsLoading={isCountsLoading}
+          isCountsError={isCountsError}
           activeServer={activeServer}
           servers={servers}
           isLoading={isLoading}
@@ -121,7 +145,9 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
       <div className="w-64">
         <SidebarContent 
           serverStatus={serverStatus} 
-          resourceCounts={resourceCounts} 
+          resourceCounts={resourceCounts}
+          isCountsLoading={isCountsLoading}
+          isCountsError={isCountsError}
           activeServer={activeServer}
           servers={servers}
           isLoading={isLoading}
@@ -144,7 +170,9 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
 
 function SidebarContent({ 
   serverStatus, 
-  resourceCounts, 
+  resourceCounts,
+  isCountsLoading,
+  isCountsError,
   activeServer,
   servers,
   isLoading,
@@ -157,6 +185,8 @@ function SidebarContent({
 }: {
   serverStatus?: ServerStatus;
   resourceCounts?: Record<string, number>;
+  isCountsLoading?: boolean;
+  isCountsError?: boolean;
   activeServer?: any;
   servers?: any[];
   isLoading?: boolean;
@@ -380,7 +410,11 @@ function SidebarContent({
                       }}
                     >
                         <span>{item.label}</span>
-                        {resourceCounts && resourceCounts[item.resourceType] !== undefined ? (
+                        {isCountsError ? (
+                          <span className="text-xs text-red-500" title="Failed to load counts">
+                            ?
+                          </span>
+                        ) : resourceCounts && resourceCounts[item.resourceType] !== undefined ? (
                           <span className={cn(
                             "text-xs font-medium",
                             isSelected 
@@ -389,8 +423,10 @@ function SidebarContent({
                           )}>
                             {formatCount(resourceCounts[item.resourceType])}
                           </span>
-                        ) : (
+                        ) : isCountsLoading ? (
                           <div className="w-4 h-4 border border-gray-300 dark:border-gray-600 border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          <span className="text-xs text-gray-400">-</span>
                         )}
                       </div>
                   </li>

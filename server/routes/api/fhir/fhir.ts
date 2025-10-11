@@ -649,13 +649,16 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
         resourceTypesToQuery = undefined; // Will use getAllResourceTypes() from CapabilityStatement
       }
       
-      // Add timeout to the entire operation (30s for more resource types)
+      // Add timeout to the entire operation (15s should be enough with parallel requests)
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Request timeout')), 30000);
+        setTimeout(() => reject(new Error('Request timeout')), 15000);
       });
       
+      const startTime = Date.now();
       const countsPromise = currentFhirClient.getResourceCounts(resourceTypesToQuery);
       const counts = await Promise.race([countsPromise, timeoutPromise]) as Record<string, number>;
+      const duration = Date.now() - startTime;
+      console.log(`[Resource Counts] Completed in ${duration}ms`);
       
       // Transform the counts into the expected format (only include types with data)
       const resourceTypes = Object.entries(counts)

@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useQuery } from "@tanstack/react-query";
 import { useValidationResults } from "@/hooks/validation";
 import type { ValidationProgress, EnhancedValidationSummary } from '@shared/types/validation';
+import { getFilteredValidationSummary } from '@/lib/validation-filtering-utils';
 
 // Extended types for this component
 interface ExtendedValidationProgress extends ValidationProgress {
@@ -103,87 +104,6 @@ export default function ResourceList({
 
   // Get current validation settings for filtering
   const currentSettings = validationSettingsData;
-  
-  // Function to filter validation results based on enabled aspects
-  const getFilteredValidationSummary = (validationSummary: any) => {
-    if (!validationSummary || !currentSettings) {
-      return validationSummary;
-    }
-
-    // If we have aspect breakdown data, filter it based on enabled aspects
-    if (validationSummary.aspectBreakdown) {
-      const filteredBreakdown = { ...validationSummary.aspectBreakdown };
-      let filteredErrorCount = 0;
-      let filteredWarningCount = 0;
-      let filteredInfoCount = 0;
-      let filteredTotalIssues = 0;
-
-      // Filter each aspect based on enabled status
-      Object.keys(filteredBreakdown).forEach(aspect => {
-        // Access aspects from the correct nested structure
-        const aspectEnabled = currentSettings.aspects?.[aspect]?.enabled !== false;
-        
-        if (!aspectEnabled) {
-          // Reset counts for disabled aspects
-          filteredBreakdown[aspect] = {
-            ...filteredBreakdown[aspect],
-            issueCount: 0,
-            errorCount: 0,
-            warningCount: 0,
-            informationCount: 0,
-            validationScore: 100, // Disabled aspects don't count against the score
-            passed: true,
-            enabled: false
-          };
-        } else {
-          // Include counts from enabled aspects
-          // For old validation results that have all aspects marked as "skipped" but should be enabled,
-          // we need to check if the aspect was actually executed or just skipped due to the old bug
-          const aspectResult = filteredBreakdown[aspect];
-          const wasActuallyExecuted = aspectResult.status === 'executed' || 
-                                     (aspectResult.status === 'skipped' && aspectResult.reason !== 'Aspect result unavailable');
-          
-          if (wasActuallyExecuted) {
-            filteredErrorCount += aspectResult.errorCount || 0;
-            filteredWarningCount += aspectResult.warningCount || 0;
-            filteredInfoCount += aspectResult.informationCount || 0;
-            filteredTotalIssues += aspectResult.issueCount || 0;
-          } else {
-            // This aspect was skipped due to the old validation engine bug
-            // Don't include it in the filtered counts, but mark it as enabled for future validations
-            filteredBreakdown[aspect] = {
-              ...aspectResult,
-              enabled: true,
-              status: 'skipped',
-              reason: 'Previously skipped due to validation engine bug - will be validated on next run'
-            };
-          }
-        }
-      });
-
-      // Calculate filtered validation score
-      let filteredScore = 100;
-      filteredScore -= filteredErrorCount * 15;  // Error issues: -15 points each
-      filteredScore -= filteredWarningCount * 5; // Warning issues: -5 points each
-      filteredScore -= filteredInfoCount * 1;    // Information issues: -1 point each
-      filteredScore = Math.max(0, Math.round(filteredScore));
-
-      return {
-        ...validationSummary,
-        errorCount: filteredErrorCount,
-        warningCount: filteredWarningCount,
-        informationCount: filteredInfoCount,
-        totalIssues: filteredTotalIssues,
-        validationScore: filteredScore,
-        hasErrors: filteredErrorCount > 0,
-        hasWarnings: filteredWarningCount > 0,
-        isValid: filteredErrorCount === 0,
-        aspectBreakdown: filteredBreakdown
-      };
-    }
-
-    return validationSummary;
-  };
 
   const getResourceDisplayName = (resource: any) => {
     switch (resource.resourceType) {
@@ -286,7 +206,7 @@ export default function ResourceList({
     }
     
     // Apply UI filtering based on enabled aspects
-    const filteredSummary = getFilteredValidationSummary(validationSummary);
+    const filteredSummary = getFilteredValidationSummary(validationSummary, currentSettings);
     
     // If no filtered summary, return not-validated
     if (!filteredSummary) {
@@ -332,7 +252,7 @@ export default function ResourceList({
     const validationSummary = enhancedValidation || legacyValidationSummary;
     
     // Apply UI filtering to get the filtered validation summary (only for legacy data)
-    const filteredSummary = enhancedValidation ? enhancedValidation : getFilteredValidationSummary(legacyValidationSummary);
+    const filteredSummary = enhancedValidation ? enhancedValidation : getFilteredValidationSummary(legacyValidationSummary, currentSettings);
     
     // Determine the validation score to display
     const getValidationScore = () => {
