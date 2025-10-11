@@ -301,67 +301,75 @@ export default function ResourceDetail() {
                   {resource.resourceType} Resource
                 </h1>
                 <p className="text-gray-600">ID: {resource.resourceId}</p>
-                {validationSummary && (
-                  <div className="flex items-center space-x-4 mt-2">
-                    <div className="flex items-center space-x-2">
-                      {/* Show revalidating badge when validation is in progress */}
-                      {(isRevalidating || (resource as any)._isRevalidating) && (
-                        <Badge className="bg-blue-50 text-blue-600 border-blue-200">
-                          <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                          Revalidating...
-                        </Badge>
-                      )}
-                      {validationSummary.isValid ? (
-                        <Badge className="bg-green-50 text-green-600 border-green-200">
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Valid
-                        </Badge>
-                      ) : (
-                        <Badge className="bg-red-50 text-red-600 border-red-200">
-                          <XCircle className="h-3 w-3 mr-1" />
-                          {validationSummary.errorCount} Error{validationSummary.errorCount !== 1 ? 's' : ''}
-                        </Badge>
-                      )}
-                      {validationSummary.warningCount > 0 && (
-                        <Badge className="bg-orange-50 text-orange-600 border-orange-200">
-                          <AlertTriangle className="h-3 w-3 mr-1" />
-                          {validationSummary.warningCount} Warning{validationSummary.warningCount !== 1 ? 's' : ''}
-                        </Badge>
-                      )}
-                    </div>
-                    {validationSummary.lastValidated && (
-                      <span className="text-xs text-gray-500">
-                        Last validated: {new Date(validationSummary.lastValidated).toLocaleString()}
-                      </span>
+                <div className="flex items-center space-x-4 mt-2">
+                  <div className="flex items-center space-x-2">
+                    {/* Show revalidating badge when validation is in progress */}
+                    {(isRevalidating || (resource as any)._isRevalidating) && (
+                      <Badge className="bg-blue-50 text-blue-600 border-blue-200">
+                        <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                        Revalidating...
+                      </Badge>
+                    )}
+                    {validationSummary ? (
+                      <>
+                        {validationSummary.isValid ? (
+                          <Badge className="bg-green-50 text-green-600 border-green-200">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Valid
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-red-50 text-red-600 border-red-200">
+                            <XCircle className="h-3 w-3 mr-1" />
+                            {validationSummary.errorCount} Error{validationSummary.errorCount !== 1 ? 's' : ''}
+                          </Badge>
+                        )}
+                        {validationSummary.warningCount > 0 && (
+                          <Badge className="bg-orange-50 text-orange-600 border-orange-200">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            {validationSummary.warningCount} Warning{validationSummary.warningCount !== 1 ? 's' : ''}
+                          </Badge>
+                        )}
+                      </>
+                    ) : (
+                      <Badge className="bg-gray-50 text-gray-600 border-gray-200">
+                        <AlertCircle className="h-3 w-3 mr-1" />
+                        Not Validated
+                      </Badge>
                     )}
                   </div>
-                )}
-              </div>
-            </div>
-            {validationSummary && (
-              <div className="flex items-center space-x-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRevalidate}
-                  disabled={isRevalidating}
-                >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${isRevalidating ? 'animate-spin' : ''}`} />
-                  Revalidate
-                </Button>
-                <CircularProgress 
-                  value={validationSummary.score} 
-                  size="lg"
-                  showValue={true}
-                />
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">Validation Score</p>
-                  <p className="text-xs text-gray-500">
-                    {validationSummary.totalIssues} issue{validationSummary.totalIssues !== 1 ? 's' : ''} found
-                  </p>
+                  {validationSummary?.lastValidated && (
+                    <span className="text-xs text-gray-500">
+                      Last validated: {new Date(validationSummary.lastValidated).toLocaleString()}
+                    </span>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
+            <div className="flex items-center space-x-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRevalidate}
+                disabled={isRevalidating}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${isRevalidating ? 'animate-spin' : ''}`} />
+                {validationSummary ? 'Revalidate' : 'Validate'}
+              </Button>
+              <CircularProgress 
+                value={validationSummary?.score || 0} 
+                size="lg"
+                showValue={true}
+              />
+              <div className="text-right">
+                <p className="text-sm font-medium text-gray-900">Validation Score</p>
+                <p className="text-xs text-gray-500">
+                  {validationSummary 
+                    ? `${validationSummary.totalIssues} issue${validationSummary.totalIssues !== 1 ? 's' : ''} found`
+                    : 'Not validated'
+                  }
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
