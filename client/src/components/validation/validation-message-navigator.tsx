@@ -86,23 +86,13 @@ export function ValidationMessageNavigator({
 
   // Auto-filter when component becomes active
   useEffect(() => {
-    console.log('[ValidationMessageNavigator] useEffect triggered:', {
-      isMessagesVisible,
-      hasOnFilterByIssue: !!onFilterByIssue,
-      totalMessages,
-      severityCounts
-    });
-    
     if (isMessagesVisible && onFilterByIssue && totalMessages > 0) {
       // Filter by the primary severity (most severe)
       if (severityCounts.error > 0) {
-        console.log('[ValidationMessageNavigator] Filtering by error');
         onFilterByIssue({ severity: 'error', category: 'all' });
       } else if (severityCounts.warning > 0) {
-        console.log('[ValidationMessageNavigator] Filtering by warning');
         onFilterByIssue({ severity: 'warning', category: 'all' });
       } else if (severityCounts.information > 0) {
-        console.log('[ValidationMessageNavigator] Filtering by information');
         onFilterByIssue({ severity: 'information', category: 'all' });
       }
     }
@@ -311,16 +301,8 @@ export function SeverityNavigator({
 
   // Auto-filter when severity navigator becomes active
   useEffect(() => {
-    console.log('[SeverityNavigator] useEffect triggered:', {
-      isMessagesVisible,
-      hasOnFilterBySeverity: !!onFilterBySeverity,
-      totalMessages,
-      severity
-    });
-    
     if (isMessagesVisible && onFilterBySeverity && totalMessages > 0) {
       // Filter by severity type only
-      console.log('[SeverityNavigator] Filtering by severity:', severity);
       onFilterBySeverity(severity);
     }
   }, [isMessagesVisible, onFilterBySeverity, totalMessages, severity]);

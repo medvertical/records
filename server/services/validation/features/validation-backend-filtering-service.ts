@@ -750,7 +750,7 @@ class ValidationBackendFilteringService extends EventEmitter {
           }
 
           // Filter by severity
-          if (issueFilter.severity && issue.severity !== issue.severity?.toLowerCase()) {
+          if (issueFilter.severity && issue.severity?.toLowerCase() !== issueFilter.severity?.toLowerCase()) {
             continue;
           }
 

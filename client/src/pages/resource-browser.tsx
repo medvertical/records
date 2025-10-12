@@ -1264,7 +1264,6 @@ export default function ResourceBrowser() {
 
   // Handle filtering by specific issue
   const handleFilterByIssue = useCallback((issue: any) => {
-    console.log('[ResourceBrowser] Filtering by issue:', issue);
     const newFilters: ValidationFilters = {
       ...validationFilters,
       issueFilter: {
@@ -1275,20 +1274,17 @@ export default function ResourceBrowser() {
         pathContains: issue.path
       }
     };
-    console.log('[ResourceBrowser] New filters:', newFilters);
     handleFilterChange(newFilters);
   }, [validationFilters, handleFilterChange]);
 
   // Handle filtering by severity
   const handleFilterBySeverity = useCallback((severity: 'error' | 'warning' | 'information') => {
-    console.log('[ResourceBrowser] Filtering by severity:', severity);
     const newFilters: ValidationFilters = {
       ...validationFilters,
       issueFilter: {
         severity: severity
       }
     };
-    console.log('[ResourceBrowser] New filters:', newFilters);
     handleFilterChange(newFilters);
   }, [validationFilters, handleFilterChange]);
 
@@ -1553,9 +1549,9 @@ export default function ResourceBrowser() {
       </div>
 
       {/* Grid layout for ResourceList and ValidationMessagesCard */}
-      <div className={isMessagesVisible ? "grid gap-6 mt-6 h-full" : "mt-6"} style={isMessagesVisible ? { gridTemplateColumns: '2fr 1fr' } : {}}>
+      <div className={isMessagesVisible ? "grid gap-6 mt-6" : "mt-6"} style={isMessagesVisible ? { gridTemplateColumns: '2fr 1fr' } : {}}>
         {/* Left side - Resource List */}
-        <div className={isMessagesVisible ? "overflow-y-auto" : ""}>
+        <div>
         
         {/* Only show skeleton on initial load, not during refetch */}
         {isLoading && !resourcesData ? (
@@ -1613,7 +1609,7 @@ export default function ResourceBrowser() {
 
         {/* Right side - Validation Messages Card */}
         {isMessagesVisible && (
-          <div className="sticky top-6 self-start">
+          <div className="sticky top-20 self-start">
             <ValidationMessagesCard
               aspects={messagesByAspect}
               highlightSignature={allMessages[currentMessageIndex]?.signature}
