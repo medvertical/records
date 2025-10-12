@@ -1305,6 +1305,19 @@ export default function ResourceBrowser() {
     handleFilterChange(newFilters);
   }, [validationFilters, handleFilterChange]);
 
+  // Clear all filters when messages panel is hidden
+  useEffect(() => {
+    if (!isMessagesVisible) {
+      // When hiding the messages panel, clear all validation filters
+      handleFilterChange({
+        aspects: [],
+        severities: [],
+        hasIssuesOnly: false,
+        issueFilter: undefined
+      });
+    }
+  }, [isMessagesVisible, handleFilterChange]);
+
   // Handle revalidation of current page
   const handleRevalidate = useCallback(async () => {
     if (!resourcesData?.resources || resourcesData.resources.length === 0) {

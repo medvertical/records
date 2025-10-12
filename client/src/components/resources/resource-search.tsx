@@ -185,16 +185,6 @@ export default function ResourceSearch({
         )}
       </div>
       
-      {/* Expanded Filter Section */}
-      {onFilterChange && isFilterExpanded && (
-        <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-          <div className="space-y-4">
-            {/* Aspect Filters */}
-
-
-          </div>
-        </div>
-      )}
       
       {(query || resourceType) && isFilterExpanded && (
         <div className="mt-4 flex items-center gap-2 flex-wrap">
