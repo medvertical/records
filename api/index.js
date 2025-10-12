@@ -982,6 +982,34 @@ app.get("/api/fhir/resources", async (req, res) => {
   }
 });
 
+// FHIR resource by ID only - tries to find resourceType from resource data
+app.get("/api/fhir/resources/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Try to get from /api/resources endpoint which has all resources
+    const resourcesResponse = await fetch(`${req.protocol}://${req.get('host')}/api/resources?search=${id}`);
+    if (resourcesResponse.ok) {
+      const data = await resourcesResponse.json();
+      const resource = data.resources?.find(r => r.id === id);
+      if (resource) {
+        return res.json(resource);
+      }
+    }
+    
+    return res.status(404).json({
+      error: "Resource not found",
+      message: `Resource with ID ${id} not found`
+    });
+  } catch (error) {
+    log(`Error fetching resource ${req.params.id}: ${error.message}`, 'api');
+    res.status(500).json({
+      error: "Failed to get resource",
+      message: error.message
+    });
+  }
+});
+
 // FHIR specific resource endpoint - REAL DATA
 app.get("/api/fhir/resources/:resourceType/:id", async (req, res) => {
   try {
