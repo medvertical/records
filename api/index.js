@@ -537,6 +537,119 @@ app.get("/api/dashboard/combined", async (req, res) => {
   }
 });
 
+// FHIR resource types endpoint
+app.get("/api/fhir/resource-types", async (req, res) => {
+  try {
+    res.json([
+      "Patient",
+      "Observation",
+      "Encounter",
+      "Medication",
+      "Condition",
+      "Procedure",
+      "AllergyIntolerance",
+      "Binary",
+      "OperationOutcome"
+    ]);
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to get resource types",
+      message: error.message
+    });
+  }
+});
+
+// FHIR resources endpoint - fetch resources with filtering
+app.get("/api/fhir/resources", async (req, res) => {
+  try {
+    const { limit = 20, offset = 0, resourceType, search } = req.query;
+    
+    // Mock resource data
+    const resourceTypes = ["Patient", "Observation", "Encounter", "Medication", "Condition", "Procedure"];
+    const allResources = [];
+    
+    for (let i = 0; i < 100; i++) {
+      const type = resourceTypes[i % resourceTypes.length];
+      allResources.push({
+        id: `${type.toLowerCase()}-${i + 1}`,
+        resourceType: type,
+        lastUpdated: new Date(Date.now() - Math.random() * 86400000).toISOString(),
+        _validationSummary: {
+          isValid: Math.random() > 0.3,
+          validationScore: Math.floor(Math.random() * 40) + 60,
+          errorCount: Math.floor(Math.random() * 3),
+          warningCount: Math.floor(Math.random() * 5),
+          infoCount: Math.floor(Math.random() * 8),
+          validatedAt: new Date().toISOString(),
+          status: "completed"
+        }
+      });
+    }
+    
+    // Filter by resource type if specified
+    let filteredResources = allResources;
+    if (resourceType && resourceType !== "All Resource Types") {
+      filteredResources = allResources.filter(r => r.resourceType === resourceType);
+    }
+    
+    // Filter by search term if specified
+    if (search) {
+      filteredResources = filteredResources.filter(r => 
+        r.id.toLowerCase().includes(search.toLowerCase()) ||
+        r.resourceType.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+    
+    // Paginate
+    const totalCount = filteredResources.length;
+    const paginatedResources = filteredResources.slice(
+      parseInt(offset),
+      parseInt(offset) + parseInt(limit)
+    );
+    
+    res.json({
+      resources: paginatedResources,
+      pagination: {
+        page: Math.floor(parseInt(offset) / parseInt(limit)) + 1,
+        limit: parseInt(limit),
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / parseInt(limit))
+      },
+      totalCount
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to get resources",
+      message: error.message
+    });
+  }
+});
+
+// FHIR specific resource endpoint
+app.get("/api/fhir/resources/:resourceType/:id", async (req, res) => {
+  try {
+    const { resourceType, id } = req.params;
+    
+    // Mock resource data
+    const resource = {
+      id,
+      resourceType,
+      lastUpdated: new Date().toISOString(),
+      meta: {
+        versionId: "1",
+        lastUpdated: new Date().toISOString()
+      }
+    };
+    
+    res.json(resource);
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to get resource",
+      message: error.message
+    });
+  }
+});
+
 // FHIR resource counts endpoint
 app.get("/api/fhir/resource-counts", async (req, res) => {
   try {
