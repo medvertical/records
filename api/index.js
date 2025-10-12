@@ -747,6 +747,47 @@ app.put("/api/validation/settings", async (req, res) => {
   }
 });
 
+// Get validation resource types for specific FHIR version
+app.get("/api/validation/resource-types/:fhirVersion", async (req, res) => {
+  try {
+    const { fhirVersion } = req.params;
+    
+    // Return common FHIR resource types based on version
+    const resourceTypes = {
+      'R4': [
+        'Patient', 'Practitioner', 'Organization', 'Location',
+        'Observation', 'Condition', 'Procedure', 'MedicationRequest',
+        'Encounter', 'AllergyIntolerance', 'DiagnosticReport', 'CarePlan',
+        'Immunization', 'DocumentReference', 'Binary', 'Bundle',
+        'Composition', 'Device', 'Medication', 'Specimen'
+      ],
+      'R5': [
+        'Patient', 'Practitioner', 'Organization', 'Location',
+        'Observation', 'Condition', 'Procedure', 'MedicationRequest',
+        'Encounter', 'AllergyIntolerance', 'DiagnosticReport', 'CarePlan'
+      ],
+      'STU3': [
+        'Patient', 'Practitioner', 'Organization', 'Location',
+        'Observation', 'Condition', 'Procedure', 'MedicationRequest',
+        'Encounter', 'AllergyIntolerance'
+      ]
+    };
+    
+    const types = resourceTypes[fhirVersion] || resourceTypes['R4'];
+    
+    res.json({
+      fhirVersion,
+      resourceTypes: types,
+      count: types.length
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to get resource types",
+      message: error.message
+    });
+  }
+});
+
 // Validation progress endpoints
 app.get("/api/validation/progress", async (req, res) => {
   try {
