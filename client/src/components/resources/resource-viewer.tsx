@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { 
@@ -15,6 +14,12 @@ import {
   Copy,
   Check
 } from 'lucide-react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { prism } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import Editor from 'react-simple-code-editor';
+import { highlight, languages } from 'prismjs';
+import 'prismjs/components/prism-json';
+import 'prismjs/themes/prism.css';
 import { OptimizedValidationResults } from './optimized-validation-results';
 import ResourceTreeViewer from './resource-tree-viewer';
 import { cn } from '@/lib/utils';
@@ -438,10 +443,22 @@ export default function ResourceViewer({
                     )}
                   </Button>
                 </div>
-                <div className="border rounded-md p-4 bg-gray-50">
-                  <pre className="text-sm font-mono overflow-auto max-h-[600px]">
+                <div className="border rounded-md overflow-hidden bg-gray-50">
+                  <SyntaxHighlighter
+                    language="json"
+                    style={prism}
+                    customStyle={{
+                      margin: 0,
+                      padding: '1rem',
+                      fontSize: '0.875rem',
+                      maxHeight: '600px',
+                      overflow: 'auto',
+                      backgroundColor: '#f9fafb',
+                    }}
+                    wrapLongLines={false}
+                  >
                     {formatJSON(resourceData)}
-                  </pre>
+                  </SyntaxHighlighter>
                 </div>
               </div>
             ) : (
@@ -509,13 +526,22 @@ export default function ResourceViewer({
                 )}
 
                 {/* JSON Editor */}
-                <div className="border rounded-md overflow-hidden">
-                  <Textarea
+                <div className="border rounded-md overflow-hidden bg-white">
+                  <Editor
                     value={jsonContent}
-                    onChange={(e) => handleJsonChange(e.target.value)}
-                    className="w-full h-[500px] font-mono text-sm resize-none border-0 focus-visible:ring-0"
+                    onValueChange={handleJsonChange}
+                    highlight={(code) => highlight(code, languages.json, 'json')}
+                    padding={16}
+                    style={{
+                      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+                      fontSize: '0.875rem',
+                      lineHeight: '1.5',
+                      minHeight: '500px',
+                      maxHeight: '500px',
+                      overflow: 'auto',
+                    }}
+                    textareaClassName="focus:outline-none"
                     placeholder="Enter FHIR resource JSON..."
-                    spellCheck={false}
                   />
                 </div>
 
