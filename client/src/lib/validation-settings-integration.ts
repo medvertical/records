@@ -127,7 +127,7 @@ export function getAllAspectIds(): string[] {
  * Get enabled aspect IDs
  */
 export function getEnabledAspectIds(settings: ValidationSettings | null): string[] {
-  if (!settings) return [];
+  if (!settings || !settings.aspects || typeof settings.aspects !== 'object') return [];
   
   return Object.entries(settings.aspects)
     .filter(([_, config]) => config.enabled)
@@ -138,7 +138,7 @@ export function getEnabledAspectIds(settings: ValidationSettings | null): string
  * Get disabled aspect IDs
  */
 export function getDisabledAspectIds(settings: ValidationSettings | null): string[] {
-  if (!settings) return [];
+  if (!settings || !settings.aspects || typeof settings.aspects !== 'object') return [];
   
   return Object.entries(settings.aspects)
     .filter(([_, config]) => !config.enabled)

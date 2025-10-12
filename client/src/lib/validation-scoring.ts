@@ -116,7 +116,7 @@ export function calculateAggregatedScore(aspectResults: AspectValidationData[]):
  * Determine if validation is valid based on settings
  */
 export function isValidationValid(counts: ValidationCounts, settings: ValidationSettings | null): boolean {
-  if (!settings) return counts.errors === 0;
+  if (!settings || !settings.aspects || typeof settings.aspects !== 'object') return counts.errors === 0;
   
   // Check if any enabled aspect has errors
   const enabledAspects = Object.entries(settings.aspects)

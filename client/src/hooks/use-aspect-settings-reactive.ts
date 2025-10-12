@@ -166,7 +166,7 @@ export function useAspectSettingsReactive(options: UseAspectSettingsReactiveOpti
 
   // Get disabled aspects
   const getDisabledAspects = useCallback((): string[] => {
-    if (!currentSettings) return [];
+    if (!currentSettings || typeof currentSettings !== 'object') return [];
     
     return Object.entries(currentSettings)
       .filter(([_, aspect]) => !aspect.enabled)
@@ -175,7 +175,7 @@ export function useAspectSettingsReactive(options: UseAspectSettingsReactiveOpti
 
   // Get enabled aspects
   const getEnabledAspects = useCallback((): string[] => {
-    if (!currentSettings) return [];
+    if (!currentSettings || typeof currentSettings !== 'object') return [];
     
     return Object.entries(currentSettings)
       .filter(([_, aspect]) => aspect.enabled)

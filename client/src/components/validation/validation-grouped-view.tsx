@@ -66,7 +66,7 @@ function CategoryGroupedView({
               </div>
             </div>
             <div className="p-4 space-y-3">
-              {Object.entries(severityGroups).map(([severity, severityIssues]) => (
+              {severityGroups && typeof severityGroups === 'object' && Object.entries(severityGroups).map(([severity, severityIssues]) => (
                 <div key={severity} className="space-y-2">
                   <div className="flex items-center gap-2">
                     <h4 className="font-medium text-gray-700 capitalize">
@@ -109,7 +109,7 @@ function AdvancedGroupedView({
   
   return (
     <div className="space-y-4">
-      {Object.entries(groupedIssues).map(([groupKey, groupIssues]) => {
+      {groupedIssues && typeof groupedIssues === 'object' && Object.entries(groupedIssues).map(([groupKey, groupIssues]) => {
         const totalIssues = groupIssues.length;
         const severityCounts = groupIssues.reduce((acc, issue) => {
           acc[issue.severity] = (acc[issue.severity] || 0) + 1;

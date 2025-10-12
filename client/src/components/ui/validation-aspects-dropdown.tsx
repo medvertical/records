@@ -235,7 +235,7 @@ export function ValidationAspectsDropdown({ className }: ValidationAspectsDropdo
             <div className="space-y-2">
               <Label className="text-sm font-medium">Validation Aspects</Label>
               <div className="space-y-2">
-                {Object.entries(settings.aspects).map(([aspectKey, aspect]) => (
+                {settings.aspects && typeof settings.aspects === 'object' && Object.entries(settings.aspects).map(([aspectKey, aspect]) => (
                   <div key={aspectKey} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       {getAspectIcon(aspectKey)}

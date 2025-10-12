@@ -352,7 +352,7 @@ export default function ResourceList({
                     <div className="border-t pt-2">
                       <p className="text-sm font-medium mb-1">Aspect Breakdown:</p>
                       <div className="space-y-1 text-xs">
-                        {Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
+                        {filteredSummary.aspectBreakdown && typeof filteredSummary.aspectBreakdown === 'object' && Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
                           <div key={aspect} className="flex justify-between items-center">
                             <span className="capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}:</span>
                             <div className="flex items-center gap-2">
@@ -427,7 +427,7 @@ export default function ResourceList({
                     <div className="border-t pt-2">
                       <p className="text-sm font-medium mb-1">Aspect Breakdown:</p>
                       <div className="space-y-1 text-xs">
-                        {Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
+                        {filteredSummary.aspectBreakdown && typeof filteredSummary.aspectBreakdown === 'object' && Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
                           <div key={aspect} className="flex justify-between items-center">
                             <span className="capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}:</span>
                             <div className="flex items-center gap-2">
@@ -472,7 +472,7 @@ export default function ResourceList({
                     <div className="border-t pt-2">
                       <p className="text-sm font-medium mb-1">Aspect Breakdown:</p>
                       <div className="space-y-1 text-xs">
-                        {Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
+                        {filteredSummary.aspectBreakdown && typeof filteredSummary.aspectBreakdown === 'object' && Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
                           <div key={aspect} className="flex justify-between items-center">
                             <span className="capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}:</span>
                             <div className="flex items-center gap-2">

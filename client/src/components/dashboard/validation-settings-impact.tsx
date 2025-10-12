@@ -202,7 +202,7 @@ export function ValidationSettingsImpact({
             </div>
             
             <div className="grid grid-cols-2 gap-2">
-              {Object.entries(validationSettings).map(([aspect, config]: [string, any]) => {
+              {validationSettings && typeof validationSettings === 'object' && Object.entries(validationSettings).map(([aspect, config]: [string, any]) => {
                 const aspectName = formatAspectName(aspect);
                 const isEnabled = config?.enabled === true;
                 
