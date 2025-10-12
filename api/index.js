@@ -1385,14 +1385,30 @@ function calculateValidationSummary(resourceId, baseScore = null) {
 // Validate specific resources
 app.post("/api/validation/validate-by-ids", async (req, res) => {
   try {
+    log(`Validation request received: ${JSON.stringify(req.body)}`, 'validation');
+    
     const { resourceIds, forceRevalidation = false } = req.body;
     
     if (!resourceIds || !Array.isArray(resourceIds)) {
+      log(`Invalid resourceIds: ${JSON.stringify({resourceIds, type: typeof resourceIds})}`, 'validation');
       return res.status(400).json({
         error: "Invalid request",
-        message: "resourceIds must be an array"
+        message: "resourceIds must be an array",
+        received: { resourceIds, type: typeof resourceIds }
       });
     }
+    
+    if (resourceIds.length === 0) {
+      return res.json({
+        success: true,
+        message: "No resources to validate",
+        results: [],
+        totalProcessed: 0,
+        completedAt: new Date().toISOString()
+      });
+    }
+    
+    log(`Validating ${resourceIds.length} resources`, 'validation');
     
     // Generate consistent validation results and store them
     const results = resourceIds.map(resourceId => {
@@ -1413,6 +1429,7 @@ app.post("/api/validation/validate-by-ids", async (req, res) => {
       completedAt: new Date().toISOString()
     });
   } catch (error) {
+    log(`Validation error: ${error.message}`, 'validation');
     res.status(500).json({
       error: "Failed to validate resources",
       message: error.message
