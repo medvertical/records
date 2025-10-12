@@ -346,6 +346,17 @@ export function ResourceDetailHeader({
           {/* Action buttons */}
           {showActions && (
             <div className="flex items-center gap-2">
+              {onEdit && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={onEdit}
+                  className="gap-2"
+                >
+                  <Edit className="h-4 w-4" />
+                  Edit
+                </Button>
+              )}
               {onRevalidate && (
                 <Button
                   variant="outline"
@@ -365,17 +376,6 @@ export function ResourceDetailHeader({
                       Revalidate
                     </>
                   )}
-                </Button>
-              )}
-              {onEdit && (
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={onEdit}
-                  className="gap-2"
-                >
-                  <Edit className="h-4 w-4" />
-                  Edit Resource
                 </Button>
               )}
             </div>

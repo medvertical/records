@@ -200,7 +200,7 @@ export function ResourceEditor({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
             <FileJson className="h-5 w-5" />
-            <span>Edit Resource</span>
+            <span>Edit</span>
             <Badge variant="secondary" className="font-mono">
               {resourceType}/{resourceId}
             </Badge>
