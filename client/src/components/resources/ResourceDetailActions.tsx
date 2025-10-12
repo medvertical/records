@@ -1,8 +1,5 @@
-import { useState, useCallback } from 'react';
-import { RefreshCw, Edit } from 'lucide-react';
+import { RefreshCw, Edit, Save, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ResourceEditor } from './ResourceEditor';
-import { useResourceActions } from '@/hooks/use-resource-actions';
 import { useServerData } from '@/hooks/use-server-data';
 
 // ============================================================================
@@ -14,8 +11,13 @@ export interface ResourceDetailActionsProps {
   resourceId: string;
   resource: any;
   versionId?: string;
-  onEditSuccess?: (updatedResource: any) => void;
-  onRevalidateSuccess?: () => void;
+  isEditMode?: boolean;
+  onEdit?: () => void;
+  onSave?: () => void;
+  onView?: () => void;
+  onRevalidate?: () => void;
+  isRevalidating?: boolean;
+  canSave?: boolean;
   className?: string;
 }
 
@@ -28,76 +30,72 @@ export function ResourceDetailActions({
   resourceId,
   resource,
   versionId,
-  onEditSuccess,
-  onRevalidateSuccess,
+  isEditMode = false,
+  onEdit,
+  onSave,
+  onView,
+  onRevalidate,
+  isRevalidating = false,
+  canSave = false,
   className,
 }: ResourceDetailActionsProps) {
   const { activeServer } = useServerData();
-  const [editorOpen, setEditorOpen] = useState(false);
-
-  const {
-    revalidateResource,
-    editResource,
-    isRevalidating,
-    isEditing,
-  } = useResourceActions({
-    serverId: activeServer?.id || 0,
-    resourceType,
-    resourceId,
-    onEditSuccess: (updatedResource) => {
-      setEditorOpen(false);
-      onEditSuccess?.(updatedResource);
-    },
-    onRevalidateSuccess,
-  });
-
-  const handleEdit = useCallback(() => {
-    setEditorOpen(true);
-  }, []);
-
-  const handleEditorClose = useCallback(() => {
-    setEditorOpen(false);
-  }, []);
-
-  const handleSave = useCallback(async (updatedResource: any) => {
-    await editResource(updatedResource, versionId);
-  }, [editResource, versionId]);
 
   return (
     <div className={className}>
       <div className="flex items-center gap-2">
-        <Button
-          variant="default"
-          size="sm"
-          onClick={handleEdit}
-          disabled={isEditing || !activeServer}
-          className="gap-2"
-        >
-          <Edit className="h-4 w-4" />
-          Edit
-        </Button>
+        {!isEditMode ? (
+          // View mode: Show Edit and Revalidate buttons
+          <>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={onEdit}
+              disabled={!activeServer}
+              className="gap-2"
+            >
+              <Edit className="h-4 w-4" />
+              Edit
+            </Button>
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={revalidateResource}
-          disabled={isRevalidating || !activeServer}
-          className="gap-2"
-        >
-          <RefreshCw className={`h-4 w-4 ${isRevalidating ? 'animate-spin' : ''}`} />
-          {isRevalidating ? 'Revalidating...' : 'Revalidate'}
-        </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRevalidate}
+              disabled={isRevalidating || !activeServer}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRevalidating ? 'animate-spin' : ''}`} />
+              {isRevalidating ? 'Revalidating...' : 'Revalidate'}
+            </Button>
+          </>
+        ) : (
+          // Edit mode: Show Save and View buttons
+          <>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={onSave}
+              disabled={!canSave || !activeServer}
+              className="gap-2"
+            >
+              <Save className="h-4 w-4" />
+              Save
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onView}
+              disabled={!activeServer}
+              className="gap-2"
+            >
+              <Eye className="h-4 w-4" />
+              View
+            </Button>
+          </>
+        )}
       </div>
-
-      <ResourceEditor
-        open={editorOpen}
-        onOpenChange={handleEditorClose}
-        resourceType={resourceType}
-        resourceId={resourceId}
-        initialResource={resource}
-        onSave={handleSave}
-        versionId={versionId}
-      />
     </div>
   );
 }

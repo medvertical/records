@@ -1,13 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { 
   AlertTriangle,
   RefreshCw,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Copy,
+  Check
 } from 'lucide-react';
 import { OptimizedValidationResults } from './optimized-validation-results';
 import ResourceTreeViewer from './resource-tree-viewer';
@@ -46,6 +52,75 @@ interface ResourceViewerProps {
   resourceType: string;
   data?: any;
   title?: string;
+  isEditMode?: boolean;
+  editedResource?: any | null;
+  onResourceChange?: (resource: any) => void;
+  autoRevalidate?: boolean;
+  onAutoRevalidateChange?: (value: boolean) => void;
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+interface ValidationError {
+  path: string;
+  message: string;
+  line?: number;
+}
+
+function validateJSON(json: string): { valid: boolean; errors: ValidationError[]; parsed?: any } {
+  const errors: ValidationError[] = [];
+  
+  // Try to parse JSON
+  let parsed: any;
+  try {
+    parsed = JSON.parse(json);
+  } catch (error: any) {
+    const match = error.message.match(/position (\d+)/);
+    const position = match ? parseInt(match[1]) : 0;
+    const lines = json.substring(0, position).split('\n');
+    const line = lines.length;
+    
+    errors.push({
+      path: 'root',
+      message: error.message,
+      line,
+    });
+    return { valid: false, errors };
+  }
+
+  // Validate FHIR resource structure
+  if (!parsed || typeof parsed !== 'object') {
+    errors.push({
+      path: 'root',
+      message: 'Resource must be a JSON object',
+    });
+  }
+
+  if (!parsed.resourceType) {
+    errors.push({
+      path: 'resourceType',
+      message: 'Missing required field: resourceType',
+    });
+  }
+
+  if (!parsed.id) {
+    errors.push({
+      path: 'id',
+      message: 'Missing required field: id',
+    });
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    parsed,
+  };
+}
+
+function formatJSON(obj: any): string {
+  return JSON.stringify(obj, null, 2);
 }
 
 // ============================================================================
@@ -57,7 +132,12 @@ export default function ResourceViewer({
   resourceId, 
   resourceType, 
   data, 
-  title = "Resource Structure" 
+  title = "Resource Structure",
+  isEditMode = false,
+  editedResource = null,
+  onResourceChange,
+  autoRevalidate = false,
+  onAutoRevalidateChange,
 }: ResourceViewerProps) {
   // Use data if provided, otherwise use resource.data or resource
   // Handle different resource structures: {data: {...}} or direct resource object
@@ -73,6 +153,25 @@ export default function ResourceViewer({
   const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined);
   const [highlightedIssueId, setHighlightedIssueId] = useState<string | null>(null);
   const [expandAll, setExpandAll] = useState(false);
+  
+  // Edit mode state
+  const [activeTab, setActiveTab] = useState<'tree' | 'json' | 'form'>('tree');
+  const [jsonContent, setJsonContent] = useState('');
+  const [jsonValidation, setJsonValidation] = useState<{ valid: boolean; errors: ValidationError[] }>({
+    valid: true,
+    errors: [],
+  });
+  const [copiedToClipboard, setCopiedToClipboard] = useState(false);
+  
+  // Initialize JSON content when entering edit mode
+  useEffect(() => {
+    if (isEditMode && editedResource) {
+      setJsonContent(formatJSON(editedResource));
+      setActiveTab('json');
+    } else if (!isEditMode) {
+      setActiveTab('tree');
+    }
+  }, [isEditMode, editedResource]);
 
   // Handler for severity changes that can also handle path
   const handleSeverityChange = (severity: string, path?: string) => {
@@ -91,6 +190,36 @@ export default function ResourceViewer({
   const handleExpandAll = () => {
     setExpandAll(!expandAll);
   };
+
+  // Handler for JSON content changes
+  const handleJsonChange = useCallback((value: string) => {
+    setJsonContent(value);
+    const result = validateJSON(value);
+    setJsonValidation(result);
+    
+    if (result.valid && result.parsed && onResourceChange) {
+      onResourceChange(result.parsed);
+    }
+  }, [onResourceChange]);
+
+  // Handler for copy to clipboard
+  const handleCopyToClipboard = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(jsonContent);
+      setCopiedToClipboard(true);
+      setTimeout(() => setCopiedToClipboard(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+    }
+  }, [jsonContent]);
+
+  // Handler for format JSON
+  const handleFormat = useCallback(() => {
+    const result = validateJSON(jsonContent);
+    if (result.valid && result.parsed) {
+      setJsonContent(formatJSON(result.parsed));
+    }
+  }, [jsonContent]);
 
   // Handler for navigating to a specific path from validation issues
   const handleNavigateToPath = (path: string) => {
@@ -224,129 +353,221 @@ export default function ResourceViewer({
     : [];
 
   return (
-    <div className="space-y-4">
-      {/* Main content: Resource structure full width when no validation messages, otherwise two columns */}
-      <div className={`grid gap-4 ${
-        validationResult && validationIssues.length > 0 
-          ? 'grid-cols-1 lg:grid-cols-2' 
-          : 'grid-cols-1'
-      }`}>
-        {/* Resource Structure - Left side */}
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CardTitle>{title}</CardTitle>
-                {getValidationBadge()}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExpandAll}
-                className="text-xs"
-              >
-                {expandAll ? 'Collapse All' : 'Expand All'}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <ResourceTreeViewer 
-              resourceData={resourceData} 
-              validationResults={validationIssues}
-              selectedCategory={selectedCategory}
-              selectedSeverity={selectedSeverity}
-              selectedPath={selectedPath}
-              onCategoryChange={setSelectedCategory}
-              onSeverityChange={handleSeverityChange}
-              onIssueClick={setHighlightedIssueId}
-              expandAll={expandAll}
-              onExpandAll={handleExpandAll}
-            />
-          </CardContent>
-        </Card>
+    <Card>
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CardTitle>{title}</CardTitle>
+            {getValidationBadge()}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'tree' | 'json' | 'form')}>
+          <TabsList className="grid w-full grid-cols-2 mb-4">
+            {!isEditMode ? (
+              <>
+                <TabsTrigger value="tree">Tree</TabsTrigger>
+                <TabsTrigger value="json">JSON</TabsTrigger>
+              </>
+            ) : (
+              <>
+                <TabsTrigger value="json">JSON</TabsTrigger>
+                <TabsTrigger value="form" disabled>Form (Coming Soon)</TabsTrigger>
+              </>
+            )}
+          </TabsList>
 
-        {/* Validation Messages - Right side (replacing Enhanced Validation Results) */}
-        {validationResult && validationIssues.length > 0 && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Validation Messages</CardTitle>
+          {/* Tree View (View Mode Only) */}
+          {!isEditMode && (
+            <TabsContent value="tree" className="mt-0">
+              <div className="flex items-center justify-end mb-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={validateResource}
-                  disabled={isValidating}
+                  onClick={handleExpandAll}
                   className="text-xs"
                 >
-                  {isValidating ? 'Revalidating...' : 'Revalidate'}
+                  {expandAll ? 'Collapse All' : 'Expand All'}
                 </Button>
               </div>
-            </CardHeader>
-            <CardContent>
-              <OptimizedValidationResults 
-                result={validationResult}
-                onRevalidate={validateResource}
-                isValidating={isValidating}
+              <ResourceTreeViewer 
+                resourceData={resourceData} 
+                validationResults={validationIssues}
                 selectedCategory={selectedCategory}
                 selectedSeverity={selectedSeverity}
                 selectedPath={selectedPath}
-                highlightedIssueId={highlightedIssueId}
-                onClearFilters={handleClearFilters}
-                onNavigateToPath={handleNavigateToPath}
+                onCategoryChange={setSelectedCategory}
+                onSeverityChange={handleSeverityChange}
+                onIssueClick={setHighlightedIssueId}
+                expandAll={expandAll}
+                onExpandAll={handleExpandAll}
               />
-            </CardContent>
-          </Card>
-        )}
+            </TabsContent>
+          )}
 
-        
-        {/* Show validation loading or error in right column if no validation results */}
-        {!validationResult && (isValidating || validationError) && (
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Validation Messages</CardTitle>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={validateResource}
-                  disabled={isValidating}
-                  className="text-xs"
-                >
-                  {isValidating ? 'Revalidating...' : 'Revalidate'}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isValidating && (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
-                  <p className="text-muted-foreground">Validating resource...</p>
+          {/* JSON View/Edit */}
+          <TabsContent value="json" className="mt-0">
+            {!isEditMode ? (
+              // Read-only JSON view
+              <div className="space-y-3">
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(formatJSON(resourceData));
+                        setCopiedToClipboard(true);
+                        setTimeout(() => setCopiedToClipboard(false), 2000);
+                      } catch (error) {
+                        console.error('Failed to copy to clipboard:', error);
+                      }
+                    }}
+                  >
+                    {copiedToClipboard ? (
+                      <>
+                        <Check className="h-4 w-4 mr-1" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-1" />
+                        Copy
+                      </>
+                    )}
+                  </Button>
                 </div>
-              )}
-              
-              {validationError && (
-                <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    <div className="space-y-2">
-                      <p className="font-medium">Validation Error</p>
-                      <p className="text-sm">{validationError}</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={validateResource}
-                        className="mt-2"
-                      >
-                        Try Again
-                      </Button>
-                    </div>
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
-    </div>
+                <div className="border rounded-md p-4 bg-gray-50">
+                  <pre className="text-sm font-mono overflow-auto max-h-[600px]">
+                    {formatJSON(resourceData)}
+                  </pre>
+                </div>
+              </div>
+            ) : (
+              // Editable JSON
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {jsonValidation.valid ? (
+                      <div className="flex items-center gap-1 text-green-600 text-sm">
+                        <Check className="h-4 w-4" />
+                        <span>Valid JSON</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 text-red-600 text-sm">
+                        <AlertCircle className="h-4 w-4" />
+                        <span>{jsonValidation.errors.length} error(s)</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleFormat}
+                      disabled={!jsonValidation.valid}
+                    >
+                      Format
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCopyToClipboard}
+                    >
+                      {copiedToClipboard ? (
+                        <>
+                          <Check className="h-4 w-4 mr-1" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4 mr-1" />
+                          Copy
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Validation Errors */}
+                {!jsonValidation.valid && jsonValidation.errors.length > 0 && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <ul className="list-disc list-inside space-y-1 mt-2">
+                        {jsonValidation.errors.map((error, index) => (
+                          <li key={index} className="text-sm">
+                            {error.line && <span className="font-mono">Line {error.line}: </span>}
+                            <span className="font-semibold">{error.path}</span> - {error.message}
+                          </li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* JSON Editor */}
+                <div className="border rounded-md overflow-hidden">
+                  <Textarea
+                    value={jsonContent}
+                    onChange={(e) => handleJsonChange(e.target.value)}
+                    className="w-full h-[500px] font-mono text-sm resize-none border-0 focus-visible:ring-0"
+                    placeholder="Enter FHIR resource JSON..."
+                    spellCheck={false}
+                  />
+                </div>
+
+                {/* Auto-Revalidate Checkbox */}
+                {onAutoRevalidateChange && (
+                  <div className="flex items-center space-x-2 pt-2">
+                    <Checkbox
+                      id="auto-revalidate-json"
+                      checked={autoRevalidate}
+                      onCheckedChange={(checked) => onAutoRevalidateChange(checked as boolean)}
+                    />
+                    <Label 
+                      htmlFor="auto-revalidate-json" 
+                      className="text-sm font-medium leading-none cursor-pointer"
+                    >
+                      Automatically revalidate after save
+                    </Label>
+                  </div>
+                )}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Form View (Edit Mode Only - Coming Soon) */}
+          {isEditMode && (
+            <TabsContent value="form" className="mt-0">
+              <div className="flex flex-col items-center justify-center h-[400px] text-gray-500 space-y-4">
+                <p className="text-lg">Form editor coming soon...</p>
+                <p className="text-sm text-gray-400">Use the JSON tab to edit the resource for now.</p>
+                
+                {/* Auto-Revalidate Checkbox (disabled) */}
+                {onAutoRevalidateChange && (
+                  <div className="flex items-center space-x-2 pt-4">
+                    <Checkbox
+                      id="auto-revalidate-form"
+                      checked={autoRevalidate}
+                      onCheckedChange={(checked) => onAutoRevalidateChange(checked as boolean)}
+                      disabled
+                    />
+                    <Label 
+                      htmlFor="auto-revalidate-form" 
+                      className="text-sm font-medium leading-none cursor-not-allowed opacity-50"
+                    >
+                      Automatically revalidate after save
+                    </Label>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+          )}
+        </Tabs>
+      </CardContent>
+    </Card>
   );
 }

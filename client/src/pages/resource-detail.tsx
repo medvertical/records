@@ -26,6 +26,12 @@ export default function ResourceDetail() {
   const { toast } = useToast();
   const [isRevalidating, setIsRevalidating] = useState(false);
   
+  // Edit mode state
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editedResource, setEditedResource] = useState<any>(null);
+  const [autoRevalidate, setAutoRevalidate] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  
   // Parse query parameters
   const searchParams = new URLSearchParams(location.split('?')[1] || '');
   const highlightSignature = searchParams.get('highlightSignature') || undefined;
@@ -161,6 +167,84 @@ export default function ResourceDetail() {
     } finally {
       setIsRevalidating(false);
     }
+  };
+
+  // Handle entering edit mode
+  const handleEdit = () => {
+    if (!resource) return;
+    // Store the current resource data for editing
+    const resourceData = resource.data || resource;
+    setEditedResource(resourceData);
+    setIsEditMode(true);
+    setHasChanges(false);
+  };
+
+  // Handle saving edits
+  const handleSave = async () => {
+    if (!editedResource || !resource) return;
+
+    try {
+      const response = await fetch(
+        `/api/fhir/resources/${resource.resourceType}/${resource.resourceId}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(editedResource),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to save resource');
+      }
+
+      const updatedResource = await response.json();
+
+      toast({
+        title: "Resource saved",
+        description: "Your changes have been saved successfully.",
+      });
+
+      // Refetch resource data
+      queryClient.invalidateQueries({
+        queryKey: ['/api/fhir/resources', id],
+      });
+
+      // Exit edit mode
+      setIsEditMode(false);
+      setEditedResource(null);
+      setHasChanges(false);
+
+      // Auto-revalidate if enabled
+      if (autoRevalidate) {
+        setTimeout(() => handleRevalidate(), 500);
+      }
+    } catch (error) {
+      console.error('Save error:', error);
+      toast({
+        title: "Save failed",
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle canceling edit mode
+  const handleView = () => {
+    if (hasChanges) {
+      const confirmed = window.confirm(
+        'You have unsaved changes. Are you sure you want to discard them?'
+      );
+      if (!confirmed) return;
+    }
+    setIsEditMode(false);
+    setEditedResource(null);
+    setHasChanges(false);
+  };
+
+  // Handle resource changes in edit mode
+  const handleResourceChange = (updatedResource: any) => {
+    setEditedResource(updatedResource);
+    setHasChanges(true);
   };
   
   const { data: resource, isLoading, error } = useQuery<FhirResourceWithValidation>({
@@ -304,18 +388,13 @@ export default function ResourceDetail() {
                 resourceId={resource.resourceId}
                 resource={resource}
                 versionId={resource.meta?.versionId}
-                onEditSuccess={() => {
-                  // Refetch resource data after edit
-                  queryClient.invalidateQueries({
-                    queryKey: ['/api/fhir/resources', id],
-                  });
-                }}
-                onRevalidateSuccess={() => {
-                  // Refetch validation data
-                  queryClient.invalidateQueries({
-                    queryKey: ['/api/fhir/resources', id],
-                  });
-                }}
+                isEditMode={isEditMode}
+                onEdit={handleEdit}
+                onSave={handleSave}
+                onView={handleView}
+                onRevalidate={handleRevalidate}
+                isRevalidating={isRevalidating}
+                canSave={hasChanges}
               />
               <CircularProgress 
                 value={validationSummary?.validationScore || 0} 
@@ -344,6 +423,11 @@ export default function ResourceDetail() {
               resource={resource} 
               resourceId={resource.resourceId}
               resourceType={resource.resourceType}
+              isEditMode={isEditMode}
+              editedResource={editedResource}
+              onResourceChange={handleResourceChange}
+              autoRevalidate={autoRevalidate}
+              onAutoRevalidateChange={setAutoRevalidate}
             />
           </div>
           
