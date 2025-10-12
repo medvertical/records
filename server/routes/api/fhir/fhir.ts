@@ -14,7 +14,7 @@ import type { ValidationSettings } from '@shared/validation-settings';
 import logger from '../../../utils/logger';
 
 // Helper function to get the current FHIR client from server activation service
-function getCurrentFhirClient(fhirClient: FhirClient): FhirClient {
+function getCurrentFhirClient(fhirClient: FhirClient | null): FhirClient | null {
   const currentClient = serverActivationService.getFhirClient();
   return currentClient || fhirClient;
 }
@@ -211,6 +211,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       const { url, auth } = req.query;
       // Get the current FHIR client (may have been updated due to server activation)
       const currentFhirClient = getCurrentFhirClient(fhirClient);
+      if (!currentFhirClient) {
+        return res.status(503).json({ message: "FHIR client not initialized" });
+      }
       const result = await currentFhirClient.testConnection();
       res.json(result);
     } catch (error: any) {
@@ -223,6 +226,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       const { url, auth } = req.query;
       // Get the current FHIR client (may have been updated due to server activation)
       const currentFhirClient = getCurrentFhirClient(fhirClient);
+      if (!currentFhirClient) {
+        return res.status(503).json({ message: "FHIR client not initialized" });
+      }
       const result = await currentFhirClient.testConnection();
       res.json(result);
     } catch (error: any) {
@@ -414,6 +420,14 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       // Get FHIR client
       const currentFhirClient = getCurrentFhirClient(fhirClient);
       console.log(`[Edit] FHIR client available:`, !!currentFhirClient);
+      
+      if (!currentFhirClient) {
+        return res.status(503).json({
+          success: false,
+          error: 'FHIR client not initialized',
+          message: 'Cannot edit resource: FHIR server connection not available'
+        });
+      }
       
       // Fetch current resource from FHIR server using getResource
       let currentResource: any;
@@ -607,6 +621,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         try {
           // Get the current FHIR client (may have been updated due to server activation)
           const currentFhirClient = getCurrentFhirClient(fhirClient);
+          if (!currentFhirClient) {
+            return res.status(503).json({ message: "FHIR client not initialized" });
+          }
           const resource = await currentFhirClient.getResource(resourceType as string, id);
           
           if (!resource) {
@@ -649,6 +666,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
           console.log(`[FHIR API] Trying to fetch ${type}/${id}`);
           // Get the current FHIR client (may have been updated due to server activation)
           const currentFhirClient = getCurrentFhirClient(fhirClient);
+          if (!currentFhirClient) {
+            return res.status(503).json({ message: "FHIR client not initialized" });
+          }
           const resource = await currentFhirClient.getResource(type, id);
           
           if (resource) {
@@ -714,6 +734,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
           
           // Get the current FHIR client (may have been updated due to server activation)
           const currentFhirClient = getCurrentFhirClient(fhirClient);
+          if (!currentFhirClient) {
+            throw new Error("FHIR client not initialized");
+          }
           const bundle = await currentFhirClient.searchResources(type, searchParams);
           const resources = bundle.entry?.map(entry => entry.resource) || [];
           
@@ -755,6 +778,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         
         // Get the current FHIR client (may have been updated due to server activation)
         const currentFhirClient = getCurrentFhirClient(fhirClient);
+        if (!currentFhirClient) {
+          throw new Error("FHIR client not initialized");
+        }
         bundle = await currentFhirClient.searchResources(
           resourceType as string,
           searchParams
@@ -809,6 +835,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
     try {
       // Get the current FHIR client (may have been updated due to server activation)
       const currentFhirClient = getCurrentFhirClient(fhirClient);
+      if (!currentFhirClient) {
+        return res.status(503).json({ message: "FHIR client not initialized" });
+      }
       const resourceTypes = await currentFhirClient.getResourceTypes();
       res.json(resourceTypes);
     } catch (error: any) {
@@ -821,6 +850,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
     try {
       // Get the current FHIR client (may have been updated due to server activation)
       const currentFhirClient = getCurrentFhirClient(fhirClient);
+      if (!currentFhirClient) {
+        return res.status(503).json({ message: "FHIR client not initialized" });
+      }
       
       // Get validation settings to check filtering
       const { ValidationSettingsService } = await import('../../../services/validation/settings/validation-settings-service');
@@ -897,6 +929,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       
       // Get the current FHIR client (may have been updated due to server activation)
       const currentFhirClient = getCurrentFhirClient(fhirClient);
+      if (!currentFhirClient) {
+        return res.status(503).json({ message: "FHIR client not initialized" });
+      }
       const limitNum = typeof limit === 'string' ? parseInt(limit, 10) : (limit as number);
       const offsetNum = typeof offset === 'string' ? parseInt(offset, 10) : (offset as number);
       
@@ -922,6 +957,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       const { resourceType, id } = req.params;
       // Get the current FHIR client (may have been updated due to server activation)
       const currentFhirClient = getCurrentFhirClient(fhirClient);
+      if (!currentFhirClient) {
+        return res.status(503).json({ message: "FHIR client not initialized" });
+      }
       const resource = await currentFhirClient.getResource(resourceType, id);
       res.json(resource);
     } catch (error: any) {
