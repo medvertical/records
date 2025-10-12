@@ -5,6 +5,7 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 import { ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   ValidationStatusIndicator, 
   type ResourceValidationStatus 
@@ -26,6 +27,9 @@ interface VirtualizedResourceListProps {
   resources: VirtualizedResource[];
   onResourceClick?: (resource: VirtualizedResource) => void;
   height?: number;
+  selectionMode?: boolean;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (resourceKey: string, selected: boolean) => void;
 }
 
 // ============================================================================
@@ -38,18 +42,39 @@ interface RowProps {
   data: {
     resources: VirtualizedResource[];
     onResourceClick: (resource: VirtualizedResource) => void;
+    selectionMode: boolean;
+    selectedIds: Set<string>;
+    onSelectionChange?: (resourceKey: string, selected: boolean) => void;
+    getResourceKey: (resource: VirtualizedResource) => string;
   };
 }
 
 function Row({ index, style, data }: RowProps) {
   const resource = data.resources[index];
+  const resourceKey = data.getResourceKey(resource);
+  const isSelected = data.selectedIds.has(resourceKey);
   
   return (
     <div
       style={style}
-      className="flex items-center gap-4 px-4 border-b hover:bg-gray-50 transition-colors cursor-pointer"
-      onClick={() => data.onResourceClick(resource)}
+      className={`flex items-center gap-4 px-4 border-b hover:bg-gray-50 transition-colors ${data.selectionMode ? '' : 'cursor-pointer'} ${isSelected ? 'bg-blue-50' : ''}`}
+      onClick={() => !data.selectionMode && data.onResourceClick(resource)}
     >
+      {/* Checkbox (Selection Mode) */}
+      {data.selectionMode && (
+        <div className="w-[50px] flex-shrink-0">
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={(checked) => {
+              if (data.onSelectionChange) {
+                data.onSelectionChange(resourceKey, checked as boolean);
+              }
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
       {/* Resource Type */}
       <div className="w-[150px] flex-shrink-0">
         <Badge variant="secondary" className="font-mono">
@@ -82,17 +107,19 @@ function Row({ index, style, data }: RowProps) {
 
       {/* Action Button */}
       <div className="w-[80px] flex-shrink-0 flex justify-center">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 w-8 p-0"
-          onClick={(e) => {
-            e.stopPropagation();
-            data.onResourceClick(resource);
-          }}
-        >
-          <ExternalLink className="h-4 w-4" />
-        </Button>
+        {!data.selectionMode && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 w-8 p-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              data.onResourceClick(resource);
+            }}
+          >
+            <ExternalLink className="h-4 w-4" />
+          </Button>
+        )}
       </div>
     </div>
   );
@@ -105,7 +132,10 @@ function Row({ index, style, data }: RowProps) {
 export function VirtualizedResourceList({ 
   resources, 
   onResourceClick,
-  height = 600
+  height = 600,
+  selectionMode = false,
+  selectedIds = new Set(),
+  onSelectionChange,
 }: VirtualizedResourceListProps) {
   const [, setLocation] = useLocation();
   const listRef = useRef<List>(null);
@@ -117,6 +147,10 @@ export function VirtualizedResourceList({
       setLocation(`/resources/${resource.resourceType}/${resource.fhirId}`);
     }
   }, [onResourceClick, setLocation]);
+
+  const getResourceKey = useCallback((resource: VirtualizedResource) => {
+    return `${resource.resourceType}/${resource.fhirId}`;
+  }, []);
 
   if (resources.length === 0) {
     return (
@@ -130,6 +164,9 @@ export function VirtualizedResourceList({
     <div className="border rounded-lg overflow-hidden">
       {/* Table Header */}
       <div className="flex items-center gap-4 px-4 py-3 bg-gray-50 border-b font-medium text-sm text-gray-700">
+        {selectionMode && (
+          <div className="w-[50px] flex-shrink-0"></div>
+        )}
         <div className="w-[150px] flex-shrink-0">Resource Type</div>
         <div className="w-[200px] flex-shrink-0">Resource ID</div>
         <div className="flex-1">Validation Status</div>
@@ -149,6 +186,10 @@ export function VirtualizedResourceList({
             itemData={{
               resources,
               onResourceClick: handleResourceClick,
+              selectionMode,
+              selectedIds,
+              onSelectionChange,
+              getResourceKey,
             }}
           >
             {Row}

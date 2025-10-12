@@ -6,6 +6,7 @@ import { useServerData } from "@/hooks/use-server-data";
 import { useToast } from "@/hooks/use-toast";
 import ValidationErrors from "@/components/validation/validation-errors";
 import ResourceViewer from "@/components/resources/resource-viewer";
+import { ResourceDetailActions } from "@/components/resources";
 import { ValidationMessagesPerAspect } from "@/components/validation/validation-messages-per-aspect";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -299,15 +300,24 @@ export default function ResourceDetail() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRevalidate}
-                disabled={isRevalidating}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isRevalidating ? 'animate-spin' : ''}`} />
-                {validationSummary ? 'Revalidate' : 'Validate'}
-              </Button>
+              <ResourceDetailActions
+                resourceType={resource.resourceType}
+                resourceId={resource.resourceId}
+                resource={resource}
+                versionId={resource.meta?.versionId}
+                onEditSuccess={() => {
+                  // Refetch resource data after edit
+                  queryClient.invalidateQueries({
+                    queryKey: ['/api/fhir/resources', id],
+                  });
+                }}
+                onRevalidateSuccess={() => {
+                  // Refetch validation data
+                  queryClient.invalidateQueries({
+                    queryKey: ['/api/fhir/resources', id],
+                  });
+                }}
+              />
               <CircularProgress 
                 value={validationSummary?.validationScore || 0} 
                 size="lg"

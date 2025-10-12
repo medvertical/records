@@ -2,6 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -57,7 +58,7 @@ interface ExtendedEnhancedValidationSummary extends EnhancedValidationSummary {
   };
 }
 
-interface ResourceListProps {
+export interface ResourceListProps {
   resources: any[];
   total: number;
   page: number;
@@ -68,6 +69,9 @@ interface ResourceListProps {
   availableResourceTypes?: string[]; // Available resource types when none is selected
   noResourceTypeMessage?: string; // Message to show when no resource type is selected
   isLoading?: boolean; // Whether the resource list is loading
+  selectionMode?: boolean; // Enable selection mode with checkboxes
+  selectedIds?: Set<string>; // Set of selected resource keys (resourceType/id)
+  onSelectionChange?: (resourceKey: string, selected: boolean) => void; // Callback for selection changes
 }
 
 export default function ResourceList({
@@ -80,7 +84,10 @@ export default function ResourceList({
   validationProgress = new Map(),
   availableResourceTypes = [],
   noResourceTypeMessage = "Please select a resource type to view resources.",
-  isLoading = false
+  isLoading = false,
+  selectionMode = false,
+  selectedIds = new Set(),
+  onSelectionChange,
 }: ResourceListProps) {
   // Fetch current validation settings for UI filtering
   const { data: validationSettingsData } = useQuery({
@@ -547,63 +554,85 @@ export default function ResourceList({
             const validationStatus = getValidationStatus(resource);
             const resourceId = resource._dbId || resource.id;
             const isValidating = validatingResourceIds.has(resourceId);
+            const resourceKey = `${resource.resourceType}/${resource.id || resource.resourceId}`;
+            const isSelected = selectedIds.has(resourceKey);
+            
+            const cardContent = (
+              <Card className={cn(
+                selectionMode ? "" : "hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer",
+                validationStatus === 'not-validated' && "border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50",
+                isSelected && "ring-2 ring-blue-500 bg-blue-50/50"
+              )}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4 flex-1 min-w-0">
+                    {selectionMode && (
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(checked) => {
+                          if (onSelectionChange) {
+                            onSelectionChange(resourceKey, checked as boolean);
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    )}
+                    <div className={cn(
+                      "rounded-full flex-shrink-0",
+                      validationStatus === 'valid' ? "w-3 h-3 bg-fhir-success" :
+                      validationStatus === 'error' ? "w-3 h-3 bg-fhir-error" :
+                      validationStatus === 'warning' ? "w-3 h-3 bg-fhir-warning" :
+                      "w-4 h-4 bg-gray-400 border-2 border-gray-300"
+                    )} />
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-3 mb-1">
+                        <h3 className="text-sm font-semibold text-gray-900 truncate">
+                          {resource.resourceType}/{resource.id}
+                        </h3>
+                        <div className="flex items-center space-x-2">
+                          <Badge variant="outline" className="text-xs">
+                            {resource.resourceType}
+                          </Badge>
+                          {validationStatus === 'not-validated' && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertCircle className="h-3 w-3 text-gray-400" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>This resource has not been validated</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-600 truncate">
+                        {getResourceDisplayName(resource)}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate mt-1">
+                        {getResourceSubtext(resource)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-4 ml-6">
+                    {renderValidationBadge(resource)}
+                    {!selectionMode && <ChevronRight className="h-4 w-4 text-gray-400" />}
+                  </div>
+                </div>
+              </CardContent>
+              </Card>
+            );
             
             return (
               <div key={resource.id || `${resource.resourceType}-${index}`} className="mb-4 last:mb-0">
-                <Link href={`/resources/${resource.resourceId || resource.id}?type=${resource.resourceType}`}>
-                  <Card className={cn(
-                    "hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer",
-                    validationStatus === 'not-validated' && "border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50"
-                  )}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4 flex-1 min-w-0">
-                        <div className={cn(
-                          "rounded-full flex-shrink-0",
-                          validationStatus === 'valid' ? "w-3 h-3 bg-fhir-success" :
-                          validationStatus === 'error' ? "w-3 h-3 bg-fhir-error" :
-                          validationStatus === 'warning' ? "w-3 h-3 bg-fhir-warning" :
-                          "w-4 h-4 bg-gray-400 border-2 border-gray-300"
-                        )} />
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-3 mb-1">
-                            <h3 className="text-sm font-semibold text-gray-900 truncate">
-                              {resource.resourceType}/{resource.id}
-                            </h3>
-                            <div className="flex items-center space-x-2">
-                              <Badge variant="outline" className="text-xs">
-                                {resource.resourceType}
-                              </Badge>
-                              {validationStatus === 'not-validated' && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <AlertCircle className="h-3 w-3 text-gray-400" />
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>This resource has not been validated</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                            </div>
-                          </div>
-                          <p className="text-sm text-gray-600 truncate">
-                            {getResourceDisplayName(resource)}
-                          </p>
-                          <p className="text-xs text-gray-500 truncate mt-1">
-                            {getResourceSubtext(resource)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-4 ml-6">
-                        {renderValidationBadge(resource)}
-                        <ChevronRight className="h-4 w-4 text-gray-400" />
-                      </div>
-                    </div>
-                  </CardContent>
-                  </Card>
-                </Link>
+                {selectionMode ? (
+                  cardContent
+                ) : (
+                  <Link href={`/resources/${resource.resourceId || resource.id}?type=${resource.resourceType}`}>
+                    {cardContent}
+                  </Link>
+                )}
               </div>
             );
           })

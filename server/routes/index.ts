@@ -16,7 +16,7 @@ import {
   cacheClearRoutes,
   analyticsCacheRoutes
 } from "./api/validation";
-import { setupFhirRoutes, setupProfileRoutes, resourceEditRoutes, batchEditRoutes } from "./api/fhir";
+import { setupFhirRoutes, setupProfileRoutes } from "./api/fhir";
 import { setupDashboardRoutes } from "./api/dashboard";
 import { setupServerRoutes } from "./api/servers";
 import { performanceRoutes } from "./api/performance";
@@ -47,9 +47,7 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   app.use('/api/validation/cache', cacheClearRoutes);
   app.use('/api/validation/analytics', analyticsCacheRoutes);
   
-  // FHIR resource edit routes
-  app.use('/api/fhir/resources/:resourceType/:id', resourceEditRoutes);
-  app.use('/api/fhir/resources/batch-edit', batchEditRoutes);
+  // FHIR resource edit routes are registered inside setupFhirRoutes() to ensure fhirClient middleware is applied
   
   // Performance monitoring routes
   app.use('/api/performance', performanceRoutes);

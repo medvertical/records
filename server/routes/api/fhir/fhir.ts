@@ -5,11 +5,57 @@ import { profileManager } from "../../../services/fhir/profile-manager";
 import { FeatureFlags } from "../../../config/feature-flags";
 import { serverActivationService } from "../../../services/server-activation-service";
 import * as ValidationGroupsRepository from "../../../repositories/validation-groups-repository";
+import crypto from 'crypto';
+import { db } from "../../../db";
+import { editAuditTrail, validationSettings } from '@shared/schema';
+import { eq } from 'drizzle-orm';
+import { validationQueue } from '../../../services/validation/queue/validation-queue-simple';
+import type { ValidationSettings } from '@shared/validation-settings';
+import logger from '../../../utils/logger';
 
 // Helper function to get the current FHIR client from server activation service
 function getCurrentFhirClient(fhirClient: FhirClient): FhirClient {
   const currentClient = serverActivationService.getFhirClient();
   return currentClient || fhirClient;
+}
+
+// Helper function to compute SHA-256 hash of resource content for audit trail
+function computeResourceHash(resource: any): string {
+  const normalized = JSON.stringify(resource, Object.keys(resource).sort());
+  return crypto.createHash('sha256').update(normalized).digest('hex');
+}
+
+// Helper function to validate FHIR resource structure (basic validation)
+function validateFhirResourceStructure(resource: any): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  
+  if (!resource.resourceType) {
+    errors.push('Missing required field: resourceType');
+  }
+  
+  if (!resource.id) {
+    errors.push('Missing required field: id');
+  }
+  
+  // Check for basic FHIR structure requirements
+  if (resource.meta && typeof resource.meta !== 'object') {
+    errors.push('meta must be an object');
+  }
+  
+  if (resource.text && typeof resource.text !== 'object') {
+    errors.push('text must be an object');
+  }
+  
+  // Size check (max 5MB)
+  const resourceSize = JSON.stringify(resource).length;
+  if (resourceSize > 5 * 1024 * 1024) {
+    errors.push('Resource size exceeds 5MB limit');
+  }
+  
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
 }
 
 // Helper function to enhance resources with validation data
@@ -150,7 +196,12 @@ function createMockBundle(resourceType: string, batchSize: number, offset: numbe
   };
 }
 
-export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
+export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
+  console.log('[FHIR Routes] Setting up FHIR routes...');
+  console.log('[FHIR Routes] fhirClient is:', fhirClient ? 'initialized' : 'NULL');
+  // Note: PUT route for editing resources is registered directly below alongside other /api/fhir/resources routes
+  // Batch edit routes would be registered here if needed (currently using direct implementation)
+
   // FHIR Server Management
   app.get("/api/fhir/servers", async (req, res) => {
     try {
@@ -377,6 +428,229 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient) {
         success: false,
         error: 'Failed to get filtering statistics',
         message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  // ============================================================================
+  // FHIR Resource Edit
+  // ============================================================================
+  // PUT route MUST come BEFORE the GET route to ensure proper matching
+  
+  console.log('[FHIR Routes] Registering PUT route: /api/fhir/resources/:resourceType/:id');
+  app.put("/api/fhir/resources/:resourceType/:id", async (req, res) => {
+    console.log(`[FHIR Routes] PUT route hit: ${req.params.resourceType}/${req.params.id}`);
+    try {
+      const { resourceType, id } = req.params;
+      const rawResource = req.body;
+      const ifMatch = req.headers['if-match'] as string | undefined;
+      
+      // Strip out internal fields that were added by our system
+      const { _dbId, _validationSummary, resourceId, ...resource } = rawResource;
+      console.log(`[Edit] Stripped internal fields:`, { hasDbId: !!_dbId, hasValidationSummary: !!_validationSummary, hasResourceId: !!resourceId });
+      
+      // Validate FHIR resource structure
+      const fhirValidation = validateFhirResourceStructure(resource);
+      if (!fhirValidation.valid) {
+        return res.status(422).json({
+          success: false,
+          error: 'FHIR validation failed',
+          details: fhirValidation.errors,
+        });
+      }
+      
+      // Ensure resource type and ID match the URL
+      if (resource.resourceType !== resourceType) {
+        return res.status(400).json({
+          success: false,
+          error: 'Resource type mismatch',
+          message: `Expected ${resourceType}, got ${resource.resourceType}`,
+        });
+      }
+      
+      if (resource.id !== id) {
+        return res.status(400).json({
+          success: false,
+          error: 'Resource ID mismatch',
+          message: `Expected ${id}, got ${resource.id}`,
+        });
+      }
+      
+      // Get FHIR client
+      const currentFhirClient = getCurrentFhirClient(fhirClient);
+      console.log(`[Edit] FHIR client available:`, !!currentFhirClient);
+      
+      // Fetch current resource from FHIR server using getResource
+      let currentResource: any;
+      try {
+        console.log(`[Edit] Fetching current resource: ${resourceType}/${id}`);
+        currentResource = await currentFhirClient.getResource(resourceType, id);
+        console.log(`[Edit] Fetched resource:`, !!currentResource, currentResource ? `versionId: ${currentResource.meta?.versionId}` : 'undefined');
+      } catch (error: any) {
+        console.error(`[Edit] Failed to fetch resource:`, error.message);
+        return res.status(404).json({
+          success: false,
+          error: 'Resource not found',
+          resourceType,
+          id,
+          details: error.message,
+        });
+      }
+      
+      // Verify resource was actually fetched
+      if (!currentResource) {
+        console.error(`[Edit] Resource is null/undefined after fetch`);
+        return res.status(404).json({
+          success: false,
+          error: 'Resource not found',
+          resourceType,
+          id,
+        });
+      }
+      
+      // Check If-Match if provided (optimistic concurrency control)
+      if (ifMatch) {
+        const currentVersionId = currentResource.meta?.versionId;
+        const currentETag = currentVersionId ? `W/"${currentVersionId}"` : undefined;
+        
+        if (currentETag && ifMatch !== currentETag && ifMatch !== currentVersionId) {
+          return res.status(409).json({
+            success: false,
+            error: 'Version conflict',
+            message: 'Resource has been modified by another user',
+            currentVersionId,
+            requestedVersionId: ifMatch,
+          });
+        }
+      }
+      
+      // Compute before/after hashes for audit trail
+      console.log(`[Edit] Computing hashes...`);
+      const beforeHash = computeResourceHash(currentResource);
+      const afterHash = computeResourceHash(resource);
+      console.log(`[Edit] Hashes computed - changed: ${beforeHash !== afterHash}`);
+      
+      // Update resource on FHIR server using PUT request
+      let updatedResource: any;
+      try {
+        const baseUrl = (currentFhirClient as any).baseUrl;
+        const headers = (currentFhirClient as any).headers;
+        
+        console.log(`[Edit] Sending PUT to FHIR server: ${baseUrl}/${resourceType}/${id}`);
+        const updateResponse = await fetch(`${baseUrl}/${resourceType}/${id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(resource),
+        });
+        
+        console.log(`[Edit] FHIR server response: ${updateResponse.status} ${updateResponse.statusText}`);
+        
+        if (!updateResponse.ok) {
+          const errorBody = await updateResponse.text();
+          console.error(`[Edit] FHIR server error response:`, errorBody.substring(0, 500));
+          return res.status(updateResponse.status).json({
+            success: false,
+            error: 'FHIR server rejected the update',
+            message: `HTTP ${updateResponse.status}: ${updateResponse.statusText}`,
+            details: errorBody.substring(0, 1000),
+          });
+        }
+        
+        updatedResource = await updateResponse.json();
+        console.log(`[Edit] Successfully updated resource, new versionId: ${updatedResource.meta?.versionId}`);
+      } catch (error: any) {
+        console.error(`[Edit] Exception during FHIR server update:`, error);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to update resource on FHIR server',
+          message: error.message || 'Unknown error',
+        });
+      }
+      
+      // Get FHIR version from server
+      let fhirVersion: string | null = null;
+      try {
+        fhirVersion = await currentFhirClient.getFhirVersion();
+      } catch (error) {
+        logger.warn('[Edit] Could not detect FHIR version:', error);
+      }
+      
+      // Create and persist audit record
+      const serverId = 1; // TODO: Get from active server
+      try {
+        await db.insert(editAuditTrail).values({
+          serverId,
+          resourceType,
+          fhirId: id,
+          beforeHash,
+          afterHash,
+          fhirVersion: fhirVersion || undefined,
+          editedAt: new Date(),
+          editedBy: 'system',
+          operation: 'single_edit',
+          result: 'success',
+          versionBefore: currentResource.meta?.versionId,
+          versionAfter: updatedResource.meta?.versionId,
+        });
+        
+        logger.info(`[Audit] Recorded successful edit: ${resourceType}/${id}`);
+      } catch (auditError) {
+        logger.error('[Audit] Failed to record audit trail:', auditError);
+      }
+      
+      // Check auto-revalidation settings
+      let queuedRevalidation = false;
+      try {
+        const settingsResult = await db
+          .select()
+          .from(validationSettings)
+          .where(eq(validationSettings.serverId, serverId))
+          .limit(1);
+        
+        const settings: ValidationSettings | null = settingsResult.length > 0 
+          ? (settingsResult[0] as any).settings
+          : null;
+        
+        const shouldAutoRevalidate = settings?.autoRevalidateAfterEdit !== false;
+        
+        if (shouldAutoRevalidate) {
+          validationQueue.enqueue({
+            serverId,
+            resourceType,
+            fhirId: id,
+            priority: 'high',
+          });
+          queuedRevalidation = true;
+          logger.info(`[Edit] Auto-revalidation queued for ${resourceType}/${id}`);
+        }
+      } catch (settingsError) {
+        logger.warn('[Edit] Failed to check auto-revalidation settings, defaulting to revalidate:', settingsError);
+        validationQueue.enqueue({
+          serverId,
+          resourceType,
+          fhirId: id,
+          priority: 'high',
+        });
+        queuedRevalidation = true;
+      }
+      
+      res.json({
+        success: true,
+        resourceType,
+        id,
+        versionId: updatedResource.meta?.versionId,
+        beforeHash,
+        afterHash,
+        changed: beforeHash !== afterHash,
+        queuedRevalidation,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.error('Error updating resource:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to update resource',
+        message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
   });

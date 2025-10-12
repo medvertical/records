@@ -3,6 +3,7 @@ import { ExternalLink, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -32,6 +33,9 @@ interface ResourceListViewProps {
   resources: Resource[];
   isLoading?: boolean;
   onResourceClick?: (resource: Resource) => void;
+  selectionMode?: boolean;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (resourceKey: string, selected: boolean) => void;
 }
 
 // ============================================================================
@@ -79,15 +83,31 @@ function EmptyState() {
 export function ResourceListView({ 
   resources, 
   isLoading, 
-  onResourceClick 
+  onResourceClick,
+  selectionMode = false,
+  selectedIds = new Set(),
+  onSelectionChange,
 }: ResourceListViewProps) {
   const [, setLocation] = useLocation();
 
   const handleResourceClick = (resource: Resource) => {
+    // In selection mode, don't navigate on row click
+    if (selectionMode) return;
+    
     if (onResourceClick) {
       onResourceClick(resource);
     } else {
       setLocation(`/resources/${resource.resourceType}/${resource.fhirId}`);
+    }
+  };
+
+  const getResourceKey = (resource: Resource) => {
+    return `${resource.resourceType}/${resource.fhirId}`;
+  };
+
+  const handleCheckboxChange = (resource: Resource, checked: boolean) => {
+    if (onSelectionChange) {
+      onSelectionChange(getResourceKey(resource), checked);
     }
   };
 
@@ -104,6 +124,9 @@ export function ResourceListView({
       <Table>
         <TableHeader>
           <TableRow>
+            {selectionMode && (
+              <TableHead className="w-[50px]"></TableHead>
+            )}
             <TableHead className="w-[150px]">Resource Type</TableHead>
             <TableHead className="w-[200px]">Resource ID</TableHead>
             <TableHead>Validation Status</TableHead>
@@ -112,58 +135,75 @@ export function ResourceListView({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {resources.map((resource) => (
-            <TableRow
-              key={`${resource.resourceType}-${resource.fhirId}`}
-              className="cursor-pointer hover:bg-gray-50 transition-colors"
-              onClick={() => handleResourceClick(resource)}
-            >
-              {/* Resource Type */}
-              <TableCell>
-                <Badge variant="secondary" className="font-mono">
-                  {resource.resourceType}
-                </Badge>
-              </TableCell>
+          {resources.map((resource) => {
+            const resourceKey = getResourceKey(resource);
+            const isSelected = selectedIds.has(resourceKey);
+            
+            return (
+              <TableRow
+                key={resourceKey}
+                className={`${selectionMode ? '' : 'cursor-pointer'} hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50' : ''}`}
+                onClick={() => handleResourceClick(resource)}
+              >
+                {/* Checkbox (Selection Mode) */}
+                {selectionMode && (
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={(checked) => handleCheckboxChange(resource, checked as boolean)}
+                    />
+                  </TableCell>
+                )}
 
-              {/* Resource ID */}
-              <TableCell>
-                <code className="text-sm text-gray-700">{resource.fhirId}</code>
-              </TableCell>
+                {/* Resource Type */}
+                <TableCell>
+                  <Badge variant="secondary" className="font-mono">
+                    {resource.resourceType}
+                  </Badge>
+                </TableCell>
 
-              {/* Validation Status */}
-              <TableCell>
-                <ValidationStatusIndicator 
-                  status={resource.validationStatus} 
-                  variant="compact"
-                />
-              </TableCell>
+                {/* Resource ID */}
+                <TableCell>
+                  <code className="text-sm text-gray-700">{resource.fhirId}</code>
+                </TableCell>
 
-              {/* Last Modified */}
-              <TableCell>
-                <span className="text-sm text-gray-600">
-                  {resource.lastModified 
-                    ? new Date(resource.lastModified).toLocaleString()
-                    : '—'
-                  }
-                </span>
-              </TableCell>
+                {/* Validation Status */}
+                <TableCell>
+                  <ValidationStatusIndicator 
+                    status={resource.validationStatus} 
+                    variant="compact"
+                  />
+                </TableCell>
 
-              {/* Action Button */}
-              <TableCell>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleResourceClick(resource);
-                  }}
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
+                {/* Last Modified */}
+                <TableCell>
+                  <span className="text-sm text-gray-600">
+                    {resource.lastModified 
+                      ? new Date(resource.lastModified).toLocaleString()
+                      : '—'
+                    }
+                  </span>
+                </TableCell>
+
+                {/* Action Button */}
+                <TableCell>
+                  {!selectionMode && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleResourceClick(resource);
+                      }}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>

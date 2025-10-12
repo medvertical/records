@@ -6,11 +6,14 @@ import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-po
 import ResourceSearch, { type ValidationFilters } from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
 import { ValidationOverview, type ValidationSummary } from "@/components/resources/validation-overview";
+import { BatchEditDialog } from "@/components/resources/BatchEditDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { getFilteredValidationSummary } from '@/lib/validation-filtering-utils';
 import { useValidationActivity } from "@/contexts/validation-activity-context";
+import { CheckSquare, Edit2, X } from "lucide-react";
 
 // Simple client-side cache to track validated resources
 const validatedResourcesCache = new Set<string>();
@@ -66,6 +69,12 @@ export default function ResourceBrowser() {
     severities: [],
     hasIssuesOnly: false,
   });
+  
+  // Batch editing state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedResources, setSelectedResources] = useState<Set<string>>(new Set());
+  const [batchEditDialogOpen, setBatchEditDialogOpen] = useState(false);
+  
   const queryClient = useQueryClient();
   const { toast } = useToast();
   
@@ -148,6 +157,49 @@ export default function ResourceBrowser() {
     // Trigger a custom event to notify the sidebar of URL changes
     window.dispatchEvent(new PopStateEvent('popstate'));
   }, []);
+
+  // Selection mode handlers
+  const toggleSelectionMode = useCallback(() => {
+    setSelectionMode(!selectionMode);
+    if (selectionMode) {
+      // Clear selection when exiting selection mode
+      setSelectedResources(new Set());
+    }
+  }, [selectionMode]);
+
+  const handleSelectionChange = useCallback((resourceKey: string, selected: boolean) => {
+    setSelectedResources(prev => {
+      const updated = new Set(prev);
+      if (selected) {
+        updated.add(resourceKey);
+      } else {
+        updated.delete(resourceKey);
+      }
+      return updated;
+    });
+  }, []);
+
+  const handleBatchEdit = useCallback(() => {
+    if (selectedResources.size === 0) {
+      toast({
+        title: 'No Resources Selected',
+        description: 'Please select at least one resource to edit.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setBatchEditDialogOpen(true);
+  }, [selectedResources.size, toast]);
+
+  const handleBatchEditComplete = useCallback(() => {
+    setBatchEditDialogOpen(false);
+    setSelectedResources(new Set());
+    setSelectionMode(false);
+    // Refetch resource list to see updated resources
+    queryClient.invalidateQueries({
+      queryKey: ['/api/fhir/resources'],
+    });
+  }, [queryClient]);
 
   // Parse URL parameters and update state when location changes
   useEffect(() => {
@@ -1161,8 +1213,46 @@ export default function ResourceBrowser() {
           activeServer={stableActiveServer}
         />
 
+        {/* Selection Mode Toggle and Action Bar */}
+        <div className="flex items-center justify-between">
+          <Button
+            variant={selectionMode ? "default" : "outline"}
+            size="sm"
+            onClick={toggleSelectionMode}
+            className="gap-2"
+          >
+            {selectionMode ? (
+              <>
+                <X className="h-4 w-4" />
+                Exit Selection
+              </>
+            ) : (
+              <>
+                <CheckSquare className="h-4 w-4" />
+                Select Resources
+              </>
+            )}
+          </Button>
+
+          {selectionMode && selectedResources.size > 0 && (
+            <div className="flex items-center gap-3">
+              <Badge variant="secondary" className="text-sm">
+                {selectedResources.size} selected
+              </Badge>
+              <Button
+                size="sm"
+                onClick={handleBatchEdit}
+                className="gap-2"
+              >
+                <Edit2 className="h-4 w-4" />
+                Batch Edit
+              </Button>
+            </div>
+          )}
+        </div>
+
         {/* Validation Overview */}
-        {resourcesData?.resources && resourcesData.resources.length > 0 && (
+        {resourcesData?.resources && resourcesData.resources.length > 0 && !selectionMode && (
           <ValidationOverview
             validationSummary={validationSummary}
             onRevalidate={handleRevalidate}
@@ -1216,8 +1306,22 @@ export default function ResourceBrowser() {
             availableResourceTypes={resourcesData?.availableResourceTypes}
             isLoading={isLoading}
             noResourceTypeMessage={undefined} // Don't show "Select a Resource Type" for filtered queries
+            selectionMode={selectionMode}
+            selectedIds={selectedResources}
+            onSelectionChange={handleSelectionChange}
           />
         )}
+
+        {/* Batch Edit Dialog */}
+        <BatchEditDialog
+          open={batchEditDialogOpen}
+          onOpenChange={setBatchEditDialogOpen}
+          selectedResources={Array.from(selectedResources).map(key => {
+            const [resourceType, id] = key.split('/');
+            return { resourceType, id };
+          })}
+          onComplete={handleBatchEditComplete}
+        />
       </div>
     </div>
   );
