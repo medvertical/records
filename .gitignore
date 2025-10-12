@@ -16,6 +16,7 @@ vite.config.ts.*
 # Logs
 logs/
 *.log
+server-log.txt
 
 # HAPI FHIR Validator JAR (large binary)
 server/lib/*.jar
