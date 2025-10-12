@@ -1032,8 +1032,11 @@ export default function ResourceBrowser() {
     setIsValidating(true);
     
     try {
-      // Get resource IDs from current page
-      const resourceIds = resourcesData.resources.map((r: any) => r._dbId).filter(Boolean);
+      // Get resource IDs from current page - ensure they are numbers
+      const resourceIds = resourcesData.resources
+        .map((r: any) => r._dbId)
+        .filter((id): id is number => id != null && !isNaN(Number(id)))
+        .map(id => Number(id));
       
       if (resourceIds.length === 0) {
         throw new Error('No valid resource IDs found');
@@ -1045,13 +1048,16 @@ export default function ResourceBrowser() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           resourceIds,
-          serverId: stableActiveServer?.id || 1,
+          serverId: Number(stableActiveServer?.id) || 1,
           forceRevalidation: true,
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Revalidation request failed');
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error || errorData.message || 'Revalidation request failed';
+        const details = errorData.details ? ` - ${JSON.stringify(errorData.details)}` : '';
+        throw new Error(`${errorMessage}${details}`);
       }
 
       const result = await response.json();

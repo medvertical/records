@@ -7,6 +7,7 @@ interface CircularProgressProps {
   showValue?: boolean;
   className?: string;
   strokeWidth?: number;
+  animate?: boolean; // Whether to animate transitions (default: true)
 }
 
 export const CircularProgress = forwardRef<HTMLDivElement, CircularProgressProps>(({ 
@@ -14,7 +15,8 @@ export const CircularProgress = forwardRef<HTMLDivElement, CircularProgressProps
   size = 'md', 
   showValue = true,
   className,
-  strokeWidth
+  strokeWidth,
+  animate = true
 }, ref) => {
   // Ensure value is between 0 and 100
   const percentage = Math.min(100, Math.max(0, value));
@@ -67,7 +69,7 @@ export const CircularProgress = forwardRef<HTMLDivElement, CircularProgressProps
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
-          className="transition-all duration-300 ease-in-out"
+          className={animate ? "transition-all duration-300 ease-in-out" : ""}
         />
       </svg>
       {showValue && (

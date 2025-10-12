@@ -319,10 +319,13 @@ export default function ResourceList({
               </div>
             </TooltipContent>
           </Tooltip>
-          <CircularProgress 
-            value={progressValue} 
-            size="sm"
-          />
+          {progressValue > 0 && (
+            <CircularProgress 
+              value={progressValue} 
+              size="sm"
+              animate={false}
+            />
+          )}
         </div>
       );
     }
@@ -335,42 +338,44 @@ export default function ResourceList({
               <CheckCircle className="h-3 w-3 mr-1" />
               Valid
             </Badge>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <CircularProgress 
-                  value={validationScore} 
-                  size="sm"
-                />
-              </TooltipTrigger>
-              <TooltipContent>
-                <div className="space-y-2">
-                  <div>
-                    <p className="font-medium">Validation Score: {validationScore}%</p>
-                    <p className="text-sm text-gray-500">Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
-                  </div>
-                  {filteredSummary?.aspectBreakdown && (
-                    <div className="border-t pt-2">
-                      <p className="text-sm font-medium mb-1">Aspect Breakdown:</p>
-                      <div className="space-y-1 text-xs">
-                        {filteredSummary.aspectBreakdown && typeof filteredSummary.aspectBreakdown === 'object' && Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
-                          <div key={aspect} className="flex justify-between items-center">
-                            <span className="capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}:</span>
-                            <div className="flex items-center gap-2">
-                              {data.enabled === false && <span className="text-gray-400">(Disabled)</span>}
-                              <span className={`font-medium ${data.validationScore === 100 ? 'text-green-600' : data.validationScore >= 80 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                {data.validationScore}%
-                              </span>
-                              {data.errorCount > 0 && <span className="text-red-500">({data.errorCount} errors)</span>}
-                              {data.warningCount > 0 && <span className="text-yellow-500">({data.warningCount} warnings)</span>}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+            {(filteredSummary?.lastValidated || validationScore > 0) && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <CircularProgress 
+                    value={validationScore} 
+                    size="sm"
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="font-medium">Validation Score: {validationScore}%</p>
+                      <p className="text-sm text-gray-500">Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
                     </div>
-                  )}
-                </div>
-              </TooltipContent>
-            </Tooltip>
+                    {filteredSummary?.aspectBreakdown && (
+                      <div className="border-t pt-2">
+                        <p className="text-sm font-medium mb-1">Aspect Breakdown:</p>
+                        <div className="space-y-1 text-xs">
+                          {filteredSummary.aspectBreakdown && typeof filteredSummary.aspectBreakdown === 'object' && Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
+                            <div key={aspect} className="flex justify-between items-center">
+                              <span className="capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}:</span>
+                              <div className="flex items-center gap-2">
+                                {data.enabled === false && <span className="text-gray-400">(Disabled)</span>}
+                                <span className={`font-medium ${data.validationScore === 100 ? 'text-green-600' : data.validationScore >= 80 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                  {data.validationScore}%
+                                </span>
+                                {data.errorCount > 0 && <span className="text-red-500">({data.errorCount} errors)</span>}
+                                {data.warningCount > 0 && <span className="text-yellow-500">({data.warningCount} warnings)</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
         );
       case 'error':
@@ -410,42 +415,44 @@ export default function ResourceList({
                 </Badge>
               )}
             </div>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <CircularProgress 
-                  value={validationScore} 
-                  size="sm"
-                />
-              </TooltipTrigger>
-              <TooltipContent>
-                <div className="space-y-2">
-                  <div>
-                    <p className="font-medium">Validation Score: {validationScore}%</p>
-                    <p className="text-sm text-gray-500">Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
-                  </div>
-                  {filteredSummary?.aspectBreakdown && (
-                    <div className="border-t pt-2">
-                      <p className="text-sm font-medium mb-1">Aspect Breakdown:</p>
-                      <div className="space-y-1 text-xs">
-                        {filteredSummary.aspectBreakdown && typeof filteredSummary.aspectBreakdown === 'object' && Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
-                          <div key={aspect} className="flex justify-between items-center">
-                            <span className="capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}:</span>
-                            <div className="flex items-center gap-2">
-                              {data.enabled === false && <span className="text-gray-400">(Disabled)</span>}
-                              <span className={`font-medium ${data.validationScore === 100 ? 'text-green-600' : data.validationScore >= 80 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                {data.validationScore}%
-                              </span>
-                              {data.errorCount > 0 && <span className="text-red-500">({data.errorCount} errors)</span>}
-                              {data.warningCount > 0 && <span className="text-yellow-500">({data.warningCount} warnings)</span>}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+            {(filteredSummary?.lastValidated || validationScore > 0) && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <CircularProgress 
+                    value={validationScore} 
+                    size="sm"
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="font-medium">Validation Score: {validationScore}%</p>
+                      <p className="text-sm text-gray-500">Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
                     </div>
-                  )}
-                </div>
-              </TooltipContent>
-            </Tooltip>
+                    {filteredSummary?.aspectBreakdown && (
+                      <div className="border-t pt-2">
+                        <p className="text-sm font-medium mb-1">Aspect Breakdown:</p>
+                        <div className="space-y-1 text-xs">
+                          {filteredSummary.aspectBreakdown && typeof filteredSummary.aspectBreakdown === 'object' && Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
+                            <div key={aspect} className="flex justify-between items-center">
+                              <span className="capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}:</span>
+                              <div className="flex items-center gap-2">
+                                {data.enabled === false && <span className="text-gray-400">(Disabled)</span>}
+                                <span className={`font-medium ${data.validationScore === 100 ? 'text-green-600' : data.validationScore >= 80 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                  {data.validationScore}%
+                                </span>
+                                {data.errorCount > 0 && <span className="text-red-500">({data.errorCount} errors)</span>}
+                                {data.warningCount > 0 && <span className="text-yellow-500">({data.warningCount} warnings)</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
         );
       case 'warning':
@@ -455,42 +462,44 @@ export default function ResourceList({
               <AlertTriangle className="h-3 w-3 mr-1" />
               {filteredSummary?.warningCount || 0} Warning{(filteredSummary?.warningCount || 0) !== 1 ? 's' : ''}
             </Badge>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <CircularProgress 
-                  value={validationScore} 
-                  size="sm"
-                />
-              </TooltipTrigger>
-              <TooltipContent>
-                <div className="space-y-2">
-                  <div>
-                    <p className="font-medium">Validation Score: {validationScore}%</p>
-                    <p className="text-sm text-gray-500">Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
-                  </div>
-                  {filteredSummary?.aspectBreakdown && (
-                    <div className="border-t pt-2">
-                      <p className="text-sm font-medium mb-1">Aspect Breakdown:</p>
-                      <div className="space-y-1 text-xs">
-                        {filteredSummary.aspectBreakdown && typeof filteredSummary.aspectBreakdown === 'object' && Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
-                          <div key={aspect} className="flex justify-between items-center">
-                            <span className="capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}:</span>
-                            <div className="flex items-center gap-2">
-                              {data.enabled === false && <span className="text-gray-400">(Disabled)</span>}
-                              <span className={`font-medium ${data.validationScore === 100 ? 'text-green-600' : data.validationScore >= 80 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                {data.validationScore}%
-                              </span>
-                              {data.errorCount > 0 && <span className="text-red-500">({data.errorCount} errors)</span>}
-                              {data.warningCount > 0 && <span className="text-yellow-500">({data.warningCount} warnings)</span>}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+            {(filteredSummary?.lastValidated || validationScore > 0) && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <CircularProgress 
+                    value={validationScore} 
+                    size="sm"
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="space-y-2">
+                    <div>
+                      <p className="font-medium">Validation Score: {validationScore}%</p>
+                      <p className="text-sm text-gray-500">Last validated: {filteredSummary?.lastValidated ? new Date(filteredSummary.lastValidated).toLocaleString() : 'Never'}</p>
                     </div>
-                  )}
-                </div>
-              </TooltipContent>
-            </Tooltip>
+                    {filteredSummary?.aspectBreakdown && (
+                      <div className="border-t pt-2">
+                        <p className="text-sm font-medium mb-1">Aspect Breakdown:</p>
+                        <div className="space-y-1 text-xs">
+                          {filteredSummary.aspectBreakdown && typeof filteredSummary.aspectBreakdown === 'object' && Object.entries(filteredSummary.aspectBreakdown).map(([aspect, data]: [string, any]) => (
+                            <div key={aspect} className="flex justify-between items-center">
+                              <span className="capitalize">{aspect.replace(/([A-Z])/g, ' $1').trim()}:</span>
+                              <div className="flex items-center gap-2">
+                                {data.enabled === false && <span className="text-gray-400">(Disabled)</span>}
+                                <span className={`font-medium ${data.validationScore === 100 ? 'text-green-600' : data.validationScore >= 80 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                  {data.validationScore}%
+                                </span>
+                                {data.errorCount > 0 && <span className="text-red-500">({data.errorCount} errors)</span>}
+                                {data.warningCount > 0 && <span className="text-yellow-500">({data.warningCount} warnings)</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
         );
       default:
@@ -500,18 +509,20 @@ export default function ResourceList({
               <AlertCircle className="h-3 w-3 mr-1" />
               Not Validated
             </Badge>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <CircularProgress 
-                  value={validationScore} 
-                  size="sm"
-                />
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Validation Score: {validationScore}% (Not validated)</p>
-                <p>Last validated: Never</p>
-              </TooltipContent>
-            </Tooltip>
+            {(filteredSummary?.lastValidated || validationScore > 0) && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <CircularProgress 
+                    value={validationScore} 
+                    size="sm"
+                  />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Validation Score: {validationScore}% (Not validated)</p>
+                  <p>Last validated: Never</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
         );
     }
