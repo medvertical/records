@@ -22,11 +22,61 @@ All code fixes have been applied to resolve crashes AND enable **real FHIR data*
 - ✅ 17 Frontend component/lib files ⭐ (**All property accesses protected**)
 - ✅ 3 Documentation files
 
-## 🔄 Next Steps - Deploy to Vercel with Real Data
+## 🔄 Two-Stage Deployment Process
 
-### Step 0: Configure Environment Variables in Vercel (REQUIRED!)
+### ⚠️ IMPORTANT: Deploy in Two Stages
 
-Your deployment now uses the **full server** which requires a database to get FHIR server configurations.
+**Stage 1: Fix 500 Errors** (Do this first!)
+- Deploy the crash fix
+- App will start (no more 500 errors)
+- Will run in "degraded mode" with mock data
+
+**Stage 2: Enable Real Data** (Do after Stage 1)
+- Set `DATABASE_URL` in Vercel
+- Redeploy to get real FHIR data
+
+---
+
+### Stage 1: Fix 500 Errors (Do This IMMEDIATELY)
+
+#### 1.1: Build
+```bash
+npm run build
+```
+
+#### 1.2: Commit the 500 Error Fix
+```bash
+git add server.ts URGENT_DEPLOY_FIX.md
+git commit -m "Fix 500 error - Don't crash in serverless"
+```
+
+#### 1.3: Push & Deploy
+```bash
+git push origin main
+```
+
+Wait for Vercel to deploy (~2 minutes)
+
+#### 1.4: Verify No More 500 Errors
+After Vercel finishes deploying:
+
+1. Test health endpoint:
+   ```bash
+   curl https://records2.dev.medvertical.com/api/health
+   ```
+   Should return **200 OK** (not 500!)
+
+2. Visit your deployed URL: `https://records2.dev.medvertical.com`
+   - ✅ App loads (no 500 errors!)
+   - ⚠️  Using mock data (this is OK for now)
+   
+**Stage 1 Complete!** App is working, now enable real data...
+
+---
+
+### Stage 2: Enable Real Data (Do After Stage 1 Works)
+
+#### 2.1: Configure DATABASE_URL in Vercel
 
 **In Vercel Dashboard:**
 1. Go to your project → Settings → Environment Variables
@@ -36,62 +86,28 @@ Your deployment now uses the **full server** which requires a database to get FH
    ```
 3. Save and make sure it's enabled for Production
 
-**Without DATABASE_URL, your app won't have FHIR server configurations!**
-
-See `VERCEL_REAL_DATA_SETUP.md` for detailed instructions.
-
-### Step 1: Build the Application
+#### 2.2: Trigger Redeploy
 ```bash
-npm run build
-```
-
-This will:
-- Compile TypeScript
-- Bundle the frontend
-- Generate production-ready files in `dist/`
-
-### Step 2: Test Locally (Optional but Recommended)
-```bash
-# Preview the production build
-npm run preview
-```
-
-Then visit `http://localhost:4173` and verify:
-- ✅ No console errors
-- ✅ No 404 errors for `/api/servers`
-- ✅ Dashboard loads without crashes
-- ✅ Server selection works
-
-### Step 3: Commit Changes
-```bash
-git add .
-git commit -m "Fix Vercel crashes and enable real FHIR data"
-```
-
-### Step 4: Push to Repository
-```bash
+# Trigger rebuild with new env var
+git commit --allow-empty -m "Trigger rebuild with DATABASE_URL"
 git push origin main
 ```
 
-Vercel will automatically:
-- Detect the push
-- Build the application
-- Deploy to production
+#### 2.3: Verify Real Data
+After redeploy completes:
 
-### Step 5: Verify Deployment
-After Vercel finishes deploying (usually 2-3 minutes):
+1. Check health endpoint:
+   ```bash
+   curl https://records2.dev.medvertical.com/api/health
+   ```
+   Should show: `"database": "connected"`, `"usingMockData": false`
 
-1. Visit your deployed URL: `https://records2.dev.medvertical.com`
-2. Open browser console (F12)
-3. Verify:
-   - ✅ No `TypeError: Cannot convert undefined or null to object` errors
-   - ✅ No `TypeError: Cannot read properties of undefined` errors
-   - ✅ No `404` errors for `/api/servers`
-   - ✅ No `404` errors for `/api/fhir/resources`
-   - ✅ Dashboard loads successfully
+2. Visit your deployed URL:
    - ✅ **Server list shows YOUR configured servers** (not mock data!)
-   - ✅ **Resources page shows REAL FHIR resources** from your server
+   - ✅ **Resources page shows REAL FHIR resources**
    - ✅ Validation works on real resources
+
+**Stage 2 Complete!** Full functionality enabled
 
 ## 📊 What to Expect
 

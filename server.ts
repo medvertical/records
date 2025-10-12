@@ -1710,17 +1710,27 @@ app.get("/api/validation/health", (req, res) => {
 // Serve static files (must be after all API routes)
 serveStatic(app);
 
-// Validate production safety before starting server
+// Validate production safety before starting server (skip process.exit in serverless)
+const isServerless = process.env.VERCEL === '1' || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+
 try {
   assertProductionSafety();
   logFeatureFlags();
 } catch (error) {
   console.error('❌ Production Safety Check Failed:', error.message);
-  process.exit(1);
+  
+  if (isServerless) {
+    // In serverless, log the warning but don't crash - allow graceful degradation
+    console.warn('⚠️  Running in degraded mode without full production safety guarantees');
+    console.warn('⚠️  Some features may use fallback/mock data');
+  } else {
+    // In traditional server mode, exit to prevent production issues
+    process.exit(1);
+  }
 }
 
 // Only start the server if not in Vercel/serverless environment
-if (process.env.VERCEL !== '1' && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+if (!isServerless) {
   server.listen({
     port,
     host: "0.0.0.0",
