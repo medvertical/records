@@ -70,13 +70,25 @@ if (enableRealTimeUpdates && enabled && hasValidActiveServer) {
 
 ## Files Modified
 
+### Backend
 1. **api/index.js** - Added `/api/servers` endpoints, removed duplicate `/api/fhir/servers` endpoints
 2. **api/index.ts** - Added database initialization and connection status tracking
-3. **server/routes/api/fhir/fhir.ts** - Removed duplicate `/api/fhir/servers` endpoints
+3. **server/routes/api/fhir/fhir.ts** - Removed duplicate `/api/fhir/servers` endpoints, added null checks
+
+### Frontend Hooks
 4. **client/src/hooks/use-dashboard-data-wiring.ts** - Added null checks and polling guards
 5. **client/src/hooks/use-active-server.ts** - Enhanced error handling with fallbacks
-6. **VERCEL_DEPLOYMENT.md** - Created deployment documentation
-7. **VERCEL_FIX_SUMMARY.md** - This summary document
+6. **client/src/hooks/use-server-data.ts** - Updated to use `/api/servers`, handle new response format
+7. **client/src/hooks/use-validation-polling.ts** - Updated to use `/api/servers`, handle new response format
+8. **client/src/hooks/use-fhir-data.ts** - Updated API endpoint constant
+
+### Frontend Components
+9. **client/src/components/settings/server-operations.tsx** - Updated all 16 references to use `/api/servers`
+
+### Documentation
+10. **VERCEL_DEPLOYMENT.md** - Created deployment documentation
+11. **VERCEL_FIX_SUMMARY.md** - This summary document
+12. **TYPESCRIPT_ERROR_FIXES.md** - TypeScript error fixes documentation
 
 ## Testing Recommendations
 

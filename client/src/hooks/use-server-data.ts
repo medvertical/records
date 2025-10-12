@@ -24,24 +24,50 @@ export function useServerData() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const queryClient = useQueryClient();
 
-  const { data: servers, isLoading, error } = useQuery<FhirServer[]>({
-    queryKey: ["/api/fhir/servers", refreshTrigger],
+  const { data: serversData, isLoading, error } = useQuery<{ servers: FhirServer[], activeServer: FhirServer | null } | FhirServer[]>({
+    queryKey: ["/api/servers", refreshTrigger],
     queryFn: async () => {
-      const response = await fetch('/api/fhir/servers');
-      if (!response.ok) {
-        throw new Error('Failed to fetch servers');
+      try {
+        const response = await fetch('/api/servers');
+        if (!response.ok) {
+          console.warn(`[useServerData] Failed to fetch servers: ${response.status}`);
+          return { servers: [], activeServer: null };
+        }
+        const data = await response.json();
+        // Handle both old array format and new object format
+        if (Array.isArray(data)) {
+          return { servers: data, activeServer: data.find(s => s.isActive) || null };
+        }
+        return data;
+      } catch (err) {
+        console.error('[useServerData] Error fetching servers:', err);
+        return { servers: [], activeServer: null };
       }
-      return response.json();
     },
     refetchInterval: false, // Disable automatic polling
     refetchOnWindowFocus: false,
     // Keep previous data visible during refetches to prevent UI flickering
     placeholderData: (previousData) => previousData,
     // Consider data fresh for 2 minutes to reduce unnecessary refetches
-    staleTime: 120000
+    staleTime: 120000,
+    retry: 2, // Retry failed requests
+    retryDelay: 1000 // Wait 1 second between retries
   });
 
-  const activeServer = useMemo(() => servers?.find(server => server.isActive), [servers]);
+  // Extract servers array from response
+  const servers = useMemo(() => {
+    if (!serversData) return [];
+    if (Array.isArray(serversData)) return serversData;
+    return serversData.servers || [];
+  }, [serversData]);
+
+  const activeServer = useMemo(() => {
+    if (!serversData) return null;
+    if (Array.isArray(serversData)) {
+      return serversData.find(server => server.isActive) || null;
+    }
+    return serversData.activeServer || servers.find(server => server.isActive) || null;
+  }, [serversData, servers]);
   
   // Connection test query - Auto-connect when there's an active server
   const { data: serverStatus, isLoading: isConnectionLoading } = useQuery<ServerStatus | undefined>({
@@ -87,7 +113,7 @@ export function useServerData() {
     // Refetch both server list and connection test queries
     queryClient.refetchQueries({ 
       predicate: (query) => 
-        query.queryKey[0] === "/api/fhir/servers" ||
+        query.queryKey[0] === "/api/servers" ||
         query.queryKey[0] === "/api/fhir/connection/test"
     });
     

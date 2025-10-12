@@ -13,7 +13,7 @@ export const QUERY_KEYS = {
   dashboardCards: '/api/dashboard/cards',
   validationProfiles: '/api/validation/profiles',
   recentErrors: '/api/validation/errors/recent',
-  servers: '/api/fhir/servers',
+  servers: '/api/servers',
 } as const;
 
 // Connection status hook

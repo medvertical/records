@@ -47,7 +47,7 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
   // Create Server Mutation
   const createServerMutation = useMutation({
     mutationFn: async (data: ServerFormData) => {
-      const response = await fetch('/api/fhir/servers', {
+      const response = await fetch('/api/servers', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -65,7 +65,7 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
     },
     onSuccess: (data) => {
       queryClient.refetchQueries({ 
-        predicate: (query) => query.queryKey[0] === "/api/fhir/servers" 
+        predicate: (query) => query.queryKey[0] === "/api/servers" 
       });
       
       queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
@@ -94,7 +94,7 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
   // Update Server Mutation
   const updateServerMutation = useMutation({
     mutationFn: async ({ id, ...data }: ServerFormData & { id: number }) => {
-      const response = await fetch(`/api/fhir/servers/${id}`, {
+      const response = await fetch(`/api/servers/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -112,7 +112,7 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
     },
     onSuccess: (data) => {
       queryClient.refetchQueries({ 
-        predicate: (query) => query.queryKey[0] === "/api/fhir/servers" 
+        predicate: (query) => query.queryKey[0] === "/api/servers" 
       });
       
       queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
@@ -141,14 +141,14 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
   // Delete Server Mutation
   const deleteServerMutation = useMutation({
     mutationFn: async (serverId: number) => {
-      return fetch(`/api/fhir/servers/${serverId}`, {
+      return fetch(`/api/servers/${serverId}`, {
         method: 'DELETE'
       });
     },
     onSuccess: (_, serverId) => {
       queryClient.refetchQueries({ 
         predicate: (query) => 
-          query.queryKey[0] === "/api/fhir/servers" || 
+          query.queryKey[0] === "/api/servers" || 
           query.queryKey[0] === "/api/fhir/connection/test"
       });
       
@@ -198,7 +198,7 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
   // Connect Server Mutation
   const connectServerMutation = useMutation({
     mutationFn: async (serverId: number) => {
-      const res = await fetch(`/api/fhir/servers/${serverId}/activate`, { method: 'POST' });
+      const res = await fetch(`/api/servers/${serverId}/activate`, { method: 'POST' });
       if (!res.ok) {
         const errorText = await res.text();
         const errorData = errorText ? JSON.parse(errorText) : { error: 'Failed to activate server' };
@@ -209,12 +209,12 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
     onMutate: async (serverId: number) => {
       // Cancel any outgoing refetches to avoid race conditions
       await queryClient.cancelQueries({ 
-        predicate: (query) => query.queryKey[0] === "/api/fhir/servers" 
+        predicate: (query) => query.queryKey[0] === "/api/servers" 
       });
       
       // Optimistically update the server status to prevent flashing
       queryClient.setQueriesData(
-        { predicate: (query) => query.queryKey[0] === "/api/fhir/servers" },
+        { predicate: (query) => query.queryKey[0] === "/api/servers" },
         (old: any) => {
           if (!old) return old;
           return old.map((server: any) => ({
@@ -230,7 +230,7 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
       // Refetch to get the final state from server
       queryClient.refetchQueries({ 
         predicate: (query) => 
-          query.queryKey[0] === "/api/fhir/servers" || 
+          query.queryKey[0] === "/api/servers" || 
           query.queryKey[0] === "/api/fhir/connection/test"
       });
       
@@ -249,7 +249,7 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
       
       // Revert optimistic update on error
       queryClient.refetchQueries({ 
-        predicate: (query) => query.queryKey[0] === "/api/fhir/servers" 
+        predicate: (query) => query.queryKey[0] === "/api/servers" 
       });
       
       queryClient.invalidateQueries({ queryKey: ['validation-settings'] });
@@ -285,7 +285,7 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
   // Disconnect Server Mutation
   const disconnectServerMutation = useMutation({
     mutationFn: async (serverId: number) => {
-      const res = await fetch(`/api/fhir/servers/${serverId}/deactivate`, { method: 'POST' });
+      const res = await fetch(`/api/servers/${serverId}/deactivate`, { method: 'POST' });
       if (!res.ok) {
         const errorText = await res.text();
         const errorData = errorText ? JSON.parse(errorText) : { error: 'Failed to deactivate server' };
@@ -296,12 +296,12 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
     onMutate: async (serverId: number) => {
       // Cancel any outgoing refetches to avoid race conditions
       await queryClient.cancelQueries({ 
-        predicate: (query) => query.queryKey[0] === "/api/fhir/servers" 
+        predicate: (query) => query.queryKey[0] === "/api/servers" 
       });
       
       // Optimistically update the server status to prevent flashing
       queryClient.setQueriesData(
-        { predicate: (query) => query.queryKey[0] === "/api/fhir/servers" },
+        { predicate: (query) => query.queryKey[0] === "/api/servers" },
         (old: any) => {
           if (!old) return old;
           return old.map((server: any) => ({
@@ -317,7 +317,7 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
       // Refetch to get the final state from server
       queryClient.refetchQueries({ 
         predicate: (query) => 
-          query.queryKey[0] === "/api/fhir/servers" || 
+          query.queryKey[0] === "/api/servers" || 
           query.queryKey[0] === "/api/fhir/connection/test"
       });
       
@@ -336,7 +336,7 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
       
       // Revert optimistic update on error
       queryClient.refetchQueries({ 
-        predicate: (query) => query.queryKey[0] === "/api/fhir/servers" 
+        predicate: (query) => query.queryKey[0] === "/api/servers" 
       });
       
       queryClient.invalidateQueries({ queryKey: ['validation-settings'] });

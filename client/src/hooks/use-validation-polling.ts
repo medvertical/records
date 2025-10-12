@@ -270,10 +270,14 @@ export function useValidationPolling(options: UseValidationPollingOptions = {}):
   // Fetch current server info
   const fetchCurrentServer = useCallback(async () => {
     try {
-      const response = await fetch('/api/fhir/servers');
+      const response = await fetch('/api/servers');
       if (response.ok) {
-        const servers = await response.json();
-        const activeServer = servers.find((server: any) => server.isActive);
+        const data = await response.json();
+        // Handle both old array format and new object format
+        const servers = Array.isArray(data) ? data : (data.servers || []);
+        const activeServer = Array.isArray(data) 
+          ? data.find((server: any) => server.isActive)
+          : (data.activeServer || servers.find((server: any) => server.isActive));
         if (activeServer) {
           setCurrentServer({
             id: activeServer.id,
