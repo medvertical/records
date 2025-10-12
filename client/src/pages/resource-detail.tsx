@@ -1,6 +1,6 @@
 import { useParams, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-polling";
 import { useServerData } from "@/hooks/use-server-data";
 import { useToast } from "@/hooks/use-toast";
@@ -30,6 +30,23 @@ export default function ResourceDetail() {
   const [editedResource, setEditedResource] = useState<any>(null);
   const [autoRevalidate, setAutoRevalidate] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  
+  // Per-resource expanded paths state - keyed by resourceId
+  const [expandedPathsMap, setExpandedPathsMap] = useState<Map<string, Set<string>>>(new Map());
+  
+  // Get expanded paths for current resource
+  const getExpandedPaths = (resourceId: string) => {
+    return expandedPathsMap.get(resourceId) || new Set<string>();
+  };
+  
+  // Set expanded paths for current resource
+  const setExpandedPaths = useCallback((resourceId: string, expandedPaths: Set<string>) => {
+    setExpandedPathsMap(prev => {
+      const newMap = new Map(prev);
+      newMap.set(resourceId, expandedPaths);
+      return newMap;
+    });
+  }, []);
   
   // Parse query parameters
   const searchParams = new URLSearchParams(location.split('?')[1] || '');
@@ -241,10 +258,10 @@ export default function ResourceDetail() {
   };
 
   // Handle resource changes in edit mode
-  const handleResourceChange = (updatedResource: any) => {
+  const handleResourceChange = useCallback((updatedResource: any) => {
     setEditedResource(updatedResource);
     setHasChanges(true);
-  };
+  }, []);
   
   const { data: resource, isLoading, error } = useQuery<FhirResourceWithValidation>({
     queryKey: ["/api/fhir/resources", id],
@@ -413,6 +430,8 @@ export default function ResourceDetail() {
               onResourceChange={handleResourceChange}
               autoRevalidate={autoRevalidate}
               onAutoRevalidateChange={setAutoRevalidate}
+              expandedPaths={getExpandedPaths(resource.resourceId)}
+              onExpandedPathsChange={(paths) => setExpandedPaths(resource.resourceId, paths)}
             />
           </div>
           

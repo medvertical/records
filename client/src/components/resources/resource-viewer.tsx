@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -21,8 +21,7 @@ import { highlight, languages } from 'prismjs';
 import 'prismjs/components/prism-json';
 import 'prismjs/themes/prism.css';
 import { OptimizedValidationResults } from './optimized-validation-results';
-import ResourceTreeViewer from './resource-tree-viewer';
-import EditableTreeViewer from './EditableTreeViewer';
+import UnifiedTreeViewer from './UnifiedTreeViewer';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -63,6 +62,8 @@ interface ResourceViewerProps {
   onResourceChange?: (resource: any) => void;
   autoRevalidate?: boolean;
   onAutoRevalidateChange?: (value: boolean) => void;
+  expandedPaths: Set<string>;
+  onExpandedPathsChange: (expandedPaths: Set<string>) => void;
 }
 
 // ============================================================================
@@ -144,6 +145,8 @@ export default function ResourceViewer({
   onResourceChange,
   autoRevalidate = false,
   onAutoRevalidateChange,
+  expandedPaths,
+  onExpandedPathsChange,
 }: ResourceViewerProps) {
   // Use data if provided, otherwise use resource.data or resource
   // Handle different resource structures: {data: {...}} or direct resource object
@@ -159,6 +162,59 @@ export default function ResourceViewer({
   const [selectedPath, setSelectedPath] = useState<string | undefined>(undefined);
   const [highlightedIssueId, setHighlightedIssueId] = useState<string | null>(null);
   const [expandAll, setExpandAll] = useState(false);
+  
+  // Track which resources have been initialized to prevent re-initialization
+  const initializedResourcesRef = useRef<Set<string>>(new Set());
+  
+  // Track expand all clicks to only apply when button is explicitly clicked
+  const expandAllTriggeredRef = useRef<number>(0);
+  
+  // Initialize expandedPaths with first two levels expanded by default for new resources
+  useEffect(() => {
+    if (!resourceData || typeof resourceData !== 'object') return;
+    if (!resourceId) return;
+    
+    // Only initialize once per resource
+    if (initializedResourcesRef.current.has(resourceId)) return;
+    
+    // Only initialize if expandedPaths is empty (new resource)
+    if (expandedPaths.size === 0) {
+      const newExpandedPaths = new Set<string>();
+      
+      Object.keys(resourceData).forEach(key => {
+        if (!key.startsWith('_') && key !== 'resourceId') {
+          const value = resourceData[key];
+          const valueType = typeof value;
+          
+          // Expand first level if it's complex
+          if ((valueType === 'object' && value !== null && !Array.isArray(value)) || Array.isArray(value)) {
+            newExpandedPaths.add(key);
+            
+            // Auto-expand second level for objects
+            if (valueType === 'object' && value !== null) {
+              Object.keys(value).forEach(subKey => {
+                if (!subKey.startsWith('_') && subKey !== 'resourceId') {
+                  const subValue = value[subKey];
+                  const subValueType = typeof subValue;
+                  
+                  if ((subValueType === 'object' && subValue !== null && !Array.isArray(subValue)) || Array.isArray(subValue)) {
+                    newExpandedPaths.add(`${key}.${subKey}`);
+                  }
+                }
+              });
+            }
+          }
+        }
+      });
+      
+      // Only update if we actually have new paths to set
+      if (newExpandedPaths.size > 0) {
+        onExpandedPathsChange(newExpandedPaths);
+        initializedResourcesRef.current.add(resourceId);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resourceId]);
   
   // Edit mode state
   const [activeTab, setActiveTab] = useState<'tree' | 'json' | 'form'>('tree');
@@ -195,6 +251,7 @@ export default function ResourceViewer({
   // Handler for expand all button
   const handleExpandAll = () => {
     setExpandAll(!expandAll);
+    expandAllTriggeredRef.current += 1; // Increment on each click
   };
 
   // Handler for JSON content changes
@@ -397,17 +454,18 @@ export default function ResourceViewer({
                   {expandAll ? 'Collapse All' : 'Expand All'}
                 </Button>
               </div>
-              <ResourceTreeViewer 
-                resourceData={resourceData} 
+              <UnifiedTreeViewer 
+                resourceData={resourceData}
+                resourceType={resourceType}
+                isEditMode={false}
                 validationResults={validationIssues}
-                selectedCategory={selectedCategory}
-                selectedSeverity={selectedSeverity}
-                selectedPath={selectedPath}
                 onCategoryChange={setSelectedCategory}
                 onSeverityChange={handleSeverityChange}
                 onIssueClick={setHighlightedIssueId}
                 expandAll={expandAll}
-                onExpandAll={handleExpandAll}
+                expandAllTrigger={expandAllTriggeredRef.current}
+                expandedPaths={expandedPaths}
+                onExpandedPathsChange={onExpandedPathsChange}
               />
             </TabsContent>
           )}
@@ -580,11 +638,15 @@ export default function ResourceViewer({
                     {expandAll ? 'Collapse All' : 'Expand All'}
                   </Button>
                 </div>
-                <EditableTreeViewer
+                <UnifiedTreeViewer
                   resourceData={editedResource || resourceData}
-                  onResourceChange={onResourceChange || (() => {})}
                   resourceType={resourceType}
+                  isEditMode={true}
+                  onResourceChange={onResourceChange}
                   expandAll={expandAll}
+                  expandAllTrigger={expandAllTriggeredRef.current}
+                  expandedPaths={expandedPaths}
+                  onExpandedPathsChange={onExpandedPathsChange}
                 />
                 
                 {/* Auto-Revalidate Checkbox */}

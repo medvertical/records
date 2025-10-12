@@ -1,0 +1,147 @@
+import React, { useCallback, useState, useEffect, useRef } from 'react';
+import { AlertCircle } from 'lucide-react';
+import { setNestedValue, deleteNestedValue } from './unified-tree-viewer/utils';
+import TreeNode from './unified-tree-viewer/TreeNode';
+import { UnifiedTreeViewerProps } from './unified-tree-viewer/types';
+
+// ============================================================================
+// Main UnifiedTreeViewer Component
+// ============================================================================
+
+export default function UnifiedTreeViewer({
+  resourceData,
+  resourceType,
+  isEditMode = false,
+  validationResults = [],
+  onCategoryChange,
+  onSeverityChange,
+  onIssueClick,
+  onResourceChange,
+  expandAll = false,
+  expandAllTrigger = 0,
+  expandedPaths: externalExpandedPaths,
+  onExpandedPathsChange: externalOnExpandedPathsChange,
+}: UnifiedTreeViewerProps) {
+  // Internal state for expanded paths (fallback if not provided externally)
+  const [internalExpandedPaths, setInternalExpandedPaths] = useState<Set<string>>(new Set());
+  
+  // Use external state if provided, otherwise use internal state
+  const expandedPaths = externalExpandedPaths ?? internalExpandedPaths;
+  const onExpandedPathsChange = externalOnExpandedPathsChange ?? setInternalExpandedPaths;
+
+  // Track previous trigger value to detect actual changes
+  const prevExpandAllTriggerRef = useRef<number>(expandAllTrigger);
+
+  // Handle expandAll functionality
+  useEffect(() => {
+    // Only run if expandAllTrigger actually changed (not on initial mount)
+    if (prevExpandAllTriggerRef.current === expandAllTrigger) return;
+    prevExpandAllTriggerRef.current = expandAllTrigger;
+    
+    if (!resourceData || typeof resourceData !== 'object') return;
+    
+    const newExpandedPaths = new Set<string>();
+    
+    if (expandAll) {
+      // When expandAll is true, expand all complex nodes
+      const expandAllPaths = (obj: any, path: string[] = []) => {
+        Object.entries(obj).forEach(([key, value]) => {
+          if (key.startsWith('_') || key === 'resourceId') return; // Skip internal fields
+          
+          const currentPath = path.length === 0 ? key : `${path.join('.')}.${key}`;
+          const valueType = typeof value;
+          
+          // Add complex types to expanded paths
+          if ((valueType === 'object' && value !== null && !Array.isArray(value)) || Array.isArray(value)) {
+            newExpandedPaths.add(currentPath);
+            
+            // Recursively expand nested objects/arrays
+            if (valueType === 'object' && value !== null) {
+              expandAllPaths(value, [...path, key]);
+            } else if (Array.isArray(value)) {
+              value.forEach((item, index) => {
+                if (typeof item === 'object' && item !== null) {
+                  expandAllPaths(item, [...path, key, `[${index}]`]);
+                }
+              });
+            }
+          }
+        });
+      };
+      
+      expandAllPaths(resourceData);
+    }
+    
+    // Update expanded paths when button is clicked
+    onExpandedPathsChange(newExpandedPaths);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandAll, expandAllTrigger]);
+
+  const handleValueChange = useCallback((path: string[], newValue: any) => {
+    if (!onResourceChange) return;
+    const updatedResource = setNestedValue(resourceData, path, newValue);
+    onResourceChange(updatedResource);
+  }, [resourceData, onResourceChange]);
+
+  const handleDeleteNode = useCallback((path: string[]) => {
+    if (!onResourceChange) return;
+    const updatedResource = deleteNestedValue(resourceData, path);
+    onResourceChange(updatedResource);
+  }, [resourceData, onResourceChange]);
+
+  if (!resourceData) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <AlertCircle className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+        <p>No resource data available</p>
+      </div>
+    );
+  }
+
+  if (typeof resourceData !== 'object') {
+    return (
+      <div className="p-4 text-center text-gray-500">
+        <p>Invalid resource data</p>
+      </div>
+    );
+  }
+
+  // Filter out internal fields at root level
+  const rootKeys = Object.keys(resourceData).filter(
+    key => !key.startsWith('_') && key !== 'resourceId'
+  );
+
+  return (
+    <div className="space-y-1 font-mono text-sm">
+      {rootKeys.map((key) => (
+        <TreeNode
+          key={key}
+          nodeKey={key}
+          value={resourceData[key]}
+          path={[]}
+          level={0}
+          resourceType={resourceType || resourceData.resourceType}
+          isEditMode={isEditMode}
+          expandAll={expandAll}
+          expandedPaths={expandedPaths}
+          onExpandedPathsChange={onExpandedPathsChange}
+          validationIssues={validationResults}
+          onCategoryChange={onCategoryChange}
+          onSeverityChange={onSeverityChange}
+          onIssueClick={onIssueClick}
+          onValueChange={handleValueChange}
+          onDeleteNode={handleDeleteNode}
+        />
+      ))}
+      
+      {/* Summary for view mode */}
+      {!isEditMode && validationResults.length > 0 && (
+        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+          <div className="text-sm text-gray-600">
+            <strong>{validationResults.length}</strong> validation issue{validationResults.length !== 1 ? 's' : ''} found
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { GripVertical } from 'lucide-react';
-import ResourceTreeViewer from './resource-tree-viewer';
+import UnifiedTreeViewer from './UnifiedTreeViewer';
 import { ValidationMessageList, type ValidationMessage } from '@/components/validation/ValidationMessageList';
 import { cn } from '@/lib/utils';
 
@@ -147,10 +147,11 @@ export function ResourceDetailSplitPane({
               </p>
             </div>
             
-            <ResourceTreeViewer
+            <UnifiedTreeViewer
               resourceData={resource}
+              resourceType={resource?.resourceType}
+              isEditMode={false}
               validationResults={validationIssues}
-              selectedPath={selectedPath}
               onSeverityChange={(_severity, path) => {
                 if (path) handleTreeNodeClick(path);
               }}
