@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChevronLeft, ChevronRight, XCircle, AlertTriangle, AlertCircle } from 'lucide-react';
@@ -12,6 +12,8 @@ export interface ValidationMessageNavigatorProps {
   onToggleMessages?: () => void;
   isMessagesVisible?: boolean;
   className?: string;
+  /** Callback to filter resources by this issue when clicked */
+  onFilterByIssue?: (issue: ValidationMessage) => void;
 }
 
 export interface SeverityNavigatorProps {
@@ -22,6 +24,8 @@ export interface SeverityNavigatorProps {
   isMessagesVisible?: boolean;
   className?: string;
   severity: 'error' | 'warning' | 'information';
+  /** Callback to filter resources by this severity when clicked */
+  onFilterBySeverity?: (severity: 'error' | 'warning' | 'information') => void;
 }
 
 export function ValidationMessageNavigator({
@@ -30,7 +34,8 @@ export function ValidationMessageNavigator({
   onIndexChange,
   onToggleMessages,
   isMessagesVisible = false,
-  className
+  className,
+  onFilterByIssue
 }: ValidationMessageNavigatorProps) {
   // Group messages by severity and count them
   const severityCounts = useMemo(() => {
@@ -73,6 +78,36 @@ export function ValidationMessageNavigator({
     onToggleMessages?.();
   };
 
+  const handleFilterByCurrentIssue = () => {
+    if (currentMessage && onFilterByIssue) {
+      onFilterByIssue(currentMessage);
+    }
+  };
+
+  // Auto-filter when component becomes active
+  useEffect(() => {
+    console.log('[ValidationMessageNavigator] useEffect triggered:', {
+      isMessagesVisible,
+      hasOnFilterByIssue: !!onFilterByIssue,
+      totalMessages,
+      severityCounts
+    });
+    
+    if (isMessagesVisible && onFilterByIssue && totalMessages > 0) {
+      // Filter by the primary severity (most severe)
+      if (severityCounts.error > 0) {
+        console.log('[ValidationMessageNavigator] Filtering by error');
+        onFilterByIssue({ severity: 'error', category: 'all' });
+      } else if (severityCounts.warning > 0) {
+        console.log('[ValidationMessageNavigator] Filtering by warning');
+        onFilterByIssue({ severity: 'warning', category: 'all' });
+      } else if (severityCounts.information > 0) {
+        console.log('[ValidationMessageNavigator] Filtering by information');
+        onFilterByIssue({ severity: 'information', category: 'all' });
+      }
+    }
+  }, [isMessagesVisible, onFilterByIssue, totalMessages, severityCounts]);
+
   // Don't render if no messages
   if (totalMessages === 0) {
     return null;
@@ -106,6 +141,7 @@ export function ValidationMessageNavigator({
             {totalMessages}
           </span>
         </div>
+
 
         {/* Severity counts */}
         <div className="flex items-center gap-2">
@@ -191,6 +227,7 @@ export function ValidationMessageNavigator({
         </div>
       </div>
 
+
       {/* Severity counts */}
       <div className="flex items-center gap-2">
         {severityCounts.error > 0 && (
@@ -224,7 +261,8 @@ export function SeverityNavigator({
   onToggleMessages,
   isMessagesVisible = false,
   className,
-  severity
+  severity,
+  onFilterBySeverity
 }: SeverityNavigatorProps) {
   // Filter messages by severity
   const filteredMessages = messages.filter(msg => 
@@ -265,6 +303,28 @@ export function SeverityNavigator({
     onToggleMessages?.();
   };
 
+  const handleFilterBySeverity = () => {
+    if (onFilterBySeverity) {
+      onFilterBySeverity(severity);
+    }
+  };
+
+  // Auto-filter when severity navigator becomes active
+  useEffect(() => {
+    console.log('[SeverityNavigator] useEffect triggered:', {
+      isMessagesVisible,
+      hasOnFilterBySeverity: !!onFilterBySeverity,
+      totalMessages,
+      severity
+    });
+    
+    if (isMessagesVisible && onFilterBySeverity && totalMessages > 0) {
+      // Filter by severity type only
+      console.log('[SeverityNavigator] Filtering by severity:', severity);
+      onFilterBySeverity(severity);
+    }
+  }, [isMessagesVisible, onFilterBySeverity, totalMessages, severity]);
+
   // Don't render if no messages of this severity
   if (totalMessages === 0) {
     return null;
@@ -273,27 +333,29 @@ export function SeverityNavigator({
   // Idle state: just icon and total count
   if (!isMessagesVisible) {
     return (
-      <div 
-        className={cn(
-          "flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors",
-          "hover:bg-muted/50 active:bg-muted",
-          className
-        )}
-        onClick={handleClick}
-      >
-        <SeverityIcon 
+      <div className={cn("flex items-center gap-2", className)}>
+        <div 
           className={cn(
-            "h-4 w-4",
-            severity === 'error' && "text-red-600",
-            severity === 'warning' && "text-yellow-600",
-            severity === 'information' && "text-blue-600"
+            "flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors",
+            "hover:bg-muted/50 active:bg-muted"
           )}
-        />
-        
-        {/* Total count only */}
-        <span className="text-sm font-medium">
-          {totalMessages}
-        </span>
+          onClick={handleClick}
+        >
+          <SeverityIcon 
+            className={cn(
+              "h-4 w-4",
+              severity === 'error' && "text-red-600",
+              severity === 'warning' && "text-yellow-600",
+              severity === 'information' && "text-blue-600"
+            )}
+          />
+          
+          {/* Total count only */}
+          <span className="text-sm font-medium">
+            {totalMessages}
+          </span>
+        </div>
+
       </div>
     );
   }
@@ -352,6 +414,7 @@ export function SeverityNavigator({
           <ChevronRight className="h-3 w-3" />
         </Button>
       </div>
+
     </div>
   );
 }

@@ -130,6 +130,25 @@ export function useResourceFiltering(options: UseResourceFilteringOptions = {}):
       params.append('isValid', options.validationStatus.isValid.toString());
     }
     
+    // Add issue-based filters
+    if (options.issueFilter) {
+      if (options.issueFilter.issueIds && options.issueFilter.issueIds.length > 0) {
+        params.append('issueIds', options.issueFilter.issueIds.join(','));
+      }
+      if (options.issueFilter.severity) {
+        params.append('issueSeverity', options.issueFilter.severity);
+      }
+      if (options.issueFilter.category) {
+        params.append('issueCategory', options.issueFilter.category);
+      }
+      if (options.issueFilter.messageContains) {
+        params.append('issueMessageContains', options.issueFilter.messageContains);
+      }
+      if (options.issueFilter.pathContains) {
+        params.append('issuePathContains', options.issueFilter.pathContains);
+      }
+    }
+    
     // Add search
     if (options.search) {
       params.append('search', options.search);

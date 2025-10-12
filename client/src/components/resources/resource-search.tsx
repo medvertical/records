@@ -15,6 +15,19 @@ export interface ValidationFilters {
   aspects: string[];
   severities: string[];
   hasIssuesOnly: boolean;
+  // Issue-based filtering
+  issueFilter?: {
+    /** Filter by specific issue IDs */
+    issueIds?: string[];
+    /** Filter by issue severity */
+    severity?: 'error' | 'warning' | 'information';
+    /** Filter by issue category/aspect */
+    category?: string;
+    /** Filter by issue message content */
+    messageContains?: string;
+    /** Filter by issue path */
+    pathContains?: string;
+  };
 }
 
 interface ResourceSearchProps {

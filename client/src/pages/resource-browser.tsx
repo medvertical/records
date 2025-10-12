@@ -378,7 +378,8 @@ export default function ResourceBrowser() {
   // Check if validation filters are active
   const hasValidationFilters = validationFilters.aspects.length > 0 || 
                                 validationFilters.severities.length > 0 || 
-                                validationFilters.hasIssuesOnly;
+                                validationFilters.hasIssuesOnly ||
+                                (validationFilters.issueFilter && Object.keys(validationFilters.issueFilter).length > 0);
   
   // Use filtered endpoint only when validation filters are active
   const apiEndpoint = hasValidationFilters ? "/api/fhir/resources/filtered" : "/api/fhir/resources";
@@ -1215,6 +1216,41 @@ export default function ResourceBrowser() {
     } else {
       urlParams.delete('severities');
     }
+    // Handle issue-based filters
+    if (newFilters.issueFilter) {
+      if (newFilters.issueFilter.issueIds && newFilters.issueFilter.issueIds.length > 0) {
+        urlParams.set('issueIds', newFilters.issueFilter.issueIds.join(','));
+      } else {
+        urlParams.delete('issueIds');
+      }
+      if (newFilters.issueFilter.severity) {
+        urlParams.set('issueSeverity', newFilters.issueFilter.severity);
+      } else {
+        urlParams.delete('issueSeverity');
+      }
+      if (newFilters.issueFilter.category) {
+        urlParams.set('issueCategory', newFilters.issueFilter.category);
+      } else {
+        urlParams.delete('issueCategory');
+      }
+      if (newFilters.issueFilter.messageContains) {
+        urlParams.set('issueMessageContains', newFilters.issueFilter.messageContains);
+      } else {
+        urlParams.delete('issueMessageContains');
+      }
+      if (newFilters.issueFilter.pathContains) {
+        urlParams.set('issuePathContains', newFilters.issueFilter.pathContains);
+      } else {
+        urlParams.delete('issuePathContains');
+      }
+    } else {
+      // Clear all issue filter params if no issue filter
+      urlParams.delete('issueIds');
+      urlParams.delete('issueSeverity');
+      urlParams.delete('issueCategory');
+      urlParams.delete('issueMessageContains');
+      urlParams.delete('issuePathContains');
+    }
     if (newFilters.hasIssuesOnly) {
       urlParams.set('hasIssues', 'true');
     } else {
@@ -1225,6 +1261,36 @@ export default function ResourceBrowser() {
     window.history.pushState({}, '', newUrl);
     window.dispatchEvent(new PopStateEvent('popstate'));
   }, [resourceType, searchQuery]);
+
+  // Handle filtering by specific issue
+  const handleFilterByIssue = useCallback((issue: any) => {
+    console.log('[ResourceBrowser] Filtering by issue:', issue);
+    const newFilters: ValidationFilters = {
+      ...validationFilters,
+      issueFilter: {
+        issueIds: issue.id ? [issue.id] : undefined,
+        severity: issue.severity,
+        category: issue.category,
+        messageContains: issue.message,
+        pathContains: issue.path
+      }
+    };
+    console.log('[ResourceBrowser] New filters:', newFilters);
+    handleFilterChange(newFilters);
+  }, [validationFilters, handleFilterChange]);
+
+  // Handle filtering by severity
+  const handleFilterBySeverity = useCallback((severity: 'error' | 'warning' | 'information') => {
+    console.log('[ResourceBrowser] Filtering by severity:', severity);
+    const newFilters: ValidationFilters = {
+      ...validationFilters,
+      issueFilter: {
+        severity: severity
+      }
+    };
+    console.log('[ResourceBrowser] New filters:', newFilters);
+    handleFilterChange(newFilters);
+  }, [validationFilters, handleFilterChange]);
 
   // Handle revalidation of current page
   const handleRevalidate = useCallback(async () => {
@@ -1448,6 +1514,8 @@ export default function ResourceBrowser() {
               onSeverityChange={handleSeverityChange}
               currentSeverityIndex={currentSeverityIndex}
               onSeverityIndexChange={handleSeverityIndexChange}
+              onFilterByIssue={handleFilterByIssue}
+              onFilterBySeverity={handleFilterBySeverity}
             />
           ) : (
             <div></div>

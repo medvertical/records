@@ -41,6 +41,19 @@ export interface ResourceFilterOptions {
     field: 'resourceType' | 'lastValidated' | 'validationScore' | 'errorCount' | 'warningCount';
     direction: 'asc' | 'desc';
   };
+  // Issue-based filtering
+  issueFilter?: {
+    /** Filter by specific issue IDs */
+    issueIds?: string[];
+    /** Filter by issue severity */
+    severity?: 'error' | 'warning' | 'information';
+    /** Filter by issue category/aspect */
+    category?: string;
+    /** Filter by issue message content */
+    messageContains?: string;
+    /** Filter by issue path */
+    pathContains?: string;
+  };
 }
 
 export interface ResourceFilterStatistics {

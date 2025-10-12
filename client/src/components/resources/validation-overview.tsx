@@ -24,6 +24,10 @@ interface ValidationOverviewProps {
   onSeverityChange?: (severity: 'error' | 'warning' | 'information') => void;
   currentSeverityIndex?: { error: number; warning: number; information: number };
   onSeverityIndexChange?: (severity: 'error' | 'warning' | 'information', index: number) => void;
+  /** Callback to filter resources by a specific issue */
+  onFilterByIssue?: (issue: ValidationMessage) => void;
+  /** Callback to filter resources by severity */
+  onFilterBySeverity?: (severity: 'error' | 'warning' | 'information') => void;
 }
 
 export function ValidationOverview({
@@ -39,6 +43,8 @@ export function ValidationOverview({
   onSeverityChange,
   currentSeverityIndex = { error: 0, warning: 0, information: 0 },
   onSeverityIndexChange,
+  onFilterByIssue,
+  onFilterBySeverity,
 }: ValidationOverviewProps) {
   return (
     <div className="flex items-center gap-4">
@@ -55,6 +61,7 @@ export function ValidationOverview({
             onToggleMessages={onToggleMessages}
             isMessagesVisible={isMessagesVisible && currentSeverity === 'error'}
             severity="error"
+            onFilterBySeverity={onFilterBySeverity}
           />
           <SeverityNavigator
             messages={messages}
@@ -66,6 +73,7 @@ export function ValidationOverview({
             onToggleMessages={onToggleMessages}
             isMessagesVisible={isMessagesVisible && currentSeverity === 'warning'}
             severity="warning"
+            onFilterBySeverity={onFilterBySeverity}
           />
           <SeverityNavigator
             messages={messages}
@@ -77,6 +85,7 @@ export function ValidationOverview({
             onToggleMessages={onToggleMessages}
             isMessagesVisible={isMessagesVisible && currentSeverity === 'information'}
             severity="information"
+            onFilterBySeverity={onFilterBySeverity}
           />
         </div>
       )}

@@ -32,6 +32,19 @@ export interface BackendFilterOptions {
   severities?: string[];
   /** Only show resources with issues in the specified aspects */
   hasIssuesInAspects?: boolean;
+  /** Issue-based filtering */
+  issueFilter?: {
+    /** Filter by specific issue IDs */
+    issueIds?: string[];
+    /** Filter by issue severity */
+    severity?: 'error' | 'warning' | 'information';
+    /** Filter by issue category/aspect */
+    category?: string;
+    /** Filter by issue message content */
+    messageContains?: string;
+    /** Filter by issue path */
+    pathContains?: string;
+  };
   /** Server ID to filter by */
   serverId?: number;
   /** Text search across resource content */
@@ -121,7 +134,8 @@ class ValidationBackendFilteringService extends EventEmitter {
       validationStatus = {},
       search = '',
       pagination = { limit: 50, offset: 0 },
-      sorting = { field: 'lastValidated', direction: 'desc' }
+      sorting = { field: 'lastValidated', direction: 'desc' },
+      issueFilter = {}
     } = options;
 
     try {
@@ -141,6 +155,12 @@ class ValidationBackendFilteringService extends EventEmitter {
       // Apply validation status filtering
       filteredResources = await this.applyValidationStatusFiltering(filteredResources, validationStatus);
       console.log(`[BackendFiltering] After validation status filtering: ${filteredResources.length} resources`);
+
+      // Apply issue-based filtering
+      if (issueFilter && Object.keys(issueFilter).length > 0) {
+        filteredResources = await this.applyIssueFiltering(filteredResources, issueFilter);
+        console.log(`[BackendFiltering] After issue filtering: ${filteredResources.length} resources`);
+      }
 
       // Apply text search if provided
       if (search) {
@@ -689,6 +709,90 @@ class ValidationBackendFilteringService extends EventEmitter {
     } catch (error) {
       console.error('[BackendFiltering] Error getting validation status statistics:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Apply issue-based filtering to resources
+   */
+  private async applyIssueFiltering(
+    resources: any[],
+    issueFilter: BackendFilterOptions['issueFilter']
+  ): Promise<any[]> {
+    if (!issueFilter || Object.keys(issueFilter).length === 0) {
+      return resources;
+    }
+
+    try {
+      const filteredResources = [];
+
+      for (const resource of resources) {
+        // Get validation results for this resource
+        const validationResults = await storage.getValidationResultsByResourceId(resource.id);
+        
+        if (!validationResults || validationResults.length === 0) {
+          continue; // Skip resources without validation results
+        }
+
+        // Check if resource matches issue filter criteria
+        let matchesFilter = false;
+
+        // Iterate through all validation results for this resource
+        for (const result of validationResults) {
+          const issues = (result.issues as any[]) || [];
+          
+          for (const issue of issues) {
+          // Filter by specific issue IDs
+          if (issueFilter.issueIds && issueFilter.issueIds.length > 0) {
+            if (!issueFilter.issueIds.includes(issue.id)) {
+              continue;
+            }
+          }
+
+          // Filter by severity
+          if (issueFilter.severity && issue.severity !== issue.severity?.toLowerCase()) {
+            continue;
+          }
+
+          // Filter by category/aspect
+          if (issueFilter.category && issue.category !== issueFilter.category) {
+            continue;
+          }
+
+          // Filter by message content
+          if (issueFilter.messageContains) {
+            const messageLower = issue.message?.toLowerCase() || '';
+            if (!messageLower.includes(issueFilter.messageContains.toLowerCase())) {
+              continue;
+            }
+          }
+
+          // Filter by path
+          if (issueFilter.pathContains) {
+            const pathLower = issue.path?.toLowerCase() || '';
+            if (!pathLower.includes(issueFilter.pathContains.toLowerCase())) {
+              continue;
+            }
+          }
+
+            // If we get here, this issue matches all filter criteria
+            matchesFilter = true;
+            break;
+          }
+          
+          if (matchesFilter) break;
+        }
+
+        if (matchesFilter) {
+          filteredResources.push(resource);
+        }
+      }
+
+      return filteredResources;
+    } catch (error) {
+      console.error('[BackendFiltering] Error applying issue filtering:', error);
+      // Return original resources if filtering fails
+      return resources;
     }
   }
 }

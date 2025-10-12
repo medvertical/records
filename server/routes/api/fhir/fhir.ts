@@ -254,6 +254,12 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         validationAspects,
         severities,
         hasIssuesInAspects,
+        // Issue-based filters
+        issueIds,
+        issueSeverity,
+        issueCategory,
+        issueMessageContains,
+        issuePathContains,
         search,
         limit = 20,
         offset = 0,
@@ -291,6 +297,18 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         ? (Array.isArray(severities) ? severities.map(String) : severities.toString().split(','))
         : [];
 
+      // Parse issue-based filters
+      const issueIdsArray: string[] = issueIds
+        ? (Array.isArray(issueIds) ? issueIds.map(String) : issueIds.toString().split(','))
+        : [];
+
+      const issueFilter: any = {};
+      if (issueIdsArray.length > 0) issueFilter.issueIds = issueIdsArray;
+      if (issueSeverity) issueFilter.severity = issueSeverity as string;
+      if (issueCategory) issueFilter.category = issueCategory as string;
+      if (issueMessageContains) issueFilter.messageContains = issueMessageContains as string;
+      if (issuePathContains) issueFilter.pathContains = issuePathContains as string;
+
       // Parse validation status filters
       const validationStatus: any = {};
       if (hasErrors !== undefined) validationStatus.hasErrors = hasErrors === 'true';
@@ -305,6 +323,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         validationAspects: aspectsArray.length > 0 ? aspectsArray : undefined,
         severities: severitiesArray.length > 0 ? severitiesArray : undefined,
         hasIssuesInAspects: hasIssuesInAspects === 'true' || undefined,
+        issueFilter: Object.keys(issueFilter).length > 0 ? issueFilter : undefined,
         serverId: parseInt(serverId as string),
         search: search as string,
         pagination: {
@@ -318,7 +337,8 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       };
 
       // Filter resources with aspect/severity support
-      const result = await filteringService.filterResourcesWithAspects(filterOptions);
+      // Use the new filtering method that supports issue-based filtering
+      const result = await filteringService.filterResources(filterOptions);
 
       console.log('[FHIR API] Filtered resources result:', {
         totalCount: result.totalCount,
