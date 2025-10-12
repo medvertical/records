@@ -187,17 +187,33 @@ export function useActiveServer(
   } = useQuery({
     queryKey,
     queryFn: async () => {
-      const response = await fetch('/api/servers');
-      if (!response.ok) {
-        throw new Error(`Failed to fetch servers: ${response.statusText}`);
+      try {
+        const response = await fetch('/api/servers');
+        if (!response.ok) {
+          // Provide fallback data structure on error
+          console.warn(`[useActiveServer] Failed to fetch servers: ${response.status} ${response.statusText}`);
+          return { servers: [], activeServer: null };
+        }
+        const data = await response.json();
+        // Ensure the response has the expected structure
+        if (!data || typeof data !== 'object') {
+          console.warn('[useActiveServer] Invalid response format, using fallback');
+          return { servers: [], activeServer: null };
+        }
+        return data;
+      } catch (err) {
+        console.error('[useActiveServer] Error fetching servers:', err);
+        // Return fallback data instead of throwing
+        return { servers: [], activeServer: null };
       }
-      return await response.json();
     },
     enabled: true,
     refetchInterval: isPolling ? pollingInterval : false,
     refetchIntervalInBackground: false,
     staleTime: 30000, // Consider data stale after 30 seconds
     gcTime: 300000, // Keep in cache for 5 minutes
+    retry: 2, // Retry failed requests up to 2 times
+    retryDelay: 1000, // Wait 1 second between retries
   });
 
   // Manual refresh function

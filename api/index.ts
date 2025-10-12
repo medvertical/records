@@ -7,6 +7,39 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Database connection status
+let dbConnected = false;
+let dbError: string | null = null;
+
+// Try to connect to remote database if DATABASE_URL is provided
+async function initializeDatabase() {
+  const databaseUrl = process.env.DATABASE_URL;
+  
+  if (!databaseUrl) {
+    console.log('[Database] No DATABASE_URL provided, using mock data');
+    dbConnected = false;
+    return;
+  }
+
+  try {
+    console.log('[Database] Attempting to connect to remote database...');
+    // TODO: Add actual database connection logic here when implementing full database support
+    // For now, we'll use mock data even when DATABASE_URL is provided
+    // This ensures the deployment works while database integration is being set up
+    console.log('[Database] Database support not yet implemented, using mock data');
+    dbConnected = false;
+  } catch (error: any) {
+    console.error('[Database] Failed to connect:', error.message);
+    dbError = error.message;
+    dbConnected = false;
+  }
+}
+
+// Initialize database connection
+initializeDatabase().catch(err => {
+  console.error('[Database] Initialization error:', err);
+});
+
 // CORS middleware
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -44,10 +77,12 @@ app.get("/api/health", async (req, res) => {
       status: "ok", 
       timestamp: new Date().toISOString(),
       services: {
-        database: "disconnected",
+        database: dbConnected ? "connected" : "disconnected",
+        databaseError: dbError,
         fhirClient: "initialized",
         validationEngine: "initialized",
-        environment: "vercel"
+        environment: process.env.NODE_ENV || "production",
+        usingMockData: !dbConnected
       }
     });
   } catch (error: any) {

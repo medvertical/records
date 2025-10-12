@@ -128,8 +128,10 @@ export function useDashboardDataWiring(
 
   // Transform data using adapters with debounced inputs
   const alerts = useMemo(() => {
+    // Defensive null checks to prevent Object.values() errors
+    const aspectBreakdown = debouncedValidationStats?.aspectBreakdown;
     const validationAlerts = AlertDataAdapter.transformValidationErrors(
-      debouncedValidationStats?.aspectBreakdown ? Object.values(debouncedValidationStats.aspectBreakdown) : []
+      aspectBreakdown && typeof aspectBreakdown === 'object' ? Object.values(aspectBreakdown) : []
     );
     const serverAlerts = AlertDataAdapter.transformServerAlerts(
       debouncedServerStatus?.error ? [{ message: debouncedServerStatus.error, level: 'error' }] : []
@@ -239,15 +241,18 @@ export function useDashboardDataWiring(
 
   // Auto-start validation polling when enabled
   useEffect(() => {
-    const hasActiveServer = activeServer !== null;
-    if (enableRealTimeUpdates && enabled && hasActiveServer) {
+    // Only start polling if we have a valid active server with an ID
+    const hasValidActiveServer = activeServer !== null && activeServer?.id !== undefined && activeServer?.id !== null;
+    if (enableRealTimeUpdates && enabled && hasValidActiveServer) {
       console.log('[DashboardDataWiring] Starting validation polling');
       startPolling();
     } else {
-      console.log('[DashboardDataWiring] Stopping validation polling');
-      stopPolling();
+      if (!hasValidActiveServer && validationConnected) {
+        console.log('[DashboardDataWiring] Stopping validation polling - no valid active server');
+        stopPolling();
+      }
     }
-  }, [enableRealTimeUpdates, enabled, activeServer, startPolling, stopPolling]);
+  }, [enableRealTimeUpdates, enabled, activeServer, validationConnected, startPolling, stopPolling]);
 
   const refreshAll = useThrottledCallback(() => {
     refetchDashboard();

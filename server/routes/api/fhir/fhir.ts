@@ -202,73 +202,8 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
   // Note: PUT route for editing resources is registered directly below alongside other /api/fhir/resources routes
   // Batch edit routes would be registered here if needed (currently using direct implementation)
 
-  // FHIR Server Management
-  app.get("/api/fhir/servers", async (req, res) => {
-    try {
-      const servers = await storage.getFhirServers();
-      res.json(servers);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.post("/api/fhir/servers", async (req, res) => {
-    try {
-      const server = await storage.createFhirServer(req.body);
-      res.json(server);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.post("/api/fhir/servers/:id/activate", async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      // First deactivate all servers
-      const servers = await storage.getFhirServers();
-      for (const server of servers) {
-        if (server.isActive) {
-          await storage.updateFhirServerStatus(server.id, false);
-        }
-      }
-      // Then activate the selected server
-      await storage.updateFhirServerStatus(id, true);
-      const server = await storage.getActiveFhirServer();
-      res.json({ message: 'Server activated successfully', server });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.post("/api/fhir/servers/:id/deactivate", async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      await storage.updateFhirServerStatus(id, false);
-      res.json({ message: 'Server deactivated successfully' });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.put("/api/fhir/servers/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const server = await storage.updateFhirServer(parseInt(id), req.body);
-      res.json(server);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.delete("/api/fhir/servers/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      await storage.deleteFhirServer(parseInt(id));
-      res.json({ message: "Server deleted" });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
+  // NOTE: Server management endpoints have been moved to /api/servers 
+  // See server/routes/api/servers.ts for the canonical server management API
 
   // FHIR Connection Testing
   app.get("/api/fhir/connection/test", async (req, res) => {
