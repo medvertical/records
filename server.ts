@@ -1,10 +1,10 @@
 import 'dotenv/config';
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { serveStatic, log } from "./server/static";
+import { serveStatic, log } from "./server/static.js";
 import { logger } from "./server/utils/logger.js";
-import { FeatureFlags, assertProductionSafety, logFeatureFlags } from "./server/config/feature-flags";
-import { getValidationPerformanceMonitor } from "./server/services/performance/validation-performance-monitor";
+import { FeatureFlags, assertProductionSafety, logFeatureFlags } from "./server/config/feature-flags.js";
+import { getValidationPerformanceMonitor } from "./server/services/performance/validation-performance-monitor.js";
 import { setupAllRoutes } from "./server/routes/index.js";
 
 const app = express();

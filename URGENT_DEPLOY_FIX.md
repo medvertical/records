@@ -1,36 +1,47 @@
 # 🚨 URGENT: Vercel Deployment Fix
 
-## Problem
+## Problems Fixed
 
 Your Vercel deployment was crashing with **500 Internal Server Error** because:
-1. `assertProductionSafety()` was calling `process.exit(1)` in serverless environment
-2. This crashed the entire serverless function
-3. All requests failed with 500 errors
+1. `assertProductionSafety()` was calling `process.exit(1)` in serverless environment - **FIXED**
+2. ES module imports missing `.js` extensions - **FIXED**
+3. This crashed the entire serverless function
+4. All requests failed with 500 errors
 
-## Fix Applied
+## Fixes Applied
 
-**File: `server.ts`**
-- Changed production safety check to **not crash** in serverless environments
-- Instead, it logs a warning and continues in "degraded mode"
-- App will now start even without DATABASE_URL (but with limited functionality)
+**File: `server.ts`** (2 changes)
+
+1. Changed production safety check to **not crash** in serverless environments
+   - Instead, it logs a warning and continues in "degraded mode"
+   - App will now start even without DATABASE_URL (but with limited functionality)
+
+2. Fixed ES module imports to include `.js` extensions
+   - Changed: `from "./server/static"` → `from "./server/static.js"`
+   - Changed: `from "./server/config/feature-flags"` → `from "./server/config/feature-flags.js"`
+   - Changed: `from "./server/services/performance/validation-performance-monitor"` → `from "./server/services/performance/validation-performance-monitor.js"`
 
 **Code change:**
 ```typescript
+// Fix 1: Don't crash in serverless
 if (isServerless) {
-  // In serverless, log the warning but don't crash
   console.warn('⚠️  Running in degraded mode');
 } else {
-  // In traditional server mode, exit to prevent issues
   process.exit(1);
 }
+
+// Fix 2: ES module imports need .js extensions
+import { serveStatic, log } from "./server/static.js";
+import { FeatureFlags, ... } from "./server/config/feature-flags.js";
+import { getValidationPerformanceMonitor } from "./server/services/performance/validation-performance-monitor.js";
 ```
 
 ## Deploy This Fix IMMEDIATELY
 
 ### 1. Commit & Push
 ```bash
-git add server.ts
-git commit -m "Fix 500 error - Don't crash in serverless without DATABASE_URL"
+git add server.ts URGENT_DEPLOY_FIX.md
+git commit -m "Fix 500 errors - ES module imports and serverless crash"
 git push origin main
 ```
 
