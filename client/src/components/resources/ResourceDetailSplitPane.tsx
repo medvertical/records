@@ -133,15 +133,15 @@ export function ResourceDetailSplitPane({
       <PanelGroup direction="horizontal">
         {/* Left Panel: Resource Tree */}
         <Panel 
-          defaultSize={50} 
+          defaultSize={66.67} 
           minSize={30}
           className="relative"
         >
           <div className="h-full overflow-auto p-4">
             <div className="sticky top-0 bg-white pb-3 border-b mb-4 z-10">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+              <h2 className="text-lg font-bold text-gray-900 uppercase tracking-wider">
                 Resource Structure
-              </h3>
+              </h2>
               <p className="text-xs text-gray-500 mt-1">
                 Click nodes to see validation messages
               </p>
@@ -169,15 +169,15 @@ export function ResourceDetailSplitPane({
 
         {/* Right Panel: Validation Messages */}
         <Panel 
-          defaultSize={50} 
+          defaultSize={33.33} 
           minSize={30}
           className="relative"
         >
           <div className="h-full overflow-auto p-4">
             <div className="sticky top-0 bg-white pb-3 border-b mb-4 z-10">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+              <h2 className="text-lg font-bold text-gray-900 uppercase tracking-wider">
                 {aspect} Validation Messages
-              </h3>
+              </h2>
               <p className="text-xs text-gray-500 mt-1">
                 Click messages to highlight in tree
               </p>

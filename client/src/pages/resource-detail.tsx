@@ -205,12 +205,12 @@ export default function ResourceDetail() {
                 The requested resource could not be found or has been removed.
               </p>
               <Button 
-                variant="outline" 
-                className="inline-flex items-center"
+                variant="ghost" 
+                size="icon"
                 onClick={() => window.history.back()}
+                aria-label="Go back"
               >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
+                <ArrowLeft className="h-4 w-4" />
               </Button>
             </div>
           </CardContent>
@@ -242,13 +242,12 @@ export default function ResourceDetail() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <Button 
-                variant="outline" 
-                size="sm" 
-                className="inline-flex items-center"
+                variant="ghost" 
+                size="icon"
                 onClick={() => window.history.back()}
+                aria-label="Go back"
               >
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
+                <ArrowLeft className="h-4 w-4" />
               </Button>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
@@ -338,7 +337,7 @@ export default function ResourceDetail() {
 
 
         {/* Main content - two columns: Resource Structure (left) and Validation Messages (right) */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
           {/* Left: Resource Structure */}
           <div>
             <ResourceViewer 

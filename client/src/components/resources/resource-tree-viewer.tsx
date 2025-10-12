@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -101,6 +101,19 @@ function CollapsibleNode({
   onIssueClick
 }: CollapsibleNodeProps) {
   const [isExpanded, setIsExpanded] = useState(expandAll);
+  const [hasManualOverride, setHasManualOverride] = useState(false);
+  
+  // Sync with expandAll prop, but only if user hasn't manually overridden
+  useEffect(() => {
+    if (!hasManualOverride) {
+      setIsExpanded(expandAll);
+    }
+  }, [expandAll, hasManualOverride]);
+  
+  // Reset manual override when expandAll changes
+  useEffect(() => {
+    setHasManualOverride(false);
+  }, [expandAll]);
   
   // Helper function to get the highest severity color for a set of issues
   const getHighestSeverityColor = (issues: ValidationIssue[]) => {
@@ -123,7 +136,7 @@ function CollapsibleNode({
   const severityColor = getHighestSeverityColor(pathIssues);
   
   // Determine if this node should be expanded
-  const shouldExpand = expandAll || isExpanded;
+  const shouldExpand = isExpanded;
   
   // Handle click on severity badge
   const handleSeverityClick = (severity: string) => {
@@ -150,7 +163,7 @@ function CollapsibleNode({
       if (val.startsWith('http') || val.startsWith('urn:')) {
         return <span className="text-blue-600 underline">{val}</span>;
       }
-      return <span className="text-gray-800">"{val}"</span>;
+      return <span className="text-gray-800">{val}</span>;
     }
     if (Array.isArray(val)) {
       return <span className="text-purple-600">Array({val.length})</span>;
@@ -168,40 +181,43 @@ function CollapsibleNode({
     <div className={`${hasIssues ? `border-l-2 ${severityColor}` : ''}`}>
       {/* Key-Value Grid Layout with fixed column width */}
       <div className="grid items-center py-0.5" style={{ 
-        gridTemplateColumns: `${level * 16}px 24px minmax(150px, auto) 1fr auto`,
+        gridTemplateColumns: `1fr 2fr auto`,
         paddingLeft: 0 
       }}>
-        {/* Column 1: Indentation spacer */}
-        <div />
-        
-        {/* Column 2: Expand/Collapse Button or Spacer */}
-        <div className="flex items-center justify-start">
-          {isExpandable ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="h-6 w-6 p-0"
-            >
-              {shouldExpand ? (
-                <ChevronDown className="h-3 w-3" />
-              ) : (
-                <ChevronRight className="h-3 w-3" />
-              )}
-            </Button>
-          ) : (
-            <div className="w-6" />
-          )}
+        {/* Column 1: Indentation + Button + Key Name - fixed total width */}
+        <div className="flex items-center overflow-hidden" style={{ paddingLeft: `${level * 16}px` }}>
+          {/* Expand/Collapse Button or Spacer */}
+          <div className="flex items-center justify-start flex-shrink-0">
+            {isExpandable ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setIsExpanded(!isExpanded);
+                  setHasManualOverride(true);
+                }}
+                className="h-6 w-6 p-0"
+              >
+                {shouldExpand ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+              </Button>
+            ) : (
+              <div className="w-6" />
+            )}
+          </div>
+          
+          {/* Key Name */}
+          <span className="font-medium text-gray-900 whitespace-nowrap overflow-hidden text-ellipsis ml-1" title={keyName}>
+            {keyName}
+          </span>
         </div>
         
-        {/* Column 3: Key Name - fixed width column */}
-        <div className="flex items-center">
-          <span className="font-medium text-gray-900 whitespace-nowrap">{keyName}:</span>
-        </div>
-        
-        {/* Column 4: Value (all aligned on same X position) */}
+        {/* Column 2: Value (all aligned on same X position) */}
         <div className="text-left pl-2">
-          {!shouldExpand && (
+          {(!shouldExpand || (!isExpandable && !isArray)) && (
             <>
               {isExpandable ? (
                 <span className="text-gray-600">
@@ -218,7 +234,7 @@ function CollapsibleNode({
           )}
         </div>
         
-        {/* Column 5: Validation Issues */}
+        {/* Column 3: Validation Issues */}
         <div className="flex items-center gap-1 justify-end ml-2">
           {hasIssues && pathIssues.map((issue, index) => (
             <div key={issue.id || index} className="flex items-center gap-1">
