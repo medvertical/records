@@ -1,44 +1,38 @@
-# Node modules (will be installed in container)
-node_modules
+# Node modules
+node_modules/
+npm-debug.log
+
+# Build output (will be rebuilt in container)
+dist/
 
 # Development files
-.env
-.env.*
-*.log
-
-# Git
-.git
+.git/
 .gitignore
-
-# Documentation
-docs/
-tasks/
+.env
+.env.local
 *.md
-!README.md
-
-# Tests
-e2e/
-tests/
-**/*.test.ts
-**/*.test.tsx
 
 # IDE
-.vscode
-.idea
-.cursor
+.vscode/
+.idea/
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Build artifacts (will be rebuilt)
-dist/
+# Test files
+tests/
+*.test.ts
+*.test.js
 
 # Logs
 logs/
 *.log
 
-# Temporary files
-tmp/
-temp/
+# Development database
+profiles/
 
+# Documentation
+docs/
+attached_assets/
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
