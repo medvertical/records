@@ -2,6 +2,10 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { neon } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-http';
+import { eq, desc } from 'drizzle-orm';
+import { fhirServers } from '../shared/schema.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -9,6 +13,27 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Initialize database connection for Vercel serverless
+let db = null;
+let dbConnected = false;
+let dbError = null;
+
+try {
+  if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
+    const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+    const sql = neon(connectionString);
+    db = drizzle(sql, { schema: { fhirServers } });
+    dbConnected = true;
+    console.log('✅ Database connected successfully (Neon serverless)');
+  } else {
+    console.warn('⚠️  No DATABASE_URL found, using mock data');
+  }
+} catch (error) {
+  dbError = error.message;
+  console.error('❌ Database connection failed:', error.message);
+  console.warn('⚠️  Falling back to mock data');
+}
 
 // CORS middleware
 app.use((req, res, next) => {
@@ -47,7 +72,8 @@ app.get("/api/health", async (req, res) => {
       status: "ok", 
       timestamp: new Date().toISOString(),
       services: {
-        database: "disconnected",
+        database: dbConnected ? "connected" : "disconnected",
+        databaseError: dbError || undefined,
         fhirClient: "initialized",
         validationEngine: "initialized",
         environment: "vercel"
@@ -65,23 +91,42 @@ app.get("/api/health", async (req, res) => {
 // Server Management Endpoints (Primary API)
 app.get("/api/servers", async (req, res) => {
   try {
-    const servers = mockFhirServers.map(server => ({
-      id: server.id,
-      name: server.name,
-      url: server.url,
-      isActive: server.isActive,
-      hasAuth: false,
-      authType: 'none',
-      createdAt: new Date().toISOString()
-    }));
+    let servers, activeServer;
     
-    const activeServer = servers.find(s => s.isActive) || null;
+    if (dbConnected && db) {
+      // Use real database
+      const dbServers = await db.select().from(fhirServers).orderBy(desc(fhirServers.createdAt));
+      servers = dbServers.map(server => ({
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        isActive: server.isActive || false,
+        hasAuth: !!server.authConfig,
+        authType: server.authConfig?.type || 'none',
+        fhirVersion: server.fhirVersion || 'R4',
+        createdAt: server.createdAt?.toISOString() || new Date().toISOString()
+      }));
+      activeServer = servers.find(s => s.isActive) || null;
+    } else {
+      // Fallback to mock data
+      servers = mockFhirServers.map(server => ({
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        isActive: server.isActive,
+        hasAuth: false,
+        authType: 'none',
+        createdAt: new Date().toISOString()
+      }));
+      activeServer = servers.find(s => s.isActive) || null;
+    }
     
     res.json({
       servers,
       activeServer
     });
   } catch (error) {
+    console.error('Error fetching servers:', error);
     res.status(500).json({
       error: "Failed to get servers",
       message: error.message
@@ -92,26 +137,53 @@ app.get("/api/servers", async (req, res) => {
 app.get("/api/servers/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const server = mockFhirServers.find(s => s.id === parseInt(id));
+    let server;
     
-    if (!server) {
-      return res.status(404).json({
-        error: "Server not found",
-        message: `Server with ID ${id} not found`
+    if (dbConnected && db) {
+      // Use real database
+      const dbServer = await db.select().from(fhirServers).where(eq(fhirServers.id, parseInt(id))).limit(1);
+      if (dbServer.length === 0) {
+        return res.status(404).json({
+          error: "Server not found",
+          message: `Server with ID ${id} not found`
+        });
+      }
+      server = dbServer[0];
+      res.json({
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        isActive: server.isActive || false,
+        hasAuth: !!server.authConfig,
+        authType: server.authConfig?.type || 'none',
+        fhirVersion: server.fhirVersion || 'R4',
+        createdAt: server.createdAt?.toISOString() || new Date().toISOString(),
+        updatedAt: server.createdAt?.toISOString() || new Date().toISOString()
+      });
+    } else {
+      // Fallback to mock data
+      server = mockFhirServers.find(s => s.id === parseInt(id));
+      
+      if (!server) {
+        return res.status(404).json({
+          error: "Server not found",
+          message: `Server with ID ${id} not found`
+        });
+      }
+      
+      res.json({
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        isActive: server.isActive,
+        hasAuth: false,
+        authType: 'none',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       });
     }
-    
-    res.json({
-      id: server.id,
-      name: server.name,
-      url: server.url,
-      isActive: server.isActive,
-      hasAuth: false,
-      authType: 'none',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
   } catch (error) {
+    console.error('Error fetching server:', error);
     res.status(500).json({
       error: "Failed to get server",
       message: error.message
@@ -121,7 +193,7 @@ app.get("/api/servers/:id", async (req, res) => {
 
 app.post("/api/servers", async (req, res) => {
   try {
-    const { name, url, auth } = req.body;
+    const { name, url, auth, fhirVersion } = req.body;
     
     if (!name || !url) {
       return res.status(400).json({
@@ -130,26 +202,53 @@ app.post("/api/servers", async (req, res) => {
       });
     }
     
-    const newServer = {
-      id: mockFhirServers.length + 1,
-      name,
-      url,
-      isActive: false
-    };
-    
-    mockFhirServers.push(newServer);
-    
-    res.status(201).json({
-      id: newServer.id,
-      name: newServer.name,
-      url: newServer.url,
-      isActive: newServer.isActive,
-      hasAuth: false,
-      authType: 'none',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
+    if (dbConnected && db) {
+      // Use real database
+      const authConfig = auth ? { type: auth.type || 'none', ...auth } : null;
+      const result = await db.insert(fhirServers).values({
+        name,
+        url,
+        isActive: false,
+        authConfig,
+        fhirVersion: fhirVersion || 'R4'
+      }).returning();
+      
+      const newServer = result[0];
+      res.status(201).json({
+        id: newServer.id,
+        name: newServer.name,
+        url: newServer.url,
+        isActive: newServer.isActive || false,
+        hasAuth: !!newServer.authConfig,
+        authType: newServer.authConfig?.type || 'none',
+        fhirVersion: newServer.fhirVersion || 'R4',
+        createdAt: newServer.createdAt?.toISOString() || new Date().toISOString(),
+        updatedAt: newServer.createdAt?.toISOString() || new Date().toISOString()
+      });
+    } else {
+      // Fallback to mock data
+      const newServer = {
+        id: mockFhirServers.length + 1,
+        name,
+        url,
+        isActive: false
+      };
+      
+      mockFhirServers.push(newServer);
+      
+      res.status(201).json({
+        id: newServer.id,
+        name: newServer.name,
+        url: newServer.url,
+        isActive: newServer.isActive,
+        hasAuth: false,
+        authType: 'none',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
   } catch (error) {
+    console.error('Error creating server:', error);
     res.status(500).json({
       error: "Failed to create server",
       message: error.message
@@ -162,30 +261,67 @@ app.put("/api/servers/:id", async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
     
-    const server = mockFhirServers.find(s => s.id === parseInt(id));
-    
-    if (!server) {
-      return res.status(404).json({
-        error: "Server not found",
-        message: `Server with ID ${id} not found`
+    if (dbConnected && db) {
+      // Use real database
+      const existingServer = await db.select().from(fhirServers).where(eq(fhirServers.id, parseInt(id))).limit(1);
+      
+      if (existingServer.length === 0) {
+        return res.status(404).json({
+          error: "Server not found",
+          message: `Server with ID ${id} not found`
+        });
+      }
+      
+      const updateData = {};
+      if (updates.name !== undefined) updateData.name = updates.name;
+      if (updates.url !== undefined) updateData.url = updates.url;
+      if (updates.isActive !== undefined) updateData.isActive = updates.isActive;
+      if (updates.fhirVersion !== undefined) updateData.fhirVersion = updates.fhirVersion;
+      if (updates.auth !== undefined) {
+        updateData.authConfig = updates.auth ? { type: updates.auth.type || 'none', ...updates.auth } : null;
+      }
+      
+      const result = await db.update(fhirServers).set(updateData).where(eq(fhirServers.id, parseInt(id))).returning();
+      const server = result[0];
+      
+      res.json({
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        isActive: server.isActive || false,
+        hasAuth: !!server.authConfig,
+        authType: server.authConfig?.type || 'none',
+        fhirVersion: server.fhirVersion || 'R4',
+        updatedAt: new Date().toISOString()
+      });
+    } else {
+      // Fallback to mock data
+      const server = mockFhirServers.find(s => s.id === parseInt(id));
+      
+      if (!server) {
+        return res.status(404).json({
+          error: "Server not found",
+          message: `Server with ID ${id} not found`
+        });
+      }
+      
+      // Update server properties
+      if (updates.name) server.name = updates.name;
+      if (updates.url) server.url = updates.url;
+      if (updates.isActive !== undefined) server.isActive = updates.isActive;
+      
+      res.json({
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        isActive: server.isActive,
+        hasAuth: false,
+        authType: 'none',
+        updatedAt: new Date().toISOString()
       });
     }
-    
-    // Update server properties
-    if (updates.name) server.name = updates.name;
-    if (updates.url) server.url = updates.url;
-    if (updates.isActive !== undefined) server.isActive = updates.isActive;
-    
-    res.json({
-      id: server.id,
-      name: server.name,
-      url: server.url,
-      isActive: server.isActive,
-      hasAuth: false,
-      authType: 'none',
-      updatedAt: new Date().toISOString()
-    });
   } catch (error) {
+    console.error('Error updating server:', error);
     res.status(500).json({
       error: "Failed to update server",
       message: error.message
@@ -196,23 +332,46 @@ app.put("/api/servers/:id", async (req, res) => {
 app.delete("/api/servers/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const serverIndex = mockFhirServers.findIndex(s => s.id === parseInt(id));
     
-    if (serverIndex === -1) {
-      return res.status(404).json({
-        error: "Server not found",
-        message: `Server with ID ${id} not found`
+    if (dbConnected && db) {
+      // Use real database
+      const existingServer = await db.select().from(fhirServers).where(eq(fhirServers.id, parseInt(id))).limit(1);
+      
+      if (existingServer.length === 0) {
+        return res.status(404).json({
+          error: "Server not found",
+          message: `Server with ID ${id} not found`
+        });
+      }
+      
+      const server = existingServer[0];
+      await db.delete(fhirServers).where(eq(fhirServers.id, parseInt(id)));
+      
+      res.json({
+        success: true,
+        message: `Server "${server.name}" deleted successfully`
+      });
+    } else {
+      // Fallback to mock data
+      const serverIndex = mockFhirServers.findIndex(s => s.id === parseInt(id));
+      
+      if (serverIndex === -1) {
+        return res.status(404).json({
+          error: "Server not found",
+          message: `Server with ID ${id} not found`
+        });
+      }
+      
+      const server = mockFhirServers[serverIndex];
+      mockFhirServers.splice(serverIndex, 1);
+      
+      res.json({
+        success: true,
+        message: `Server "${server.name}" deleted successfully`
       });
     }
-    
-    const server = mockFhirServers[serverIndex];
-    mockFhirServers.splice(serverIndex, 1);
-    
-    res.json({
-      success: true,
-      message: `Server "${server.name}" deleted successfully`
-    });
   } catch (error) {
+    console.error('Error deleting server:', error);
     res.status(500).json({
       error: "Failed to delete server",
       message: error.message
@@ -223,31 +382,65 @@ app.delete("/api/servers/:id", async (req, res) => {
 app.post("/api/servers/:id/activate", async (req, res) => {
   try {
     const { id } = req.params;
-    const server = mockFhirServers.find(s => s.id === parseInt(id));
     
-    if (!server) {
-      return res.status(404).json({
-        error: "Server not found",
-        message: `Server with ID ${id} not found`
+    if (dbConnected && db) {
+      // Use real database
+      const existingServer = await db.select().from(fhirServers).where(eq(fhirServers.id, parseInt(id))).limit(1);
+      
+      if (existingServer.length === 0) {
+        return res.status(404).json({
+          error: "Server not found",
+          message: `Server with ID ${id} not found`
+        });
+      }
+      
+      const server = existingServer[0];
+      
+      // Deactivate all servers first
+      await db.update(fhirServers).set({ isActive: false });
+      
+      // Activate this server
+      await db.update(fhirServers).set({ isActive: true }).where(eq(fhirServers.id, parseInt(id)));
+      
+      res.json({
+        success: true,
+        message: `Server "${server.name}" activated successfully`,
+        server: {
+          id: server.id,
+          name: server.name,
+          url: server.url,
+          isActive: true
+        }
+      });
+    } else {
+      // Fallback to mock data
+      const server = mockFhirServers.find(s => s.id === parseInt(id));
+      
+      if (!server) {
+        return res.status(404).json({
+          error: "Server not found",
+          message: `Server with ID ${id} not found`
+        });
+      }
+      
+      // Deactivate all other servers
+      mockFhirServers.forEach(s => s.isActive = false);
+      // Activate this server
+      server.isActive = true;
+      
+      res.json({
+        success: true,
+        message: `Server "${server.name}" activated successfully`,
+        server: {
+          id: server.id,
+          name: server.name,
+          url: server.url,
+          isActive: server.isActive
+        }
       });
     }
-    
-    // Deactivate all other servers
-    mockFhirServers.forEach(s => s.isActive = false);
-    // Activate this server
-    server.isActive = true;
-    
-    res.json({
-      success: true,
-      message: `Server "${server.name}" activated successfully`,
-      server: {
-        id: server.id,
-        name: server.name,
-        url: server.url,
-        isActive: server.isActive
-      }
-    });
   } catch (error) {
+    console.error('Error activating server:', error);
     res.status(500).json({
       error: "Failed to activate server",
       message: error.message
