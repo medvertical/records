@@ -326,22 +326,24 @@ function validateMigratedSettings(
   }
 
   // Validate performance settings
-  if (settings.performance.maxConcurrent < 1 || settings.performance.maxConcurrent > 16) {
-    errors.push({
-      type: 'validation_failed',
-      message: 'Invalid maxConcurrent value',
-      details: 'maxConcurrent must be between 1 and 16',
-      field: 'performance.maxConcurrent'
-    });
-  }
+  if (settings.performance) {
+    if (settings.performance.maxConcurrent < 1 || settings.performance.maxConcurrent > 16) {
+      errors.push({
+        type: 'validation_failed',
+        message: 'Invalid maxConcurrent value',
+        details: 'maxConcurrent must be between 1 and 16',
+        field: 'performance.maxConcurrent'
+      });
+    }
 
-  if (settings.performance.batchSize < 1 || settings.performance.batchSize > 1000) {
-    errors.push({
-      type: 'validation_failed',
-      message: 'Invalid batchSize value',
-      details: 'batchSize must be between 1 and 1000',
-      field: 'performance.batchSize'
-    });
+    if (settings.performance.batchSize < 1 || settings.performance.batchSize > 1000) {
+      errors.push({
+        type: 'validation_failed',
+        message: 'Invalid batchSize value',
+        details: 'batchSize must be between 1 and 1000',
+        field: 'performance.batchSize'
+      });
+    }
   }
 
   return {
@@ -416,7 +418,7 @@ export function isMigrationNeeded(
   settings: ValidationSettings,
   currentVersion: FHIRVersion
 ): boolean {
-  return settings.resourceTypes.fhirVersion !== currentVersion;
+  return settings.resourceTypes?.fhirVersion !== currentVersion;
 }
 
 /**
@@ -447,7 +449,7 @@ export function getMigrationImpact(
   }
 
   // Check performance impact
-  if (fromVersion === 'R5' && toVersion === 'R4' && settings.performance.maxConcurrent > 8) {
+  if (fromVersion === 'R5' && toVersion === 'R4' && settings.performance?.maxConcurrent && settings.performance.maxConcurrent > 8) {
     affectedAreas.push('Performance Settings');
     impact = 'medium';
   }

@@ -264,13 +264,13 @@ export function ValidationAspectsDropdown({ className }: ValidationAspectsDropdo
                 <div className="flex items-center justify-between">
                   <Label className="text-sm">Max Concurrent</Label>
                   <Badge variant="outline">
-                    {settings.performance.maxConcurrent}
+                    {settings.performance?.maxConcurrent || 4}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <Label className="text-sm">Batch Size</Label>
                   <Badge variant="outline">
-                    {settings.performance.batchSize}
+                    {settings.performance?.batchSize || 20}
                   </Badge>
                 </div>
               </div>

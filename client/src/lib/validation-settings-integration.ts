@@ -293,13 +293,15 @@ export function validateSettingsStructure(settings: ValidationSettings | null): 
   }
   
   // Check performance structure
-  if (typeof settings.performance.maxConcurrent !== 'number' || 
+  if (!settings.performance || 
+      typeof settings.performance.maxConcurrent !== 'number' || 
       typeof settings.performance.batchSize !== 'number') {
     return false;
   }
   
   // Check resource types structure
-  if (typeof settings.resourceTypes.enabled !== 'boolean' || 
+  if (!settings.resourceTypes ||
+      typeof settings.resourceTypes.enabled !== 'boolean' || 
       !settings.resourceTypes.fhirVersion) {
     return false;
   }
