@@ -530,7 +530,7 @@ export default function ResourceBrowser() {
   });
 
   // Fetch validation messages for all resources on current page
-  const { data: validationMessagesData, isLoading: isLoadingMessages } = useQuery({
+  const { data: validationMessagesData, isLoading: isLoadingMessages, error: validationMessagesError } = useQuery({
     queryKey: ['validation-messages', resourcesData?.resources?.map(r => `${r.resourceType}/${r.resourceId}`)],
     enabled: !!resourcesData?.resources && resourcesData.resources.length > 0 && !!stableActiveServer,
     queryFn: async () => {
@@ -578,11 +578,35 @@ export default function ResourceBrowser() {
       });
       
       const results = await Promise.all(messagePromises);
-      return results.filter(result => result !== null);
+      const filteredResults = results.filter(result => result !== null);
+      
+      console.log('[ResourceBrowser] Validation messages fetched:', {
+        totalResources: resourcesData.resources.length,
+        successfulFetches: filteredResults.length,
+        failedFetches: results.length - filteredResults.length,
+        totalMessages: filteredResults.reduce((sum, result) => sum + (result?.messages?.length || 0), 0),
+        timestamp: new Date().toISOString()
+      });
+      
+      return filteredResults;
     },
     staleTime: 30 * 1000, // 30 seconds
     refetchInterval: false,
   });
+
+  // Debug validation messages query state
+  useEffect(() => {
+    console.log('[ResourceBrowser] Validation messages query state:', {
+      hasResources: !!resourcesData?.resources,
+      resourceCount: resourcesData?.resources?.length || 0,
+      hasActiveServer: !!stableActiveServer,
+      isLoading: isLoadingMessages,
+      hasData: !!validationMessagesData,
+      dataLength: validationMessagesData?.length || 0,
+      error: validationMessagesError,
+      queryEnabled: !!(resourcesData?.resources && resourcesData.resources.length > 0 && stableActiveServer)
+    });
+  }, [resourcesData?.resources, stableActiveServer, isLoadingMessages, validationMessagesData, validationMessagesError]);
 
   // Aggregate all messages from all resources for navigation
   const allMessages = useMemo(() => {
@@ -1390,9 +1414,8 @@ export default function ResourceBrowser() {
 
   return (
     <div className="p-6 h-full overflow-y-auto">
-      <div className={isMessagesVisible ? "grid grid-cols-2 gap-6 h-full" : "space-y-6"}>
-        {/* Left side - Main content */}
-        <div className={isMessagesVisible ? "space-y-6 overflow-y-auto" : "space-y-6"}>
+      {/* Full width blocks above - always stretch full width */}
+      <div className="space-y-6">
         {/* Resource Search with integrated filters */}
         <ResourceSearch 
           resourceTypes={resourceTypes || []}
@@ -1459,6 +1482,12 @@ export default function ResourceBrowser() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Grid layout for ResourceList and ValidationMessagesCard */}
+      <div className={isMessagesVisible ? "grid gap-6 mt-6 h-full" : "mt-6"} style={isMessagesVisible ? { gridTemplateColumns: '2fr 1fr' } : {}}>
+        {/* Left side - Resource List */}
+        <div className={isMessagesVisible ? "overflow-y-auto" : ""}>
         
         {/* Only show skeleton on initial load, not during refetch */}
         {isLoading && !resourcesData ? (
@@ -1512,17 +1541,6 @@ export default function ResourceBrowser() {
             highlightedResourceId={currentMessage ? `${currentMessage.resourceType}/${currentMessage.resourceId}` : undefined}
           />
         )}
-
-        {/* Batch Edit Dialog */}
-        <BatchEditDialog
-          open={batchEditDialogOpen}
-          onOpenChange={setBatchEditDialogOpen}
-          selectedResources={Array.from(selectedResources).map(key => {
-            const [resourceType, id] = key.split('/');
-            return { resourceType, id };
-          })}
-          onComplete={handleBatchEditComplete}
-        />
         </div>
 
         {/* Right side - Validation Messages Card */}
@@ -1531,13 +1549,24 @@ export default function ResourceBrowser() {
             <ValidationMessagesCard
               aspects={messagesByAspect}
               highlightSignature={allMessages[currentMessageIndex]?.signature}
-              title={`${currentSeverity.charAt(0).toUpperCase() + currentSeverity.slice(1)} Messages`}
+              title="Validation Messages"
               description={`${allMessages.filter(msg => msg.severity.toLowerCase() === currentSeverity).length} ${currentSeverity} messages from ${resourcesData?.resources?.length || 0} resources`}
               isLoading={isLoadingMessages}
             />
           </div>
         )}
       </div>
+
+      {/* Batch Edit Dialog - outside grid layout */}
+      <BatchEditDialog
+        open={batchEditDialogOpen}
+        onOpenChange={setBatchEditDialogOpen}
+        selectedResources={Array.from(selectedResources).map(key => {
+          const [resourceType, id] = key.split('/');
+          return { resourceType, id };
+        })}
+        onComplete={handleBatchEditComplete}
+      />
     </div>
   );
 }

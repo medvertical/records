@@ -49,8 +49,8 @@ export function ValidationOverview({
             messages={messages}
             currentIndex={currentSeverityIndex.error}
             onIndexChange={(index) => {
-              onSeverityIndexChange?.('error', index);
               onSeverityChange?.('error');
+              onSeverityIndexChange?.('error', index);
             }}
             onToggleMessages={onToggleMessages}
             isMessagesVisible={isMessagesVisible && currentSeverity === 'error'}
@@ -60,8 +60,8 @@ export function ValidationOverview({
             messages={messages}
             currentIndex={currentSeverityIndex.warning}
             onIndexChange={(index) => {
-              onSeverityIndexChange?.('warning', index);
               onSeverityChange?.('warning');
+              onSeverityIndexChange?.('warning', index);
             }}
             onToggleMessages={onToggleMessages}
             isMessagesVisible={isMessagesVisible && currentSeverity === 'warning'}
@@ -71,8 +71,8 @@ export function ValidationOverview({
             messages={messages}
             currentIndex={currentSeverityIndex.information}
             onIndexChange={(index) => {
-              onSeverityIndexChange?.('information', index);
               onSeverityChange?.('information');
+              onSeverityIndexChange?.('information', index);
             }}
             onToggleMessages={onToggleMessages}
             isMessagesVisible={isMessagesVisible && currentSeverity === 'information'}
@@ -93,7 +93,7 @@ export function ValidationOverview({
       </Button>
 
       {/* Show message when no validation messages */}
-      {messages.length === 0 && (
+      {messages.length === 0 && validationSummary.errorCount === 0 && validationSummary.warningCount === 0 && validationSummary.infoCount === 0 && (
         <div className="text-muted-foreground text-sm">
           No validation messages found
         </div>

@@ -258,6 +258,10 @@ export function SeverityNavigator({
   };
 
   const handleClick = () => {
+    // When clicking on a severity navigator, we need to:
+    // 1. Set the current index to 0 (first message of this severity)
+    // 2. Toggle the messages visibility
+    onIndexChange(0);
     onToggleMessages?.();
   };
 
