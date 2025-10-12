@@ -6,6 +6,7 @@ import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-po
 import ResourceSearch, { type ValidationFilters } from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
 import { ValidationOverview, type ValidationSummary } from "@/components/resources/validation-overview";
+import { ValidationMessagesCard } from "@/components/validation/validation-messages-card";
 import { BatchEditDialog } from "@/components/resources/BatchEditDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -120,6 +121,13 @@ export default function ResourceBrowser() {
 
   // Get current validation settings for filtering
   const currentSettings = validationSettingsData;
+
+  // State for validation message navigation
+  const [isMessagesVisible, setIsMessagesVisible] = useState(false);
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
+  const [aggregatedMessages, setAggregatedMessages] = useState<any[]>([]);
+  const [currentSeverity, setCurrentSeverity] = useState<'error' | 'warning' | 'information'>('error');
+  const [currentSeverityIndex, setCurrentSeverityIndex] = useState({ error: 0, warning: 0, information: 0 });
 
   // Listen for validation settings changes
   // Note: Settings changes only affect UI filtering, not data fetching
@@ -521,9 +529,185 @@ export default function ResourceBrowser() {
     }
   });
 
+  // Fetch validation messages for all resources on current page
+  const { data: validationMessagesData, isLoading: isLoadingMessages } = useQuery({
+    queryKey: ['validation-messages', resourcesData?.resources?.map(r => `${r.resourceType}/${r.resourceId}`)],
+    enabled: !!resourcesData?.resources && resourcesData.resources.length > 0 && !!stableActiveServer,
+    queryFn: async () => {
+      if (!resourcesData?.resources) return [];
+      
+      // Fetch messages for all resources on current page in parallel
+      const messagePromises = resourcesData.resources.map(async (resource) => {
+        try {
+          const response = await fetch(
+            `/api/validation/resources/${resource.resourceType}/${resource.resourceId}/messages?serverId=${stableActiveServer?.id || 1}`
+          );
+          if (!response.ok) {
+            console.warn(`Failed to fetch messages for ${resource.resourceType}/${resource.resourceId}`);
+            return null;
+          }
+          const data = await response.json();
+          
+          // Flatten messages and add resource context
+          const flatMessages: any[] = [];
+          if (data.aspects) {
+            data.aspects.forEach((aspect: any) => {
+              if (aspect.messages) {
+                aspect.messages.forEach((message: any) => {
+                  flatMessages.push({
+                    ...message,
+                    resourceType: resource.resourceType,
+                    resourceId: resource.resourceId,
+                    aspect: aspect.aspect
+                  });
+                });
+              }
+            });
+          }
+          
+          return {
+            resourceType: resource.resourceType,
+            resourceId: resource.resourceId,
+            messages: flatMessages,
+            aspects: data.aspects || []
+          };
+        } catch (error) {
+          console.warn(`Error fetching messages for ${resource.resourceType}/${resource.resourceId}:`, error);
+          return null;
+        }
+      });
+      
+      const results = await Promise.all(messagePromises);
+      return results.filter(result => result !== null);
+    },
+    staleTime: 30 * 1000, // 30 seconds
+    refetchInterval: false,
+  });
+
+  // Aggregate all messages from all resources for navigation
+  const allMessages = useMemo(() => {
+    if (!validationMessagesData) return [];
+    
+    const messages: any[] = [];
+    validationMessagesData.forEach(resourceData => {
+      if (resourceData.messages) {
+        messages.push(...resourceData.messages);
+      }
+    });
+    
+    // Sort by severity: errors first, then warnings, then information
+    return messages.sort((a, b) => {
+      const severityOrder = { error: 0, warning: 1, information: 2 };
+      const aOrder = severityOrder[a.severity.toLowerCase() as keyof typeof severityOrder] ?? 3;
+      const bOrder = severityOrder[b.severity.toLowerCase() as keyof typeof severityOrder] ?? 3;
+      return aOrder - bOrder;
+    });
+  }, [validationMessagesData]);
+
+  // Group messages by aspect for the ValidationMessagesCard, filtered by current severity
+  const messagesByAspect = useMemo(() => {
+    if (!validationMessagesData) return [];
+    
+    const aspectMap = new Map<string, any[]>();
+    
+    validationMessagesData.forEach(resourceData => {
+      if (resourceData.aspects) {
+        resourceData.aspects.forEach((aspect: any) => {
+          if (aspect.messages && aspect.messages.length > 0) {
+            const aspectKey = aspect.aspect;
+            if (!aspectMap.has(aspectKey)) {
+              aspectMap.set(aspectKey, []);
+            }
+            
+            // Add resource context to each message and filter by current severity
+            aspect.messages.forEach((message: any) => {
+              // Only include messages that match the current severity
+              if (message.severity.toLowerCase() === currentSeverity.toLowerCase()) {
+                aspectMap.get(aspectKey)!.push({
+                  ...message,
+                  resourceType: resourceData.resourceType,
+                  resourceId: resourceData.resourceId
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+    
+    // Convert map to array and sort aspects
+    const aspectOrder = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'];
+    return aspectOrder
+      .filter(aspect => aspectMap.has(aspect) && aspectMap.get(aspect)!.length > 0)
+      .map(aspect => ({
+        aspect,
+        messages: aspectMap.get(aspect)!.sort((a, b) => {
+          const severityOrder = { error: 0, warning: 1, information: 2 };
+          const aOrder = severityOrder[a.severity.toLowerCase() as keyof typeof severityOrder] ?? 3;
+          const bOrder = severityOrder[b.severity.toLowerCase() as keyof typeof severityOrder] ?? 3;
+          return aOrder - bOrder;
+        })
+      }));
+  }, [validationMessagesData, currentSeverity]);
+
+  // Update aggregated messages when allMessages changes
+  useEffect(() => {
+    setAggregatedMessages(allMessages);
+    // Reset current index if it's out of bounds
+    if (currentMessageIndex >= allMessages.length) {
+      setCurrentMessageIndex(Math.max(0, allMessages.length - 1));
+    }
+  }, [allMessages, currentMessageIndex]);
+
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
+    // Reset message navigation when page changes
+    setIsMessagesVisible(false);
+    setCurrentMessageIndex(0);
   };
+
+  // Navigation handlers for validation messages
+  const handleMessageIndexChange = (index: number) => {
+    setCurrentMessageIndex(index);
+  };
+
+  const handleToggleMessages = () => {
+    setIsMessagesVisible(!isMessagesVisible);
+  };
+
+  // Severity navigation handlers
+  const handleSeverityChange = (severity: 'error' | 'warning' | 'information') => {
+    setCurrentSeverity(severity);
+    // Update the global message index to match the current severity message
+    const messagesOfSeverity = allMessages.filter(msg => msg.severity.toLowerCase() === severity);
+    const severityIndex = currentSeverityIndex[severity];
+    const globalIndex = allMessages.findIndex(msg => msg === messagesOfSeverity[severityIndex]);
+    if (globalIndex !== -1) {
+      setCurrentMessageIndex(globalIndex);
+    }
+    // Show the messages panel when switching severity
+    if (!isMessagesVisible) {
+      setIsMessagesVisible(true);
+    }
+  };
+
+  const handleSeverityIndexChange = (severity: 'error' | 'warning' | 'information', index: number) => {
+    setCurrentSeverityIndex(prev => ({ ...prev, [severity]: index }));
+    // Update the global message index
+    const messagesOfSeverity = allMessages.filter(msg => msg.severity.toLowerCase() === severity);
+    const globalIndex = allMessages.findIndex(msg => msg === messagesOfSeverity[index]);
+    if (globalIndex !== -1) {
+      setCurrentMessageIndex(globalIndex);
+    }
+  };
+
+  // Get the resource that contains the current message
+  const currentMessage = allMessages[currentMessageIndex];
+  const currentMessageResource = currentMessage ? 
+    resourcesData?.resources?.find(r => 
+      r.resourceType === currentMessage.resourceType && 
+      r.resourceId === currentMessage.resourceId
+    ) : null;
 
   // Function to simulate validation progress updates
   const simulateValidationProgress = useCallback((resourceIds: number[], resources: any[]) => {
@@ -668,10 +852,10 @@ export default function ResourceBrowser() {
         });
         
         // Create a timeout promise for the fetch request
-        const fetchWithTimeout = (url: string, options: any, timeoutMs: number = 120000) => {
+        const fetchWithTimeout = (url: string, options: any, timeoutMs: number = 120000): Promise<Response> => {
           return Promise.race([
             fetch(url, options),
-            new Promise((_, reject) =>
+            new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error(`Request timeout after ${timeoutMs}ms`)), timeoutMs)
             )
           ]);
@@ -1206,7 +1390,9 @@ export default function ResourceBrowser() {
 
   return (
     <div className="p-6 h-full overflow-y-auto">
-      <div className="space-y-6">
+      <div className={isMessagesVisible ? "grid grid-cols-2 gap-6 h-full" : "space-y-6"}>
+        {/* Left side - Main content */}
+        <div className={isMessagesVisible ? "space-y-6 overflow-y-auto" : "space-y-6"}>
         {/* Resource Search with integrated filters */}
         <ResourceSearch 
           resourceTypes={resourceTypes || []}
@@ -1216,55 +1402,63 @@ export default function ResourceBrowser() {
           filters={validationFilters}
           onFilterChange={handleFilterChange}
           validationSummary={validationSummaryWithStats}
-          activeServer={stableActiveServer}
+          activeServer={stableActiveServer ? {
+            name: stableActiveServer.name,
+            url: stableActiveServer.url
+          } : undefined}
         />
 
-        {/* Selection Mode Toggle and Action Bar */}
+        {/* Validation Overview and Selection Action Bar */}
         <div className="flex items-center justify-between">
-          <Button
-            variant={selectionMode ? "default" : "outline"}
-            size="sm"
-            onClick={toggleSelectionMode}
-            className="gap-2"
-          >
-            {selectionMode ? (
+          {/* Left side - Validation Overview */}
+          {resourcesData?.resources && resourcesData.resources.length > 0 ? (
+            <ValidationOverview
+              validationSummary={validationSummary}
+              onRevalidate={handleRevalidate}
+              isRevalidating={isValidating}
+              messages={allMessages}
+              currentMessageIndex={currentMessageIndex}
+              onMessageIndexChange={handleMessageIndexChange}
+              onToggleMessages={handleToggleMessages}
+              isMessagesVisible={isMessagesVisible}
+              currentSeverity={currentSeverity}
+              onSeverityChange={handleSeverityChange}
+              currentSeverityIndex={currentSeverityIndex}
+              onSeverityIndexChange={handleSeverityIndexChange}
+            />
+          ) : (
+            <div></div>
+          )}
+
+          {/* Right side - Selection Action Bar */}
+          <div className="flex items-center gap-3">
+            <Button
+              variant={selectionMode ? "default" : "outline"}
+              size="sm"
+              onClick={toggleSelectionMode}
+              className="gap-2"
+            >
+              <CheckSquare className="h-4 w-4" />
+              {selectionMode ? "Exit Selection" : "Select"}
+            </Button>
+            
+            {selectionMode && selectedResources.size > 0 && (
               <>
-                <X className="h-4 w-4" />
-                Exit Selection
-              </>
-            ) : (
-              <>
-                <CheckSquare className="h-4 w-4" />
-                Select Resources
+                <Badge variant="secondary" className="text-sm">
+                  {selectedResources.size} selected
+                </Badge>
+                <Button
+                  size="sm"
+                  onClick={handleBatchEdit}
+                  className="gap-2"
+                >
+                  <Edit2 className="h-4 w-4" />
+                  Batch Edit
+                </Button>
               </>
             )}
-          </Button>
-
-          {selectionMode && selectedResources.size > 0 && (
-            <div className="flex items-center gap-3">
-              <Badge variant="secondary" className="text-sm">
-                {selectedResources.size} selected
-              </Badge>
-              <Button
-                size="sm"
-                onClick={handleBatchEdit}
-                className="gap-2"
-              >
-                <Edit2 className="h-4 w-4" />
-                Batch Edit
-              </Button>
-            </div>
-          )}
+          </div>
         </div>
-
-        {/* Validation Overview */}
-        {resourcesData?.resources && resourcesData.resources.length > 0 && !selectionMode && (
-          <ValidationOverview
-            validationSummary={validationSummary}
-            onRevalidate={handleRevalidate}
-            isRevalidating={isValidating}
-          />
-        )}
         
         {/* Only show skeleton on initial load, not during refetch */}
         {isLoading && !resourcesData ? (
@@ -1315,6 +1509,7 @@ export default function ResourceBrowser() {
             selectionMode={selectionMode}
             selectedIds={selectedResources}
             onSelectionChange={handleSelectionChange}
+            highlightedResourceId={currentMessage ? `${currentMessage.resourceType}/${currentMessage.resourceId}` : undefined}
           />
         )}
 
@@ -1328,6 +1523,20 @@ export default function ResourceBrowser() {
           })}
           onComplete={handleBatchEditComplete}
         />
+        </div>
+
+        {/* Right side - Validation Messages Card */}
+        {isMessagesVisible && (
+          <div className="sticky top-6 self-start">
+            <ValidationMessagesCard
+              aspects={messagesByAspect}
+              highlightSignature={allMessages[currentMessageIndex]?.signature}
+              title={`${currentSeverity.charAt(0).toUpperCase() + currentSeverity.slice(1)} Messages`}
+              description={`${allMessages.filter(msg => msg.severity.toLowerCase() === currentSeverity).length} ${currentSeverity} messages from ${resourcesData?.resources?.length || 0} resources`}
+              isLoading={isLoadingMessages}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

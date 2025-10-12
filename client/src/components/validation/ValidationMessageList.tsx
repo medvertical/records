@@ -406,7 +406,7 @@ export function ValidationMessageList({
         </div>
       </div>
 
-      {/* Error Messages */}
+      {/* Validation Messages */}
       {groupedMessages.error.length > 0 && (
         <div className="space-y-2">
           {groupedMessages.error.map((message, index) => (

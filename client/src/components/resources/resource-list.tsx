@@ -72,6 +72,7 @@ export interface ResourceListProps {
   selectionMode?: boolean; // Enable selection mode with checkboxes
   selectedIds?: Set<string>; // Set of selected resource keys (resourceType/id)
   onSelectionChange?: (resourceKey: string, selected: boolean) => void; // Callback for selection changes
+  highlightedResourceId?: string; // Resource ID to highlight (resourceType/resourceId)
 }
 
 export default function ResourceList({
@@ -88,6 +89,7 @@ export default function ResourceList({
   selectionMode = false,
   selectedIds = new Set(),
   onSelectionChange,
+  highlightedResourceId,
 }: ResourceListProps) {
   // Fetch current validation settings for UI filtering
   const { data: validationSettingsData } = useQuery({
@@ -567,12 +569,14 @@ export default function ResourceList({
             const isValidating = validatingResourceIds.has(resourceId);
             const resourceKey = `${resource.resourceType}/${resource.id || resource.resourceId}`;
             const isSelected = selectedIds.has(resourceKey);
+            const isHighlighted = highlightedResourceId === resourceKey;
             
             const cardContent = (
               <Card className={cn(
                 selectionMode ? "" : "hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer",
                 validationStatus === 'not-validated' && "border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50",
-                isSelected && "ring-2 ring-blue-500 bg-blue-50/50"
+                isSelected && "ring-2 ring-blue-500 bg-blue-50/50",
+                isHighlighted && "ring-2 ring-orange-500 bg-orange-50/50 animate-pulse"
               )}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">

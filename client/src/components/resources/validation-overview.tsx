@@ -1,7 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
-import { SeverityIcon } from '@/components/ui/severity-icon';
+import ValidationMessageNavigator, { SeverityNavigator } from '@/components/validation/validation-message-navigator';
+import type { ValidationMessage } from '@/components/validation/validation-messages-card';
 
 export interface ValidationSummary {
   totalResources: number;
@@ -15,77 +15,90 @@ interface ValidationOverviewProps {
   validationSummary: ValidationSummary;
   onRevalidate: () => void;
   isRevalidating?: boolean;
+  messages?: ValidationMessage[];
+  currentMessageIndex?: number;
+  onMessageIndexChange?: (index: number) => void;
+  onToggleMessages?: () => void;
+  isMessagesVisible?: boolean;
+  currentSeverity?: 'error' | 'warning' | 'information';
+  onSeverityChange?: (severity: 'error' | 'warning' | 'information') => void;
+  currentSeverityIndex?: { error: number; warning: number; information: number };
+  onSeverityIndexChange?: (severity: 'error' | 'warning' | 'information', index: number) => void;
 }
 
 export function ValidationOverview({
   validationSummary,
   onRevalidate,
   isRevalidating = false,
+  messages = [],
+  currentMessageIndex = 0,
+  onMessageIndexChange,
+  onToggleMessages,
+  isMessagesVisible = false,
+  currentSeverity = 'error',
+  onSeverityChange,
+  currentSeverityIndex = { error: 0, warning: 0, information: 0 },
+  onSeverityIndexChange,
 }: ValidationOverviewProps) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-base font-semibold">Validation Overview</CardTitle>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onRevalidate}
-          disabled={isRevalidating}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${isRevalidating ? 'animate-spin' : ''}`} />
-          Revalidate
-        </Button>
-      </CardHeader>
-      <CardContent className="pt-3">
-        <div className="grid grid-cols-4 gap-3">
-          {/* Total Resources */}
-          <div className="text-center p-3 bg-gray-50 rounded-lg">
-            <div className="text-2xl font-bold text-gray-900">
-              {validationSummary.totalResources}
-            </div>
-            <div className="text-xs text-gray-600 mt-0.5">Total Resources</div>
-          </div>
-
-          {/* Errors */}
-          <div className="text-center p-3 bg-red-50 rounded-lg border border-red-200">
-            <div className="flex items-center justify-center gap-1.5">
-              <SeverityIcon severity="error" className="h-4 w-4" />
-              <div className="text-2xl font-bold text-red-600">
-                {validationSummary.errorCount}
-              </div>
-            </div>
-            <div className="text-xs text-red-700 mt-0.5">Errors</div>
-          </div>
-
-          {/* Warnings */}
-          <div className="text-center p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-            <div className="flex items-center justify-center gap-1.5">
-              <SeverityIcon severity="warning" className="h-4 w-4" />
-              <div className="text-2xl font-bold text-yellow-600">
-                {validationSummary.warningCount}
-              </div>
-            </div>
-            <div className="text-xs text-yellow-700 mt-0.5">Warnings</div>
-          </div>
-
-          {/* Information */}
-          <div className="text-center p-3 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="flex items-center justify-center gap-1.5">
-              <SeverityIcon severity="information" className="h-4 w-4" />
-              <div className="text-2xl font-bold text-blue-600">
-                {validationSummary.infoCount}
-              </div>
-            </div>
-            <div className="text-xs text-blue-700 mt-0.5">Information</div>
-          </div>
+    <div className="flex items-center gap-4">
+      {/* Severity Navigators */}
+      {messages.length > 0 && (
+        <div className="flex items-center gap-2">
+          <SeverityNavigator
+            messages={messages}
+            currentIndex={currentSeverityIndex.error}
+            onIndexChange={(index) => {
+              onSeverityIndexChange?.('error', index);
+              onSeverityChange?.('error');
+            }}
+            onToggleMessages={onToggleMessages}
+            isMessagesVisible={isMessagesVisible && currentSeverity === 'error'}
+            severity="error"
+          />
+          <SeverityNavigator
+            messages={messages}
+            currentIndex={currentSeverityIndex.warning}
+            onIndexChange={(index) => {
+              onSeverityIndexChange?.('warning', index);
+              onSeverityChange?.('warning');
+            }}
+            onToggleMessages={onToggleMessages}
+            isMessagesVisible={isMessagesVisible && currentSeverity === 'warning'}
+            severity="warning"
+          />
+          <SeverityNavigator
+            messages={messages}
+            currentIndex={currentSeverityIndex.information}
+            onIndexChange={(index) => {
+              onSeverityIndexChange?.('information', index);
+              onSeverityChange?.('information');
+            }}
+            onToggleMessages={onToggleMessages}
+            isMessagesVisible={isMessagesVisible && currentSeverity === 'information'}
+            severity="information"
+          />
         </div>
+      )}
+      
+      {/* Revalidate Button */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onRevalidate}
+        disabled={isRevalidating}
+      >
+        <RefreshCw className={`h-4 w-4 mr-2 ${isRevalidating ? 'animate-spin' : ''}`} />
+        Revalidate
+      </Button>
 
-        {/* Additional Info */}
-        <div className="mt-3 text-center text-xs text-gray-600">
-          {validationSummary.validatedCount} of {validationSummary.totalResources} resources validated
+      {/* Show message when no validation messages */}
+      {messages.length === 0 && (
+        <div className="text-muted-foreground text-sm">
+          No validation messages found
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
 

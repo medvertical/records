@@ -92,7 +92,7 @@ export function ValidationAggregatedView({ issues, onExport }: ValidationAggrega
         {/* Top Messages */}
         {stats.topMessages.length > 0 && (
           <div className="mb-6">
-            <h4 className="font-medium text-gray-700 mb-3">Most Common Error Messages</h4>
+            <h4 className="font-medium text-gray-700 mb-3">Most Common Validation Messages</h4>
             <div className="space-y-2">
               {stats.topMessages.map((item, index) => (
                 <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
