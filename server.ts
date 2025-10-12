@@ -1719,10 +1719,16 @@ try {
   process.exit(1);
 }
 
-server.listen({
-  port,
-  host: "0.0.0.0",
-  reusePort: true,
-}, () => {
-  log(`Vercel-compatible server serving on port ${port}`);
-});
+// Only start the server if not in Vercel/serverless environment
+if (process.env.VERCEL !== '1' && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  server.listen({
+    port,
+    host: "0.0.0.0",
+    reusePort: true,
+  }, () => {
+    log(`Server serving on port ${port}`);
+  });
+}
+
+// Export for Vercel serverless
+export default app;
