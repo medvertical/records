@@ -1387,14 +1387,16 @@ app.post("/api/validation/validate-by-ids", async (req, res) => {
   try {
     log(`Validation request received: ${JSON.stringify(req.body)}`, 'validation');
     
-    const { resourceIds, forceRevalidation = false } = req.body;
+    // Accept both 'resourceIds' and 'ids' field names for flexibility
+    const resourceIds = req.body.resourceIds || req.body.ids || [];
+    const forceRevalidation = req.body.forceRevalidation || false;
     
-    if (!resourceIds || !Array.isArray(resourceIds)) {
-      log(`Invalid resourceIds: ${JSON.stringify({resourceIds, type: typeof resourceIds})}`, 'validation');
+    if (!Array.isArray(resourceIds)) {
+      log(`Invalid resourceIds: ${JSON.stringify({resourceIds, type: typeof resourceIds, body: req.body})}`, 'validation');
       return res.status(400).json({
         error: "Invalid request",
-        message: "resourceIds must be an array",
-        received: { resourceIds, type: typeof resourceIds }
+        message: "resourceIds or ids must be an array",
+        received: { body: req.body, resourceIds, type: typeof resourceIds }
       });
     }
     
