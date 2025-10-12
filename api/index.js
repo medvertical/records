@@ -90,6 +90,139 @@ const mockFhirServers = [
   { id: 2, name: "FHIR Test Server", url: "https://r4.smarthealthit.org", isActive: false }
 ];
 
+// ============================================================================
+// FHIR Client - Fetch Real Data from FHIR Servers
+// ============================================================================
+
+class FhirClient {
+  constructor(baseUrl) {
+    this.baseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  }
+
+  async fetchResources(resourceType, params = {}) {
+    try {
+      const queryParams = new URLSearchParams();
+      if (params._count) queryParams.append('_count', params._count);
+      if (params._offset) queryParams.append('_offset', params._offset);
+      if (params._sort) queryParams.append('_sort', params._sort);
+      
+      const url = `${this.baseUrl}/${resourceType}?${queryParams.toString()}`;
+      const response = await fetch(url, {
+        headers: {
+          'Accept': 'application/fhir+json',
+          'Content-Type': 'application/fhir+json'
+        },
+        timeout: 10000
+      });
+
+      if (!response.ok) {
+        throw new Error(`FHIR server returned ${response.status}`);
+      }
+
+      const bundle = await response.json();
+      return {
+        resources: bundle.entry ? bundle.entry.map(e => e.resource) : [],
+        total: bundle.total || 0
+      };
+    } catch (error) {
+      log(`FHIR fetch error: ${error.message}`, 'fhir-client');
+      return { resources: [], total: 0, error: error.message };
+    }
+  }
+
+  async fetchResource(resourceType, id) {
+    try {
+      const url = `${this.baseUrl}/${resourceType}/${id}`;
+      const response = await fetch(url, {
+        headers: {
+          'Accept': 'application/fhir+json',
+          'Content-Type': 'application/fhir+json'
+        },
+        timeout: 10000
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error(`FHIR server returned ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      log(`FHIR fetch error: ${error.message}`, 'fhir-client');
+      return null;
+    }
+  }
+
+  async getResourceTypes() {
+    try {
+      const url = `${this.baseUrl}/metadata`;
+      const response = await fetch(url, {
+        headers: { 'Accept': 'application/fhir+json' },
+        timeout: 10000
+      });
+
+      if (!response.ok) {
+        throw new Error(`FHIR server returned ${response.status}`);
+      }
+
+      const metadata = await response.json();
+      const resourceTypes = [];
+      
+      if (metadata.rest && metadata.rest[0] && metadata.rest[0].resource) {
+        metadata.rest[0].resource.forEach(r => {
+          if (r.type) resourceTypes.push(r.type);
+        });
+      }
+
+      return resourceTypes.length > 0 ? resourceTypes : [
+        'Patient', 'Observation', 'Encounter', 'Condition', 
+        'Procedure', 'MedicationRequest', 'AllergyIntolerance'
+      ];
+    } catch (error) {
+      log(`FHIR metadata error: ${error.message}`, 'fhir-client');
+      return ['Patient', 'Observation', 'Encounter', 'Condition'];
+    }
+  }
+
+  async getResourceCount(resourceType) {
+    try {
+      const url = `${this.baseUrl}/${resourceType}?_summary=count`;
+      const response = await fetch(url, {
+        headers: { 'Accept': 'application/fhir+json' },
+        timeout: 10000
+      });
+
+      if (!response.ok) {
+        throw new Error(`FHIR server returned ${response.status}`);
+      }
+
+      const bundle = await response.json();
+      return bundle.total || 0;
+    } catch (error) {
+      log(`FHIR count error for ${resourceType}: ${error.message}`, 'fhir-client');
+      return 0;
+    }
+  }
+}
+
+// Get active FHIR server and create client
+async function getActiveFhirClient() {
+  try {
+    if (dbConnected && db) {
+      const servers = await db.select().from(fhirServers).where(eq(fhirServers.isActive, true)).limit(1);
+      if (servers.length > 0) {
+        log(`Using FHIR server: ${servers[0].name} (${servers[0].url})`, 'fhir-client');
+        return new FhirClient(servers[0].url);
+      }
+    }
+    log('No active FHIR server found', 'fhir-client');
+    return null;
+  } catch (error) {
+    log(`Error getting active server: ${error.message}`, 'fhir-client');
+    return null;
+  }
+}
+
 // Basic API routes with fallbacks for Vercel deployment
 app.get("/api/health", async (req, res) => {
   try {
@@ -755,21 +888,28 @@ app.get("/api/dashboard/combined", async (req, res) => {
   }
 });
 
-// FHIR resource types endpoint
+// FHIR resource types endpoint - REAL DATA
 app.get("/api/fhir/resource-types", async (req, res) => {
   try {
-    res.json([
-      "Patient",
-      "Observation",
-      "Encounter",
-      "Medication",
-      "Condition",
-      "Procedure",
-      "AllergyIntolerance",
-      "Binary",
-      "OperationOutcome"
-    ]);
+    const fhirClient = await getActiveFhirClient();
+    
+    if (fhirClient) {
+      const resourceTypes = await fhirClient.getResourceTypes();
+      res.json(resourceTypes);
+    } else {
+      // Fallback to common types if no active server
+      res.json([
+        "Patient",
+        "Observation",
+        "Encounter",
+        "Condition",
+        "Procedure",
+        "MedicationRequest",
+        "AllergyIntolerance"
+      ]);
+    }
   } catch (error) {
+    log(`Error fetching resource types: ${error.message}`, 'api');
     res.status(500).json({
       error: "Failed to get resource types",
       message: error.message
@@ -777,65 +917,64 @@ app.get("/api/fhir/resource-types", async (req, res) => {
   }
 });
 
-// FHIR resources endpoint - fetch resources with filtering
+// FHIR resources endpoint - REAL DATA from FHIR server
 app.get("/api/fhir/resources", async (req, res) => {
   try {
     const { limit = 20, offset = 0, resourceType, search } = req.query;
+    const fhirClient = await getActiveFhirClient();
     
-    // Mock resource data
-    const resourceTypes = ["Patient", "Observation", "Encounter", "Medication", "Condition", "Procedure"];
-    const allResources = [];
-    
-    for (let i = 0; i < 100; i++) {
-      const type = resourceTypes[i % resourceTypes.length];
-      allResources.push({
-        id: `${type.toLowerCase()}-${i + 1}`,
-        resourceType: type,
-        lastUpdated: new Date(Date.now() - Math.random() * 86400000).toISOString(),
-        _validationSummary: {
-          isValid: Math.random() > 0.3,
-          validationScore: Math.floor(Math.random() * 40) + 60,
-          errorCount: Math.floor(Math.random() * 3),
-          warningCount: Math.floor(Math.random() * 5),
-          infoCount: Math.floor(Math.random() * 8),
-          validatedAt: new Date().toISOString(),
-          status: "completed"
-        }
+    if (!fhirClient) {
+      return res.json({
+        resources: [],
+        pagination: { page: 1, limit: parseInt(limit), total: 0, totalPages: 0 },
+        totalCount: 0,
+        message: "No active FHIR server configured"
       });
     }
+
+    // Use resourceType or default to Patient
+    const typeToFetch = resourceType && resourceType !== "All Resource Types" ? resourceType : "Patient";
     
-    // Filter by resource type if specified
-    let filteredResources = allResources;
-    if (resourceType && resourceType !== "All Resource Types") {
-      filteredResources = allResources.filter(r => r.resourceType === resourceType);
+    const result = await fhirClient.fetchResources(typeToFetch, {
+      _count: parseInt(limit),
+      _offset: parseInt(offset)
+    });
+
+    if (result.error) {
+      return res.json({
+        resources: [],
+        pagination: { page: 1, limit: parseInt(limit), total: 0, totalPages: 0 },
+        totalCount: 0,
+        error: result.error
+      });
     }
-    
-    // Filter by search term if specified
-    if (search) {
-      filteredResources = filteredResources.filter(r => 
-        r.id.toLowerCase().includes(search.toLowerCase()) ||
-        r.resourceType.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-    
-    // Paginate
-    const totalCount = filteredResources.length;
-    const paginatedResources = filteredResources.slice(
-      parseInt(offset),
-      parseInt(offset) + parseInt(limit)
-    );
-    
+
+    // Add mock validation summaries for now (TODO: implement real validation)
+    const resourcesWithValidation = result.resources.map(resource => ({
+      ...resource,
+      _validationSummary: {
+        isValid: true,
+        validationScore: 95,
+        errorCount: 0,
+        warningCount: 0,
+        infoCount: 0,
+        validatedAt: new Date().toISOString(),
+        status: "pending"
+      }
+    }));
+
     res.json({
-      resources: paginatedResources,
+      resources: resourcesWithValidation,
       pagination: {
         page: Math.floor(parseInt(offset) / parseInt(limit)) + 1,
         limit: parseInt(limit),
-        total: totalCount,
-        totalPages: Math.ceil(totalCount / parseInt(limit))
+        total: result.total,
+        totalPages: Math.ceil(result.total / parseInt(limit))
       },
-      totalCount
+      totalCount: result.total
     });
   } catch (error) {
+    log(`Error fetching FHIR resources: ${error.message}`, 'api');
     res.status(500).json({
       error: "Failed to get resources",
       message: error.message
@@ -843,24 +982,31 @@ app.get("/api/fhir/resources", async (req, res) => {
   }
 });
 
-// FHIR specific resource endpoint
+// FHIR specific resource endpoint - REAL DATA
 app.get("/api/fhir/resources/:resourceType/:id", async (req, res) => {
   try {
     const { resourceType, id } = req.params;
+    const fhirClient = await getActiveFhirClient();
     
-    // Mock resource data
-    const resource = {
-      id,
-      resourceType,
-      lastUpdated: new Date().toISOString(),
-      meta: {
-        versionId: "1",
-        lastUpdated: new Date().toISOString()
-      }
-    };
+    if (!fhirClient) {
+      return res.status(503).json({
+        error: "No active FHIR server",
+        message: "Please configure and activate a FHIR server first"
+      });
+    }
+
+    const resource = await fhirClient.fetchResource(resourceType, id);
+    
+    if (!resource) {
+      return res.status(404).json({
+        error: "Resource not found",
+        message: `${resourceType}/${id} not found on FHIR server`
+      });
+    }
     
     res.json(resource);
   } catch (error) {
+    log(`Error fetching resource ${req.params.resourceType}/${req.params.id}: ${error.message}`, 'api');
     res.status(500).json({
       error: "Failed to get resource",
       message: error.message
@@ -868,16 +1014,34 @@ app.get("/api/fhir/resources/:resourceType/:id", async (req, res) => {
   }
 });
 
-// FHIR resource counts endpoint
+// FHIR resource counts endpoint - REAL DATA
 app.get("/api/fhir/resource-counts", async (req, res) => {
   try {
-    res.json({
-      Patient: 45,
-      Observation: 30,
-      Encounter: 15,
-      Medication: 10
-    });
+    const fhirClient = await getActiveFhirClient();
+    
+    if (!fhirClient) {
+      return res.json({});
+    }
+
+    // Fetch counts for common resource types
+    const resourceTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'Procedure', 'MedicationRequest'];
+    const counts = {};
+    
+    // Fetch counts in parallel
+    await Promise.all(
+      resourceTypes.map(async (type) => {
+        try {
+          counts[type] = await fhirClient.getResourceCount(type);
+        } catch (error) {
+          log(`Error getting count for ${type}: ${error.message}`, 'api');
+          counts[type] = 0;
+        }
+      })
+    );
+    
+    res.json(counts);
   } catch (error) {
+    log(`Error fetching resource counts: ${error.message}`, 'api');
     res.status(500).json({
       error: "Failed to get resource counts",
       message: error.message
