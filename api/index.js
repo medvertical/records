@@ -31,14 +31,28 @@ let dbConnected = false;
 let dbError = null;
 
 try {
-  if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
-    const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+  // Check multiple possible environment variable names
+  const connectionString = 
+    process.env.DATABASE_URL || 
+    process.env.POSTGRES_URL || 
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.POSTGRES_URL_NON_POOLING;
+  
+  if (connectionString) {
     const sql = neon(connectionString);
     db = drizzle(sql);
     dbConnected = true;
     console.log('✅ Database connected successfully (Neon serverless)');
+    console.log('📊 Using connection string from:', 
+      process.env.DATABASE_URL ? 'DATABASE_URL' :
+      process.env.POSTGRES_URL ? 'POSTGRES_URL' :
+      process.env.POSTGRES_PRISMA_URL ? 'POSTGRES_PRISMA_URL' :
+      'POSTGRES_URL_NON_POOLING'
+    );
   } else {
-    console.warn('⚠️  No DATABASE_URL found, using mock data');
+    console.warn('⚠️  No DATABASE_URL, POSTGRES_URL, or POSTGRES_PRISMA_URL found');
+    console.warn('⚠️  Available env vars:', Object.keys(process.env).filter(k => k.includes('POSTGRES') || k.includes('DATABASE')).join(', '));
+    console.warn('⚠️  Using mock data');
   }
 } catch (error) {
   dbError = error.message;
