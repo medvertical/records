@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { neon } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-http';
 import { eq, desc } from 'drizzle-orm';
-import { fhirServers } from '../shared/schema.js';
+import { pgTable, text, serial, boolean, jsonb, timestamp } from 'drizzle-orm/pg-core';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,6 +13,17 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Define fhirServers schema inline (matching shared/schema.ts)
+const fhirServers = pgTable("fhir_servers", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  isActive: boolean("is_active").default(false),
+  authConfig: jsonb("auth_config"),
+  fhirVersion: text("fhir_version"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 // Initialize database connection for Vercel serverless
 let db = null;
@@ -23,7 +34,7 @@ try {
   if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
     const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
     const sql = neon(connectionString);
-    db = drizzle(sql, { schema: { fhirServers } });
+    db = drizzle(sql);
     dbConnected = true;
     console.log('✅ Database connected successfully (Neon serverless)');
   } else {
