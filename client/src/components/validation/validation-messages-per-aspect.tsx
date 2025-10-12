@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle, AlertCircle } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { SeverityIcon, getSeverityVariant } from '@/components/ui/severity-icon';
+import { CircularProgress } from '@/components/ui/circular-progress';
 import type { SeverityLevel } from '@/components/ui/severity-icon';
 
 interface ValidationMessage {
@@ -32,6 +33,7 @@ interface ValidationMessagesPerAspectProps {
   resourceId: string;
   serverId?: number;
   highlightSignature?: string;
+  validationScore?: number;
 }
 
 function getAspectBadgeColor(aspect: string): string {
@@ -51,6 +53,7 @@ export function ValidationMessagesPerAspect({
   resourceId,
   serverId = 1,
   highlightSignature,
+  validationScore = 0,
 }: ValidationMessagesPerAspectProps) {
   const { data, isLoading, error } = useQuery<ResourceMessagesResponse>({
     queryKey: ['/api/validation/resources', resourceType, resourceId, 'messages', serverId],
@@ -123,10 +126,20 @@ export function ValidationMessagesPerAspect({
   return (
     <Card className="text-left">
       <CardHeader className="text-left">
-        <CardTitle className="text-left">Validation Messages</CardTitle>
-        <CardDescription className="text-left">
-          {totalMessages} validation message{totalMessages !== 1 ? 's' : ''} across {data.aspects.length} aspect{data.aspects.length !== 1 ? 's' : ''}
-        </CardDescription>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <CardTitle className="text-left">Validation Messages</CardTitle>
+            <CardDescription className="text-left">
+              {totalMessages} validation message{totalMessages !== 1 ? 's' : ''} across {data.aspects.length} aspect{data.aspects.length !== 1 ? 's' : ''}
+            </CardDescription>
+          </div>
+          <CircularProgress 
+            value={validationScore} 
+            size="md"
+            showValue={true}
+            className="flex-shrink-0"
+          />
+        </div>
       </CardHeader>
       <CardContent className="text-left">
         <div className="space-y-4">

@@ -70,19 +70,8 @@ export function ResourceDetailActions({
             </Button>
           </>
         ) : (
-          // Edit mode: Show Save and View buttons
+          // Edit mode: Show View and Save buttons
           <>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={onSave}
-              disabled={!canSave || !activeServer}
-              className="gap-2"
-            >
-              <Save className="h-4 w-4" />
-              Save
-            </Button>
-
             <Button
               variant="outline"
               size="sm"
@@ -92,6 +81,17 @@ export function ResourceDetailActions({
             >
               <Eye className="h-4 w-4" />
               View
+            </Button>
+
+            <Button
+              variant="default"
+              size="sm"
+              onClick={onSave}
+              disabled={!canSave || !activeServer}
+              className="gap-2"
+            >
+              <Save className="h-4 w-4" />
+              Save
             </Button>
           </>
         )}

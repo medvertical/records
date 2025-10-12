@@ -15,7 +15,6 @@ import { FhirResourceWithValidation } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle, XCircle, ArrowLeft, AlertCircle, AlertTriangle, Info, Settings, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
-import { CircularProgress } from "@/components/ui/circular-progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function ResourceDetail() {
@@ -267,7 +266,7 @@ export default function ResourceDetail() {
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-6 h-full overflow-y-auto">
+      <div className="p-6 space-y-6">
         <Skeleton className="h-20 rounded-xl" />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Skeleton className="h-96 rounded-xl" />
@@ -279,7 +278,7 @@ export default function ResourceDetail() {
 
   if (!resource) {
     return (
-      <div className="p-6 h-full overflow-y-auto">
+      <div className="p-6">
         <Card>
           <CardContent className="pt-6">
             <div className="text-center">
@@ -319,7 +318,7 @@ export default function ResourceDetail() {
   ) : 0;
 
   return (
-    <div className="p-6 h-full overflow-y-auto">
+    <div className="p-6">
       <div className="space-y-6">
         {/* Header section with validation summary */}
         <div className="bg-white rounded-lg border p-6">
@@ -396,20 +395,6 @@ export default function ResourceDetail() {
                 isRevalidating={isRevalidating}
                 canSave={hasChanges}
               />
-              <CircularProgress 
-                value={validationSummary?.validationScore || 0} 
-                size="lg"
-                showValue={true}
-              />
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">Validation Score</p>
-                <p className="text-xs text-gray-500">
-                  {validationSummary 
-                    ? `${totalIssues} issue${totalIssues !== 1 ? 's' : ''} found`
-                    : 'Not validated'
-                  }
-                </p>
-              </div>
             </div>
           </div>
         </div>
@@ -431,13 +416,14 @@ export default function ResourceDetail() {
             />
           </div>
           
-          {/* Right: Per-Aspect Validation Messages */}
-          <div>
+          {/* Right: Per-Aspect Validation Messages - Sticky */}
+          <div className="sticky top-20 self-start">
             <ValidationMessagesPerAspect
               resourceType={resource.resourceType}
               resourceId={resource.resourceId}
               serverId={activeServer?.id}
               highlightSignature={highlightSignature}
+              validationScore={validationSummary?.validationScore || 0}
             />
           </div>
         </div>

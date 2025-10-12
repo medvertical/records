@@ -96,7 +96,7 @@ function Router() {
                 <div className="flex pt-16">
                   <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
                   <main className={cn(
-                    "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
+                    "flex-1 relative z-10 transition-all duration-300 ease-in-out",
                     sidebarOpen && !isMobile ? "ml-64" : "ml-0"
                   )}>
                     <ResourceDetail resourceId={params.id} />
@@ -116,7 +116,7 @@ function Router() {
             <div className="flex pt-16">
               <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
               <main className={cn(
-                "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
+                "flex-1 relative z-10 transition-all duration-300 ease-in-out",
                 sidebarOpen && !isMobile ? "ml-64" : "ml-0"
               )}>
                 <DashboardComponent />
@@ -134,7 +134,7 @@ function Router() {
             <div className="flex pt-16">
               <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
               <main className={cn(
-                "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
+                "flex-1 relative z-10 transition-all duration-300 ease-in-out",
                 sidebarOpen && !isMobile ? "ml-64" : "ml-0"
               )}>
                 <DashboardComponent />
@@ -152,7 +152,7 @@ function Router() {
             <div className="flex pt-16">
               <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
               <main className={cn(
-                "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
+                "flex-1 relative z-10 transition-all duration-300 ease-in-out",
                 sidebarOpen && !isMobile ? "ml-64" : "ml-0"
               )}>
                 <ResourceBrowserComponent />
@@ -170,7 +170,7 @@ function Router() {
             <div className="flex pt-16">
               <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
               <main className={cn(
-                "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
+                "flex-1 relative z-10 transition-all duration-300 ease-in-out",
                 sidebarOpen && !isMobile ? "ml-64" : "ml-0"
               )}>
                 <div className="p-8">
@@ -191,7 +191,7 @@ function Router() {
             <div className="flex pt-16">
               <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
               <main className={cn(
-                "flex-1 overflow-hidden relative z-10 transition-all duration-300 ease-in-out",
+                "flex-1 relative z-10 transition-all duration-300 ease-in-out",
                 sidebarOpen && !isMobile ? "ml-64" : "ml-0"
               )}>
                 <SettingsPage />

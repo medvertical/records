@@ -22,6 +22,7 @@ import 'prismjs/components/prism-json';
 import 'prismjs/themes/prism.css';
 import { OptimizedValidationResults } from './optimized-validation-results';
 import ResourceTreeViewer from './resource-tree-viewer';
+import EditableTreeViewer from './EditableTreeViewer';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -172,7 +173,7 @@ export default function ResourceViewer({
   useEffect(() => {
     if (isEditMode && editedResource) {
       setJsonContent(formatJSON(editedResource));
-      setActiveTab('json');
+      setActiveTab('form');
     } else if (!isEditMode) {
       setActiveTab('tree');
     }
@@ -359,29 +360,29 @@ export default function ResourceViewer({
 
   return (
     <Card>
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CardTitle>{title}</CardTitle>
-            {getValidationBadge()}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'tree' | 'json' | 'form')}>
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <CardTitle>{title}</CardTitle>
+              {getValidationBadge()}
+            </div>
+            <TabsList className="grid grid-cols-2">
+              {!isEditMode ? (
+                <>
+                  <TabsTrigger value="tree">Tree</TabsTrigger>
+                  <TabsTrigger value="json">JSON</TabsTrigger>
+                </>
+              ) : (
+                <>
+                  <TabsTrigger value="form">Form</TabsTrigger>
+                  <TabsTrigger value="json">JSON</TabsTrigger>
+                </>
+              )}
+            </TabsList>
           </div>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'tree' | 'json' | 'form')}>
-          <TabsList className="grid w-full grid-cols-2 mb-4">
-            {!isEditMode ? (
-              <>
-                <TabsTrigger value="tree">Tree</TabsTrigger>
-                <TabsTrigger value="json">JSON</TabsTrigger>
-              </>
-            ) : (
-              <>
-                <TabsTrigger value="json">JSON</TabsTrigger>
-                <TabsTrigger value="form" disabled>Form (Coming Soon)</TabsTrigger>
-              </>
-            )}
-          </TabsList>
+        </CardHeader>
+        <CardContent className="pt-0">
 
           {/* Tree View (View Mode Only) */}
           {!isEditMode && (
@@ -565,25 +566,38 @@ export default function ResourceViewer({
             )}
           </TabsContent>
 
-          {/* Form View (Edit Mode Only - Coming Soon) */}
+          {/* Form View (Edit Mode Only) */}
           {isEditMode && (
             <TabsContent value="form" className="mt-0">
-              <div className="flex flex-col items-center justify-center h-[400px] text-gray-500 space-y-4">
-                <p className="text-lg">Form editor coming soon...</p>
-                <p className="text-sm text-gray-400">Use the JSON tab to edit the resource for now.</p>
+              <div className="space-y-4">
+                <div className="flex items-center justify-end mb-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExpandAll}
+                    className="text-xs"
+                  >
+                    {expandAll ? 'Collapse All' : 'Expand All'}
+                  </Button>
+                </div>
+                <EditableTreeViewer
+                  resourceData={editedResource || resourceData}
+                  onResourceChange={onResourceChange || (() => {})}
+                  resourceType={resourceType}
+                  expandAll={expandAll}
+                />
                 
-                {/* Auto-Revalidate Checkbox (disabled) */}
+                {/* Auto-Revalidate Checkbox */}
                 {onAutoRevalidateChange && (
-                  <div className="flex items-center space-x-2 pt-4">
+                  <div className="flex items-center space-x-2 pt-4 border-t">
                     <Checkbox
                       id="auto-revalidate-form"
                       checked={autoRevalidate}
                       onCheckedChange={(checked) => onAutoRevalidateChange(checked as boolean)}
-                      disabled
                     />
                     <Label 
                       htmlFor="auto-revalidate-form" 
-                      className="text-sm font-medium leading-none cursor-not-allowed opacity-50"
+                      className="text-sm font-medium leading-none cursor-pointer"
                     >
                       Automatically revalidate after save
                     </Label>
@@ -592,8 +606,8 @@ export default function ResourceViewer({
               </div>
             </TabsContent>
           )}
-        </Tabs>
-      </CardContent>
+        </CardContent>
+      </Tabs>
     </Card>
   );
 }
