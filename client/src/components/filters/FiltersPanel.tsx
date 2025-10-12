@@ -197,7 +197,7 @@ export function FiltersPanel({
         <div className="flex items-center gap-2">
           <Filter className="h-5 w-5 text-gray-600" />
           <span className="font-semibold text-gray-900">Validation Filters</span>
-          {hasActiveFilters && (
+          {hasActiveFilters && filters && typeof filters === 'object' && (
             <Badge variant="secondary" className="ml-2">
               {Object.values(filters).filter(v => 
                 Array.isArray(v) ? v.length > 0 : v !== undefined && v !== false

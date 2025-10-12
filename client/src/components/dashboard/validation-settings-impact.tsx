@@ -124,8 +124,12 @@ export function ValidationSettingsImpact({
   }
 
   // Calculate impact metrics
-  const enabledAspects = Object.values(validationSettings).filter((config: any) => config?.enabled === true).length;
-  const totalAspects = Object.keys(validationSettings).length;
+  const enabledAspects = validationSettings && typeof validationSettings === 'object'
+    ? Object.values(validationSettings).filter((config: any) => config?.enabled === true).length
+    : 0;
+  const totalAspects = validationSettings && typeof validationSettings === 'object'
+    ? Object.keys(validationSettings).length
+    : 0;
   const disabledAspects = totalAspects - enabledAspects;
 
   // Calculate potential impact on statistics

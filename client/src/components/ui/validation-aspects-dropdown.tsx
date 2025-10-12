@@ -196,7 +196,9 @@ export function ValidationAspectsDropdown({ className }: ValidationAspectsDropdo
     return aspectKey.replace(/([A-Z])/g, ' $1').trim();
   };
 
-  const enabledAspectsCount = settings ? Object.values(settings.aspects).filter(aspect => aspect.enabled).length : 0;
+  const enabledAspectsCount = settings && settings.aspects && typeof settings.aspects === 'object' 
+    ? Object.values(settings.aspects).filter(aspect => aspect.enabled).length 
+    : 0;
 
   if (loading) {
     return (

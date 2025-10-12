@@ -159,7 +159,7 @@ export function useAspectSettingsReactive(options: UseAspectSettingsReactiveOpti
 
   // Get enabled aspects count
   const getEnabledAspectsCount = useCallback((): number => {
-    if (!currentSettings) return 0;
+    if (!currentSettings || typeof currentSettings !== 'object') return 0;
     
     return Object.values(currentSettings).filter(aspect => aspect.enabled).length;
   }, [currentSettings]);

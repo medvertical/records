@@ -115,7 +115,7 @@ export function ResourceFilterControls({
   }, [filterOptions]);
 
   const hasActiveFilters = localResourceTypes.length > 0 || 
-                          Object.values(localValidationStatus).some(Boolean) || 
+                          (localValidationStatus && typeof localValidationStatus === 'object' && Object.values(localValidationStatus).some(Boolean)) || 
                           localSearch !== '' ||
                           localSorting.field !== 'lastValidated' ||
                           localSorting.direction !== 'desc';

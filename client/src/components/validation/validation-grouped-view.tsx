@@ -50,7 +50,9 @@ function CategoryGroupedView({
     <div className="space-y-4">
       {Object.entries(groupedIssues).map(([category, severityGroups]) => {
         const categoryInfo = getCategoryInfo(category);
-        const totalIssues = Object.values(severityGroups).flat().length;
+        const totalIssues = severityGroups && typeof severityGroups === 'object' 
+          ? Object.values(severityGroups).flat().length 
+          : 0;
 
         return (
           <div key={category} className="border rounded-lg overflow-hidden">

@@ -221,7 +221,7 @@ export default function ResourceList({
     }
     
     // Check if this is an old validation result where all aspects were skipped due to the validation engine bug
-    if (validationSummary.aspectBreakdown) {
+    if (validationSummary.aspectBreakdown && typeof validationSummary.aspectBreakdown === 'object') {
       const allAspectsSkipped = Object.values(validationSummary.aspectBreakdown).every((aspect: any) => 
         aspect.status === 'skipped' && aspect.reason === 'Aspect result unavailable'
       );
