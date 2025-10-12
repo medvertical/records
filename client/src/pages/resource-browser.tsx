@@ -236,6 +236,7 @@ export default function ResourceBrowser() {
       aspects: aspectsParam ? aspectsParam.split(',') : [],
       severities: severitiesParam ? severitiesParam.split(',') : [],
       hasIssuesOnly: hasIssuesParam === 'true',
+      issueFilter: undefined, // Clear issue filter when URL changes
     });
     setPage(0); // Reset to first page when navigating
   }, [location]);
@@ -683,6 +684,22 @@ export default function ResourceBrowser() {
       setCurrentMessageIndex(Math.max(0, allMessages.length - 1));
     }
   }, [allMessages, currentMessageIndex]);
+
+  // Clear message navigation when all filters are turned off
+  useEffect(() => {
+    const hasActiveFilters = 
+      validationFilters.severities.length > 0 || 
+      validationFilters.aspects.length > 0 || 
+      validationFilters.hasIssuesOnly ||
+      (validationFilters.issueFilter && Object.keys(validationFilters.issueFilter).length > 0);
+    
+    if (!hasActiveFilters) {
+      // Clear message navigation state when no filters are active
+      setCurrentMessageIndex(0);
+      setCurrentSeverityIndex({ error: 0, warning: 0, information: 0 });
+      setIsMessagesVisible(false);
+    }
+  }, [validationFilters]);
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
@@ -1602,7 +1619,16 @@ export default function ResourceBrowser() {
             selectionMode={selectionMode}
             selectedIds={selectedResources}
             onSelectionChange={handleSelectionChange}
-            highlightedResourceId={currentMessage ? `${currentMessage.resourceType}/${currentMessage.resourceId}` : undefined}
+            highlightedResourceId={
+              currentMessage && (
+                validationFilters.severities.length > 0 || 
+                validationFilters.aspects.length > 0 || 
+                validationFilters.hasIssuesOnly ||
+                (validationFilters.issueFilter && Object.keys(validationFilters.issueFilter).length > 0)
+              )
+                ? `${currentMessage.resourceType}/${currentMessage.resourceId}` 
+                : undefined
+            }
           />
         )}
         </div>
@@ -1616,6 +1642,7 @@ export default function ResourceBrowser() {
               title="Validation Messages"
               description={`${allMessages.filter(msg => msg.severity.toLowerCase() === currentSeverity).length} ${currentSeverity} messages from ${resourcesData?.resources?.length || 0} resources`}
               isLoading={isLoadingMessages}
+              severityFilter={[currentSeverity]}
             />
           </div>
         )}

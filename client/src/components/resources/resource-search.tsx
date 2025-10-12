@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Search, Filter, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Search, ListFilter, ChevronDown, ChevronUp, X } from "lucide-react";
 import { SeverityIcon } from "@/components/ui/severity-icon";
 import type { SeverityLevel } from "@/components/ui/severity-icon";
 import { cn } from "@/lib/utils";
@@ -124,10 +124,10 @@ export default function ResourceSearch({
 
   const handleClearFilters = () => {
     if (!onFilterChange) return;
-    onFilterChange({ aspects: [], severities: [], hasIssuesOnly: false });
+    onFilterChange({ aspects: [], severities: [], hasIssuesOnly: false, issueFilter: undefined });
   };
 
-  const hasActiveFilters = filters.aspects.length > 0 || filters.severities.length > 0 || filters.hasIssuesOnly;
+  const hasActiveFilters = false; // No validation filters remain
 
   return (
     <div className="w-full bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
@@ -178,13 +178,8 @@ export default function ResourceSearch({
             onClick={() => setIsFilterExpanded(!isFilterExpanded)}
             className="relative"
           >
-            <Filter className="h-4 w-4 sm:mr-2" />
+            <ListFilter className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Filters</span>
-            {hasActiveFilters && (
-              <Badge variant="destructive" className="ml-2 px-1.5 py-0.5 text-xs">
-                {filters.aspects.length + filters.severities.length + (filters.hasIssuesOnly ? 1 : 0)}
-              </Badge>
-            )}
             {isFilterExpanded ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />}
           </Button>
         )}
@@ -195,142 +190,13 @@ export default function ResourceSearch({
         <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
           <div className="space-y-4">
             {/* Aspect Filters */}
-            <div className="text-left">
-              <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 block text-left">
-                Validation Aspects
-              </Label>
-              <div className="space-y-2">
-                {VALIDATION_ASPECTS.map((aspect) => {
-                  const stats = validationSummary?.aspectStats?.[aspect.id];
-                  return (
-                    <div key={aspect.id} className="flex items-center justify-between text-left">
-                      <div className="flex items-center space-x-2 text-left">
-                        <Checkbox
-                          id={`aspect-${aspect.id}`}
-                          checked={filters.aspects.includes(aspect.id)}
-                          onCheckedChange={() => handleAspectToggle(aspect.id)}
-                        />
-                        <Label
-                          htmlFor={`aspect-${aspect.id}`}
-                          className="text-sm font-normal cursor-pointer text-left"
-                        >
-                          {aspect.label}
-                        </Label>
-                      </div>
-                      {stats && stats.total > 0 && (
-                        <div className="flex items-center gap-1">
-                          {stats.valid > 0 && (
-                            <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-                              ✓ {stats.valid}
-                            </Badge>
-                          )}
-                          {stats.invalid > 0 && (
-                            <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
-                              ✗ {stats.invalid}
-                            </Badge>
-                          )}
-                          {stats.warnings > 0 && (
-                            <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
-                              ⚠ {stats.warnings}
-                            </Badge>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
 
-            <Separator />
 
-            {/* Severity Filters */}
-            <div className="text-left">
-              <Label className="text-sm font-semibold text-gray-700 mb-2 block text-left">
-                Severities
-              </Label>
-              <div className="space-y-2">
-                {SEVERITIES.map((severity) => {
-                  const stats = validationSummary?.severityStats?.[severity.id];
-                  return (
-                    <div key={severity.id} className="flex items-center justify-between text-left">
-                      <div className="flex items-center space-x-2 text-left">
-                        <Checkbox
-                          id={`severity-${severity.id}`}
-                          checked={filters.severities.includes(severity.id)}
-                          onCheckedChange={() => handleSeverityToggle(severity.id)}
-                        />
-                        <SeverityIcon severity={severity.id as SeverityLevel} className="h-4 w-4" />
-                        <Label
-                          htmlFor={`severity-${severity.id}`}
-                          className="text-sm font-normal cursor-pointer text-left"
-                        >
-                          {severity.label}
-                        </Label>
-                      </div>
-                      {stats && (stats.count > 0 || stats.resourceCount > 0) && (
-                        <div className="flex items-center gap-1">
-                          <Badge variant="outline" className="text-xs">
-                            {stats.count} issue{stats.count !== 1 ? 's' : ''}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs text-gray-600">
-                            {stats.resourceCount} resource{stats.resourceCount !== 1 ? 's' : ''}
-                          </Badge>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Has Issues Only Toggle */}
-            <div className="flex items-center space-x-2 text-left">
-              <Checkbox
-                id="hasIssuesOnly"
-                checked={filters.hasIssuesOnly}
-                onCheckedChange={(checked) =>
-                  onFilterChange({
-                    ...filters,
-                    hasIssuesOnly: checked as boolean,
-                  })
-                }
-              />
-              <Label
-                htmlFor="hasIssuesOnly"
-                className="text-sm font-normal cursor-pointer text-left"
-              >
-                Only show resources with validation issues
-              </Label>
-            </div>
-
-            <Separator />
-
-            {/* Action Buttons */}
-            <div className="flex items-center justify-between">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClearFilters}
-                disabled={!hasActiveFilters}
-              >
-                <X className="h-4 w-4 mr-2" />
-                Clear Filters
-              </Button>
-              
-              {hasActiveFilters && (
-                <div className="text-sm text-gray-600">
-                  {filters.aspects.length + filters.severities.length + (filters.hasIssuesOnly ? 1 : 0)} active filter{(filters.aspects.length + filters.severities.length + (filters.hasIssuesOnly ? 1 : 0)) !== 1 ? 's' : ''}
-                </div>
-              )}
-            </div>
           </div>
         </div>
       )}
       
-      {(query || resourceType || hasActiveFilters) && (
+      {(query || resourceType) && isFilterExpanded && (
         <div className="mt-4 flex items-center gap-2 flex-wrap">
           <span className="text-sm text-gray-600">Active filters:</span>
           {query && (
@@ -343,27 +209,6 @@ export default function ResourceSearch({
               Type: {resourceType}
             </span>
           )}
-          {filters?.aspects.map((aspectId) => {
-            const aspect = VALIDATION_ASPECTS.find(a => a.id === aspectId);
-            return aspect ? (
-              <Badge key={aspectId} variant="secondary" className="text-xs">
-                Aspect: {aspect.label}
-              </Badge>
-            ) : null;
-          })}
-          {filters?.severities.map((severityId) => {
-            const severity = SEVERITIES.find(s => s.id === severityId);
-            return severity ? (
-              <Badge key={severityId} variant="secondary" className="text-xs">
-                Severity: {severity.label}
-              </Badge>
-            ) : null;
-          })}
-          {filters?.hasIssuesOnly && (
-            <Badge variant="secondary" className="text-xs">
-              Issues Only
-            </Badge>
-          )}
           <Button 
             variant="ghost" 
             size="sm" 
@@ -372,7 +217,7 @@ export default function ResourceSearch({
               setResourceType("all");
               onSearch("", "");
               if (onFilterChange) {
-                onFilterChange({ aspects: [], severities: [], hasIssuesOnly: false });
+                onFilterChange({ aspects: [], severities: [], hasIssuesOnly: false, issueFilter: undefined });
               }
             }}
             className="text-xs"

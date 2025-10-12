@@ -36,6 +36,8 @@ export interface ValidationMessageListProps {
   onPathClick?: (path: string) => void;
   emptyMessage?: string;
   className?: string;
+  // Filter messages by severity - if provided, only show messages matching these severities
+  severityFilter?: ValidationSeverity[];
 }
 
 // ============================================================================
@@ -358,24 +360,38 @@ export function ValidationMessageList({
   onPathClick,
   emptyMessage = 'No validation issues found for this aspect.',
   className,
+  severityFilter,
 }: ValidationMessageListProps) {
+  // Filter messages by severity if filter is provided
+  const filteredMessages = useMemo(() => {
+    if (!severityFilter || severityFilter.length === 0) {
+      // If no severity filter is provided, show no messages (to avoid highlighting when no filter is selected)
+      return [];
+    }
+    return messages.filter(m => severityFilter.includes(m.severity));
+  }, [messages, severityFilter]);
+
   // Group messages by severity for better organization
   const groupedMessages = useMemo(() => {
     const groups = {
-      error: messages.filter(m => m.severity === 'error'),
-      warning: messages.filter(m => m.severity === 'warning'),
-      information: messages.filter(m => m.severity === 'information'),
+      error: filteredMessages.filter(m => m.severity === 'error'),
+      warning: filteredMessages.filter(m => m.severity === 'warning'),
+      information: filteredMessages.filter(m => m.severity === 'information'),
     };
     return groups;
-  }, [messages]);
+  }, [filteredMessages]);
 
-  const totalMessages = messages.length;
+  const totalMessages = filteredMessages.length;
 
   if (totalMessages === 0) {
+    const displayMessage = severityFilter && severityFilter.length === 0
+      ? 'Select severity filters to view validation messages.'
+      : emptyMessage;
+
     return (
       <div className={cn('text-center py-12', className)}>
         <Info className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-        <p className="text-gray-500">{emptyMessage}</p>
+        <p className="text-gray-500">{displayMessage}</p>
       </div>
     );
   }

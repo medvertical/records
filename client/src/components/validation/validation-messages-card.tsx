@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { SeverityIcon, getSeverityVariant } from '@/components/ui/severity-icon';
 import { CircularProgress } from '@/components/ui/circular-progress';
@@ -34,6 +34,7 @@ export interface ValidationMessagesCardProps {
   description?: string;
   isLoading?: boolean;
   error?: string | null;
+  severityFilter?: ('error' | 'warning' | 'information')[];
 }
 
 function getAspectBadgeColor(aspect: string): string {
@@ -58,6 +59,7 @@ export function ValidationMessagesCard({
   description,
   isLoading = false,
   error = null,
+  severityFilter,
 }: ValidationMessagesCardProps) {
   if (isLoading) {
     return (
@@ -88,6 +90,22 @@ export function ValidationMessagesCard({
     );
   }
 
+  // Filter messages by severity if filter is provided
+  const filteredAspects = useMemo(() => {
+    if (!severityFilter || severityFilter.length === 0) {
+      // If no severity filter is provided, return empty aspects (to avoid highlighting when no filter is selected)
+      return aspects.map(aspect => ({ ...aspect, messages: [] }));
+    }
+    return aspects.map(aspect => ({
+      ...aspect,
+      messages: aspect.messages.filter(message => 
+        severityFilter.includes(message.severity.toLowerCase() as any)
+      )
+    }));
+  }, [aspects, severityFilter]);
+
+  const totalMessages = filteredAspects.reduce((sum, aspect) => sum + aspect.messages.length, 0);
+
   if (!aspects || aspects.length === 0) {
     return (
       <Card>
@@ -107,11 +125,32 @@ export function ValidationMessagesCard({
     );
   }
 
-  const totalMessages = aspects.reduce((sum, aspect) => sum + aspect.messages.length, 0);
+  if (totalMessages === 0) {
+    const displayMessage = severityFilter && severityFilter.length === 0
+      ? 'Select severity filters to view validation messages.'
+      : 'No validation messages found for the selected severity.';
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{displayMessage}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Alert>
+            <Info className="h-4 w-4 text-blue-500" />
+            <AlertDescription>
+              {displayMessage}
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
 
   // Separate aspects with and without messages
-  const aspectsWithMessages = aspects.filter(aspect => aspect.messages.length > 0);
-  const aspectsWithoutMessages = aspects.filter(aspect => aspect.messages.length === 0);
+  const aspectsWithMessages = filteredAspects.filter(aspect => aspect.messages.length > 0);
+  const aspectsWithoutMessages = filteredAspects.filter(aspect => aspect.messages.length === 0);
 
   return (
     <Card className="text-left">
