@@ -369,9 +369,8 @@ export default function ResourceDetail() {
               </Button>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  {resource.resourceType} Resource
+                  {resource.resourceType}/{resource.resourceId.substring(0, 8)}
                 </h1>
-                <p className="text-gray-600">ID: {resource.resourceId}</p>
                 <div className="flex items-center space-x-4 mt-2">
                   <div className="flex items-center space-x-2">
                     {/* Show revalidating badge when validation is in progress */}
