@@ -415,8 +415,8 @@ function SidebarContent({
 
         {/* Resource Types Quick Access */}
         {isServerConnected && (
-          <div className="mt-8 group">
-            <div className="flex items-center justify-between mb-3">
+          <div className="mt-8">
+            <div className="flex items-center justify-between mb-3 group">
               <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Quick Access
               </h3>
@@ -427,7 +427,7 @@ function SidebarContent({
                 onClick={() => setAddDialogOpen(true)}
                 title="Customize quick access"
               >
-                <Settings className="h-4 w-4" />
+                <Settings className="h-4 w-4 text-gray-400" />
               </Button>
             </div>
             <ul className="space-y-1">

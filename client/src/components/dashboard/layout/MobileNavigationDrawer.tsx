@@ -193,8 +193,8 @@ export const MobileNavigationDrawer: React.FC<MobileNavigationProps> = ({
           </nav>
 
           {/* Quick Access Section */}
-          <div className="p-4 border-t group">
-            <div className="flex items-center justify-between mb-3">
+          <div className="p-4 border-t">
+            <div className="flex items-center justify-between mb-3 group">
               <h3 className="text-sm font-medium text-muted-foreground">
                 Quick Access
               </h3>
@@ -205,7 +205,7 @@ export const MobileNavigationDrawer: React.FC<MobileNavigationProps> = ({
                 onClick={() => setAddDialogOpen(true)}
                 title="Customize quick access"
               >
-                <Settings className="h-4 w-4" />
+                <Settings className="h-4 w-4 text-gray-400" />
               </Button>
             </div>
             <div className="space-y-1">
