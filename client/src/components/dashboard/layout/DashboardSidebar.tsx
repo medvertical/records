@@ -10,7 +10,8 @@ import {
   Settings, 
   Package,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Loader2
 } from 'lucide-react';
 import { useQuickAccessItems, useQuickAccessCounts } from '@/hooks/use-quick-access-preferences';
 import { ManageQuickAccessDialog } from '@/components/dashboard/AddQuickAccessDialog';
@@ -200,7 +201,11 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
                           <span className="text-sm">{item.label}</span>
                         </div>
                         <Badge variant="outline" className="text-xs">
-                          {isCountsLoading ? '-' : formatCount(item.count)}
+                          {isCountsLoading ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            formatCount(item.count)
+                          )}
                         </Badge>
                       </div>
                     </Link>

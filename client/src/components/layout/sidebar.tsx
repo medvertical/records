@@ -12,7 +12,8 @@ import ServerConnectionModal from "@/components/settings/server-connection-modal
 import { 
   Database, 
   ChartPie, 
-  Settings, 
+  Settings,
+  Loader2, 
   Package,
   Server
 } from "lucide-react";
@@ -466,8 +467,8 @@ function SidebarContent({
                         <span>{item.label}</span>
                       </div>
                       {isQuickAccessCountsLoading ? (
-                        <span className="text-xs text-gray-400" title="Loading count">
-                          -
+                        <span title="Loading count">
+                          <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
                         </span>
                       ) : quickAccessCounts && quickAccessCounts[item.resourceType] !== undefined ? (
                         <span className={cn(

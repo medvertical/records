@@ -6,7 +6,8 @@ import { MobileNavigationProps, QuickAccessItem, NavigationItem } from '@/shared
 import { 
   X, 
   Database,
-  Settings
+  Settings,
+  Loader2
 } from 'lucide-react';
 import { getTouchButtonClasses } from '@/lib/touch-utils';
 import { useQuickAccessItems, useQuickAccessCounts } from '@/hooks/use-quick-access-preferences';
@@ -225,7 +226,11 @@ export const MobileNavigationDrawer: React.FC<MobileNavigationProps> = ({
                         <span className="text-sm">{item.label}</span>
                       </div>
                       <Badge variant="outline" className="text-xs">
-                        {isCountsLoading ? '-' : formatCount(item.count)}
+                        {isCountsLoading ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          formatCount(item.count)
+                        )}
                       </Badge>
                     </div>
                   );
