@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle, XCircle, ArrowLeft, AlertCircle, AlertTriangle, Info, Settings, Eye, EyeOff, RefreshCw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import ProfileBadge from "@/components/resources/ProfileBadge";
 
 export default function ResourceDetail() {
   const { id } = useParams<{ id: string }>();
@@ -417,11 +418,11 @@ export default function ResourceDetail() {
                 {(resource.data?.meta?.profile || resource.meta?.profile) && (
                   <div className="flex items-center gap-2 mt-2">
                     <span className="text-sm text-gray-500">Profiles:</span>
-                    {(resource.data?.meta?.profile || resource.meta?.profile || []).map((profileUrl: string, idx: number) => (
-                      <Badge key={idx} variant="outline" className="text-xs">
-                        {profileUrl.split('/').pop() || profileUrl}
-                      </Badge>
-                    ))}
+                    <ProfileBadge 
+                      profiles={resource.data?.meta?.profile || resource.meta?.profile || []}
+                      size="md"
+                      variant="outline"
+                    />
                   </div>
                 )}
               </div>

@@ -6,9 +6,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Search, ListFilter, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Search, ListFilter, ChevronDown, ChevronUp, X, Clock, Zap } from "lucide-react";
 import { SeverityIcon } from "@/components/ui/severity-icon";
 import { FilterChipList } from "@/components/filters/FilterChipList";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { SeverityLevel } from "@/components/ui/severity-icon";
 import { cn } from "@/lib/utils";
 
@@ -98,11 +99,182 @@ export default function ResourceSearch({
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const [isManuallyCollapsed, setIsManuallyCollapsed] = useState(false);
   const [fhirSearchParams, setFhirSearchParams] = useState<Record<string, { value: string | string[]; operator?: string }>>({});
+  
+  // Autocomplete state
+  const [isAutocompleteOpen, setIsAutocompleteOpen] = useState(false);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<Array<{value: string, label: string, type: 'history' | 'suggestion' | 'syntax'}>>([]);
+  
+  // Ref for search input to manage focus
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setQuery(defaultQuery);
     setResourceType(defaultResourceType);
   }, [defaultQuery, defaultResourceType]);
+
+  // Load search history from localStorage
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('fhir-search-history');
+    if (savedHistory) {
+      try {
+        setSearchHistory(JSON.parse(savedHistory));
+      } catch (e) {
+        console.warn('Failed to parse search history:', e);
+      }
+    }
+  }, []);
+
+  // Generate suggestions based on query and resource type
+  useEffect(() => {
+    if (!query.trim()) {
+      // Show recent searches when no query
+      const recentSuggestions = searchHistory.slice(0, 5).map(search => ({
+        value: search,
+        label: search,
+        type: 'history' as const
+      }));
+      setSuggestions(recentSuggestions);
+      return;
+    }
+
+    const newSuggestions: Array<{value: string, label: string, type: 'history' | 'suggestion' | 'syntax'}> = [];
+    
+    // Add matching search history
+    const matchingHistory = searchHistory
+      .filter(search => search.toLowerCase().includes(query.toLowerCase()))
+      .slice(0, 3)
+      .map(search => ({
+        value: search,
+        label: search,
+        type: 'history' as const
+      }));
+    newSuggestions.push(...matchingHistory);
+
+    // Add resource-specific suggestions
+    if (resourceType && resourceType !== 'all') {
+      const resourceSuggestions = getResourceSpecificSuggestions(resourceType, query);
+      newSuggestions.push(...resourceSuggestions);
+    } else {
+      // Add general suggestions
+      const generalSuggestions = getGeneralSuggestions(query);
+      newSuggestions.push(...generalSuggestions);
+    }
+
+    // Add syntax suggestions
+    const syntaxSuggestions = getSyntaxSuggestions(query);
+    newSuggestions.push(...syntaxSuggestions);
+
+    setSuggestions(newSuggestions);
+  }, [query, resourceType, searchHistory]);
+
+  // Helper functions for generating suggestions
+  const getResourceSpecificSuggestions = (resourceType: string, query: string) => {
+    const suggestions: Array<{value: string, label: string, type: 'suggestion' | 'syntax'}> = [];
+    
+    const resourceFields: Record<string, string[]> = {
+      'Patient': ['name:', 'family:', 'given:', 'identifier:', 'birthdate:', 'gender:'],
+      'Practitioner': ['name:', 'family:', 'given:', 'identifier:', 'practitioner-role:'],
+      'Organization': ['name:', 'identifier:', 'address:', 'type:'],
+      'Observation': ['code:', 'value-string:', 'value-quantity:', 'status:', 'category:'],
+      'Medication': ['name:', 'code:', 'manufacturer:'],
+      'Condition': ['code:', 'clinical-status:', 'verification-status:', 'category:'],
+      'DiagnosticReport': ['code:', 'status:', 'category:'],
+      'Encounter': ['status:', 'class:', 'type:', 'service-type:'],
+      'Procedure': ['code:', 'status:', 'category:'],
+      'AllergyIntolerance': ['code:', 'clinical-status:', 'verification-status:'],
+      'Immunization': ['vaccine-code:', 'status:', 'reason-code:'],
+      'DocumentReference': ['type:', 'status:', 'category:'],
+      'Location': ['name:', 'address:', 'type:'],
+      'Appointment': ['status:', 'service-type:', 'specialty:']
+    };
+
+    const fields = resourceFields[resourceType] || [];
+    
+    // If query starts with a field name, suggest completions
+    const matchingFields = fields.filter(field => 
+      field.toLowerCase().startsWith(query.toLowerCase())
+    );
+    
+    matchingFields.forEach(field => {
+      suggestions.push({
+        value: field,
+        label: `${field} (search in ${field.slice(0, -1)})`,
+        type: 'syntax'
+      });
+    });
+
+    // If no field match, suggest common fields for this resource
+    if (matchingFields.length === 0 && fields.length > 0) {
+      fields.slice(0, 3).forEach(field => {
+        suggestions.push({
+          value: field,
+          label: `${field} (search in ${field.slice(0, -1)})`,
+          type: 'suggestion'
+        });
+      });
+    }
+
+    return suggestions;
+  };
+
+  const getGeneralSuggestions = (query: string) => {
+    const suggestions: Array<{value: string, label: string, type: 'suggestion' | 'syntax'}> = [];
+    
+    // Common FHIR search suggestions
+    const commonSuggestions = [
+      'meta.profile',
+      'meta.lastUpdated',
+      'meta.versionId',
+      '_content',
+      '_text',
+      'name:',
+      'identifier:',
+      'status:'
+    ];
+
+    const matchingSuggestions = commonSuggestions.filter(suggestion =>
+      suggestion.toLowerCase().includes(query.toLowerCase())
+    );
+
+    matchingSuggestions.forEach(suggestion => {
+      suggestions.push({
+        value: suggestion,
+        label: suggestion.includes(':') ? `${suggestion} (field search)` : suggestion,
+        type: 'syntax'
+      });
+    });
+
+    return suggestions;
+  };
+
+  const getSyntaxSuggestions = (query: string) => {
+    const suggestions: Array<{value: string, label: string, type: 'syntax'}> = [];
+    
+    // FHIR search operators
+    const operators = [
+      ':exact',
+      ':contains',
+      ':gt',
+      ':lt',
+      ':ge',
+      ':le',
+      ':not'
+    ];
+
+    // If query ends with a colon, suggest operators
+    if (query.endsWith(':')) {
+      operators.forEach(op => {
+        suggestions.push({
+          value: query + op,
+          label: `${query}${op} (exact match)`,
+          type: 'syntax'
+        });
+      });
+    }
+
+    return suggestions;
+  };
 
   // Initialize FHIR search parameters from URL
   useEffect(() => {
@@ -131,10 +303,18 @@ export default function ResourceSearch({
   }, [filters.fhirSearchParams]);
 
   const handleSearch = useCallback(() => {
+    // Save to search history
+    if (query.trim()) {
+      const newHistory = [query.trim(), ...searchHistory.filter(h => h !== query.trim())].slice(0, 10);
+      setSearchHistory(newHistory);
+      localStorage.setItem('fhir-search-history', JSON.stringify(newHistory));
+    }
+    
     // Convert "all" back to empty string for the API
     const searchResourceType = resourceType === "all" ? "" : resourceType;
     onSearch(query, searchResourceType, fhirSearchParams);
-  }, [query, resourceType, fhirSearchParams, onSearch]);
+    setIsAutocompleteOpen(false);
+  }, [query, resourceType, fhirSearchParams, onSearch, searchHistory]);
 
   // Auto-expand filters when there are active filters, but respect manual collapse
   useEffect(() => {
@@ -160,6 +340,11 @@ export default function ResourceSearch({
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleSearch();
+    } else if (e.key === 'Escape') {
+      setIsAutocompleteOpen(false);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setIsAutocompleteOpen(true);
     }
   };
 
@@ -190,15 +375,172 @@ export default function ResourceSearch({
     <div className="w-full bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
       <div className="flex items-center space-x-4">
         <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 h-4 w-4" />
-          <Input
-            type="text"
-            placeholder="Search resources by ID, name, or content..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyPress}
-            className="pl-10"
-          />
+          <Popover open={isAutocompleteOpen} onOpenChange={setIsAutocompleteOpen}>
+            <PopoverTrigger asChild>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 h-4 w-4" />
+                <Input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Search resources by ID, name, or content..."
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    // Only open autocomplete if there's a query or suggestions
+                    if (e.target.value.trim() && suggestions.length > 0) {
+                      setIsAutocompleteOpen(true);
+                    } else if (!e.target.value.trim()) {
+                      setIsAutocompleteOpen(false);
+                    }
+                  }}
+                  onKeyDown={handleKeyPress}
+                  onFocus={() => {
+                    // Only open if there are suggestions to show and query is empty (for history)
+                    if (suggestions.length > 0 && !query.trim()) {
+                      setIsAutocompleteOpen(true);
+                    }
+                  }}
+                  className="pl-10"
+                />
+              </div>
+            </PopoverTrigger>
+            <PopoverContent 
+              className="w-[--radix-popover-trigger-width] p-0" 
+              align="start"
+              onOpenAutoFocus={(e) => {
+                // Prevent Radix from stealing focus when popover opens
+                e.preventDefault();
+              }}
+              onCloseAutoFocus={(e) => {
+                // Prevent Radix from managing focus when popover closes
+                e.preventDefault();
+                // Manually focus the input
+                searchInputRef.current?.focus();
+              }}
+            >
+              <div className="max-h-60 overflow-auto">
+                {suggestions.length === 0 ? (
+                  <div className="p-2 text-sm text-gray-500">No suggestions found.</div>
+                ) : (
+                  <>
+                    {suggestions.some(s => s.type === 'history') && (
+                      <div>
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                          Recent Searches
+                        </div>
+                        {suggestions.filter(s => s.type === 'history').map((suggestion, index) => (
+                          <button
+                            key={`history-${index}`}
+                            className="w-full flex items-center px-3 py-2 text-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                            onMouseDown={(e) => {
+                              // Use onMouseDown instead of onClick to prevent input blur
+                              e.preventDefault();
+                            }}
+                            onClick={() => {
+                              const newQuery = suggestion.value;
+                              setQuery(newQuery);
+                              
+                              // Save to search history immediately with the new query
+                              if (newQuery.trim()) {
+                                const newHistory = [newQuery.trim(), ...searchHistory.filter(h => h !== newQuery.trim())].slice(0, 10);
+                                setSearchHistory(newHistory);
+                                localStorage.setItem('fhir-search-history', JSON.stringify(newHistory));
+                              }
+                              
+                              // Trigger search with the new query value directly
+                              const searchResourceType = resourceType === "all" ? "" : resourceType;
+                              onSearch(newQuery, searchResourceType, fhirSearchParams);
+                              setIsAutocompleteOpen(false);
+                              // Focus is now handled by onCloseAutoFocus in PopoverContent
+                            }}
+                          >
+                            <Clock className="mr-2 h-4 w-4 text-gray-500" />
+                            {suggestion.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {suggestions.some(s => s.type === 'suggestion') && (
+                      <div>
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                          Suggestions
+                        </div>
+                        {suggestions.filter(s => s.type === 'suggestion').map((suggestion, index) => (
+                          <button
+                            key={`suggestion-${index}`}
+                            className="w-full flex items-center px-3 py-2 text-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                            onMouseDown={(e) => {
+                              // Use onMouseDown instead of onClick to prevent input blur
+                              e.preventDefault();
+                            }}
+                            onClick={() => {
+                              const newQuery = suggestion.value;
+                              setQuery(newQuery);
+                              
+                              // Save to search history immediately with the new query
+                              if (newQuery.trim()) {
+                                const newHistory = [newQuery.trim(), ...searchHistory.filter(h => h !== newQuery.trim())].slice(0, 10);
+                                setSearchHistory(newHistory);
+                                localStorage.setItem('fhir-search-history', JSON.stringify(newHistory));
+                              }
+                              
+                              // Trigger search with the new query value directly
+                              const searchResourceType = resourceType === "all" ? "" : resourceType;
+                              onSearch(newQuery, searchResourceType, fhirSearchParams);
+                              setIsAutocompleteOpen(false);
+                              // Focus is now handled by onCloseAutoFocus in PopoverContent
+                            }}
+                          >
+                            <Search className="mr-2 h-4 w-4 text-blue-500" />
+                            {suggestion.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {suggestions.some(s => s.type === 'syntax') && (
+                      <div>
+                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                          Search Syntax
+                        </div>
+                        {suggestions.filter(s => s.type === 'syntax').map((suggestion, index) => (
+                          <button
+                            key={`syntax-${index}`}
+                            className="w-full flex items-center px-3 py-2 text-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                            onMouseDown={(e) => {
+                              // Use onMouseDown instead of onClick to prevent input blur
+                              e.preventDefault();
+                            }}
+                            onClick={() => {
+                              const newQuery = suggestion.value;
+                              setQuery(newQuery);
+                              
+                              // Save to search history immediately with the new query
+                              if (newQuery.trim()) {
+                                const newHistory = [newQuery.trim(), ...searchHistory.filter(h => h !== newQuery.trim())].slice(0, 10);
+                                setSearchHistory(newHistory);
+                                localStorage.setItem('fhir-search-history', JSON.stringify(newHistory));
+                              }
+                              
+                              // Trigger search with the new query value directly
+                              const searchResourceType = resourceType === "all" ? "" : resourceType;
+                              onSearch(newQuery, searchResourceType, fhirSearchParams);
+                              setIsAutocompleteOpen(false);
+                              // Focus is now handled by onCloseAutoFocus in PopoverContent
+                            }}
+                          >
+                            <Zap className="mr-2 h-4 w-4 text-purple-500" />
+                            {suggestion.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
         <Button onClick={handleSearch} className="bg-fhir-blue text-white hover:bg-blue-700">

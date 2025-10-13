@@ -196,6 +196,182 @@ function createMockBundle(resourceType: string, batchSize: number, offset: numbe
   };
 }
 
+/**
+ * Perform FHIR text search with fallback strategies
+ */
+async function performFhirTextSearch(
+  fhirClient: FhirClient,
+  resourceTypes: string[],
+  searchTerm: string,
+  filterOptions: any
+): Promise<any> {
+  console.log(`[FHIR Text Search] Searching for "${searchTerm}" in ${resourceTypes.length} resource types`);
+  
+  const allResults: any[] = [];
+  let totalCount = 0;
+  let searchMethod = 'none';
+  
+  // Define resource-specific search parameters
+  const resourceSearchParams: Record<string, string[]> = {
+    'Patient': ['name', 'family', 'given', 'identifier', 'birthdate'],
+    'Practitioner': ['name', 'family', 'given', 'identifier'],
+    'Organization': ['name', 'identifier'],
+    'Observation': ['code', 'value-string', 'value-quantity'],
+    'Medication': ['name', 'code'],
+    'Condition': ['code', 'clinical-status'],
+    'DiagnosticReport': ['code', 'status'],
+    'Encounter': ['status', 'class', 'type'],
+    'Procedure': ['code', 'status'],
+    'AllergyIntolerance': ['code', 'clinical-status'],
+    'Immunization': ['vaccine-code', 'status'],
+    'DocumentReference': ['type', 'status'],
+    'Location': ['name', 'address'],
+    'Appointment': ['status', 'service-type']
+  };
+  
+  for (const resourceType of resourceTypes) {
+    try {
+      let searchSuccessful = false;
+      const resourceResults: any[] = [];
+      
+      // Strategy 1: Try _content search parameter (searches narrative and text)
+      try {
+        console.log(`[FHIR Text Search] Trying _content search for ${resourceType}`);
+        const contentBundle = await fhirClient.searchResources(resourceType, {
+          '_content': searchTerm,
+          '_count': filterOptions.pagination.limit || 50
+        });
+        
+        if (contentBundle.entry && contentBundle.entry.length > 0) {
+          resourceResults.push(...contentBundle.entry.map((e: any) => e.resource));
+          searchMethod = '_content';
+          searchSuccessful = true;
+          console.log(`[FHIR Text Search] _content search found ${contentBundle.entry.length} results for ${resourceType}`);
+        }
+      } catch (error: any) {
+        console.log(`[FHIR Text Search] _content search failed for ${resourceType}:`, error.message);
+        // Continue to next strategy
+      }
+      
+      // Strategy 2: Try _text search parameter (full-text search)
+      if (!searchSuccessful) {
+        try {
+          console.log(`[FHIR Text Search] Trying _text search for ${resourceType}`);
+          const textBundle = await fhirClient.searchResources(resourceType, {
+            '_text': searchTerm,
+            '_count': filterOptions.pagination.limit || 50
+          });
+          
+          if (textBundle.entry && textBundle.entry.length > 0) {
+            resourceResults.push(...textBundle.entry.map((e: any) => e.resource));
+            searchMethod = '_text';
+            searchSuccessful = true;
+            console.log(`[FHIR Text Search] _text search found ${textBundle.entry.length} results for ${resourceType}`);
+          }
+        } catch (error: any) {
+          console.log(`[FHIR Text Search] _text search failed for ${resourceType}:`, error.message);
+          // Continue to next strategy
+        }
+      }
+      
+      // Strategy 3: Resource-specific field searches
+      if (!searchSuccessful && resourceSearchParams[resourceType]) {
+        console.log(`[FHIR Text Search] Trying resource-specific field searches for ${resourceType}`);
+        
+        const searchFields = resourceSearchParams[resourceType];
+        for (const field of searchFields) {
+          try {
+            const fieldBundle = await fhirClient.searchResources(resourceType, {
+              [field]: searchTerm,
+              '_count': filterOptions.pagination.limit || 50
+            });
+            
+            if (fieldBundle.entry && fieldBundle.entry.length > 0) {
+              resourceResults.push(...fieldBundle.entry.map((e: any) => e.resource));
+              searchMethod = `field:${field}`;
+              searchSuccessful = true;
+              console.log(`[FHIR Text Search] Field search (${field}) found ${fieldBundle.entry.length} results for ${resourceType}`);
+              break; // Use first successful field search
+            }
+          } catch (error: any) {
+            console.log(`[FHIR Text Search] Field search (${field}) failed for ${resourceType}:`, error.message);
+            // Continue to next field
+          }
+        }
+      }
+      
+      // Strategy 4: Generic search with contains modifier
+      if (!searchSuccessful) {
+        console.log(`[FHIR Text Search] Trying generic contains search for ${resourceType}`);
+        try {
+          // Try a generic search that might work on some servers
+          const genericBundle = await fhirClient.searchResources(resourceType, {
+            'name': searchTerm, // Many resources have a name field
+            '_count': filterOptions.pagination.limit || 50
+          });
+          
+          if (genericBundle.entry && genericBundle.entry.length > 0) {
+            resourceResults.push(...genericBundle.entry.map((e: any) => e.resource));
+            searchMethod = 'generic:name';
+            searchSuccessful = true;
+            console.log(`[FHIR Text Search] Generic name search found ${genericBundle.entry.length} results for ${resourceType}`);
+          }
+        } catch (error: any) {
+          console.log(`[FHIR Text Search] Generic search failed for ${resourceType}:`, error.message);
+        }
+      }
+      
+      if (searchSuccessful) {
+        allResults.push(...resourceResults);
+        totalCount += resourceResults.length;
+      } else {
+        console.log(`[FHIR Text Search] No search strategy worked for ${resourceType}`);
+      }
+      
+    } catch (error: any) {
+      console.error(`[FHIR Text Search] Error searching ${resourceType}:`, error);
+    }
+  }
+  
+  // Remove duplicates based on resource id and type
+  const uniqueResults = allResults.filter((resource, index, self) => 
+    index === self.findIndex(r => r.id === resource.id && r.resourceType === resource.resourceType)
+  );
+  
+  console.log(`[FHIR Text Search] Total unique results: ${uniqueResults.length} (method: ${searchMethod})`);
+  
+  // Enhance resources with validation data
+  const enhancedResources = await enhanceResourcesWithValidationData(uniqueResults);
+  
+  // Apply pagination
+  const startIndex = filterOptions.pagination.offset || 0;
+  const endIndex = startIndex + (filterOptions.pagination.limit || 50);
+  const paginatedResources = enhancedResources.slice(startIndex, endIndex);
+  
+  return {
+    resources: paginatedResources,
+    totalCount: enhancedResources.length,
+    returnedCount: paginatedResources.length,
+    pagination: {
+      limit: filterOptions.pagination.limit || 50,
+      offset: filterOptions.pagination.offset || 0,
+      hasMore: endIndex < enhancedResources.length
+    },
+    filterSummary: {
+      resourceTypes: resourceTypes,
+      validationStatus: {
+        hasErrors: enhancedResources.filter(r => r._validationSummary?.hasErrors).length,
+        hasWarnings: enhancedResources.filter(r => r._validationSummary?.hasWarnings).length,
+        hasInformation: 0,
+        isValid: enhancedResources.filter(r => r._validationSummary?.isValid).length
+      },
+      totalMatching: enhancedResources.length
+    },
+    appliedFilters: filterOptions,
+    searchMethod: searchMethod
+  };
+}
+
 export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
   console.log('[FHIR Routes] Setting up FHIR routes...');
   console.log('[FHIR Routes] fhirClient is:', fhirClient ? 'initialized' : 'NULL');
@@ -380,9 +556,41 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         }
       };
 
+      // If search parameter is provided, perform FHIR text search using multiple strategies
+      const currentFhirClient = getCurrentFhirClient(fhirClient);
+      if (currentFhirClient && search) {
+        // If no resource types specified, search common resource types
+        const searchResourceTypes = resourceTypesArray.length > 0 
+          ? resourceTypesArray 
+          : ['Patient', 'Practitioner', 'Organization', 'Observation', 'Condition', 'DiagnosticReport', 'Medication', 'Encounter', 'Procedure', 'AllergyIntolerance', 'Immunization', 'DocumentReference', 'Location', 'Appointment'];
+        console.log('[FHIR API] Using FHIR text search for query:', search, 'in resource types:', searchResourceTypes);
+        try {
+          const searchResults = await performFhirTextSearch(
+            currentFhirClient, 
+            searchResourceTypes, 
+            search as string, 
+            filterOptions
+          );
+          
+          console.log('[FHIR API] FHIR text search completed. Results:', searchResults.resources.length, 'Method:', searchResults.searchMethod);
+          
+          if (searchResults.resources.length > 0) {
+            return res.json({
+              success: true,
+              data: searchResults,
+              message: `Found ${searchResults.totalCount} resources via FHIR search (method: ${searchResults.searchMethod})`
+            });
+          } else {
+            console.log('[FHIR API] FHIR text search returned no results, falling back to local filtering');
+          }
+        } catch (error: any) {
+          console.error('[FHIR API] FHIR text search failed, falling back to local filtering:', error.message);
+          console.error('[FHIR API] Full error:', error);
+        }
+      }
+
       // If FHIR search parameters are provided and there are resource types selected,
       // perform server-side FHIR search and enhance results, bypassing local store filtering.
-      const currentFhirClient = getCurrentFhirClient(fhirClient);
       if (currentFhirClient && resourceTypesArray.length > 0 && fhirParams) {
         let parsedParams: Record<string, { operator?: string; value: any }> = {};
         try {

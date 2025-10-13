@@ -30,6 +30,7 @@ import { useValidationResults } from "@/hooks/validation";
 import type { ValidationProgress, EnhancedValidationSummary } from '@shared/types/validation';
 import { getFilteredValidationSummary } from '@/lib/validation-filtering-utils';
 import { getShortId, getShortReference } from "@/lib/resource-utils";
+import ProfileBadge from "@/components/resources/ProfileBadge";
 
 // Extended types for this component
 interface ExtendedValidationProgress extends ValidationProgress {
@@ -656,6 +657,17 @@ export default function ResourceList({
                       <p className="text-xs text-gray-500 truncate mt-1">
                         {getResourceSubtext(resource)}
                       </p>
+                      {/* Display profile badges */}
+                      {(resource.meta?.profile || resource.data?.meta?.profile) && (
+                        <div className="mt-2">
+                          <ProfileBadge 
+                            profiles={resource.meta?.profile || resource.data?.meta?.profile || []}
+                            size="sm"
+                            variant="outline"
+                            maxDisplay={2}
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
 
