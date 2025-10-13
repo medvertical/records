@@ -12,7 +12,7 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
-import { useQuickAccessItems } from '@/hooks/use-quick-access-preferences';
+import { useQuickAccessItems, useQuickAccessCounts } from '@/hooks/use-quick-access-preferences';
 import { ManageQuickAccessDialog } from '@/components/dashboard/AddQuickAccessDialog';
 import { getResourceTypeIcon } from '@/lib/resource-type-icons';
 
@@ -31,6 +31,7 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
   
   // Use the new hook to get user's custom quick access items
   const { data: userQuickAccess, isLoading: isLoadingQuickAccess } = useQuickAccessItems();
+  const { data: quickAccessCounts, isLoading: isCountsLoading } = useQuickAccessCounts();
 
   // Default navigation items if none provided
   const defaultNavigationItems: NavigationItem[] = [
@@ -105,7 +106,7 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
         id: resourceType.toLowerCase(),
         label: resourceType,
         resourceType,
-        count: 0, // Will be updated by parent component if resource counts are available
+        count: quickAccessCounts?.[resourceType] ?? 0,
         href: `/resources?type=${resourceType}`
       }))
     : quickAccessItems.length > 0 ? quickAccessItems : defaultQuickAccessItems;
@@ -198,11 +199,9 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
                           <Icon className="h-4 w-4 text-muted-foreground" />
                           <span className="text-sm">{item.label}</span>
                         </div>
-                        {item.count > 0 && (
-                          <Badge variant="outline" className="text-xs">
-                            {formatCount(item.count)}
-                          </Badge>
-                        )}
+                        <Badge variant="outline" className="text-xs">
+                          {isCountsLoading ? '-' : formatCount(item.count)}
+                        </Badge>
                       </div>
                     </Link>
                   );

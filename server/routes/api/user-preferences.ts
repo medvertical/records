@@ -74,22 +74,19 @@ router.put('/quick-access', async (req, res) => {
       .where(eq(userPreferences.userId, userId))
       .limit(1);
 
+    let result;
     if (existingPrefs.length === 0) {
       // Create new preferences
-      const newPrefs = await db
+      result = await db
         .insert(userPreferences)
         .values({
           userId,
           quickAccessItems
         })
         .returning();
-      
-      return res.json({
-        quickAccessItems: newPrefs[0].quickAccessItems
-      });
     } else {
       // Update existing preferences
-      const updatedPrefs = await db
+      result = await db
         .update(userPreferences)
         .set({
           quickAccessItems,
@@ -97,11 +94,39 @@ router.put('/quick-access', async (req, res) => {
         })
         .where(eq(userPreferences.userId, userId))
         .returning();
-      
-      return res.json({
-        quickAccessItems: updatedPrefs[0].quickAccessItems
-      });
     }
+
+    // Auto-add new resource types to validation settings
+    try {
+      const { ValidationSettingsService } = await import('../../services/validation/settings/validation-settings-service');
+      const settingsService = new ValidationSettingsService();
+      await settingsService.initialize();
+      const currentSettings = await settingsService.getCurrentSettings();
+      
+      const currentIncludedTypes = currentSettings?.resourceTypes?.includedTypes || [];
+      const newTypes = quickAccessItems.filter(type => !currentIncludedTypes.includes(type));
+      
+      if (newTypes.length > 0) {
+        console.log(`[UserPreferences] Auto-adding ${newTypes.length} new resource types to validation settings:`, newTypes);
+        const updatedIncludedTypes = [...currentIncludedTypes, ...newTypes];
+        await settingsService.updateSettings({
+          ...currentSettings,
+          resourceTypes: {
+            ...currentSettings.resourceTypes,
+            enabled: true,
+            includedTypes: updatedIncludedTypes
+          }
+        });
+        console.log(`[UserPreferences] Successfully added new types to validation settings`);
+      }
+    } catch (validationError) {
+      console.warn('[UserPreferences] Failed to update validation settings:', validationError);
+      // Don't fail the request if validation settings update fails
+    }
+    
+    return res.json({
+      quickAccessItems: result[0].quickAccessItems
+    });
   } catch (error) {
     console.error('[UserPreferences] Error updating quick access items:', error);
     res.status(500).json({ 

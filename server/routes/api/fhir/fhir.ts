@@ -1029,23 +1029,34 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         return res.status(503).json({ message: "FHIR client not initialized" });
       }
       
-      // Get validation settings to check filtering
-      const { ValidationSettingsService } = await import('../../../services/validation/settings/validation-settings-service');
-      const settingsService = new ValidationSettingsService();
-      await settingsService.initialize();
-      const settings = await settingsService.getCurrentSettings();
+      // Check if specific resource types are requested via query param
+      const requestedTypes = req.query.types 
+        ? (req.query.types as string).split(',').map(t => t.trim())
+        : undefined;
       
       let resourceTypesToQuery: string[] | undefined = undefined;
       
-      // Check if resource type filtering is enabled
-      // When enabled=false, it means "Validate All" - ignore includedTypes
-      if (settings?.resourceTypes?.enabled === true) {
-        const includedTypes = settings.resourceTypes.includedTypes || [];
-        resourceTypesToQuery = includedTypes.length > 0 ? includedTypes : undefined;
-        console.log(`[Resource Counts] Filtering enabled: ${includedTypes.length} types included`);
+      if (requestedTypes && requestedTypes.length > 0) {
+        // Use requested types if provided
+        resourceTypesToQuery = requestedTypes;
+        console.log(`[Resource Counts] Using requested types: ${requestedTypes.join(', ')}`);
       } else {
-        console.log('[Resource Counts] Filtering disabled (Validate All) - using all server types from CapabilityStatement');
-        resourceTypesToQuery = undefined; // Will use getAllResourceTypes() from CapabilityStatement
+        // Fall back to validation settings logic
+        const { ValidationSettingsService } = await import('../../../services/validation/settings/validation-settings-service');
+        const settingsService = new ValidationSettingsService();
+        await settingsService.initialize();
+        const settings = await settingsService.getCurrentSettings();
+        
+        // Check if resource type filtering is enabled
+        // When enabled=false, it means "Validate All" - ignore includedTypes
+        if (settings?.resourceTypes?.enabled === true) {
+          const includedTypes = settings.resourceTypes.includedTypes || [];
+          resourceTypesToQuery = includedTypes.length > 0 ? includedTypes : undefined;
+          console.log(`[Resource Counts] Filtering enabled: ${includedTypes.length} types included`);
+        } else {
+          console.log('[Resource Counts] Filtering disabled (Validate All) - using all server types from CapabilityStatement');
+          resourceTypesToQuery = undefined; // Will use getAllResourceTypes() from CapabilityStatement
+        }
       }
       
       // Add timeout to the entire operation (15s should be enough with parallel requests)

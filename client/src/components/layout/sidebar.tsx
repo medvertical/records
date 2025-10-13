@@ -16,7 +16,7 @@ import {
   Package,
   Server
 } from "lucide-react";
-import { useQuickAccessItems } from "@/hooks/use-quick-access-preferences";
+import { useQuickAccessItems, useQuickAccessCounts } from "@/hooks/use-quick-access-preferences";
 import { ManageQuickAccessDialog } from "@/components/dashboard/AddQuickAccessDialog";
 import { getResourceTypeIcon } from "@/lib/resource-type-icons";
 
@@ -219,6 +219,7 @@ function SidebarContent({
 }) {
   // Use the new hook to get user's custom quick access items
   const { data: userQuickAccess, isLoading: isLoadingQuickAccess } = useQuickAccessItems();
+  const { data: quickAccessCounts, isLoading: isQuickAccessCountsLoading } = useQuickAccessCounts();
 
   // Memoize the quick access items to show
   const itemsToShow = useMemo(() => {
@@ -464,23 +465,23 @@ function SidebarContent({
                         <Icon className="h-4 w-4" />
                         <span>{item.label}</span>
                       </div>
-                      {isCountsError ? (
-                        <span className="text-xs text-red-500" title="Failed to load counts">
-                          ?
+                      {isQuickAccessCountsLoading ? (
+                        <span className="text-xs text-gray-400" title="Loading count">
+                          -
                         </span>
-                      ) : resourceCounts && resourceCounts[item.resourceType] !== undefined ? (
+                      ) : quickAccessCounts && quickAccessCounts[item.resourceType] !== undefined ? (
                         <span className={cn(
                           "text-xs font-medium",
                           isSelected 
                             ? "text-blue-600 dark:text-blue-400" 
                             : "text-gray-400 dark:text-gray-500"
                         )}>
-                          {formatCount(resourceCounts[item.resourceType])}
+                          {formatCount(quickAccessCounts[item.resourceType])}
                         </span>
-                      ) : isCountsLoading ? (
-                        <div className="w-4 h-4 border border-gray-300 dark:border-gray-600 border-t-transparent rounded-full animate-spin"></div>
                       ) : (
-                        <span className="text-xs text-gray-400">-</span>
+                        <span className="text-xs text-gray-400" title="Count not available">
+                          -
+                        </span>
                       )}
                     </div>
                   </li>

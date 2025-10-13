@@ -103,6 +103,7 @@ export function useUpdateQuickAccess() {
       });
       // Invalidate resource counts to ensure they update with new quick access items
       queryClient.invalidateQueries({ queryKey: ['/api/fhir/resource-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['quickAccessCounts'] });
     },
     onSettled: () => {
       // Always refetch after error or success
@@ -139,6 +140,37 @@ export function useResourceTypes() {
     queryKey: ['resourceTypes'],
     queryFn: fetchResourceTypes,
     staleTime: 10 * 60 * 1000, // 10 minutes - resource types don't change often
+    retry: 2,
+  });
+}
+
+export function useQuickAccessCounts() {
+  const { data: quickAccessData } = useQuickAccessItems();
+  const quickAccessItems = quickAccessData?.quickAccessItems || [];
+  
+  return useQuery({
+    queryKey: ['quickAccessCounts', quickAccessItems],
+    queryFn: async () => {
+      if (quickAccessItems.length === 0) {
+        return {};
+      }
+      
+      const types = quickAccessItems.join(',');
+      const response = await fetch(`/api/fhir/resource-counts?types=${types}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch resource counts');
+      }
+      
+      const data = await response.json();
+      // Convert array format to object format: { Patient: 100, Observation: 500 }
+      const counts: Record<string, number> = {};
+      data.resourceTypes.forEach((item: { resourceType: string; count: number }) => {
+        counts[item.resourceType] = item.count;
+      });
+      return counts;
+    },
+    enabled: quickAccessItems.length > 0,
+    staleTime: 5 * 60 * 1000, // 5 minutes
     retry: 2,
   });
 }
