@@ -16,6 +16,9 @@ import {
   Package,
   Server
 } from "lucide-react";
+import { useQuickAccessItems } from "@/hooks/use-quick-access-preferences";
+import { ManageQuickAccessDialog } from "@/components/dashboard/AddQuickAccessDialog";
+import { getResourceTypeIcon } from "@/lib/resource-type-icons";
 
 const navigationItems = [
   { href: "/", label: "Dashboard", icon: ChartPie },
@@ -41,6 +44,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
   const [location] = useLocation();
   const isMobile = useIsMobile();
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
   
   // Close sidebar on mobile when location changes
   useEffect(() => {
@@ -132,6 +136,8 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
           isServerConnected={isServerConnected}
           onItemClick={() => onToggle && onToggle()}
           onChangeServer={() => setIsServerModalOpen(true)}
+          addDialogOpen={addDialogOpen}
+          setAddDialogOpen={setAddDialogOpen}
         />
           </div>
         </aside>
@@ -158,6 +164,8 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
           location={location}
           isServerConnected={isServerConnected}
           onChangeServer={() => setIsServerModalOpen(true)}
+          addDialogOpen={addDialogOpen}
+          setAddDialogOpen={setAddDialogOpen}
         />
       </div>
       
@@ -165,6 +173,12 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
       <ServerConnectionModal
         open={isServerModalOpen}
         onOpenChange={setIsServerModalOpen}
+      />
+      
+      {/* Add Quick Access Dialog */}
+      <ManageQuickAccessDialog 
+        open={addDialogOpen} 
+        onOpenChange={setAddDialogOpen} 
       />
     </aside>
   );
@@ -183,7 +197,9 @@ function SidebarContent({
   location, 
   isServerConnected,
   onItemClick,
-  onChangeServer
+  onChangeServer,
+  addDialogOpen,
+  setAddDialogOpen
 }: {
   serverStatus?: ServerStatus;
   resourceCounts?: Record<string, number>;
@@ -198,7 +214,24 @@ function SidebarContent({
   isServerConnected: boolean;
   onItemClick?: () => void;
   onChangeServer?: () => void;
+  addDialogOpen: boolean;
+  setAddDialogOpen: (open: boolean) => void;
 }) {
+  // Use the new hook to get user's custom quick access items
+  const { data: userQuickAccess, isLoading: isLoadingQuickAccess } = useQuickAccessItems();
+
+  // Memoize the quick access items to show
+  const itemsToShow = useMemo(() => {
+    const userQuickAccessItems = userQuickAccess?.quickAccessItems || [];
+    return userQuickAccessItems.length > 0 
+      ? userQuickAccessItems.map(resourceType => ({
+          href: `/resources?type=${resourceType}`,
+          label: resourceType,
+          resourceType
+        }))
+      : quickAccessItems;
+  }, [userQuickAccess?.quickAccessItems, quickAccessItems]);
+
   // Determine connection state for UI gating
   // Show "Checking..." only during initial connection test, otherwise show actual status
   const isCheckingConnection = useMemo(() => 
@@ -380,12 +413,26 @@ function SidebarContent({
 
         {/* Resource Types Quick Access */}
         {isServerConnected && (
-          <div className="mt-8">
-            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
-              Quick Access
-            </h3>
+          <div className="mt-8 group">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Quick Access
+              </h3>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => setAddDialogOpen(true)}
+                title="Customize quick access"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            </div>
             <ul className="space-y-1">
-              {quickAccessItems.map((item) => {
+              {isLoadingQuickAccess ? (
+                <li className="text-sm text-muted-foreground">Loading...</li>
+              ) : (
+                itemsToShow.map((item) => {
                 // Check if this resource type is currently selected
                 // Use window.location.search to match how resource-browser.tsx reads the URL
                 // Include urlVersion to ensure re-render when URL changes
@@ -395,6 +442,8 @@ function SidebarContent({
                 
                 // Force re-render by referencing urlVersion
                 const _ = urlVersion;
+                
+                const Icon = getResourceTypeIcon(item.resourceType);
                 
                 return (
                   <li key={item.href}>
@@ -411,29 +460,33 @@ function SidebarContent({
                         window.dispatchEvent(new PopStateEvent('popstate'));
                       }}
                     >
+                      <div className="flex items-center space-x-2">
+                        <Icon className="h-4 w-4" />
                         <span>{item.label}</span>
-                        {isCountsError ? (
-                          <span className="text-xs text-red-500" title="Failed to load counts">
-                            ?
-                          </span>
-                        ) : resourceCounts && resourceCounts[item.resourceType] !== undefined ? (
-                          <span className={cn(
-                            "text-xs font-medium",
-                            isSelected 
-                              ? "text-blue-600 dark:text-blue-400" 
-                              : "text-gray-400 dark:text-gray-500"
-                          )}>
-                            {formatCount(resourceCounts[item.resourceType])}
-                          </span>
-                        ) : isCountsLoading ? (
-                          <div className="w-4 h-4 border border-gray-300 dark:border-gray-600 border-t-transparent rounded-full animate-spin"></div>
-                        ) : (
-                          <span className="text-xs text-gray-400">-</span>
-                        )}
                       </div>
+                      {isCountsError ? (
+                        <span className="text-xs text-red-500" title="Failed to load counts">
+                          ?
+                        </span>
+                      ) : resourceCounts && resourceCounts[item.resourceType] !== undefined ? (
+                        <span className={cn(
+                          "text-xs font-medium",
+                          isSelected 
+                            ? "text-blue-600 dark:text-blue-400" 
+                            : "text-gray-400 dark:text-gray-500"
+                        )}>
+                          {formatCount(resourceCounts[item.resourceType])}
+                        </span>
+                      ) : isCountsLoading ? (
+                        <div className="w-4 h-4 border border-gray-300 dark:border-gray-600 border-t-transparent rounded-full animate-spin"></div>
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
+                      )}
+                    </div>
                   </li>
                 );
-              })}
+                })
+              )}
             </ul>
           </div>
         )}

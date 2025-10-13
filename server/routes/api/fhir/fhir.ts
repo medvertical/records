@@ -1004,12 +1004,19 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       // Get the current FHIR client (may have been updated due to server activation)
       const currentFhirClient = getCurrentFhirClient(fhirClient);
       if (!currentFhirClient) {
-        return res.status(503).json({ message: "FHIR client not initialized" });
+        return res.status(503).json({ 
+          error: 'No FHIR server connected',
+          message: 'Please connect to a FHIR server first'
+        });
       }
-      const resourceTypes = await currentFhirClient.getResourceTypes();
-      res.json(resourceTypes);
+      const resourceTypes = await currentFhirClient.getAllResourceTypes();
+      res.json({ resourceTypes });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('[FHIR] Error fetching resource types:', error);
+      res.status(500).json({ 
+        error: 'Failed to fetch resource types',
+        message: error.message 
+      });
     }
   });
 
@@ -1134,4 +1141,5 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       res.status(500).json({ message: error.message });
     }
   });
+
 }

@@ -344,7 +344,7 @@ export default function ResourceBrowser() {
         const totalTime = Date.now() - startTime;
         
         
-        return data;
+        return data.resourceTypes || data;
       } catch (error) {
         const totalTime = Date.now() - startTime;
         throw error;

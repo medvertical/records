@@ -24,6 +24,7 @@ import adminRoutes from "./api/admin/clear-validation-results";
 import healthCheckRoutes from "./api/health/health-checks";
 import dashboardSettingsRouter from "./api/settings/dashboard-settings";
 import systemSettingsRouter from "./api/settings/system-settings";
+import userPreferencesRouter from "./api/user-preferences";
 
 export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, consolidatedValidationService: ConsolidatedValidationService | null, dashboardService: DashboardService | null) {
   // Health check endpoints
@@ -58,5 +59,8 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   // Settings routes
   app.use('/api/dashboard-settings', dashboardSettingsRouter);
   app.use('/api/system-settings', systemSettingsRouter);
+  
+  // User preferences routes
+  app.use('/api/user-preferences', userPreferencesRouter);
 }
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -10,12 +10,11 @@ import {
   Settings, 
   Package,
   ChevronLeft,
-  ChevronRight,
-  Users,
-  Activity,
-  Calendar,
-  Heart
+  ChevronRight
 } from 'lucide-react';
+import { useQuickAccessItems } from '@/hooks/use-quick-access-preferences';
+import { ManageQuickAccessDialog } from '@/components/dashboard/AddQuickAccessDialog';
+import { getResourceTypeIcon } from '@/lib/resource-type-icons';
 
 /**
  * DashboardSidebar Component - Single responsibility: Provide collapsible navigation for dashboard
@@ -28,6 +27,10 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
   navigationItems = [],
 }) => {
   const [location] = useLocation();
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  
+  // Use the new hook to get user's custom quick access items
+  const { data: userQuickAccess, isLoading: isLoadingQuickAccess } = useQuickAccessItems();
 
   // Default navigation items if none provided
   const defaultNavigationItems: NavigationItem[] = [
@@ -94,7 +97,18 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
   ];
 
   const navItems = navigationItems.length > 0 ? navigationItems : defaultNavigationItems;
-  const quickItems = quickAccessItems.length > 0 ? quickAccessItems : defaultQuickAccessItems;
+  
+  // Use user's custom quick access items if available, otherwise fall back to props or defaults
+  const userQuickAccessItems = userQuickAccess?.quickAccessItems || [];
+  const quickItems = userQuickAccessItems.length > 0 
+    ? userQuickAccessItems.map(resourceType => ({
+        id: resourceType.toLowerCase(),
+        label: resourceType,
+        resourceType,
+        count: 0, // Will be updated by parent component if resource counts are available
+        href: `/resources?type=${resourceType}`
+      }))
+    : quickAccessItems.length > 0 ? quickAccessItems : defaultQuickAccessItems;
 
   const formatCount = (count: number): string => {
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`;
@@ -102,15 +116,6 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
     return count.toString();
   };
 
-  const getResourceIcon = (resourceType: string) => {
-    const icons: Record<string, React.ComponentType<any>> = {
-      Patient: Users,
-      Observation: Activity,
-      Encounter: Calendar,
-      Condition: Heart,
-    };
-    return icons[resourceType] || Database;
-  };
 
   return (
     <aside className={cn(
@@ -164,29 +169,45 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
 
         {/* Quick Access Section */}
         {!collapsed && (
-          <div className="p-4 border-t">
-            <h3 className="text-sm font-medium text-muted-foreground mb-3">
-              Quick Access
-            </h3>
+          <div className="p-4 border-t group">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-muted-foreground">
+                Quick Access
+              </h3>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => setAddDialogOpen(true)}
+                title="Customize quick access"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            </div>
             <div className="space-y-1">
-              {quickItems.map((item) => {
-                const Icon = getResourceIcon(item.resourceType);
-                return (
-                  <Link key={item.id} href={item.href}>
-                    <div className="quick-access-item">
-                      <div className="flex items-center space-x-2">
-                        <Icon className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">{item.label}</span>
+              {isLoadingQuickAccess ? (
+                <div className="text-sm text-muted-foreground">Loading...</div>
+              ) : (
+                quickItems.map((item) => {
+                  const Icon = getResourceTypeIcon(item.resourceType);
+                  
+                  return (
+                    <Link key={item.id} href={item.href}>
+                      <div className="quick-access-item">
+                        <div className="flex items-center space-x-2">
+                          <Icon className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">{item.label}</span>
+                        </div>
+                        {item.count > 0 && (
+                          <Badge variant="outline" className="text-xs">
+                            {formatCount(item.count)}
+                          </Badge>
+                        )}
                       </div>
-                      {item.count > 0 && (
-                        <Badge variant="outline" className="text-xs">
-                          {formatCount(item.count)}
-                        </Badge>
-                      )}
-                    </div>
-                  </Link>
-                );
-              })}
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </div>
         )}
@@ -196,7 +217,7 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
           <div className="p-2 border-t">
             <div className="grid grid-cols-2 gap-1">
               {quickItems.slice(0, 4).map((item) => {
-                const Icon = getResourceIcon(item.resourceType);
+                const Icon = getResourceTypeIcon(item.resourceType);
                 return (
                   <Link key={item.id} href={item.href}>
                     <Button
@@ -214,6 +235,12 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
           </div>
         )}
       </div>
+      
+      {/* Manage Quick Access Dialog */}
+      <ManageQuickAccessDialog 
+        open={addDialogOpen} 
+        onOpenChange={setAddDialogOpen} 
+      />
     </aside>
   );
 };

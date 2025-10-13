@@ -175,6 +175,16 @@ export const validationSettings = pgTable("validation_settings", {
   updatedBy: text("updated_by"),
 });
 
+export const userPreferences = pgTable("user_preferences", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull().default("default"),
+  quickAccessItems: jsonb("quick_access_items").notNull().default([
+    "Patient", "Observation", "Encounter", "Condition"
+  ]),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
 export const editAuditTrail = pgTable("edit_audit_trail", {
   id: serial("id").primaryKey(),
   serverId: integer("server_id").notNull().references(() => fhirServers.id, { onDelete: "cascade" }),
