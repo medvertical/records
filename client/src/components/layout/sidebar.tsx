@@ -114,9 +114,10 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
 
         {/* Mobile Sidebar */}
         <aside className={cn(
-          "fixed left-0 top-16 h-full w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out z-40 md:hidden",
+          "fixed left-0 top-16 h-[calc(100vh-4rem)] w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out z-40 md:hidden",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}>
+          <div className="h-full flex flex-col">
         <SidebarContent 
           serverStatus={serverStatus} 
           resourceCounts={resourceCounts}
@@ -132,6 +133,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
           onItemClick={() => onToggle && onToggle()}
           onChangeServer={() => setIsServerModalOpen(true)}
         />
+          </div>
         </aside>
       </>
     );
@@ -139,10 +141,10 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
 
   return (
     <aside className={cn(
-      "fixed left-0 top-16 h-[calc(100vh-4rem)] bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out z-30 overflow-y-auto",
+      "fixed left-0 top-16 h-[calc(100vh-4rem)] bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out z-30",
       isOpen ? "w-64" : "w-0 overflow-hidden"
     )}>
-      <div className="w-64">
+      <div className="w-64 h-full flex flex-col">
         <SidebarContent 
           serverStatus={serverStatus} 
           resourceCounts={resourceCounts}
@@ -307,7 +309,7 @@ function SidebarContent({
       </div>
 
       {/* Navigation Menu */}
-      <nav className="flex-1 p-4">
+      <nav className="flex-1 p-4 overflow-y-auto min-h-0">
         {!isServerConnected ? (
           <div className="text-center py-8">
             <Server className="w-12 h-12 text-gray-300 mx-auto mb-4" />
@@ -438,7 +440,7 @@ function SidebarContent({
       </nav>
 
       {/* Settings at Bottom */}
-      <div className="p-4 border-t border-gray-200 dark:border-gray-700 mt-auto">
+      <div className="p-4 border-t border-gray-200 dark:border-gray-700 mt-auto flex-shrink-0">
         <Link href={settingsItem.href}>
           <div 
             className={cn(
