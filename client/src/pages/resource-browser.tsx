@@ -718,9 +718,11 @@ export default function ResourceBrowser() {
     // Simulate progress updates with more realistic timing
     let currentAspectIndex = 0;
     const updateInterval = setInterval(() => {
+      let allComplete = true;
+      const updatesToApply: Array<{id: number, data: any}> = [];
+
       setValidationProgress(prev => {
         const updated = new Map(prev);
-        let allComplete = true;
 
         resourceIds.forEach(id => {
           const current = updated.get(id);
@@ -741,13 +743,7 @@ export default function ResourceBrowser() {
             };
             
             updated.set(id, updatedData);
-            
-            // Update activity context
-            updateResourceValidation(id, {
-              progress: updatedData.progress,
-              currentAspect: updatedData.currentAspect,
-              completedAspects: updatedData.completedAspects
-            });
+            updatesToApply.push({id, data: updatedData});
 
             if (currentAspectIndex < totalAspects) {
               allComplete = false;
@@ -760,6 +756,15 @@ export default function ResourceBrowser() {
         }
 
         return updated;
+      });
+
+      // Update activity context outside of state setter
+      updatesToApply.forEach(({id, data}) => {
+        updateResourceValidation(id, {
+          progress: data.progress,
+          currentAspect: data.currentAspect,
+          completedAspects: data.completedAspects
+        });
       });
 
       currentAspectIndex++;
@@ -800,13 +805,15 @@ export default function ResourceBrowser() {
     try {
 
       // Batch validation requests to avoid payload size limits
-      const batchSize = 10; // Process 10 resources per batch
+      const batchSize = 2; // Process 2 resources per batch to avoid 413 errors
       const allResults = [];
       const totalBatches = Math.ceil(resourcesData.resources.length / batchSize);
       
       for (let i = 0; i < resourcesData.resources.length; i += batchSize) {
         const batch = resourcesData.resources.slice(i, i + batchSize);
         const batchNumber = Math.floor(i/batchSize) + 1;
+        
+        console.log(`[Validation] Processing batch ${batchNumber}/${totalBatches} with ${batch.length} resources`);
         
         // Update progress to show current batch being processed
         setValidationProgress(prev => {
@@ -835,28 +842,42 @@ export default function ResourceBrowser() {
           ]);
         };
 
-        const response = await fetchWithTimeout('/api/validation/validate-by-ids', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            // Always send the resources array with database IDs
-            resources: batch.map((resource: any) => ({
-              ...resource,
-              _dbId: resource._dbId || resource.id // Ensure _dbId is available
-            }))
-          })
-        }, 120000); // 2 minute timeout per batch
+        try {
+          const response = await fetchWithTimeout('/api/validation/validate-by-ids', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              // Send only the minimal required data to reduce payload size
+              resources: batch.map((resource: any) => ({
+                _dbId: resource._dbId || resource.id,
+                resourceType: resource.resourceType,
+                resourceId: resource.resourceId || resource.id
+              }))
+            })
+          }, 120000); // 2 minute timeout per batch
 
-        if (!response.ok) {
-          const errorText = await response.text();
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[Validation] Batch ${batchNumber} failed: ${response.status} ${response.statusText}`, errorText);
+            // Continue with other batches even if one fails
+            continue;
+          }
+
+          const batchResult = await response.json();
+          allResults.push(...(batchResult.detailedResults || []));
+          console.log(`[Validation] Batch ${batchNumber} completed successfully`);
+        } catch (error) {
+          console.error(`[Validation] Batch ${batchNumber} error:`, error);
           // Continue with other batches even if one fails
           continue;
         }
 
-        const batchResult = await response.json();
-        allResults.push(...(batchResult.detailedResults || []));
+        // Add a small delay between batches to reduce server load
+        if (i + batchSize < resourcesData.resources.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
 
       // Combine all batch results
@@ -894,14 +915,16 @@ export default function ResourceBrowser() {
               currentAspect: 'Validation complete'
             });
           }
-          
-          // Update activity context with completion
-          updateResourceValidation(id, {
-            progress: 100,
-            currentAspect: 'Validation complete'
-          });
         });
         return completed;
+      });
+
+      // Update activity context with completion (outside of state setter)
+      resourceIds.forEach(id => {
+        updateResourceValidation(id, {
+          progress: 100,
+          currentAspect: 'Validation complete'
+        });
       });
 
       // Clear progress after showing completion
@@ -982,33 +1005,51 @@ export default function ResourceBrowser() {
     // Use the new validate-by-ids endpoint with batching for background validation
     try {
       // Batch background validation requests to avoid payload size limits
-      const batchSize = 10; // Process 10 resources per batch
+      const batchSize = 2; // Process 2 resources per batch to avoid 413 errors
       const allResults = [];
       
       for (let i = 0; i < unvalidatedResources.length; i += batchSize) {
         const batch = unvalidatedResources.slice(i, i + batchSize);
+        const batchNumber = Math.floor(i/batchSize) + 1;
         
-        const response = await fetch('/api/validation/validate-by-ids', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            // Always send the resources array with database IDs
-            resources: batch.map((resource: any) => ({
-              ...resource,
-              _dbId: resource._dbId || resource.id // Ensure _dbId is available
-            }))
-          })
-        });
+        console.log(`[Background Validation] Processing batch ${batchNumber} with ${batch.length} resources`);
+        
+        try {
+          const response = await fetch('/api/validation/validate-by-ids', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              // Send only the minimal required data to reduce payload size
+              resources: batch.map((resource: any) => ({
+                _dbId: resource._dbId || resource.id,
+                resourceType: resource.resourceType,
+                resourceId: resource.resourceId || resource.id
+              }))
+            })
+          });
 
-        if (!response.ok) {
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[Background Validation] Batch ${batchNumber} failed: ${response.status} ${response.statusText}`, errorText);
+            // Continue with other batches even if one fails
+            continue;
+          }
+
+          const batchResult = await response.json();
+          allResults.push(...(batchResult.detailedResults || []));
+          console.log(`[Background Validation] Batch ${batchNumber} completed successfully`);
+        } catch (error) {
+          console.error(`[Background Validation] Batch ${batchNumber} error:`, error);
           // Continue with other batches even if one fails
           continue;
         }
 
-        const batchResult = await response.json();
-        allResults.push(...(batchResult.detailedResults || []));
+        // Add a small delay between batches to reduce server load
+        if (i + batchSize < unvalidatedResources.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
 
       // Combine all batch results
@@ -1047,15 +1088,17 @@ export default function ResourceBrowser() {
               currentAspect: 'Validation complete'
             };
             completed.set(id, completedData);
-            
-            // Update activity context with completion
-            updateResourceValidation(id, {
-              progress: 100,
-              currentAspect: 'Validation complete'
-            });
           }
         });
         return completed;
+      });
+
+      // Update activity context with completion (outside of state setter)
+      resourceIds.forEach(id => {
+        updateResourceValidation(id, {
+          progress: 100,
+          currentAspect: 'Validation complete'
+        });
       });
 
       // Clear progress after showing completion

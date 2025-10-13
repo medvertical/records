@@ -18,6 +18,7 @@ export function FilterChipList({ filterOptions, availableResourceTypes, onFilter
   const { params, loading } = useCapabilitySearchParams(activeResourceTypes);
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [newlyAddedParams, setNewlyAddedParams] = useState<Set<string>>(new Set());
 
 
   const chips = useMemo(() => {
@@ -68,6 +69,7 @@ export function FilterChipList({ filterOptions, availableResourceTypes, onFilter
     // FHIR param chips
     if (filterOptions.fhirSearchParams) {
       Object.entries(filterOptions.fhirSearchParams).forEach(([name, cfg]) => {
+        const isNew = newlyAddedParams.has(name);
         list.push(
           <FilterChip
             key={`fhir:${name}`}
@@ -77,14 +79,29 @@ export function FilterChipList({ filterOptions, availableResourceTypes, onFilter
             operator={cfg.operator}
             operators={params.find(p => p.name === name)?.operators}
             typeHint={params.find(p => p.name === name)?.type}
-            onChange={({ value, operator }) => onFilterChange({
-              ...filterOptions,
-              fhirSearchParams: { ...filterOptions.fhirSearchParams, [name]: { value: String(value || ''), operator } }
-            })}
+            isNew={isNew}
+            onChange={({ value, operator }) => {
+              onFilterChange({
+                ...filterOptions,
+                fhirSearchParams: { ...filterOptions.fhirSearchParams, [name]: { value: String(value || ''), operator } }
+              });
+              // Remove from newly added set after first change
+              setNewlyAddedParams(prev => {
+                const next = new Set(prev);
+                next.delete(name);
+                return next;
+              });
+            }}
             onRemove={() => {
               const updated = { ...filterOptions.fhirSearchParams };
               delete updated[name];
               onFilterChange({ ...filterOptions, fhirSearchParams: updated });
+              // Remove from newly added set when removed
+              setNewlyAddedParams(prev => {
+                const next = new Set(prev);
+                next.delete(name);
+                return next;
+              });
             }}
           />
         );
@@ -92,7 +109,7 @@ export function FilterChipList({ filterOptions, availableResourceTypes, onFilter
     }
 
     return list;
-  }, [filterOptions, params, onFilterChange]);
+  }, [filterOptions, params, onFilterChange, newlyAddedParams]);
 
   const availableToAdd = useMemo(() => {
     const existing = new Set(Object.keys(filterOptions.fhirSearchParams || {}));
@@ -128,6 +145,8 @@ export function FilterChipList({ filterOptions, availableResourceTypes, onFilter
                         [p.name]: { operator: p.operators?.[0], value: '' }
                       };
                       onFilterChange({ ...filterOptions, fhirSearchParams: next });
+                      // Mark this parameter as newly added
+                      setNewlyAddedParams(prev => new Set(prev).add(p.name));
                       setAddOpen(false);
                       setSearch('');
                     }}

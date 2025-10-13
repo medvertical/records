@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -18,12 +18,15 @@ export interface FilterChipProps {
   // For fhirParam chips
   typeHint?: string; // e.g., string, date, token
   disabled?: boolean;
+  // Auto-open for new chips
+  isNew?: boolean;
 }
 
-export function FilterChip({ kind, label, value, operator, operators, onChange, onRemove, typeHint, disabled }: FilterChipProps) {
+export function FilterChip({ kind, label, value, operator, operators, onChange, onRemove, typeHint, disabled, isNew = false }: FilterChipProps) {
   const [open, setOpen] = useState(false);
   const [localValue, setLocalValue] = useState<string>(Array.isArray(value) ? value.join(',') : (value ?? ''));
   const [localOp, setLocalOp] = useState<string>(operator || (operators?.[0] || 'eq'));
+  const valueInputRef = useRef<HTMLInputElement>(null);
 
 
   const display = useMemo(() => {
@@ -32,6 +35,17 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
   }, [label, operator, value]);
 
   const isText = typeHint === 'string' || kind === 'search';
+
+  // Auto-open for new chips
+  useEffect(() => {
+    if (isNew) {
+      setOpen(true);
+      // Focus value input after a short delay to ensure popover is rendered
+      setTimeout(() => {
+        valueInputRef.current?.focus();
+      }, 150);
+    }
+  }, [isNew]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -46,7 +60,11 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
           {operators && operators.length > 0 && (
             <div className="space-y-1">
               <div className="text-xs text-gray-500">Operator</div>
-              <Select value={localOp} onValueChange={(v) => setLocalOp(v)} disabled={disabled}>
+              <Select 
+                value={localOp} 
+                onValueChange={(v) => setLocalOp(v)} 
+                disabled={disabled}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -62,9 +80,19 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
           <div className="space-y-1">
             <div className="text-xs text-gray-500">Value</div>
             {isText ? (
-              <Input value={localValue} onChange={(e) => setLocalValue(e.target.value)} disabled={disabled} />
+              <Input 
+                ref={valueInputRef}
+                value={localValue} 
+                onChange={(e) => setLocalValue(e.target.value)} 
+                disabled={disabled} 
+              />
             ) : (
-              <Input value={localValue} onChange={(e) => setLocalValue(e.target.value)} disabled={disabled} />
+              <Input 
+                ref={valueInputRef}
+                value={localValue} 
+                onChange={(e) => setLocalValue(e.target.value)} 
+                disabled={disabled} 
+              />
             )}
           </div>
 
