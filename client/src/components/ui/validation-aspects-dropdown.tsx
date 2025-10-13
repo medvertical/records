@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,6 +56,10 @@ export function ValidationAspectsDropdown({ className }: ValidationAspectsDropdo
   const [settings, setSettings] = useState<ValidationSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  
+  // Temporary state for performance settings during editing
+  const [tempMaxConcurrent, setTempMaxConcurrent] = useState<string>('');
+  const [tempBatchSize, setTempBatchSize] = useState<string>('');
 
   // Load settings on mount
   useEffect(() => {
@@ -72,6 +77,10 @@ export function ValidationAspectsDropdown({ className }: ValidationAspectsDropdo
       
       const data = await response.json();
       setSettings(data);
+      
+      // Initialize temporary performance values
+      setTempMaxConcurrent(data?.performance?.maxConcurrent?.toString() || '4');
+      setTempBatchSize(data?.performance?.batchSize?.toString() || '50');
     } catch (error) {
       console.error('Error loading settings:', error);
       toast({
@@ -84,22 +93,64 @@ export function ValidationAspectsDropdown({ className }: ValidationAspectsDropdo
     }
   };
 
+  const validatePerformanceSettings = () => {
+    const maxConcurrent = parseInt(tempMaxConcurrent);
+    const batchSize = parseInt(tempBatchSize);
+    
+    const errors: string[] = [];
+    
+    if (isNaN(maxConcurrent) || maxConcurrent < 1 || maxConcurrent > 20) {
+      errors.push('Max Concurrent must be between 1 and 20');
+    }
+    
+    if (isNaN(batchSize) || batchSize < 10 || batchSize > 100) {
+      errors.push('Batch Size must be between 10 and 100');
+    }
+    
+    return { isValid: errors.length === 0, errors };
+  };
+
   const saveSettings = async () => {
     if (!settings) return;
     
+    // Validate performance settings
+    const validation = validatePerformanceSettings();
+    if (!validation.isValid) {
+      toast({
+        title: 'Validation Error',
+        description: validation.errors.join(', '),
+        variant: 'destructive'
+      });
+      return;
+    }
+    
     try {
       setSaving(true);
+      
+      // Update settings with validated performance values
+      const updatedSettings = {
+        ...settings,
+        performance: {
+          ...settings.performance,
+          maxConcurrent: parseInt(tempMaxConcurrent),
+          batchSize: parseInt(tempBatchSize)
+        }
+      };
+      
       const response = await fetch('/api/validation/settings', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(settings)
+        body: JSON.stringify(updatedSettings)
       });
       
       if (!response.ok) {
         throw new Error('Failed to save settings');
       }
+      
+      const savedData = await response.json();
+      setSettings(savedData);
       
       toast({
         title: 'Success',
@@ -134,6 +185,10 @@ export function ValidationAspectsDropdown({ className }: ValidationAspectsDropdo
       
       const data = await response.json();
       setSettings(data);
+      
+      // Reset temporary performance values
+      setTempMaxConcurrent(data?.performance?.maxConcurrent?.toString() || '4');
+      setTempBatchSize(data?.performance?.batchSize?.toString() || '50');
       
       toast({
         title: 'Success',
@@ -261,17 +316,29 @@ export function ValidationAspectsDropdown({ className }: ValidationAspectsDropdo
                 Performance
               </Label>
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm">Max Concurrent</Label>
-                  <Badge variant="outline">
-                    {settings.performance?.maxConcurrent || 4}
-                  </Badge>
+                <div className="space-y-1">
+                  <Label className="text-sm">Max Concurrent (1-20)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={tempMaxConcurrent}
+                    onChange={(e) => setTempMaxConcurrent(e.target.value)}
+                    className="h-8"
+                    disabled={saving}
+                  />
                 </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm">Batch Size</Label>
-                  <Badge variant="outline">
-                    {settings.performance?.batchSize || 20}
-                  </Badge>
+                <div className="space-y-1">
+                  <Label className="text-sm">Batch Size (10-100)</Label>
+                  <Input
+                    type="number"
+                    min="10"
+                    max="100"
+                    value={tempBatchSize}
+                    onChange={(e) => setTempBatchSize(e.target.value)}
+                    className="h-8"
+                    disabled={saving}
+                  />
                 </div>
               </div>
             </div>

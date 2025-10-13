@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { X, ChevronDown, Equal, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Search, Type, Hash } from 'lucide-react';
+import { getResourceTypeIcon } from '@/lib/resource-type-icons';
 
 export type ChipKind = 'resourceType' | 'validation' | 'search' | 'fhirParam';
 
@@ -172,11 +173,17 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
                   <SelectValue placeholder="Select resource type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableResourceTypes.map(rt => (
-                    <SelectItem key={rt} value={rt}>
-                      {rt}
-                    </SelectItem>
-                  ))}
+                  {availableResourceTypes.map(rt => {
+                    const Icon = getResourceTypeIcon(rt);
+                    return (
+                      <SelectItem key={rt} value={rt}>
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
+                          <span>{rt}</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             ) : (

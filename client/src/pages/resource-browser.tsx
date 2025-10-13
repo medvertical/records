@@ -811,8 +811,8 @@ export default function ResourceBrowser() {
     
     try {
 
-      // Batch validation requests to avoid payload size limits
-      const batchSize = 2; // Process 2 resources per batch to avoid 413 errors
+      // Batch validation requests using settings batch size
+      const batchSize = currentSettings?.performance?.batchSize || 50;
       const allResults = [];
       const totalBatches = Math.ceil(resourcesData.resources.length / batchSize);
       
@@ -1011,8 +1011,8 @@ export default function ResourceBrowser() {
 
     // Use the new validate-by-ids endpoint with batching for background validation
     try {
-      // Batch background validation requests to avoid payload size limits
-      const batchSize = 2; // Process 2 resources per batch to avoid 413 errors
+      // Batch background validation requests using settings batch size
+      const batchSize = currentSettings?.performance?.batchSize || 50;
       const allResults = [];
       
       for (let i = 0; i < unvalidatedResources.length; i += batchSize) {
