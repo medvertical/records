@@ -64,6 +64,7 @@ interface ResourceViewerProps {
   onAutoRevalidateChange?: (value: boolean) => void;
   expandedPaths: Set<string>;
   onExpandedPathsChange: (expandedPaths: Set<string>) => void;
+  highlightPath?: string;
 }
 
 // ============================================================================
@@ -147,6 +148,7 @@ export default function ResourceViewer({
   onAutoRevalidateChange,
   expandedPaths,
   onExpandedPathsChange,
+  highlightPath,
 }: ResourceViewerProps) {
   // Use data if provided, otherwise use resource.data or resource
   // Handle different resource structures: {data: {...}} or direct resource object
@@ -301,6 +303,13 @@ export default function ResourceViewer({
     // Auto-expand the tree to show the path
     setExpandAll(true);
   };
+
+  // Handle external path highlighting
+  useEffect(() => {
+    if (highlightPath) {
+      handleNavigateToPath(highlightPath);
+    }
+  }, [highlightPath]);
 
   // Validation function
   const validateResource = async () => {

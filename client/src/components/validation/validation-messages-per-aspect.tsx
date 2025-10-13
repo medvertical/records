@@ -34,6 +34,7 @@ interface ValidationMessagesPerAspectProps {
   serverId?: number;
   highlightSignature?: string;
   validationScore?: number;
+  onPathClick?: (path: string) => void;
 }
 
 function getAspectBadgeColor(aspect: string): string {
@@ -54,6 +55,7 @@ export function ValidationMessagesPerAspect({
   serverId = 1,
   highlightSignature,
   validationScore = 0,
+  onPathClick,
 }: ValidationMessagesPerAspectProps) {
   const { data, isLoading, error } = useQuery<ResourceMessagesResponse>({
     queryKey: ['/api/validation/resources', resourceType, resourceId, 'messages', serverId],
@@ -191,7 +193,20 @@ export function ValidationMessagesPerAspect({
                                   {message.text}
                                 </AlertDescription>
                                 <div className="text-xs text-muted-foreground space-y-1 text-left">
-                                  <div className="text-left">Path: <code className="bg-muted px-1 py-0.5 rounded">{message.canonicalPath}</code></div>
+                                  <div className="text-left">
+                                    Path: 
+                                    {onPathClick ? (
+                                      <button
+                                        onClick={() => onPathClick(message.canonicalPath)}
+                                        className="bg-muted px-1 py-0.5 rounded hover:bg-muted/80 cursor-pointer transition-colors ml-1"
+                                        title="Click to highlight in tree viewer"
+                                      >
+                                        {message.canonicalPath}
+                                      </button>
+                                    ) : (
+                                      <code className="bg-muted px-1 py-0.5 rounded ml-1">{message.canonicalPath}</code>
+                                    )}
+                                  </div>
                                   {message.timestamp && (
                                     <div className="text-left">Validated: {new Date(message.timestamp).toLocaleString()}</div>
                                   )}

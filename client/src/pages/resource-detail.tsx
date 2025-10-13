@@ -31,6 +31,9 @@ export default function ResourceDetail() {
   const [autoRevalidate, setAutoRevalidate] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   
+  // Path highlighting state
+  const [highlightedPath, setHighlightedPath] = useState<string | undefined>(undefined);
+  
   // Per-resource expanded paths state - keyed by resourceId
   const [expandedPathsMap, setExpandedPathsMap] = useState<Map<string, Set<string>>>(new Map());
   
@@ -111,13 +114,21 @@ export default function ResourceDetail() {
     console.log('[Revalidate] Resource type:', resource.resourceType);
     console.log('[Revalidate] Resource ID:', resource.resourceId);
     
+    // Extract profile URLs from resource meta
+    const profileUrls = resource.data?.meta?.profile || resource.meta?.profile || [];
+    console.log('[Revalidate] Profile URLs found:', profileUrls);
+    
     setIsRevalidating(true);
     
     try {
       const url = `/api/validation/resources/${resource.resourceType}/${resource.resourceId}/revalidate?serverId=${activeServer?.id || 1}`;
       console.log('[Revalidate] Calling URL:', url);
       
-      const response = await fetch(url, { method: 'POST' });
+      const response = await fetch(url, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileUrls })
+      });
       console.log('[Revalidate] Response status:', response.status);
       console.log('[Revalidate] Response ok:', response.ok);
 
@@ -262,6 +273,13 @@ export default function ResourceDetail() {
     setEditedResource(updatedResource);
     setHasChanges(true);
   }, []);
+
+  // Handle path clicks from validation messages
+  const handlePathClick = useCallback((path: string) => {
+    setHighlightedPath(path);
+    // Clear the highlight after a short delay to allow for re-highlighting
+    setTimeout(() => setHighlightedPath(undefined), 100);
+  }, []);
   
   const { data: resource, isLoading, error } = useQuery<FhirResourceWithValidation>({
     queryKey: ["/api/fhir/resources", id],
@@ -396,6 +414,17 @@ export default function ResourceDetail() {
                     </span>
                   )}
                 </div>
+                {/* Display declared profiles */}
+                {(resource.data?.meta?.profile || resource.meta?.profile) && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="text-sm text-gray-500">Profiles:</span>
+                    {(resource.data?.meta?.profile || resource.meta?.profile || []).map((profileUrl: string, idx: number) => (
+                      <Badge key={idx} variant="outline" className="text-xs">
+                        {profileUrl.split('/').pop() || profileUrl}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -432,6 +461,7 @@ export default function ResourceDetail() {
               onAutoRevalidateChange={setAutoRevalidate}
               expandedPaths={getExpandedPaths(resource.resourceId)}
               onExpandedPathsChange={(paths) => setExpandedPaths(resource.resourceId, paths)}
+              highlightPath={highlightedPath}
             />
           </div>
           
@@ -443,6 +473,7 @@ export default function ResourceDetail() {
               serverId={activeServer?.id}
               highlightSignature={highlightSignature}
               validationScore={validationSummary?.validationScore || 0}
+              onPathClick={handlePathClick}
             />
           </div>
         </div>

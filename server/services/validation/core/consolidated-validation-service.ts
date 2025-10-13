@@ -45,9 +45,10 @@ import type {
 // Types
 // ============================================================================
 
-interface ValidateResourceOptions {
+export interface ValidateResourceOptions {
   pipelineConfig?: Partial<ValidationPipelineConfig>;
   validationSettingsOverride?: ValidationSettings;
+  profileUrls?: string[];
   requestContext?: {
     requestId?: string;
     requestedBy?: string;
@@ -371,14 +372,31 @@ export class ConsolidatedValidationService extends EventEmitter {
       throw new Error('Failed to load validation settings');
     }
 
+    // Merge explicit profile URLs with existing resource meta.profile
+    let resourceWithProfiles = { ...resource };
+    if (options.profileUrls && options.profileUrls.length > 0) {
+      // Ensure meta.profile exists and merge with explicit profile URLs
+      if (!resourceWithProfiles.meta) {
+        resourceWithProfiles.meta = {};
+      }
+      if (!resourceWithProfiles.meta.profile) {
+        resourceWithProfiles.meta.profile = [];
+      }
+      
+      // Add explicit profile URLs that aren't already present
+      const existingProfiles = new Set(resourceWithProfiles.meta.profile);
+      const newProfiles = options.profileUrls.filter(url => !existingProfiles.has(url));
+      resourceWithProfiles.meta.profile = [...resourceWithProfiles.meta.profile, ...newProfiles];
+    }
+
     const requestContext = options.requestContext || {};
     const pipelineRequest: ValidationPipelineRequest = {
       resources: [
         {
-          resource,
+          resource: resourceWithProfiles,
           resourceType: resource.resourceType,
           resourceId: resource.id,
-          profileUrl: undefined,
+          profileUrl: options.profileUrls?.[0], // Use first profile URL if available
           settings: currentSettings,
         } as any,
       ],

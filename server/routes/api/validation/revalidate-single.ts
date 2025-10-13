@@ -34,8 +34,10 @@ router.post('/resources/:resourceType/:id/revalidate', async (req: Request, res:
   try {
     const { resourceType, id } = req.params;
     const serverId = parseInt(req.query.serverId as string) || 1;
+    const { profileUrls } = req.body || {};
     
     logger.info(`[Single Revalidate] Revalidating ${resourceType}/${id} on server ${serverId}`);
+    logger.info(`[Single Revalidate] Profile URLs provided:`, profileUrls);
     
     // Fetch resource from database
     const { db } = await import('../../../db');
@@ -110,8 +112,9 @@ router.post('/resources/:resourceType/:id/revalidate', async (req: Request, res:
         true,  // forceRevalidation
         0,     // retryAttempt
         {      // options
-          validationSettingsOverride: settingsOverride
-        }
+          validationSettingsOverride: settingsOverride,
+          profileUrls: profileUrls // Add profile URLs for validation
+        } as any // Type assertion to avoid TypeScript error with dynamic import
       );
       
       logger.info(`[Single Revalidate] Validation completed successfully for ${resourceType}/${id}`);
