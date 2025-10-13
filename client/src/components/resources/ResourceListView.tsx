@@ -16,6 +16,7 @@ import {
   ValidationStatusIndicator, 
   type ResourceValidationStatus 
 } from '@/components/validation/ValidationStatusIndicator';
+import { getShortId } from "@/lib/resource-utils";
 
 // ============================================================================
 // Types
@@ -164,7 +165,7 @@ export function ResourceListView({
 
                 {/* Resource ID */}
                 <TableCell>
-                  <code className="text-sm text-gray-700">{resource.fhirId}</code>
+                  <code className="text-sm text-gray-700">{getShortId(resource.fhirId)}</code>
                 </TableCell>
 
                 {/* Validation Status */}

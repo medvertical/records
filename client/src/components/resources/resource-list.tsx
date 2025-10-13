@@ -29,6 +29,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useValidationResults } from "@/hooks/validation";
 import type { ValidationProgress, EnhancedValidationSummary } from '@shared/types/validation';
 import { getFilteredValidationSummary } from '@/lib/validation-filtering-utils';
+import { getShortId, getShortReference } from "@/lib/resource-utils";
 
 // Extended types for this component
 interface ExtendedValidationProgress extends ValidationProgress {
@@ -150,8 +151,9 @@ export default function ResourceList({
         return [birthDate && `DOB: ${birthDate}`, gender].filter(Boolean).join(' | ') || 'Patient';
       case 'Observation':
         const subject = resource.subject?.reference || '';
+        const shortSubject = subject ? getShortReference(subject) : '';
         const date = resource.effectiveDateTime ? new Date(resource.effectiveDateTime).toLocaleDateString() : '';
-        return [subject, date].filter(Boolean).join(' | ') || 'Observation';
+        return [shortSubject, date].filter(Boolean).join(' | ') || 'Observation';
       case 'Encounter':
         const encounterDate = resource.period?.start ? new Date(resource.period.start).toLocaleDateString() : '';
         return encounterDate || 'Encounter';
@@ -630,7 +632,7 @@ export default function ResourceList({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center space-x-3 mb-1">
                         <h3 className="text-sm font-semibold text-gray-900 truncate">
-                          {resource.resourceType}/{resource.id}
+                          {resource.resourceType}/{getShortId(resource.id)}
                         </h3>
                         <div className="flex items-center space-x-2">
                           <Badge variant="outline" className="text-xs">

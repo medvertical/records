@@ -15,6 +15,7 @@ import {
   Loader2,
   RefreshCw
 } from 'lucide-react';
+import { getShortId } from "@/lib/resource-utils";
 
 // ============================================================================
 // Types
@@ -227,7 +228,7 @@ export function FilteredResourceList({
                           {resource.resourceType}
                         </Badge>
                         <span className="font-medium text-gray-900 truncate">
-                          {resource.id}
+                          {getShortId(resource.id)}
                         </span>
                       </div>
                       

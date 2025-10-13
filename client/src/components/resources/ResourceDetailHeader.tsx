@@ -7,6 +7,7 @@ import { CircularProgress } from '@/components/ui/circular-progress';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAspectSettingsReactive } from '@/hooks/use-aspect-settings-reactive';
 import { cn } from '@/lib/utils';
+import { getShortId } from "@/lib/resource-utils";
 
 // ============================================================================
 // Types
@@ -250,7 +251,7 @@ export function ResourceDetailHeader({
 
               <div className="flex items-center gap-3 flex-wrap">
                 <p className="text-sm text-gray-600 font-mono">
-                  ID: {identity.fhirId}
+                  ID: {getShortId(identity.fhirId)}
                 </p>
                 {identity.versionId && (
                   <Badge variant="outline" className="text-xs font-mono">

@@ -10,6 +10,7 @@ import {
   ValidationStatusIndicator, 
   type ResourceValidationStatus 
 } from '@/components/validation/ValidationStatusIndicator';
+import { getShortId } from "@/lib/resource-utils";
 
 // ============================================================================
 // Types
@@ -84,7 +85,7 @@ function Row({ index, style, data }: RowProps) {
 
       {/* Resource ID */}
       <div className="w-[200px] flex-shrink-0">
-        <code className="text-sm text-gray-700">{resource.fhirId}</code>
+        <code className="text-sm text-gray-700">{getShortId(resource.fhirId)}</code>
       </div>
 
       {/* Validation Status */}
