@@ -206,10 +206,19 @@ async function performFhirTextSearch(
   filterOptions: any
 ): Promise<any> {
   console.log(`[FHIR Text Search] Searching for "${searchTerm}" in ${resourceTypes.length} resource types`);
+  console.log(`[FHIR Text Search] Pagination: offset=${filterOptions.pagination.offset}, limit=${filterOptions.pagination.limit}`);
   
   const allResults: any[] = [];
-  let totalCount = 0;
+  let totalAvailableCount = 0;
   let searchMethod = 'none';
+  const bundleMetadata: { total?: number; hasNext?: boolean }[] = [];
+  
+  // Calculate how many results to fetch from FHIR server
+  // This function is now only called for the first page (offset 0), so we fetch a reasonable batch
+  const offset = filterOptions.pagination.offset || 0;
+  const limit = filterOptions.pagination.limit || 50;
+  // Fetch enough for the first page plus a few extra to detect if there are more results
+  const fetchCount = Math.max(limit * 2, 100); // At least 100 or 2 pages worth, whichever is larger
   
   // Define resource-specific search parameters
   const resourceSearchParams: Record<string, string[]> = {
@@ -233,17 +242,19 @@ async function performFhirTextSearch(
     try {
       let searchSuccessful = false;
       const resourceResults: any[] = [];
+      let bundle: any = null;
       
       // Strategy 1: Try _content search parameter (searches narrative and text)
       try {
         console.log(`[FHIR Text Search] Trying _content search for ${resourceType}`);
         const contentBundle = await fhirClient.searchResources(resourceType, {
           '_content': searchTerm,
-          '_count': filterOptions.pagination.limit || 50
+          '_count': fetchCount
         });
         
         if (contentBundle.entry && contentBundle.entry.length > 0) {
           resourceResults.push(...contentBundle.entry.map((e: any) => e.resource));
+          bundle = contentBundle;
           searchMethod = '_content';
           searchSuccessful = true;
           console.log(`[FHIR Text Search] _content search found ${contentBundle.entry.length} results for ${resourceType}`);
@@ -259,11 +270,12 @@ async function performFhirTextSearch(
           console.log(`[FHIR Text Search] Trying _text search for ${resourceType}`);
           const textBundle = await fhirClient.searchResources(resourceType, {
             '_text': searchTerm,
-            '_count': filterOptions.pagination.limit || 50
+            '_count': fetchCount
           });
           
           if (textBundle.entry && textBundle.entry.length > 0) {
             resourceResults.push(...textBundle.entry.map((e: any) => e.resource));
+            bundle = textBundle;
             searchMethod = '_text';
             searchSuccessful = true;
             console.log(`[FHIR Text Search] _text search found ${textBundle.entry.length} results for ${resourceType}`);
@@ -283,11 +295,12 @@ async function performFhirTextSearch(
           try {
             const fieldBundle = await fhirClient.searchResources(resourceType, {
               [field]: searchTerm,
-              '_count': filterOptions.pagination.limit || 50
+              '_count': fetchCount
             });
             
             if (fieldBundle.entry && fieldBundle.entry.length > 0) {
               resourceResults.push(...fieldBundle.entry.map((e: any) => e.resource));
+              bundle = fieldBundle;
               searchMethod = `field:${field}`;
               searchSuccessful = true;
               console.log(`[FHIR Text Search] Field search (${field}) found ${fieldBundle.entry.length} results for ${resourceType}`);
@@ -307,11 +320,12 @@ async function performFhirTextSearch(
           // Try a generic search that might work on some servers
           const genericBundle = await fhirClient.searchResources(resourceType, {
             'name': searchTerm, // Many resources have a name field
-            '_count': filterOptions.pagination.limit || 50
+            '_count': fetchCount
           });
           
           if (genericBundle.entry && genericBundle.entry.length > 0) {
             resourceResults.push(...genericBundle.entry.map((e: any) => e.resource));
+            bundle = genericBundle;
             searchMethod = 'generic:name';
             searchSuccessful = true;
             console.log(`[FHIR Text Search] Generic name search found ${genericBundle.entry.length} results for ${resourceType}`);
@@ -321,9 +335,23 @@ async function performFhirTextSearch(
         }
       }
       
-      if (searchSuccessful) {
+      if (searchSuccessful && bundle) {
         allResults.push(...resourceResults);
-        totalCount += resourceResults.length;
+        
+        // Extract metadata from bundle
+        const metadata: { total?: number; hasNext?: boolean } = {};
+        if (bundle.total !== undefined) {
+          metadata.total = bundle.total;
+          totalAvailableCount += bundle.total;
+        }
+        // Check for next link in bundle
+        if (bundle.link) {
+          const nextLink = bundle.link.find((l: any) => l.relation === 'next');
+          metadata.hasNext = !!nextLink;
+        }
+        bundleMetadata.push(metadata);
+        
+        console.log(`[FHIR Text Search] Bundle metadata for ${resourceType}:`, metadata);
       } else {
         console.log(`[FHIR Text Search] No search strategy worked for ${resourceType}`);
       }
@@ -338,34 +366,43 @@ async function performFhirTextSearch(
     index === self.findIndex(r => r.id === resource.id && r.resourceType === resource.resourceType)
   );
   
-  console.log(`[FHIR Text Search] Total unique results: ${uniqueResults.length} (method: ${searchMethod})`);
+  console.log(`[FHIR Text Search] Total unique results fetched: ${uniqueResults.length} (method: ${searchMethod})`);
   
   // Enhance resources with validation data
   const enhancedResources = await enhanceResourcesWithValidationData(uniqueResults);
   
-  // Apply pagination
-  const startIndex = filterOptions.pagination.offset || 0;
-  const endIndex = startIndex + (filterOptions.pagination.limit || 50);
-  const paginatedResources = enhancedResources.slice(startIndex, endIndex);
+  // Apply pagination for the first page (offset is always 0 here)
+  const paginatedResources = enhancedResources.slice(0, limit);
+  
+  // Calculate hasMore based on fetched results
+  // We have more if: we fetched more than the page size, OR bundles indicated more results
+  const hasMoreFromFetch = enhancedResources.length > limit;
+  const hasMoreFromBundles = bundleMetadata.some(m => m.hasNext || (m.total && m.total > fetchCount));
+  const hasMore = hasMoreFromFetch || hasMoreFromBundles;
+  
+  // Use bundle total if available, otherwise use fetched count (conservative estimate)
+  const finalTotalCount = totalAvailableCount > 0 ? totalAvailableCount : enhancedResources.length;
+  
+  console.log(`[FHIR Text Search] First page result: total=${finalTotalCount}, returned=${paginatedResources.length}, hasMore=${hasMore}`);
   
   return {
     resources: paginatedResources,
-    totalCount: enhancedResources.length,
+    totalCount: finalTotalCount,
     returnedCount: paginatedResources.length,
     pagination: {
-      limit: filterOptions.pagination.limit || 50,
-      offset: filterOptions.pagination.offset || 0,
-      hasMore: endIndex < enhancedResources.length
+      limit: limit,
+      offset: 0, // Always first page for FHIR text search
+      hasMore: hasMore
     },
     filterSummary: {
       resourceTypes: resourceTypes,
       validationStatus: {
-        hasErrors: enhancedResources.filter(r => r._validationSummary?.hasErrors).length,
-        hasWarnings: enhancedResources.filter(r => r._validationSummary?.hasWarnings).length,
+        hasErrors: paginatedResources.filter(r => r._validationSummary?.hasErrors).length,
+        hasWarnings: paginatedResources.filter(r => r._validationSummary?.hasWarnings).length,
         hasInformation: 0,
-        isValid: enhancedResources.filter(r => r._validationSummary?.isValid).length
+        isValid: paginatedResources.filter(r => r._validationSummary?.isValid).length
       },
-      totalMatching: enhancedResources.length
+      totalMatching: finalTotalCount
     },
     appliedFilters: filterOptions,
     searchMethod: searchMethod
@@ -557,8 +594,12 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       };
 
       // If search parameter is provided, perform FHIR text search using multiple strategies
+      // But only use FHIR search for the first page (offset 0) to avoid pagination complexity
+      // Skip FHIR text search for field-specific searches (e.g., "meta.profile") - use backend filtering instead
       const currentFhirClient = getCurrentFhirClient(fhirClient);
-      if (currentFhirClient && search) {
+      const isFieldSearch = search && typeof search === 'string' && search.includes('.');
+      
+      if (currentFhirClient && search && filterOptions.pagination.offset === 0 && !isFieldSearch) {
         // If no resource types specified, search common resource types
         const searchResourceTypes = resourceTypesArray.length > 0 
           ? resourceTypesArray 
@@ -587,6 +628,12 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
           console.error('[FHIR API] FHIR text search failed, falling back to local filtering:', error.message);
           console.error('[FHIR API] Full error:', error);
         }
+      } else if (search && filterOptions.pagination.offset > 0) {
+        console.log('[FHIR API] Search with pagination offset > 0, using backend filtering for consistent results');
+        // Fall through to backend filtering for pagination
+      } else if (isFieldSearch) {
+        console.log('[FHIR API] Field-specific search detected (', search, '), using backend filtering with dot notation support');
+        // Fall through to backend filtering for field searches
       }
 
       // If FHIR search parameters are provided and there are resource types selected,
@@ -601,6 +648,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         }
 
         const allResources: any[] = [];
+        let totalFromBundles = 0;
+        let hasNextLink = false;
+        
         for (const rt of resourceTypesArray) {
           // Construct query params for FHIR search
           const q: Record<string, string | number> = {};
@@ -644,6 +694,21 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
             const bundle = await currentFhirClient.searchResources(rt, q, filterOptions.pagination.limit);
             const resources = bundle.entry?.map((e: any) => e.resource) || [];
             allResources.push(...resources);
+            
+            // Extract pagination metadata from bundle
+            if (bundle.total !== undefined) {
+              totalFromBundles += bundle.total;
+              console.log(`[FHIR API] Bundle for ${rt} has total: ${bundle.total}`);
+            }
+            
+            // Check for next link
+            if (bundle.link) {
+              const nextLink = bundle.link.find((l: any) => l.relation === 'next');
+              if (nextLink) {
+                hasNextLink = true;
+                console.log(`[FHIR API] Bundle for ${rt} has next link`);
+              }
+            }
           } catch (err: any) {
             console.warn(`[FHIR API] FHIR search failed for ${rt}:`, err.message);
           }
@@ -651,8 +716,15 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
 
         // Enhance resources and build result
         const enhanced = await enhanceResourcesWithValidationData(allResources);
-        const totalCount = enhanced.length;
         const returnedCount = enhanced.length;
+        
+        // Use bundle total if available, otherwise use returned count
+        const totalCount = totalFromBundles > 0 ? totalFromBundles : returnedCount;
+        
+        // Calculate hasMore: either we have a next link, or returned count equals limit (might be more)
+        const hasMore = hasNextLink || (returnedCount >= filterOptions.pagination.limit);
+        
+        console.log(`[FHIR API] FHIR parameter search result: total=${totalCount}, returned=${returnedCount}, hasMore=${hasMore}`);
 
         return res.json({
           success: true,
@@ -660,7 +732,12 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
             resources: enhanced,
             totalCount,
             returnedCount,
-            hasMore: false,
+            hasMore: hasMore,
+            pagination: {
+              limit: filterOptions.pagination.limit,
+              offset: filterOptions.pagination.offset,
+              hasMore: hasMore
+            },
             statistics: {
               validationStatistics: {
                 totalResources: totalCount,

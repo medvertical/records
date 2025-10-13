@@ -366,19 +366,23 @@ export default function ResourceBrowser() {
     !['type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'limit'].includes(key)
   );
   
-  // Use filtered endpoint when validation filters are active OR when FHIR params are in URL
-  const apiEndpoint = (hasValidationFilters || hasFhirParamsInUrl) ? "/api/fhir/resources/filtered" : "/api/fhir/resources";
+  // Check if there's a text search query
+  const hasTextSearch = searchQuery && searchQuery.trim().length > 0;
+  
+  // Use filtered endpoint when validation filters are active OR when FHIR params are in URL OR when there's a text search
+  const apiEndpoint = (hasValidationFilters || hasFhirParamsInUrl || hasTextSearch) ? "/api/fhir/resources/filtered" : "/api/fhir/resources";
+  
 
   const { data: resourcesData, isLoading, error} = useQuery<ResourcesResponse>({
     queryKey: [apiEndpoint, { resourceType, search: searchQuery, page, pageSize, location, filters: validationFilters }],
     // Only fetch resources when there's an active server (resourceType can be empty for "all types")
     enabled: !!stableActiveServer,
-    staleTime: 2 * 60 * 1000, // 2 minutes - resources don't change that frequently
+    staleTime: apiEndpoint.includes('/filtered') ? 0 : 2 * 60 * 1000, // Fresh data for searches, cache for browsing
     gcTime: 5 * 60 * 1000, // 5 minutes - keep in cache longer
     refetchInterval: false, // Don't auto-refetch
     refetchOnWindowFocus: false, // Don't refetch on window focus
-    refetchOnMount: false, // Don't refetch on component mount if data is fresh
-    placeholderData: (previousData) => previousData, // Keep previous data visible during refetch
+    refetchOnMount: apiEndpoint.includes('/filtered') ? true : false, // Refetch for searches
+    placeholderData: apiEndpoint.includes('/filtered') ? undefined : (previousData) => previousData, // No placeholder for searches
     queryFn: async ({ queryKey }) => {
       const [url, params] = queryKey as [string, { resourceType?: string; search?: string; page: number; pageSize: number; location: string; filters: ValidationFilters }];
       const searchParams = new URLSearchParams();

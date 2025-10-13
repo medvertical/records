@@ -452,10 +452,41 @@ class ValidationBackendFilteringService extends EventEmitter {
     if (!search) return resources;
 
     const searchLower = search.toLowerCase();
+    
     return resources.filter(resource => {
       // Search in resource data
       const resourceData = resource.data;
       if (resourceData) {
+        // Handle dot notation searches (e.g., "meta.profile") FIRST
+        if (searchLower.includes('.')) {
+          const pathParts = searchLower.split('.');
+          let current: any = resourceData;
+          
+          for (const part of pathParts) {
+            if (current && typeof current === 'object') {
+              current = current[part];
+            } else {
+              current = null;
+              break;
+            }
+          }
+          
+          // If we found a value at this path, check if it has actual content
+          if (current !== null && current !== undefined) {
+            // Exclude empty arrays and empty objects
+            if (Array.isArray(current) && current.length === 0) {
+              return false; // Empty array - no actual values
+            }
+            if (typeof current === 'object' && Object.keys(current).length === 0) {
+              return false; // Empty object - no actual values
+            }
+            return true; // Has actual values
+          } else {
+            return false;
+          }
+        }
+        
+        // Fallback to general text search for non-dot-notation searches
         const searchableText = JSON.stringify(resourceData).toLowerCase();
         if (searchableText.includes(searchLower)) {
           return true;
