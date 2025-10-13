@@ -200,29 +200,6 @@ export default function ResourceSearch({
             className="pl-10"
           />
         </div>
-        
-        <Select 
-              value={resourceType || "all"} 
-              onValueChange={(value) => {
-                setResourceType(value);
-                // Convert "all" back to empty string for the API
-                const searchResourceType = value === "all" ? "" : value;
-                onSearch(query, searchResourceType, fhirSearchParams);
-              }}
-            >
-          <SelectTrigger className="w-48">
-            <SelectValue placeholder="All Resource Types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Resource Types</SelectItem>
-            {resourceTypes.map((type) => (
-              <SelectItem key={type} value={type}>
-                {type}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        
 
         <Button onClick={handleSearch} className="bg-fhir-blue text-white hover:bg-blue-700">
           <Search className="h-4 w-4 sm:mr-2" />

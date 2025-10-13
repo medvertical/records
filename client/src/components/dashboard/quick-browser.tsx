@@ -123,18 +123,6 @@ export default function QuickBrowser({ resourceCounts }: QuickBrowserProps) {
               className="pl-10"
             />
           </div>
-          <Select value={selectedResourceType} onValueChange={setSelectedResourceType}>
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="All Types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="Patient">Patient</SelectItem>
-              <SelectItem value="Observation">Observation</SelectItem>
-              <SelectItem value="Encounter">Encounter</SelectItem>
-              <SelectItem value="Condition">Condition</SelectItem>
-            </SelectContent>
-          </Select>
           <Button onClick={handleSearch} size="sm">
             Search
           </Button>
