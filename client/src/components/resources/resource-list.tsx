@@ -3,6 +3,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -64,6 +71,7 @@ export interface ResourceListProps {
   page: number;
   onPageChange: (page: number) => void;
   pageSize?: number;
+  onPageSizeChange?: (pageSize: number) => void; // Callback for page size changes
   validatingResourceIds?: Set<number>; // Track which resources are currently being validated
   validationProgress?: Map<number, ValidationProgress>; // Track validation progress per resource
   availableResourceTypes?: string[]; // Available resource types when none is selected
@@ -81,6 +89,7 @@ export default function ResourceList({
   page,
   onPageChange,
   pageSize = 20,
+  onPageSizeChange,
   validatingResourceIds = new Set(),
   validationProgress = new Map(),
   availableResourceTypes = [],
@@ -541,8 +550,17 @@ export default function ResourceList({
           <Button
             variant="outline"
             size="sm"
+            onClick={() => onPageChange(0)}
+            disabled={currentPage === 0 || isLoading}
+            className="hidden sm:inline-flex"
+          >
+            First
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => onPageChange(currentPage - 1)}
-            disabled={currentPage === 0}
+            disabled={currentPage === 0 || isLoading}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -553,9 +571,18 @@ export default function ResourceList({
             variant="outline"
             size="sm"
             onClick={() => onPageChange(currentPage + 1)}
-            disabled={currentPage >= totalPages - 1}
+            disabled={currentPage >= totalPages - 1 || isLoading}
           >
             <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onPageChange(totalPages - 1)}
+            disabled={currentPage >= totalPages - 1 || isLoading}
+            className="hidden sm:inline-flex"
+          >
+            Last
           </Button>
         </div>
       </div>
@@ -691,71 +718,96 @@ export default function ResourceList({
 
       {/* Pagination Footer */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center space-x-2 pt-4">
-          {isLoading ? (
-            <div className="flex items-center space-x-2">
-              <Skeleton className="h-9 w-16 hidden sm:block" />
-              <Skeleton className="h-9 w-20" />
-              <Skeleton className="h-9 w-8" />
-              <Skeleton className="h-9 w-8" />
-              <Skeleton className="h-9 w-8" />
-              <Skeleton className="h-9 w-8" />
-              <Skeleton className="h-9 w-8" />
-              <Skeleton className="h-9 w-16" />
-              <Skeleton className="h-9 w-12 hidden sm:block" />
-            </div>
-          ) : (
+        <div className="flex items-center justify-between pt-4">
+          {/* Left side - Page size selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-700">Resources per page:</span>
+            <Select
+              value={pageSize.toString()}
+              onValueChange={(value) => onPageSizeChange?.(parseInt(value))}
+              disabled={isLoading}
+            >
+              <SelectTrigger className="w-20 h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[10, 20, 50, 100].map((size) => (
+                  <SelectItem key={size} value={size.toString()}>
+                    {size}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Right side - Pagination controls */}
+          <div className="flex items-center space-x-2">
+            {isLoading ? (
+              <div className="flex items-center space-x-2">
+                <Skeleton className="h-9 w-16 hidden sm:block" />
+                <Skeleton className="h-9 w-20" />
+                <Skeleton className="h-9 w-8" />
+                <Skeleton className="h-9 w-8" />
+                <Skeleton className="h-9 w-8" />
+                <Skeleton className="h-9 w-8" />
+                <Skeleton className="h-9 w-8" />
+                <Skeleton className="h-9 w-16" />
+                <Skeleton className="h-9 w-12 hidden sm:block" />
+              </div>
+            ) : (
             <>
               <Button
                 variant="outline"
                 onClick={() => onPageChange(0)}
-                disabled={currentPage === 0}
+                disabled={currentPage === 0 || isLoading}
                 className="hidden sm:inline-flex"
               >
                 First
               </Button>
-          <Button
-            variant="outline"
-            onClick={() => onPageChange(currentPage - 1)}
-            disabled={currentPage === 0}
-          >
-            <ChevronLeft className="h-4 w-4 sm:mr-1" />
-            <span className="hidden sm:inline">Previous</span>
-          </Button>
-          
-          {/* Page numbers */}
-          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-            const pageNum = Math.max(0, Math.min(totalPages - 5, page - 2)) + i;
-            return (
               <Button
-                key={pageNum}
-                variant={pageNum === page ? "default" : "outline"}
-                onClick={() => onPageChange(pageNum)}
-                className={pageNum === page ? "bg-fhir-blue text-white" : ""}
+                variant="outline"
+                onClick={() => onPageChange(currentPage - 1)}
+                disabled={currentPage === 0 || isLoading}
               >
-                {pageNum + 1}
+                <ChevronLeft className="h-4 w-4 sm:mr-1" />
+                <span className="hidden sm:inline">Previous</span>
               </Button>
-            );
-          })}
-          
-          <Button
-            variant="outline"
-            onClick={() => onPageChange(currentPage + 1)}
-            disabled={currentPage >= totalPages - 1}
-          >
-            <span className="hidden sm:inline">Next</span>
-            <ChevronRight className="h-4 w-4 sm:ml-1" />
-          </Button>
+              
+              {/* Page numbers */}
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const pageNum = Math.max(0, Math.min(totalPages - 5, page - 2)) + i;
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={pageNum === page ? "default" : "outline"}
+                    onClick={() => onPageChange(pageNum)}
+                    disabled={isLoading}
+                    className={pageNum === page ? "bg-fhir-blue text-white" : ""}
+                  >
+                    {pageNum + 1}
+                  </Button>
+                );
+              })}
+              
+              <Button
+                variant="outline"
+                onClick={() => onPageChange(currentPage + 1)}
+                disabled={currentPage >= totalPages - 1 || isLoading}
+              >
+                <span className="hidden sm:inline">Next</span>
+                <ChevronRight className="h-4 w-4 sm:ml-1" />
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => onPageChange(totalPages - 1)}
-                disabled={currentPage >= totalPages - 1}
+                disabled={currentPage >= totalPages - 1 || isLoading}
                 className="hidden sm:inline-flex"
               >
                 Last
               </Button>
             </>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>

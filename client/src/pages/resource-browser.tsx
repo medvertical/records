@@ -60,6 +60,7 @@ export default function ResourceBrowser() {
   const [resourceType, setResourceType] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
   const [isValidating, setIsValidating] = useState(false);
   const [validatingResourceIds, setValidatingResourceIds] = useState<Set<number>>(new Set());
   const [validationProgress, setValidationProgress] = useState<Map<number, any>>(new Map());
@@ -369,7 +370,7 @@ export default function ResourceBrowser() {
   const apiEndpoint = (hasValidationFilters || hasFhirParamsInUrl) ? "/api/fhir/resources/filtered" : "/api/fhir/resources";
 
   const { data: resourcesData, isLoading, error} = useQuery<ResourcesResponse>({
-    queryKey: [apiEndpoint, { resourceType, search: searchQuery, page, location, filters: validationFilters }],
+    queryKey: [apiEndpoint, { resourceType, search: searchQuery, page, pageSize, location, filters: validationFilters }],
     // Only fetch resources when there's an active server (resourceType can be empty for "all types")
     enabled: !!stableActiveServer,
     staleTime: 2 * 60 * 1000, // 2 minutes - resources don't change that frequently
@@ -379,7 +380,7 @@ export default function ResourceBrowser() {
     refetchOnMount: false, // Don't refetch on component mount if data is fresh
     placeholderData: (previousData) => previousData, // Keep previous data visible during refetch
     queryFn: async ({ queryKey }) => {
-      const [url, params] = queryKey as [string, { resourceType?: string; search?: string; page: number; location: string; filters: ValidationFilters }];
+      const [url, params] = queryKey as [string, { resourceType?: string; search?: string; page: number; pageSize: number; location: string; filters: ValidationFilters }];
       const searchParams = new URLSearchParams();
       
       const isFilteredEndpoint = url.includes('/filtered');
@@ -396,7 +397,7 @@ export default function ResourceBrowser() {
         searchParams.set('serverId', '1'); // TODO: Get from context
         
         // Convert page to limit/offset for /filtered endpoint
-        const limit = 20; // Match frontend pageSize
+        const limit = params?.pageSize || 20;
         const offset = (params?.page || 0) * limit;
         searchParams.set('limit', limit.toString());
         searchParams.set('offset', offset.toString());
@@ -447,7 +448,7 @@ export default function ResourceBrowser() {
         }
         
         // Convert page to limit/offset for standard endpoint
-        const limit = 20; // Match frontend pageSize
+        const limit = params?.pageSize || 20;
         const offset = (params?.page || 0) * limit;
         searchParams.set('limit', limit.toString());
         searchParams.set('offset', offset.toString());
@@ -646,6 +647,12 @@ export default function ResourceBrowser() {
     // Reset message navigation when page changes
     setIsMessagesVisible(false);
     setCurrentMessageIndex(0);
+  };
+
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setPage(0); // Reset to first page when changing page size
+    setHasValidatedCurrentPage(false); // Reset validation status when changing page size
   };
 
   // Navigation handlers for validation messages
@@ -1562,7 +1569,7 @@ export default function ResourceBrowser() {
         {/* Only show skeleton on initial load, not during refetch */}
         {isLoading && !resourcesData ? (
           <div className="space-y-4">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map(i => (
+            {Array.from({ length: pageSize }, (_, i) => i + 1).map(i => (
               <div key={i} className="border rounded-lg p-4 bg-white shadow-sm">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4 flex-1 min-w-0">
@@ -1600,6 +1607,8 @@ export default function ResourceBrowser() {
             total={resourcesData?.total || 0}
             page={page}
             onPageChange={handlePageChange}
+            pageSize={pageSize}
+            onPageSizeChange={handlePageSizeChange}
             validatingResourceIds={validatingResourceIds}
             validationProgress={validationProgress}
             availableResourceTypes={resourcesData?.availableResourceTypes}
