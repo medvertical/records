@@ -96,6 +96,7 @@ export default function ResourceSearch({
   const [query, setQuery] = useState(defaultQuery);
   const [resourceType, setResourceType] = useState(defaultResourceType);
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  const [isManuallyCollapsed, setIsManuallyCollapsed] = useState(false);
   const [fhirSearchParams, setFhirSearchParams] = useState<Record<string, { value: string | string[]; operator?: string }>>({});
 
   useEffect(() => {
@@ -135,17 +136,22 @@ export default function ResourceSearch({
     onSearch(query, searchResourceType, fhirSearchParams);
   }, [query, resourceType, fhirSearchParams, onSearch]);
 
-  // Auto-expand filters when there are active filters
+  // Auto-expand filters when there are active filters, but respect manual collapse
   useEffect(() => {
     const hasActiveFilters = 
-      (resourceType && resourceType !== 'all') || // Has specific resource type
-      (query && query.trim() !== '') || // Has search query
-      Object.keys(fhirSearchParams).length > 0; // Has FHIR search parameters
+      (resourceType && resourceType !== 'all') || 
+      (query && query.trim() !== '') || 
+      Object.keys(fhirSearchParams).length > 0;
     
-    if (hasActiveFilters && !isFilterExpanded) {
+    // Auto-expand if there are active filters and user hasn't manually collapsed
+    if (hasActiveFilters && !isManuallyCollapsed) {
       setIsFilterExpanded(true);
     }
-  }, [resourceType, query, fhirSearchParams, isFilterExpanded]);
+    // Auto-collapse if no active filters and user hasn't manually expanded
+    else if (!hasActiveFilters && !isFilterExpanded) {
+      setIsManuallyCollapsed(false);
+    }
+  }, [resourceType, query, fhirSearchParams, isManuallyCollapsed, isFilterExpanded]);
 
   // Note: Auto-search removed to prevent infinite loops
   // The query will re-run automatically when validationFilters.fhirSearchParams changes
@@ -226,12 +232,35 @@ export default function ResourceSearch({
         {onFilterChange && (
           <Button 
             variant="outline" 
-            onClick={() => setIsFilterExpanded(!isFilterExpanded)}
+            onClick={() => {
+              const newExpanded = !isFilterExpanded;
+              setIsFilterExpanded(newExpanded);
+              // Track manual collapse/expand
+              if (!newExpanded) {
+                setIsManuallyCollapsed(true);
+              } else {
+                setIsManuallyCollapsed(false);
+              }
+            }}
             className="relative"
           >
             <ListFilter className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Filters</span>
-            {isFilterExpanded ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />}
+            {(() => {
+              const hasActiveFilters = 
+                (resourceType && resourceType !== 'all') || 
+                (query && query.trim() !== '') || 
+                Object.keys(fhirSearchParams).length > 0;
+              
+              return (
+                <div className="flex items-center ml-1">
+                  {hasActiveFilters && (
+                    <div className="w-2 h-2 bg-blue-500 rounded-full mr-1" />
+                  )}
+                  {isFilterExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </div>
+              );
+            })()}
           </Button>
         )}
       </div>

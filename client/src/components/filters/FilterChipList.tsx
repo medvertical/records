@@ -32,6 +32,11 @@ export function FilterChipList({ filterOptions, availableResourceTypes, onFilter
           kind="resourceType"
           label="Type"
           value={rt}
+          availableResourceTypes={availableResourceTypes}
+          onChange={({ value }) => {
+            const newResourceTypes = filterOptions.resourceTypes.map(t => t === rt ? String(value || '') : t);
+            onFilterChange({ ...filterOptions, resourceTypes: newResourceTypes });
+          }}
           onRemove={() => onFilterChange({ ...filterOptions, resourceTypes: filterOptions.resourceTypes.filter(t => t !== rt) })}
         />
       );

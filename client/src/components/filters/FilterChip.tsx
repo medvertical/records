@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { X, ChevronDown } from 'lucide-react';
+import { X, ChevronDown, Equal, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Search, Type, Hash } from 'lucide-react';
 
 export type ChipKind = 'resourceType' | 'validation' | 'search' | 'fhirParam';
 
@@ -20,9 +20,11 @@ export interface FilterChipProps {
   disabled?: boolean;
   // Auto-open for new chips
   isNew?: boolean;
+  // For resource type chips
+  availableResourceTypes?: string[];
 }
 
-export function FilterChip({ kind, label, value, operator, operators, onChange, onRemove, typeHint, disabled, isNew = false }: FilterChipProps) {
+export function FilterChip({ kind, label, value, operator, operators, onChange, onRemove, typeHint, disabled, isNew = false, availableResourceTypes = [] }: FilterChipProps) {
   const [open, setOpen] = useState(false);
   const [localValue, setLocalValue] = useState<string>(Array.isArray(value) ? value.join(',') : (value ?? ''));
   const [localOp, setLocalOp] = useState<string>(operator || (operators?.[0] || 'eq'));
@@ -35,6 +37,82 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
   }, [label, operator, value]);
 
   const isText = typeHint === 'string' || kind === 'search';
+
+  // Get icon for operator
+  const getOperatorIcon = (op: string) => {
+    switch (op) {
+      case 'eq':
+      case '==':
+      case 'equals':
+        return <Equal className="h-4 w-4" />;
+      case 'gt':
+      case '>':
+      case 'greaterThan':
+        return <ChevronRight className="h-4 w-4" />;
+      case 'lt':
+      case '<':
+      case 'lessThan':
+        return <ChevronLeft className="h-4 w-4" />;
+      case 'ge':
+      case '>=':
+      case 'greaterThanOrEqual':
+        return <ChevronsRight className="h-4 w-4" />;
+      case 'le':
+      case '<=':
+      case 'lessThanOrEqual':
+        return <ChevronsLeft className="h-4 w-4" />;
+      case 'contains':
+        return <Search className="h-4 w-4" />;
+      case 'startsWith':
+        return <Type className="h-4 w-4" />;
+      case 'endsWith':
+        return <Hash className="h-4 w-4" />;
+      case 'ne':
+      case '!=':
+      case 'notEquals':
+        return <X className="h-4 w-4" />;
+      default: 
+        return <Equal className="h-4 w-4" />;
+    }
+  };
+
+  // Get label for operator
+  const getOperatorLabel = (op: string) => {
+    switch (op) {
+      case 'eq':
+      case '==':
+      case 'equals':
+        return 'equals';
+      case 'gt':
+      case '>':
+      case 'greaterThan':
+        return 'greater than';
+      case 'lt':
+      case '<':
+      case 'lessThan':
+        return 'less than';
+      case 'ge':
+      case '>=':
+      case 'greaterThanOrEqual':
+        return 'greater than or equal';
+      case 'le':
+      case '<=':
+      case 'lessThanOrEqual':
+        return 'less than or equal';
+      case 'contains':
+        return 'contains';
+      case 'startsWith':
+        return 'starts with';
+      case 'endsWith':
+        return 'ends with';
+      case 'ne':
+      case '!=':
+      case 'notEquals':
+        return 'not equals';
+      default: 
+        return op;
+    }
+  };
 
   // Auto-open for new chips
   useEffect(() => {
@@ -55,7 +133,7 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
           <ChevronDown className="h-3 w-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72">
+      <PopoverContent className="w-72" align="start">
         <div className="space-y-3">
           {operators && operators.length > 0 && (
             <div className="space-y-1">
@@ -70,7 +148,12 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
                 </SelectTrigger>
                 <SelectContent>
                   {operators.map(op => (
-                    <SelectItem key={op} value={op}>{op}</SelectItem>
+                    <SelectItem key={op} value={op}>
+                      <div className="flex items-center gap-2">
+                        {getOperatorIcon(op)}
+                        <span className="text-sm">{getOperatorLabel(op)}</span>
+                      </div>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -79,13 +162,23 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
 
           <div className="space-y-1">
             <div className="text-xs text-gray-500">Value</div>
-            {isText ? (
-              <Input 
-                ref={valueInputRef}
+            {kind === 'resourceType' ? (
+              <Select 
                 value={localValue} 
-                onChange={(e) => setLocalValue(e.target.value)} 
-                disabled={disabled} 
-              />
+                onValueChange={(v) => setLocalValue(v)} 
+                disabled={disabled}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select resource type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableResourceTypes.map(rt => (
+                    <SelectItem key={rt} value={rt}>
+                      {rt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             ) : (
               <Input 
                 ref={valueInputRef}
