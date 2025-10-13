@@ -46,6 +46,8 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
       case '==':
       case 'equals':
         return <Equal className="h-4 w-4" />;
+      case 'exists':
+        return <Search className="h-4 w-4" />;
       case 'gt':
       case '>':
       case 'greaterThan':
@@ -84,6 +86,8 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
       case '==':
       case 'equals':
         return 'equals';
+      case 'exists':
+        return 'exists';
       case 'gt':
       case '>':
       case 'greaterThan':
@@ -184,6 +188,28 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
                       </SelectItem>
                     );
                   })}
+                </SelectContent>
+              </Select>
+            ) : localOp === 'exists' ? (
+              <Select 
+                value={localValue} 
+                onValueChange={(v) => setLocalValue(v)} 
+                disabled={disabled}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select existence" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="true">
+                    <div className="flex items-center gap-2">
+                      <span>true (has value)</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="false">
+                    <div className="flex items-center gap-2">
+                      <span>false (no value)</span>
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             ) : (

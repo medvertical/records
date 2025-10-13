@@ -374,7 +374,7 @@ export default function ResourceBrowser() {
   
 
   const { data: resourcesData, isLoading, error} = useQuery<ResourcesResponse>({
-    queryKey: [apiEndpoint, { resourceType, search: searchQuery, page, pageSize, location, filters: validationFilters }],
+    queryKey: ['resources', { endpoint: apiEndpoint, resourceType, search: searchQuery, page, pageSize, location, filters: validationFilters }],
     // Only fetch resources when there's an active server (resourceType can be empty for "all types")
     enabled: !!stableActiveServer,
     staleTime: apiEndpoint.includes('/filtered') ? 0 : 2 * 60 * 1000, // Fresh data for searches, cache for browsing
@@ -382,9 +382,11 @@ export default function ResourceBrowser() {
     refetchInterval: false, // Don't auto-refetch
     refetchOnWindowFocus: false, // Don't refetch on window focus
     refetchOnMount: apiEndpoint.includes('/filtered') ? true : false, // Refetch for searches
-    placeholderData: apiEndpoint.includes('/filtered') ? undefined : (previousData) => previousData, // No placeholder for searches
+    placeholderData: undefined, // Disable placeholder to prevent stale data display
     queryFn: async ({ queryKey }) => {
-      const [url, params] = queryKey as [string, { resourceType?: string; search?: string; page: number; pageSize: number; location: string; filters: ValidationFilters }];
+      const [_, params] = queryKey as [string, { endpoint: string; resourceType?: string; search?: string; page: number; pageSize: number; location: string; filters: ValidationFilters }];
+      const url = params.endpoint;
+      
       const searchParams = new URLSearchParams();
       
       const isFilteredEndpoint = url.includes('/filtered');
@@ -476,14 +478,24 @@ export default function ResourceBrowser() {
         const data = await response.json();
         const totalTime = Date.now() - startTime;
         
+        // Check for warning messages (like unsupported search parameters)
+        if (data.warning) {
+          toast({
+            title: "Search Limitation",
+            description: data.warning.message,
+            variant: "destructive",
+            duration: 8000, // Show longer for important info
+          });
+        }
         
         // Transform /filtered endpoint response to match expected format
         if (isFilteredEndpoint) {
-          return {
+          const transformed = {
             resources: data.data?.resources || [],
             total: data.data?.totalCount || 0,
             availableResourceTypes: data.data?.filterSummary?.availableResourceTypes || []
           };
+          return transformed;
         }
         
         // Return standard endpoint response as is

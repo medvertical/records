@@ -142,6 +142,10 @@ class ValidationBackendFilteringService extends EventEmitter {
       // Get all resources
       const allResources = await storage.getFhirResources();
       console.log(`[BackendFiltering] Found ${allResources.length} resources`);
+      console.log(`[BackendFiltering] First resource has data field:`, !!allResources[0]?.data);
+      if (allResources[0]?.data) {
+        console.log(`[BackendFiltering] First resource data keys:`, Object.keys(allResources[0].data).slice(0, 10));
+      }
 
       // Apply resource type filtering
       let filteredResources = allResources;

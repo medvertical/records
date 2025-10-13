@@ -155,11 +155,11 @@ export default function ResourceSearch({
     if (resourceType && resourceType !== 'all') {
       const resourceSuggestions = getResourceSpecificSuggestions(resourceType, query);
       newSuggestions.push(...resourceSuggestions);
-    } else {
-      // Add general suggestions
-      const generalSuggestions = getGeneralSuggestions(query);
-      newSuggestions.push(...generalSuggestions);
     }
+
+    // Always add general suggestions (field paths work for all resource types)
+    const generalSuggestions = getGeneralSuggestions(query);
+    newSuggestions.push(...generalSuggestions);
 
     // Add syntax suggestions
     const syntaxSuggestions = getSyntaxSuggestions(query);

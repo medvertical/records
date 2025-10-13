@@ -214,13 +214,11 @@ async function performFhirTextSearch(
   const bundleMetadata: { total?: number; hasNext?: boolean }[] = [];
   
   // Calculate how many results to fetch from FHIR server
-  // IMPORTANT: This function is now called for ALL pages, not just the first one
+  // This function is now only called for the first page (offset 0), so we fetch a reasonable batch
   const offset = filterOptions.pagination.offset || 0;
   const limit = filterOptions.pagination.limit || 50;
-  
-  // For pagination, we'll fetch results from the FHIR server with _skip parameter
-  // Fetch the exact amount requested for the current page
-  const fetchCount = limit;
+  // Fetch enough for the first page plus a few extra to detect if there are more results
+  const fetchCount = Math.max(limit * 2, 100); // At least 100 or 2 pages worth, whichever is larger
   
   // Define resource-specific search parameters
   const resourceSearchParams: Record<string, string[]> = {
@@ -248,18 +246,11 @@ async function performFhirTextSearch(
       
       // Strategy 1: Try _content search parameter (searches narrative and text)
       try {
-        console.log(`[FHIR Text Search] Trying _content search for ${resourceType} with term: "${searchTerm}", offset: ${offset}`);
-        const searchParams: any = {
+        console.log(`[FHIR Text Search] Trying _content search for ${resourceType}`);
+        const contentBundle = await fhirClient.searchResources(resourceType, {
           '_content': searchTerm,
           '_count': fetchCount
-        };
-        
-        // Add pagination support with _skip parameter
-        if (offset > 0) {
-          searchParams._skip = offset;
-        }
-        
-        const contentBundle = await fhirClient.searchResources(resourceType, searchParams);
+        });
         
         if (contentBundle.entry && contentBundle.entry.length > 0) {
           resourceResults.push(...contentBundle.entry.map((e: any) => e.resource));
@@ -267,77 +258,20 @@ async function performFhirTextSearch(
           searchMethod = '_content';
           searchSuccessful = true;
           console.log(`[FHIR Text Search] _content search found ${contentBundle.entry.length} results for ${resourceType}`);
-        } else {
-          console.log(`[FHIR Text Search] _content search returned 0 results for ${resourceType}`);
         }
       } catch (error: any) {
         console.log(`[FHIR Text Search] _content search failed for ${resourceType}:`, error.message);
-        
-        // Check if this is an OperationOutcome error with structured details
-        if (error.outcomeDetails) {
-          console.log(`[FHIR Text Search] FHIR server returned OperationOutcome:`, error.outcomeDetails);
-          if (error.outcomeDetails.isUnsupportedParam) {
-            // Return early with error information from OperationOutcome
-            return {
-              resources: [],
-              totalCount: 0,
-              returnedCount: 0,
-              hasMore: false,
-              pagination: {
-                limit: filterOptions.pagination.limit,
-                offset: filterOptions.pagination.offset,
-                hasMore: false
-              },
-              searchMethod: 'none',
-              error: {
-                type: 'unsupported_parameter',
-                message: error.outcomeDetails.message,
-                details: error.outcomeDetails.details,
-                operationOutcome: error.operationOutcome
-              }
-            };
-          }
-        }
-        
-        // Check if this is a "parameter not supported" error (fallback)
-        if (error.message && (error.message.includes('not supported') || error.message.includes('not enabled'))) {
-          console.log(`[FHIR Text Search] FHIR server does not support _content search parameter`);
-          return {
-            resources: [],
-            totalCount: 0,
-            returnedCount: 0,
-            hasMore: false,
-            pagination: {
-              limit: filterOptions.pagination.limit,
-              offset: filterOptions.pagination.offset,
-              hasMore: false
-            },
-            searchMethod: 'none',
-            error: {
-              type: 'unsupported_parameter',
-              message: 'FHIR server does not support full-text search (_content parameter)',
-              details: error.message
-            }
-          };
-        }
         // Continue to next strategy
       }
       
       // Strategy 2: Try _text search parameter (full-text search)
       if (!searchSuccessful) {
         try {
-          console.log(`[FHIR Text Search] Trying _text search for ${resourceType}, offset: ${offset}`);
-          const searchParams: any = {
+          console.log(`[FHIR Text Search] Trying _text search for ${resourceType}`);
+          const textBundle = await fhirClient.searchResources(resourceType, {
             '_text': searchTerm,
             '_count': fetchCount
-          };
-          
-          // Add pagination support with _skip parameter
-          if (offset > 0) {
-            searchParams._skip = offset;
-          }
-          
-          const textBundle = await fhirClient.searchResources(resourceType, searchParams);
+          });
           
           if (textBundle.entry && textBundle.entry.length > 0) {
             resourceResults.push(...textBundle.entry.map((e: any) => e.resource));
@@ -348,54 +282,6 @@ async function performFhirTextSearch(
           }
         } catch (error: any) {
           console.log(`[FHIR Text Search] _text search failed for ${resourceType}:`, error.message);
-          
-          // Check if this is an OperationOutcome error with structured details
-          if (error.outcomeDetails) {
-            console.log(`[FHIR Text Search] FHIR server returned OperationOutcome:`, error.outcomeDetails);
-            if (error.outcomeDetails.isUnsupportedParam) {
-              // Return early with error information from OperationOutcome
-              return {
-                resources: [],
-                totalCount: 0,
-                returnedCount: 0,
-                hasMore: false,
-                pagination: {
-                  limit: filterOptions.pagination.limit,
-                  offset: filterOptions.pagination.offset,
-                  hasMore: false
-                },
-                searchMethod: 'none',
-                error: {
-                  type: 'unsupported_parameter',
-                  message: error.outcomeDetails.message,
-                  details: error.outcomeDetails.details,
-                  operationOutcome: error.operationOutcome
-                }
-              };
-            }
-          }
-          
-          // Check if this is a "parameter not supported" error (fallback)
-          if (error.message && (error.message.includes('not supported') || error.message.includes('not enabled'))) {
-            console.log(`[FHIR Text Search] FHIR server does not support _text search parameter`);
-            return {
-              resources: [],
-              totalCount: 0,
-              returnedCount: 0,
-              hasMore: false,
-              pagination: {
-                limit: filterOptions.pagination.limit,
-                offset: filterOptions.pagination.offset,
-                hasMore: false
-              },
-              searchMethod: 'none',
-              error: {
-                type: 'unsupported_parameter',
-                message: 'FHIR server does not support full-text search (_text parameter)',
-                details: error.message
-              }
-            };
-          }
           // Continue to next strategy
         }
       }
@@ -454,15 +340,9 @@ async function performFhirTextSearch(
         
         // Extract metadata from bundle
         const metadata: { total?: number; hasNext?: boolean } = {};
-        if (bundle.total !== undefined && bundle.total > 0) {
+        if (bundle.total !== undefined) {
           metadata.total = bundle.total;
           totalAvailableCount += bundle.total;
-        } else if (resourceResults.length > 0) {
-          // If bundle.total is 0 or undefined but we have results,
-          // use the actual result count (FHIR server bug workaround)
-          console.log(`[FHIR Text Search] WARNING: Bundle total is ${bundle.total} but got ${resourceResults.length} results`);
-          metadata.total = resourceResults.length;
-          totalAvailableCount += resourceResults.length;
         }
         // Check for next link in bundle
         if (bundle.link) {
@@ -487,32 +367,6 @@ async function performFhirTextSearch(
   );
   
   console.log(`[FHIR Text Search] Total unique results fetched: ${uniqueResults.length} (method: ${searchMethod})`);
-  console.log(`[FHIR Text Search] Search term was: "${searchTerm}"`);
-  console.log(`[FHIR Text Search] Resource types searched: ${resourceTypes.join(', ')}`);
-  
-  // If no search method worked and we have results, this indicates a problem
-  // The search should either find specific results or return 0 results
-  if (searchMethod === 'none' && uniqueResults.length > 0) {
-    console.log(`[FHIR Text Search] WARNING: No search method worked but got ${uniqueResults.length} results - this indicates a bug`);
-    // Return 0 results instead of potentially incorrect results
-    return {
-      resources: [],
-      totalCount: 0,
-      returnedCount: 0,
-      hasMore: false,
-      pagination: {
-        limit: filterOptions.pagination.limit,
-        offset: filterOptions.pagination.offset,
-        hasMore: false
-      },
-      searchMethod: 'none',
-      error: {
-        type: 'search_failed',
-        message: 'FHIR search failed - no search method worked',
-        details: 'All search strategies failed but results were returned'
-      }
-    };
-  }
   
   // Enhance resources with validation data
   const enhancedResources = await enhanceResourcesWithValidationData(uniqueResults);
@@ -629,24 +483,12 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         uri: ["equals", "contains"],
       };
 
-      // Special handling for parameters that support the "exists" modifier
-      const existsSupportedParams = ['_profile', '_security', '_tag', '_source', 'identifier', 'active', 'deceased', 'gender', 'language'];
-
-      const searchParameters = params.map((p: any) => {
-        let operators = operatorMap[p.type] || ["eq"];
-        
-        // Add "exists" operator for parameters that support it
-        if (existsSupportedParams.includes(p.name)) {
-          operators = [...operators, "exists"];
-        }
-        
-        return {
-          name: p.name,
-          type: p.type,
-          documentation: p.documentation || "",
-          operators: operators,
-        };
-      });
+      const searchParameters = params.map((p: any) => ({
+        name: p.name,
+        type: p.type,
+        documentation: p.documentation || "",
+        operators: operatorMap[p.type] || ["eq"],
+      }));
 
       res.json({ resourceType, searchParameters });
     } catch (error: any) {
@@ -752,16 +594,17 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       };
 
       // If search parameter is provided, perform FHIR text search using multiple strategies
-      // IMPORTANT: ALWAYS use FHIR server for text searches, never local database
+      // But only use FHIR search for the first page (offset 0) to avoid pagination complexity
+      // Skip FHIR text search for field-specific searches (e.g., "meta.profile") - use backend filtering instead
       const currentFhirClient = getCurrentFhirClient(fhirClient);
+      const isFieldSearch = search && typeof search === 'string' && search.includes('.');
       
-      if (currentFhirClient && search) {
+      if (currentFhirClient && search && filterOptions.pagination.offset === 0 && !isFieldSearch) {
         // If no resource types specified, search common resource types
         const searchResourceTypes = resourceTypesArray.length > 0 
           ? resourceTypesArray 
           : ['Patient', 'Practitioner', 'Organization', 'Observation', 'Condition', 'DiagnosticReport', 'Medication', 'Encounter', 'Procedure', 'AllergyIntolerance', 'Immunization', 'DocumentReference', 'Location', 'Appointment'];
         console.log('[FHIR API] Using FHIR text search for query:', search, 'in resource types:', searchResourceTypes);
-        console.log('[FHIR API] Pagination:', filterOptions.pagination);
         try {
           const searchResults = await performFhirTextSearch(
             currentFhirClient, 
@@ -779,302 +622,30 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
               message: `Found ${searchResults.totalCount} resources via FHIR search (method: ${searchResults.searchMethod})`
             });
           } else {
-            console.log('[FHIR API] FHIR text search returned no results');
-            
-            // Check if there's an error (unsupported parameter with OperationOutcome)
-            if (searchResults.error) {
-              return res.json({
-                success: true,
-                data: {
-                  resources: [],
-                  totalCount: 0,
-                  returnedCount: 0,
-                  hasMore: false,
-                  pagination: {
-                    limit: filterOptions.pagination.limit,
-                    offset: filterOptions.pagination.offset,
-                    hasMore: false
-                  },
-                  filterSummary: {
-                    resourceTypes: resourceTypesArray,
-                    validationStatus: { hasErrors: 0, hasWarnings: 0, hasInformation: 0, isValid: 0 },
-                    totalMatching: 0
-                  },
-                  appliedFilters: {
-                    resourceTypes: resourceTypesArray,
-                    serverId: filterOptions.serverId,
-                    search: search,
-                    pagination: filterOptions.pagination,
-                    sorting: filterOptions.sorting
-                  },
-                  searchMethod: searchResults.searchMethod || 'none',
-                  error: searchResults.error
-                },
-                message: searchResults.error.message,
-                warning: {
-                  type: 'unsupported_search_parameter',
-                  message: searchResults.error.message,
-                  details: searchResults.error.details
-                }
-              });
-            }
-            
-            // Return empty results for normal "no results found" case
-            return res.json({
-              success: true,
-              data: {
-                resources: [],
-                totalCount: 0,
-                returnedCount: 0,
-                hasMore: false,
-                pagination: {
-                  limit: filterOptions.pagination.limit,
-                  offset: filterOptions.pagination.offset,
-                  hasMore: false
-                },
-                filterSummary: {
-                  resourceTypes: resourceTypesArray,
-                  validationStatus: { hasErrors: 0, hasWarnings: 0, hasInformation: 0, isValid: 0 },
-                  totalMatching: 0
-                },
-                appliedFilters: {
-                  resourceTypes: resourceTypesArray,
-                  serverId: filterOptions.serverId,
-                  search: search,
-                  pagination: filterOptions.pagination,
-                  sorting: filterOptions.sorting
-                },
-                searchMethod: searchResults.searchMethod || 'none'
-              },
-              message: `No results found for "${search}"`
-            });
+            console.log('[FHIR API] FHIR text search returned no results, falling back to local filtering');
           }
         } catch (error: any) {
-          console.error('[FHIR API] FHIR text search failed:', error.message);
+          console.error('[FHIR API] FHIR text search failed, falling back to local filtering:', error.message);
           console.error('[FHIR API] Full error:', error);
-          
-          // Return error response instead of falling back to local filtering
-          return res.status(503).json({
-            success: false,
-            error: 'FHIR server search failed',
-            message: error.message,
-            details: 'Text search requires connection to FHIR server. Local database filtering is not available for text searches.'
-          });
         }
-      } else if (!currentFhirClient && search) {
-        // No FHIR client available but search is requested
-        console.log('[FHIR API] Search requested but no FHIR client available');
-        return res.status(503).json({
-          success: false,
-          error: 'FHIR server not available',
-          message: 'Text search requires connection to FHIR server',
-          details: 'Please ensure a FHIR server is configured and connected.'
-        });
+      } else if (search && filterOptions.pagination.offset > 0) {
+        console.log('[FHIR API] Search with pagination offset > 0, using backend filtering for consistent results');
+        // Fall through to backend filtering for pagination
+      } else if (isFieldSearch) {
+        console.log('[FHIR API] Field-specific search detected (', search, '), using backend filtering with dot notation support');
+        // Fall through to backend filtering for field searches
       }
 
-      // Handle special case: _profile:exists parameter for searching resources with/without profiles
-      // Check if there's a _profile:exists parameter in the query (both URL params and JSON fhirParams)
-      let profileExistsValue: boolean | null = null;
-      
-      // First check direct URL parameters with colons
-      Object.entries(req.query).forEach(([key, value]) => {
-        if (key.includes(':')) {
-          const [paramName, operator] = key.split(':');
-          if (paramName === '_profile' && operator === 'exists') {
-            profileExistsValue = value === 'true';
-          }
-        }
-      });
-      
-      // Also check JSON fhirParams if not found in URL params
-      if (profileExistsValue === null && fhirParams) {
-        try {
-          const parsedFhirParams = typeof fhirParams === 'string' ? JSON.parse(fhirParams) : fhirParams;
-          if (parsedFhirParams._profile && parsedFhirParams._profile.operator === 'exists') {
-            profileExistsValue = parsedFhirParams._profile.value === 'true';
-          }
-        } catch (e) {
-          // Ignore JSON parsing errors
-        }
-      }
-      
-      // If we have _profile:exists, search FHIR server and filter for resources with/without profiles
-      if (profileExistsValue !== null) {
-        console.log(`[FHIR API] Searching for resources ${profileExistsValue ? 'with' : 'without'} profiles (_profile:exists=${profileExistsValue})`);
-        
-        // Use FHIR server search and then filter results
-        if (currentFhirClient) {
-          try {
-            const searchResourceTypes = resourceTypesArray.length > 0 ? resourceTypesArray : ['Patient', 'Practitioner', 'Organization', 'Observation', 'Condition'];
-            const allResults: any[] = [];
-            const userPageSize = filterOptions.pagination.limit || 50;
-            const userOffset = filterOptions.pagination.offset || 0;
-            
-            // Simple approach: Just fill the page quickly, don't worry about total count
-            let allFoundResources: any[] = [];
-            let totalProcessed = 0;
-            
-            console.log(`[FHIR API] Fast page-filling approach: Get ${userPageSize} results as quickly as possible`);
-            
-            for (const resourceType of searchResourceTypes) {
-              try {
-                let resourceTypeOffset = 0;
-                
-                console.log(`[FHIR API] Fetching ${resourceType} resources to fill page...`);
-                
-                // Keep fetching until we have enough results for the page
-                while (allFoundResources.length < userPageSize && resourceTypeOffset < 10000) {
-                  const bundle = await currentFhirClient.searchResources(resourceType, {
-                    _count: 100, // Server's actual batch size
-                    _skip: resourceTypeOffset,
-                    _total: 'accurate'
-                  });
-                  
-                  if (!bundle?.entry || bundle.entry.length === 0) {
-                    break; // No more results
-                  }
-                  
-                  // Filter for resources based on profile existence
-                  const filteredResources = bundle.entry
-                    .map((entry: any) => entry.resource)
-                    .filter((resource: any) => {
-                      const hasProfile = resource.meta?.profile && 
-                                        Array.isArray(resource.meta.profile) && 
-                                        resource.meta.profile.length > 0;
-                      return profileExistsValue ? hasProfile : !hasProfile;
-                    })
-                    .map((resource: any) => ({
-                      ...resource,
-                      resourceType,
-                      _validationSummary: {
-                        isValid: true,
-                        hasErrors: false,
-                        hasWarnings: false,
-                        errorCount: 0,
-                        warningCount: 0,
-                        informationCount: 0,
-                        validationScore: 100,
-                        lastValidated: new Date().toISOString(),
-                        hasValidationData: false
-                      }
-                    }));
-                  
-                  // Add only what we need to fill the page
-                  const needed = userPageSize - allFoundResources.length;
-                  const toAdd = filteredResources.slice(0, needed);
-                  allFoundResources.push(...toAdd);
-                  
-                  totalProcessed += bundle.entry.length;
-                  resourceTypeOffset += bundle.entry.length;
-                  
-                  console.log(`[FHIR API] ${resourceType} batch: Found ${filteredResources.length} resources ${profileExistsValue ? 'with' : 'without'} profiles (${allFoundResources.length}/${userPageSize} for page, ${totalProcessed} processed)`);
-                  
-                  // If we got fewer results than expected, we might be at the end
-                  if (bundle.entry.length < 51) {
-                    console.log(`[FHIR API] Reached end of ${resourceType} data`);
-                    break;
-                  }
-                  
-                  // If we have enough for the page, stop
-                  if (allFoundResources.length >= userPageSize) {
-                    console.log(`[FHIR API] Page filled with ${allFoundResources.length} results`);
-                    break;
-                  }
-                }
-                
-                console.log(`[FHIR API] Completed ${resourceType}: Found ${allFoundResources.length} resources for page out of ${totalProcessed} processed`);
-              } catch (error: any) {
-                console.log(`[FHIR API] Failed to fetch ${resourceType}:`, error.message);
-                // Continue with other resource types
-              }
-            }
-            
-            // Get the requested page
-            const paginatedResults = allFoundResources.slice(userOffset, userOffset + userPageSize);
-            
-            // Calculate pagination metadata
-            const totalFound = allFoundResources.length;
-            const hasMore = totalFound >= userPageSize; // If we filled the page, there might be more
-            
-            res.json({
-              success: true,
-              data: {
-                resources: paginatedResults,
-                totalCount: totalFound,
-                returnedCount: paginatedResults.length,
-                hasMore: hasMore,
-                pagination: {
-                  limit: userPageSize,
-                  offset: userOffset,
-                  hasMore: hasMore
-                },
-                searchMethod: 'fhir_profile_filter',
-                filterSummary: {
-                  resourceTypes: searchResourceTypes,
-                  totalMatching: totalFound,
-                  processedResources: totalProcessed,
-                  progressMessage: `Found ${totalFound} resources ${profileExistsValue ? 'with' : 'without'} profiles after processing ${totalProcessed} resources`
-                },
-                appliedFilters: {
-                  resourceTypes: searchResourceTypes,
-                  serverId: filterOptions.serverId,
-                  pagination: filterOptions.pagination,
-                  sorting: filterOptions.sorting,
-                  profileExists: profileExistsValue
-                }
-              },
-              message: `Found ${allResults.length} resources ${profileExistsValue ? 'with' : 'without'} profiles`
-            });
-            return;
-          } catch (error: any) {
-            console.error('[FHIR API] Profile search failed:', error.message);
-            return res.status(503).json({
-              success: false,
-              error: 'Profile search failed',
-              message: error.message
-            });
-          }
-        }
-      }
-
-      // Parse FHIR search parameters from query string
-      let parsedParams: Record<string, { operator?: string; value: any }> = {};
-      
-      // First, try to parse fhirParams JSON if provided
-      if (fhirParams) {
+      // If FHIR search parameters are provided and there are resource types selected,
+      // perform server-side FHIR search and enhance results, bypassing local store filtering.
+      if (currentFhirClient && resourceTypesArray.length > 0 && fhirParams) {
+        let parsedParams: Record<string, { operator?: string; value: any }> = {};
         try {
           parsedParams = typeof fhirParams === 'string' ? JSON.parse(fhirParams) : {};
         } catch (e) {
           console.warn('[FHIR API] Invalid fhirParams JSON, ignoring:', fhirParams);
           parsedParams = {};
         }
-      }
-      
-      // Also parse FHIR search parameters from URL query parameters
-      // Look for parameters like "_profile:equals", "name:contains", etc.
-      Object.entries(req.query).forEach(([key, value]) => {
-        if (key.includes(':')) {
-          const [paramName, operator] = key.split(':');
-          // Skip if this is already in parsedParams from JSON
-          if (!parsedParams[paramName]) {
-            // Handle special case: _profile:exists=true means "has any profile"
-            if (paramName === '_profile' && operator === 'exists' && value === 'true') {
-              // This is a special case - we'll handle it separately
-              // Don't add it to parsedParams, it's handled before this section
-              console.log('[FHIR API] Detected _profile:exists=true - handled separately');
-            } else {
-              parsedParams[paramName] = {
-                operator: operator,
-                value: value
-              };
-            }
-          }
-        }
-      });
-
-      // If FHIR search parameters are provided and there are resource types selected,
-      // perform server-side FHIR search and enhance results, bypassing local store filtering.
-      if (currentFhirClient && resourceTypesArray.length > 0 && Object.keys(parsedParams).length > 0) {
 
         const allResources: any[] = [];
         let totalFromBundles = 0;
@@ -1183,7 +754,6 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
           message: `Found ${totalCount} resources via FHIR search`
         });
       }
-
 
       // Filter resources with aspect/severity support
       // Use the new filtering method that supports issue-based filtering

@@ -278,13 +278,26 @@ export class FhirClient {
         }
       );
 
+      // Check if the response is an OperationOutcome (error response)
+      if (response.data.resourceType === 'OperationOutcome') {
+        const outcomeDetails = this.extractOperationOutcomeDetails(response.data);
+        const error: any = new Error(`FHIR Error: ${this.formatOperationOutcome(response.data)}`);
+        error.operationOutcome = response.data;
+        error.outcomeDetails = outcomeDetails;
+        throw error;
+      }
+      
       console.log(`[FhirClient] Response total: ${response.data.total}, entry count: ${response.data.entry?.length || 0}`);
       return response.data;
     } catch (error: any) {
       if (error.response?.data?.resourceType === 'OperationOutcome') {
-        throw new Error(`FHIR Error: ${this.formatOperationOutcome(error.response.data)}`);
+        const outcomeDetails = this.extractOperationOutcomeDetails(error.response.data);
+        const fhirError: any = new Error(`FHIR Error: ${this.formatOperationOutcome(error.response.data)}`);
+        fhirError.operationOutcome = error.response.data;
+        fhirError.outcomeDetails = outcomeDetails;
+        throw fhirError;
       }
-      throw new Error(`Failed to search ${resourceType}: ${error.message}`);
+      throw error;
     }
   }
 
@@ -917,6 +930,24 @@ export class FhirClient {
     return outcome.issue
       .map(issue => `${issue.severity}: ${issue.details?.text || issue.diagnostics || 'Unknown error'}`)
       .join('; ');
+  }
+
+  private extractOperationOutcomeDetails(outcome: FhirOperationOutcome): { message: string; details: string; isUnsupportedParam: boolean } {
+    const firstIssue = outcome.issue?.[0];
+    const diagnostics = firstIssue?.diagnostics || '';
+    const message = firstIssue?.details?.text || diagnostics || 'Unknown error';
+    
+    // Check if this is an unsupported parameter error
+    const isUnsupportedParam = diagnostics.toLowerCase().includes('not supported') || 
+                               diagnostics.toLowerCase().includes('not enabled') ||
+                               diagnostics.toLowerCase().includes('unsupported') ||
+                               diagnostics.toLowerCase().includes('parameter');
+    
+    return {
+      message,
+      details: diagnostics,
+      isUnsupportedParam
+    };
   }
 
   // ==========================================================================
