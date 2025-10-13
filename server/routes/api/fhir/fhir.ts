@@ -236,11 +236,53 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
     }
   });
 
-  // ============================================================================
+  // =========================================================================
   // Filtered Resources Endpoint
-  // ============================================================================
+  // =========================================================================
   // CRITICAL: These specific routes MUST come BEFORE /api/fhir/resources/:id
   // to prevent Express from matching "filtered" as the :id parameter
+
+  // GET /api/fhir/capability/search-params/:resourceType - Get search params from CapabilityStatement
+  app.get("/api/fhir/capability/search-params/:resourceType", async (req, res) => {
+    try {
+      const { resourceType } = req.params;
+      const currentFhirClient = getCurrentFhirClient(fhirClient);
+      if (!currentFhirClient) {
+        return res.status(503).json({ message: "FHIR client not initialized" });
+      }
+
+      const capability = await currentFhirClient.getCapabilityStatement();
+      if (!capability?.rest?.[0]?.resource) {
+        return res.json({ resourceType, searchParameters: [] });
+      }
+
+      const resourceDef = capability.rest[0].resource.find((r: any) => r.type === resourceType);
+      const params: any[] = resourceDef?.searchParam || [];
+
+      // Map FHIR search param types to supported operators (simplified)
+      const operatorMap: Record<string, string[]> = {
+        string: ["contains", "exact"],
+        token: ["equals", "notEquals"],
+        date: ["eq", "gt", "lt", "ge", "le"],
+        number: ["eq", "gt", "lt", "ge", "le"],
+        quantity: ["eq", "gt", "lt", "ge", "le"],
+        reference: ["equals"],
+        uri: ["equals", "contains"],
+      };
+
+      const searchParameters = params.map((p: any) => ({
+        name: p.name,
+        type: p.type,
+        documentation: p.documentation || "",
+        operators: operatorMap[p.type] || ["eq"],
+      }));
+
+      res.json({ resourceType, searchParameters });
+    } catch (error: any) {
+      console.error('[FHIR API] Error getting capability search params:', error);
+      res.status(500).json({ message: error.message || 'Failed to get search parameters' });
+    }
+  });
 
   // GET /api/fhir/resources/filtered - Get filtered resources with validation data
   app.get("/api/fhir/resources/filtered", async (req, res) => {
@@ -265,7 +307,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         offset = 0,
         sortBy = 'lastValidated',
         sortDirection = 'desc',
-        serverId = 1
+        serverId = 1,
+        // New: FHIR search parameters (JSON string)
+        fhirParams
       } = req.query;
 
       console.log('[FHIR API] Filtered resources endpoint called with filters:', {
@@ -335,6 +379,96 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
           direction: sortDirection as 'asc' | 'desc'
         }
       };
+
+      // If FHIR search parameters are provided and there are resource types selected,
+      // perform server-side FHIR search and enhance results, bypassing local store filtering.
+      const currentFhirClient = getCurrentFhirClient(fhirClient);
+      if (currentFhirClient && resourceTypesArray.length > 0 && fhirParams) {
+        let parsedParams: Record<string, { operator?: string; value: any }> = {};
+        try {
+          parsedParams = typeof fhirParams === 'string' ? JSON.parse(fhirParams) : {};
+        } catch (e) {
+          console.warn('[FHIR API] Invalid fhirParams JSON, ignoring:', fhirParams);
+          parsedParams = {};
+        }
+
+        const allResources: any[] = [];
+        for (const rt of resourceTypesArray) {
+          // Construct query params for FHIR search
+          const q: Record<string, string | number> = {};
+          Object.entries(parsedParams).forEach(([name, cfg]) => {
+            if (cfg && (cfg as any).value !== undefined && (cfg as any).value !== null && (cfg as any).value !== '') {
+              const op = (cfg as any).operator || 'eq';
+              const val = (cfg as any).value;
+              // Map operator to FHIR search prefix/modifier where applicable
+              switch (op) {
+                case 'eq':
+                  q[name] = String(val);
+                  break;
+                case 'gt':
+                case 'lt':
+                case 'ge':
+                case 'le':
+                  q[name] = `${op}${val}`;
+                  break;
+                case 'contains':
+                  q[`${name}:contains`] = String(val);
+                  break;
+                case 'exact':
+                  q[`${name}:exact`] = String(val);
+                  break;
+                case 'notEquals':
+                  q[`${name}:not`] = String(val);
+                  break;
+                default:
+                  q[name] = String(val);
+              }
+            }
+          });
+
+          // Pagination
+          q['_count'] = filterOptions.pagination.limit;
+          if (filterOptions.pagination.offset > 0) {
+            q['_skip'] = filterOptions.pagination.offset;
+          }
+
+          try {
+            const bundle = await currentFhirClient.searchResources(rt, q, filterOptions.pagination.limit);
+            const resources = bundle.entry?.map((e: any) => e.resource) || [];
+            allResources.push(...resources);
+          } catch (err: any) {
+            console.warn(`[FHIR API] FHIR search failed for ${rt}:`, err.message);
+          }
+        }
+
+        // Enhance resources and build result
+        const enhanced = await enhanceResourcesWithValidationData(allResources);
+        const totalCount = enhanced.length;
+        const returnedCount = enhanced.length;
+
+        return res.json({
+          success: true,
+          data: {
+            resources: enhanced,
+            totalCount,
+            returnedCount,
+            hasMore: false,
+            statistics: {
+              validationStatistics: {
+                totalResources: totalCount,
+                withValidationData: enhanced.filter(r => !!r._validationSummary).length,
+                withoutValidationData: enhanced.filter(r => !r._validationSummary).length,
+                hasErrors: enhanced.filter(r => r._validationSummary?.hasErrors).length,
+                hasWarnings: enhanced.filter(r => r._validationSummary?.hasWarnings).length,
+                hasInformation: 0,
+                isValid: enhanced.filter(r => r._validationSummary?.isValid).length,
+              },
+              availableResourceTypes: resourceTypesArray,
+            }
+          },
+          message: `Found ${totalCount} resources via FHIR search`
+        });
+      }
 
       // Filter resources with aspect/severity support
       // Use the new filtering method that supports issue-based filtering
@@ -725,7 +859,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
   // FHIR Resources
   app.get("/api/fhir/resources", async (req, res) => {
     try {
-      const { resourceType, limit = 20, offset = 0, search } = req.query;
+      const { resourceType, limit = 20, offset = 0, search, ...fhirSearchParams } = req.query;
       
     // If no resource type is specified, fetch from all common resource types (expensive but requested)
     if (!resourceType) {
@@ -746,6 +880,13 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
             _count: Math.min(parseInt(limit as string), 10), // Limit per type to avoid huge responses
             _total: 'accurate'
           };
+          
+          // Add FHIR search parameters from query string
+          Object.entries(fhirSearchParams).forEach(([key, value]) => {
+            if (value && typeof value === 'string') {
+              searchParams[key] = value;
+            }
+          });
           
           if (parseInt(offset as string) > 0) {
             // Fire.ly server uses _skip instead of _offset for pagination
@@ -790,6 +931,13 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         if (search) {
           searchParams._content = search as string;
         }
+        
+        // Add FHIR search parameters from query string
+        Object.entries(fhirSearchParams).forEach(([key, value]) => {
+          if (value && typeof value === 'string') {
+            searchParams[key] = value;
+          }
+        });
         
         if (parseInt(offset as string) > 0) {
           // Fire.ly server uses _skip instead of _offset for pagination

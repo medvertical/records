@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Search, ListFilter, ChevronDown, ChevronUp, X } from "lucide-react";
 import { SeverityIcon } from "@/components/ui/severity-icon";
+import { FilterChipList } from "@/components/filters/FilterChipList";
 import type { SeverityLevel } from "@/components/ui/severity-icon";
 import { cn } from "@/lib/utils";
 
@@ -28,11 +29,18 @@ export interface ValidationFilters {
     /** Filter by issue path */
     pathContains?: string;
   };
+  // FHIR search parameter filters (per capability statement)
+  fhirSearchParams?: {
+    [paramName: string]: {
+      operator?: string;
+      value: string | string[];
+    };
+  };
 }
 
 interface ResourceSearchProps {
   resourceTypes: string[];
-  onSearch: (query: string, resourceType: string) => void;
+  onSearch: (query: string, resourceType: string, fhirParams?: Record<string, { value: string | string[]; operator?: string }>) => void;
   defaultQuery?: string;
   defaultResourceType?: string;
   filters?: ValidationFilters;
@@ -88,17 +96,60 @@ export default function ResourceSearch({
   const [query, setQuery] = useState(defaultQuery);
   const [resourceType, setResourceType] = useState(defaultResourceType);
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  const [fhirSearchParams, setFhirSearchParams] = useState<Record<string, { value: string | string[]; operator?: string }>>({});
 
   useEffect(() => {
     setQuery(defaultQuery);
     setResourceType(defaultResourceType);
   }, [defaultQuery, defaultResourceType]);
 
-  const handleSearch = () => {
+  // Initialize FHIR search parameters from URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fhirParams: Record<string, { value: string | string[]; operator?: string }> = {};
+    
+    params.forEach((value, key) => {
+      // Skip known params like 'type', 'search', etc.
+      if (!['type', 'search', 'page', 'limit'].includes(key)) {
+        // Parse operator if present (e.g., "birthdate:gt")
+        const [paramName, operator] = key.split(':');
+        fhirParams[paramName] = { value, operator };
+      }
+    });
+    
+    if (Object.keys(fhirParams).length > 0) {
+      setFhirSearchParams(fhirParams);
+    }
+  }, []);
+
+  // Sync local fhirSearchParams with filters prop
+  useEffect(() => {
+    if (filters.fhirSearchParams) {
+      setFhirSearchParams(filters.fhirSearchParams);
+    }
+  }, [filters.fhirSearchParams]);
+
+  const handleSearch = useCallback(() => {
     // Convert "all" back to empty string for the API
     const searchResourceType = resourceType === "all" ? "" : resourceType;
-    onSearch(query, searchResourceType);
-  };
+    onSearch(query, searchResourceType, fhirSearchParams);
+  }, [query, resourceType, fhirSearchParams, onSearch]);
+
+  // Auto-expand filters when there are active filters
+  useEffect(() => {
+    const hasActiveFilters = 
+      (resourceType && resourceType !== 'all') || // Has specific resource type
+      (query && query.trim() !== '') || // Has search query
+      Object.keys(fhirSearchParams).length > 0; // Has FHIR search parameters
+    
+    if (hasActiveFilters && !isFilterExpanded) {
+      setIsFilterExpanded(true);
+    }
+  }, [resourceType, query, fhirSearchParams, isFilterExpanded]);
+
+  // Note: Auto-search removed to prevent infinite loops
+  // The query will re-run automatically when validationFilters.fhirSearchParams changes
+  // due to the query key dependency in resource-browser.tsx
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -150,7 +201,7 @@ export default function ResourceSearch({
                 setResourceType(value);
                 // Convert "all" back to empty string for the API
                 const searchResourceType = value === "all" ? "" : value;
-                onSearch(query, searchResourceType);
+                onSearch(query, searchResourceType, fhirSearchParams);
               }}
             >
           <SelectTrigger className="w-48">
@@ -186,34 +237,38 @@ export default function ResourceSearch({
       </div>
       
       
-      {(query || resourceType) && isFilterExpanded && (
-        <div className="mt-4 flex items-center gap-2 flex-wrap">
-          <span className="text-sm text-gray-600">Active filters:</span>
-          {query && (
-            <span className="bg-blue-50 text-fhir-blue px-2 py-1 rounded-md text-sm">
-              Query: "{query}"
-            </span>
-          )}
-          {resourceType && (
-            <span className="bg-blue-50 text-fhir-blue px-2 py-1 rounded-md text-sm">
-              Type: {resourceType}
-            </span>
-          )}
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => {
-              setQuery("");
-              setResourceType("all");
-              onSearch("", "");
-              if (onFilterChange) {
-                onFilterChange({ aspects: [], severities: [], hasIssuesOnly: false, issueFilter: undefined });
-              }
+      {isFilterExpanded && (
+        <div className="mt-4">
+          <FilterChipList
+            filterOptions={{
+              resourceTypes: resourceType && resourceType !== 'all' ? [resourceType] : [],
+              search: query || '',
+              validationStatus: {},
+              fhirSearchParams: fhirSearchParams,
+              pagination: { limit: 20, offset: 0 },
+              sorting: { field: 'resourceType', direction: 'desc' }
             }}
-            className="text-xs"
-          >
-            Clear All
-          </Button>
+            availableResourceTypes={resourceTypes}
+            onFilterChange={(newFilters) => {
+              // Update local state
+              if (newFilters.resourceTypes.length > 0) {
+                setResourceType(newFilters.resourceTypes[0]);
+              }
+              if (newFilters.search !== undefined) {
+                setQuery(newFilters.search);
+              }
+              if (newFilters.fhirSearchParams !== undefined) {
+                setFhirSearchParams(newFilters.fhirSearchParams);
+              }
+              
+              // Trigger search with FHIR params
+              // Use current resourceType state if no resource type in newFilters
+              const searchResourceType = newFilters.resourceTypes.length > 0 
+                ? newFilters.resourceTypes[0] 
+                : resourceType;
+              onSearch(newFilters.search || query, searchResourceType, newFilters.fhirSearchParams);
+            }}
+          />
         </div>
       )}
     </div>

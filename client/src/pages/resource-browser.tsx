@@ -91,7 +91,6 @@ export default function ResourceBrowser() {
     return () => {
       // Clear all validations from activity context when unmounting
       if (validatingIdsRef.current.size > 0) {
-        console.log('[ResourceBrowser] Cleaning up validations on unmount:', validatingIdsRef.current.size);
         validatingIdsRef.current.forEach(id => {
           removeResourceValidation(id);
         });
@@ -133,7 +132,6 @@ export default function ResourceBrowser() {
   // Note: Settings changes only affect UI filtering, not data fetching
   useEffect(() => {
     if (lastChange) {
-      console.log('[ResourceBrowser] Validation settings changed');
       // Reset validation flag when settings change to allow re-validation with new settings
       setHasValidatedCurrentPage(false);
       // Clear validation cache to force revalidation with new settings
@@ -145,7 +143,7 @@ export default function ResourceBrowser() {
 
 
   // Define handleSearch function before using it in useEffect
-  const handleSearch = useCallback((query: string, type: string) => {
+  const handleSearch = useCallback((query: string, type: string, fhirParams?: Record<string, { value: string | string[]; operator?: string }>) => {
     setSearchQuery(query);
     setResourceType(type);
     setPage(0);
@@ -157,6 +155,17 @@ export default function ResourceBrowser() {
     }
     if (query) {
       searchParams.set('search', query);
+    }
+    
+    // Add FHIR search params to URL
+    if (fhirParams) {
+      Object.entries(fhirParams).forEach(([key, config]) => {
+        if (config.value) {
+          const paramKey = config.operator ? `${key}:${config.operator}` : key;
+          const value = Array.isArray(config.value) ? config.value.join(',') : config.value;
+          searchParams.set(paramKey, value);
+        }
+      });
     }
     
     const newUrl = searchParams.toString() ? `/resources?${searchParams.toString()}` : '/resources';
@@ -218,15 +227,15 @@ export default function ResourceBrowser() {
     const severitiesParam = urlParams.get('severities');
     const hasIssuesParam = urlParams.get('hasIssues');
     
-    console.log('[ResourceBrowser] URL changed:', {
-      location,
-      typeParam,
-      searchParam,
-      aspectsParam,
-      severitiesParam,
-      hasIssuesParam,
-      currentResourceType: resourceType,
-      currentSearchQuery: searchQuery
+    // Parse FHIR search parameters from URL
+    const fhirSearchParams: Record<string, { value: string | string[]; operator?: string }> = {};
+    urlParams.forEach((value, key) => {
+      // Skip known params like 'type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'limit'
+      if (!['type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'limit'].includes(key)) {
+        // Parse operator if present (e.g., "birthdate:gt")
+        const [paramName, operator] = key.split(':');
+        fhirSearchParams[paramName] = { value, operator };
+      }
     });
     
     // Update state directly - this will trigger the query to re-run
@@ -237,6 +246,7 @@ export default function ResourceBrowser() {
       severities: severitiesParam ? severitiesParam.split(',') : [],
       hasIssuesOnly: hasIssuesParam === 'true',
       issueFilter: undefined, // Clear issue filter when URL changes
+      fhirSearchParams: Object.keys(fhirSearchParams).length > 0 ? fhirSearchParams : undefined,
     });
     setPage(0); // Reset to first page when navigating
   }, [location]);
@@ -247,17 +257,22 @@ export default function ResourceBrowser() {
       const urlParams = new URLSearchParams(window.location.search);
       const typeParam = urlParams.get('type');
       const searchParam = urlParams.get('search');
-      
-      console.log('[ResourceBrowser] Popstate event:', {
-        typeParam,
-        searchParam,
-        currentResourceType: resourceType,
-        currentSearchQuery: searchQuery
+
+      // Parse FHIR params
+      const fhirParams: Record<string, { value: string | string[]; operator?: string }> = {};
+      urlParams.forEach((value, key) => {
+        if (!['type','search','aspects','severities','hasIssues','page','limit'].includes(key)) {
+          const [paramName, operator] = key.split(':');
+          fhirParams[paramName] = { value, operator };
+        }
       });
-      
-      // Update state when URL changes programmatically
+
       setResourceType(typeParam || "");
       setSearchQuery(searchParam || "");
+      setValidationFilters(prev => ({
+        ...prev,
+        fhirSearchParams: Object.keys(fhirParams).length > 0 ? fhirParams : undefined,
+      }));
       setPage(0);
     };
     
@@ -275,7 +290,6 @@ export default function ResourceBrowser() {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'settings_changed' && data.data?.type === 'validation_settings_updated') {
-          console.log('[ResourceBrowser] Validation settings updated');
           // No need to refetch - settings only affect UI filtering, not the data itself
         }
       } catch (error) {
@@ -303,16 +317,6 @@ export default function ResourceBrowser() {
 
   // Debug logging for component state - reduced frequency
   useEffect(() => {
-    console.log('[ResourceBrowser] Component state changed:', {
-      activeServer: stableActiveServer ? {
-        id: stableActiveServer.id,
-        name: stableActiveServer.name
-      } : null,
-      resourceType,
-      searchQuery,
-      page,
-      location
-    });
   }, [stableActiveServer?.id, resourceType, searchQuery, page, location]); // Only log when meaningful changes occur
 
   const { data: resourceTypes, isLoading: isLoadingResourceTypes } = useQuery<string[]>({
@@ -323,10 +327,6 @@ export default function ResourceBrowser() {
     refetchInterval: false, // Don't auto-refetch
     refetchOnWindowFocus: false, // Don't refetch on window focus
     queryFn: async () => {
-      console.log('[ResourceBrowser] Starting resource types fetch:', {
-        url: '/api/fhir/resource-types',
-        timestamp: new Date().toISOString()
-      });
       
       const startTime = Date.now();
       
@@ -334,43 +334,19 @@ export default function ResourceBrowser() {
         const response = await fetch('/api/fhir/resource-types');
         const fetchTime = Date.now() - startTime;
         
-        console.log('[ResourceBrowser] Resource types response received:', {
-          status: response.status,
-          statusText: response.statusText,
-          fetchTime: `${fetchTime}ms`,
-          timestamp: new Date().toISOString()
-        });
         
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('[ResourceBrowser] Resource types fetch failed:', {
-            status: response.status,
-            statusText: response.statusText,
-            errorText,
-            fetchTime: `${fetchTime}ms`,
-            timestamp: new Date().toISOString()
-          });
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
         const totalTime = Date.now() - startTime;
         
-        console.log('[ResourceBrowser] Resource types data received:', {
-          resourceTypeCount: data?.length || 0,
-          fetchTime: `${fetchTime}ms`,
-          totalTime: `${totalTime}ms`,
-          timestamp: new Date().toISOString()
-        });
         
         return data;
       } catch (error) {
         const totalTime = Date.now() - startTime;
-        console.error('[ResourceBrowser] Resource types fetch error:', {
-          error: error instanceof Error ? error.message : String(error),
-          fetchTime: `${totalTime}ms`,
-          timestamp: new Date().toISOString()
-        });
         throw error;
       }
     }
@@ -380,10 +356,17 @@ export default function ResourceBrowser() {
   const hasValidationFilters = validationFilters.aspects.length > 0 || 
                                 validationFilters.severities.length > 0 || 
                                 validationFilters.hasIssuesOnly ||
-                                (validationFilters.issueFilter && Object.keys(validationFilters.issueFilter).length > 0);
+                                (validationFilters.issueFilter && Object.keys(validationFilters.issueFilter).length > 0) ||
+                                (validationFilters.fhirSearchParams && Object.keys(validationFilters.fhirSearchParams || {}).length > 0);
   
-  // Use filtered endpoint only when validation filters are active
-  const apiEndpoint = hasValidationFilters ? "/api/fhir/resources/filtered" : "/api/fhir/resources";
+  // Also check URL directly for FHIR search parameters as a fallback
+  const urlParams = new URLSearchParams(window.location.search);
+  const hasFhirParamsInUrl = Array.from(urlParams.keys()).some(key => 
+    !['type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'limit'].includes(key)
+  );
+  
+  // Use filtered endpoint when validation filters are active OR when FHIR params are in URL
+  const apiEndpoint = (hasValidationFilters || hasFhirParamsInUrl) ? "/api/fhir/resources/filtered" : "/api/fhir/resources";
 
   const { data: resourcesData, isLoading, error} = useQuery<ResourcesResponse>({
     queryKey: [apiEndpoint, { resourceType, search: searchQuery, page, location, filters: validationFilters }],
@@ -441,11 +424,27 @@ export default function ResourceBrowser() {
           if (params.filters.hasIssuesOnly && params.filters.aspects.length === 0 && params.filters.severities.length === 0) {
             searchParams.set('hasIssuesInAspects', 'true');
           }
+          
+          // Add FHIR search parameters
+          if (params.filters.fhirSearchParams && Object.keys(params.filters.fhirSearchParams).length > 0) {
+            searchParams.set('fhirParams', JSON.stringify(params.filters.fhirSearchParams));
+          }
         }
       } else {
         // Standard /resources endpoint parameters
         if (params?.resourceType) searchParams.set('resourceType', params.resourceType);
         if (params?.search) searchParams.set('search', params.search);
+        
+        // Add FHIR search parameters directly to query string for standard endpoint
+        if (params?.filters?.fhirSearchParams && Object.keys(params.filters.fhirSearchParams).length > 0) {
+          Object.entries(params.filters.fhirSearchParams).forEach(([key, config]) => {
+            if (config.value) {
+              const paramKey = config.operator ? `${key}:${config.operator}` : key;
+              const value = Array.isArray(config.value) ? config.value.join(',') : config.value;
+              searchParams.set(paramKey, value);
+            }
+          });
+        }
         
         // Convert page to limit/offset for standard endpoint
         const limit = 20; // Match frontend pageSize
@@ -456,17 +455,6 @@ export default function ResourceBrowser() {
       
       const fullUrl = `${url}?${searchParams}`;
       
-      console.log('[ResourceBrowser] Starting resource fetch:', {
-        url: fullUrl,
-        params: {
-          resourceType: params?.resourceType || 'all',
-          search: params?.search || '',
-          page: params?.page || 0,
-          location: params?.location || '',
-          filters: params?.filters
-        },
-        timestamp: new Date().toISOString()
-      });
       
       const startTime = Date.now();
       
@@ -474,38 +462,15 @@ export default function ResourceBrowser() {
         const response = await fetch(fullUrl);
         const fetchTime = Date.now() - startTime;
         
-        console.log('[ResourceBrowser] Fetch response received:', {
-          status: response.status,
-          statusText: response.statusText,
-          fetchTime: `${fetchTime}ms`,
-          url: fullUrl,
-          timestamp: new Date().toISOString()
-        });
         
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('[ResourceBrowser] Fetch failed:', {
-            status: response.status,
-            statusText: response.statusText,
-            errorText,
-            url: fullUrl,
-            fetchTime: `${fetchTime}ms`,
-            timestamp: new Date().toISOString()
-          });
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
         const totalTime = Date.now() - startTime;
         
-        console.log('[ResourceBrowser] Resource data received:', {
-          resourceCount: isFilteredEndpoint ? (data.data?.resources?.length || 0) : (data.resources?.length || 0),
-          totalResources: isFilteredEndpoint ? (data.data?.totalCount || 0) : (data.total || 0),
-          fetchTime: `${fetchTime}ms`,
-          totalTime: `${totalTime}ms`,
-          url: fullUrl,
-          timestamp: new Date().toISOString()
-        });
         
         // Transform /filtered endpoint response to match expected format
         if (isFilteredEndpoint) {
@@ -520,12 +485,6 @@ export default function ResourceBrowser() {
         return data;
       } catch (error) {
         const totalTime = Date.now() - startTime;
-        console.error('[ResourceBrowser] Resource fetch error:', {
-          error: error instanceof Error ? error.message : String(error),
-          fetchTime: `${totalTime}ms`,
-          url: fullUrl,
-          timestamp: new Date().toISOString()
-        });
         throw error;
       }
     }
@@ -545,7 +504,6 @@ export default function ResourceBrowser() {
             `/api/validation/resources/${resource.resourceType}/${resource.resourceId}/messages?serverId=${stableActiveServer?.id || 1}`
           );
           if (!response.ok) {
-            console.warn(`Failed to fetch messages for ${resource.resourceType}/${resource.resourceId}`);
             return null;
           }
           const data = await response.json();
@@ -574,7 +532,6 @@ export default function ResourceBrowser() {
             aspects: data.aspects || []
           };
         } catch (error) {
-          console.warn(`Error fetching messages for ${resource.resourceType}/${resource.resourceId}:`, error);
           return null;
         }
       });
@@ -582,13 +539,6 @@ export default function ResourceBrowser() {
       const results = await Promise.all(messagePromises);
       const filteredResults = results.filter(result => result !== null);
       
-      console.log('[ResourceBrowser] Validation messages fetched:', {
-        totalResources: resourcesData.resources.length,
-        successfulFetches: filteredResults.length,
-        failedFetches: results.length - filteredResults.length,
-        totalMessages: filteredResults.reduce((sum, result) => sum + (result?.messages?.length || 0), 0),
-        timestamp: new Date().toISOString()
-      });
       
       return filteredResults;
     },
@@ -598,16 +548,6 @@ export default function ResourceBrowser() {
 
   // Debug validation messages query state
   useEffect(() => {
-    console.log('[ResourceBrowser] Validation messages query state:', {
-      hasResources: !!resourcesData?.resources,
-      resourceCount: resourcesData?.resources?.length || 0,
-      hasActiveServer: !!stableActiveServer,
-      isLoading: isLoadingMessages,
-      hasData: !!validationMessagesData,
-      dataLength: validationMessagesData?.length || 0,
-      error: validationMessagesError,
-      queryEnabled: !!(resourcesData?.resources && resourcesData.resources.length > 0 && stableActiveServer)
-    });
   }, [resourcesData?.resources, stableActiveServer, isLoadingMessages, validationMessagesData, validationMessagesError]);
 
   // Aggregate all messages from all resources for navigation
@@ -827,7 +767,6 @@ export default function ResourceBrowser() {
 
     // Safety timeout: force cleanup after 30 seconds to prevent indefinite hanging
     const safetyTimeout = setTimeout(() => {
-      console.warn('[ResourceBrowser] Validation progress simulation timed out, forcing cleanup');
       clearInterval(updateInterval);
       // Remove all resources from activity context
       resourceIds.forEach(id => {
@@ -846,7 +785,6 @@ export default function ResourceBrowser() {
   // Function to validate resources on the current page
   const validateCurrentPage = useCallback(async () => {
     if (!resourcesData?.resources || resourcesData.resources.length === 0) {
-      console.log('[ResourceBrowser] No resources to validate');
       return;
     }
 
@@ -860,11 +798,6 @@ export default function ResourceBrowser() {
     const progressCleanup = simulateValidationProgress(resourceIds, resourcesData.resources);
     
     try {
-      console.log('[ResourceBrowser] Starting validation for current page resources:', {
-        resourceCount: resourcesData.resources.length,
-        resourceType,
-        page
-      });
 
       // Batch validation requests to avoid payload size limits
       const batchSize = 10; // Process 10 resources per batch
@@ -874,7 +807,6 @@ export default function ResourceBrowser() {
       for (let i = 0; i < resourcesData.resources.length; i += batchSize) {
         const batch = resourcesData.resources.slice(i, i + batchSize);
         const batchNumber = Math.floor(i/batchSize) + 1;
-        console.log(`[ResourceBrowser] Processing validation batch ${batchNumber}/${totalBatches} (${batch.length} resources)`);
         
         // Update progress to show current batch being processed
         setValidationProgress(prev => {
@@ -919,17 +851,11 @@ export default function ResourceBrowser() {
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error(`[ResourceBrowser] Validation batch failed: ${response.status} ${response.statusText}`, errorText);
           // Continue with other batches even if one fails
           continue;
         }
 
         const batchResult = await response.json();
-        console.log(`[ResourceBrowser] Validation batch ${batchNumber} completed:`, {
-          success: batchResult.success,
-          validatedCount: batchResult.validatedCount,
-          requestedCount: batchResult.requestedCount
-        });
         allResults.push(...(batchResult.detailedResults || []));
       }
 
@@ -942,10 +868,6 @@ export default function ResourceBrowser() {
         detailedResults: allResults
       };
       
-      console.log('[ResourceBrowser] Validation completed:', {
-        validatedCount: result.validatedCount,
-        requestedCount: result.requestedCount
-      });
 
       // Mark resources as validated in cache
       if (result.validatedCount > 0) {
@@ -993,7 +915,6 @@ export default function ResourceBrowser() {
       // and will be reflected on the next natural data update
 
     } catch (error) {
-      console.error('[ResourceBrowser] Validation error:', error);
       // Clear progress on error
       if (progressCleanup) {
         progressCleanup();
@@ -1018,7 +939,6 @@ export default function ResourceBrowser() {
 
     // Don't start validation if already validating
     if (isValidating || validatingResourceIds.size > 0) {
-      console.log('[ResourceBrowser] Validation already in progress, skipping');
       return;
     }
 
@@ -1036,10 +956,8 @@ export default function ResourceBrowser() {
         const isRecent = lastValidated > fiveMinutesAgo;
         
         if (isRecent) {
-          console.log(`[ResourceBrowser] Resource ${resource.id} recently validated (${validationSummary.lastValidated}), skipping`);
           return false;
         } else {
-          console.log(`[ResourceBrowser] Resource ${resource.id} validation is stale (${validationSummary.lastValidated}), needs revalidation`);
           return true;
         }
       }
@@ -1048,13 +966,11 @@ export default function ResourceBrowser() {
     });
 
     if (unvalidatedResources.length === 0) {
-      console.log('[ResourceBrowser] All resources on current page are already validated');
       // Show a brief notification that all resources are validated
       // This helps users understand why no validation is happening
       return;
     }
 
-    console.log(`[ResourceBrowser] Found ${unvalidatedResources.length} unvalidated resources, starting background validation`);
 
     // Track which resources are being validated
     const resourceIds = unvalidatedResources.map((resource: any) => resource._dbId || resource.id);
@@ -1071,7 +987,6 @@ export default function ResourceBrowser() {
       
       for (let i = 0; i < unvalidatedResources.length; i += batchSize) {
         const batch = unvalidatedResources.slice(i, i + batchSize);
-        console.log(`[ResourceBrowser] Processing background validation batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(unvalidatedResources.length/batchSize)} (${batch.length} resources)`);
         
         const response = await fetch('/api/validation/validate-by-ids', {
           method: 'POST',
@@ -1088,7 +1003,6 @@ export default function ResourceBrowser() {
         });
 
         if (!response.ok) {
-          console.warn(`[ResourceBrowser] Background validation batch failed: ${response.status} ${response.statusText}`);
           // Continue with other batches even if one fails
           continue;
         }
@@ -1106,14 +1020,9 @@ export default function ResourceBrowser() {
         detailedResults: allResults
       };
       
-      console.log('[ResourceBrowser] Background validation completed:', {
-        validatedCount: result.validatedCount,
-        requestedCount: result.requestedCount
-      });
 
       // Only add resources to cache if validation was actually successful
       if (result.validatedCount > 0) {
-        console.log(`[ResourceBrowser] Validation completed for ${result.validatedCount} resources`);
         // Mark resources as validated in cache
         unvalidatedResources.forEach((resource: any) => {
           const cacheKey = `${resource.resourceType}/${resource.id}`;
@@ -1163,7 +1072,6 @@ export default function ResourceBrowser() {
       setHasValidatedCurrentPage(true);
 
     } catch (error) {
-      console.warn('[ResourceBrowser] Background validation error:', error);
       if (progressCleanup) {
         progressCleanup();
       }
@@ -1185,7 +1093,6 @@ export default function ResourceBrowser() {
   useEffect(() => {
     if (typeof window !== 'undefined' && (window as any).onCacheCleared) {
       (window as any).onCacheCleared(() => {
-        console.log('[ResourceBrowser] Cache cleared event received, forcing revalidation');
         setCacheCleared(true);
         setHasValidatedCurrentPage(false);
         // Force revalidation of current page resources
@@ -1274,6 +1181,26 @@ export default function ResourceBrowser() {
       urlParams.delete('hasIssues');
     }
     
+    // Handle FHIR search parameters
+    if (newFilters.fhirSearchParams && Object.keys(newFilters.fhirSearchParams).length > 0) {
+      Object.entries(newFilters.fhirSearchParams).forEach(([key, config]) => {
+        if (config.value) {
+          const paramKey = config.operator ? `${key}:${config.operator}` : key;
+          const value = Array.isArray(config.value) ? config.value.join(',') : config.value;
+          urlParams.set(paramKey, value);
+        }
+      });
+    } else {
+      // Remove all FHIR search parameters if none are set
+      const keysToRemove: string[] = [];
+      urlParams.forEach((value, key) => {
+        if (!['type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'limit'].includes(key)) {
+          keysToRemove.push(key);
+        }
+      });
+      keysToRemove.forEach(key => urlParams.delete(key));
+    }
+    
     const newUrl = urlParams.toString() ? `/resources?${urlParams.toString()}` : '/resources';
     window.history.pushState({}, '', newUrl);
     window.dispatchEvent(new PopStateEvent('popstate'));
@@ -1305,18 +1232,25 @@ export default function ResourceBrowser() {
     handleFilterChange(newFilters);
   }, [validationFilters, handleFilterChange]);
 
-  // Clear all filters when messages panel is hidden
+  // Clear validation filters when messages panel is hidden (preserve FHIR params)
   useEffect(() => {
-    if (!isMessagesVisible) {
-      // When hiding the messages panel, clear all validation filters
+    const hasValidationFilters = (
+      validationFilters.severities.length > 0 ||
+      validationFilters.aspects.length > 0 ||
+      validationFilters.hasIssuesOnly ||
+      (validationFilters.issueFilter && Object.keys(validationFilters.issueFilter).length > 0)
+    );
+    if (!isMessagesVisible && hasValidationFilters) {
       handleFilterChange({
+        ...validationFilters,
         aspects: [],
         severities: [],
         hasIssuesOnly: false,
         issueFilter: undefined
+        // fhirSearchParams preserved via spread
       });
     }
-  }, [isMessagesVisible, handleFilterChange]);
+  }, [isMessagesVisible, validationFilters, handleFilterChange]);
 
   // Handle revalidation of current page
   const handleRevalidate = useCallback(async () => {
@@ -1372,7 +1306,6 @@ export default function ResourceBrowser() {
       setIsValidating(false);
 
     } catch (error) {
-      console.error('Revalidation error:', error);
       toast({
         title: "Revalidation failed",
         description: error instanceof Error ? error.message : 'Unknown error',

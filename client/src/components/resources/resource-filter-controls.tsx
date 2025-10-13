@@ -19,6 +19,7 @@ import {
   SortDesc
 } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { FilterChipList } from '@/components/filters/FilterChipList';
 
 // ============================================================================
 // Types
@@ -53,6 +54,13 @@ export interface ResourceFilterOptions {
     messageContains?: string;
     /** Filter by issue path */
     pathContains?: string;
+  };
+  // FHIR search parameter filters (per capability statement)
+  fhirSearchParams?: {
+    [paramName: string]: {
+      operator?: string;
+      value: string | string[];
+    };
   };
 }
 
@@ -234,14 +242,15 @@ export function ResourceFilterControls({
                   {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </Button>
               </CollapsibleTrigger>
-            </Collapsible>
-          )}
-        </div>
-      </div>
-
-      <Collapsible open={isExpanded} onOpenChange={onToggleExpanded}>
-        <CollapsibleContent>
+              <CollapsibleContent>
           <div className="p-4 space-y-4">
+            {/* Active Filter Chips */}
+            <FilterChipList
+              filterOptions={filterOptions}
+              availableResourceTypes={statistics?.availableResourceTypes || []}
+              onFilterChange={onFilterChange}
+            />
+
             {/* Search Input */}
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">Search Resources</label>
@@ -431,7 +440,8 @@ export function ResourceFilterControls({
             )}
           </div>
         </CollapsibleContent>
-      </Collapsible>
+            </Collapsible>
+          )}
 
       {/* Results Summary */}
       <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 rounded-b-lg">

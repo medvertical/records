@@ -149,6 +149,11 @@ export function useResourceFiltering(options: UseResourceFilteringOptions = {}):
       }
     }
     
+    // Add FHIR search params (JSON)
+    if (options.fhirSearchParams && Object.keys(options.fhirSearchParams).length > 0) {
+      params.append('fhirParams', JSON.stringify(options.fhirSearchParams));
+    }
+    
     // Add search
     if (options.search) {
       params.append('search', options.search);
@@ -174,7 +179,25 @@ export function useResourceFiltering(options: UseResourceFilteringOptions = {}):
       throw new Error(result.error || 'Failed to fetch filtered resources');
     }
     
-    return result.data;
+    // Support both backend-filtering result shape and FHIR-search fallback shape
+    const data = result.data;
+    const total = typeof data.totalCount === 'number' ? data.totalCount : (Array.isArray(data.resources) ? data.resources.length : 0);
+    const returned = typeof data.returnedCount === 'number' ? data.returnedCount : (Array.isArray(data.resources) ? data.resources.length : 0);
+
+    const normalized: FilteredResourceResult = {
+      resources: data.resources || [],
+      totalCount: total,
+      returnedCount: returned,
+      pagination: {
+        limit: options.pagination.limit,
+        offset: options.pagination.offset,
+        hasMore: Boolean(data.hasMore)
+      },
+      filterSummary: data.filterSummary || null,
+      appliedFilters: options
+    } as any;
+    
+    return normalized;
   }, []);
 
   const fetchStatistics = useCallback(async (): Promise<ResourceFilterStatistics> => {

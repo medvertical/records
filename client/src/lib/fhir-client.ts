@@ -67,6 +67,16 @@ export class FhirClient {
     }
   }
 
+  async getSearchParameters(resourceType: string): Promise<Array<{ name: string; type: string; documentation?: string; operators: string[] }>> {
+    try {
+      const response = await apiRequest('GET', `${this.baseUrl}/capability/search-params/${encodeURIComponent(resourceType)}`);
+      const data = await response.json();
+      return data.searchParameters || [];
+    } catch (error: any) {
+      throw new FhirClientError('Failed to fetch search parameters', error.status, error);
+    }
+  }
+
   async getResourceTypes(): Promise<string[]> {
     try {
       const response = await apiRequest('GET', `${this.baseUrl}/resource-types`);
