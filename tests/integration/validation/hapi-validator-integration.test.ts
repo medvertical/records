@@ -339,8 +339,9 @@ describe('HAPI Validator Integration Tests', () => {
       const issues = await profileValidator.validate(
         VALID_PATIENT_R4,
         'Patient',
+        'http://hl7.org/fhir/StructureDefinition/Patient',
         'R4',
-        'http://hl7.org/fhir/StructureDefinition/Patient'
+        undefined // settings parameter
       );
 
       const errors = issues.filter(issue => issue.severity === 'error');
@@ -353,8 +354,9 @@ describe('HAPI Validator Integration Tests', () => {
       const issues = await profileValidator.validate(
         INVALID_PATIENT_PROFILE,
         'Patient',
+        'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient',
         'R4',
-        'http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient'
+        undefined // settings parameter
       );
 
       const errors = issues.filter(issue => issue.severity === 'error');

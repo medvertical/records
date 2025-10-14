@@ -281,7 +281,7 @@ export class ValidationEngine extends EventEmitter {
             case 'structural':
               return await this.structuralValidator.validate(request.resource, request.resourceType, this.fhirVersion);
             case 'profile':
-              return await this.profileValidator.validate(request.resource, request.resourceType, request.profileUrl, this.fhirVersion);
+              return await this.profileValidator.validate(request.resource, request.resourceType, request.profileUrl, this.fhirVersion, settings);
             case 'terminology':
               return await this.terminologyValidator.validate(request.resource, request.resourceType, settings, this.fhirVersion);
             case 'reference':

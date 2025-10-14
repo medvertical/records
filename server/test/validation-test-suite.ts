@@ -118,7 +118,7 @@ export class ValidationTestSuite {
     // Run all validators
     const [structuralIssues, profileIssues, terminologyIssues, referenceIssues, businessRuleIssues, metadataIssues] = await Promise.all([
       this.structuralValidator.validate(resource, resourceType),
-      this.profileValidator.validate(resource, resourceType),
+      this.profileValidator.validate(resource, resourceType, undefined, undefined, undefined),
       this.terminologyValidator.validate(resource, resourceType),
       this.referenceValidator.validate(resource, resourceType),
       this.businessRuleValidator.validate(resource, resourceType),

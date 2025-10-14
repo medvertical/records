@@ -285,7 +285,8 @@ export class ValidationEnginePerAspect {
             resource,
             resource.resourceType,
             profileUrl,
-            this.fhirVersion
+            this.fhirVersion,
+            settings
           );
           console.log(`[PerAspect] Profile validation found ${validationIssues.length} issues`);
           break;

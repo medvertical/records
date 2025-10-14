@@ -114,7 +114,7 @@ export class UIValidationDisplayTest {
       // Step 1: Perform validation to get results
       const [structuralIssues, profileIssues, terminologyIssues, referenceIssues, businessRuleIssues, metadataIssues] = await Promise.all([
         this.structuralValidator.validate(resource, resourceType),
-        this.profileValidator.validate(resource, resourceType),
+        this.profileValidator.validate(resource, resourceType, undefined, undefined, undefined),
         this.terminologyValidator.validate(resource, resourceType),
         this.referenceValidator.validate(resource, resourceType),
         this.businessRuleValidator.validate(resource, resourceType),

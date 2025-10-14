@@ -22,6 +22,7 @@
  */
 
 import type { ValidationIssue } from '../types/validation-types';
+import type { ValidationSettings } from '@shared/validation-settings';
 import { hapiValidatorClient } from './hapi-validator-client';
 import type { HapiValidationOptions } from './hapi-validator-types';
 import {
@@ -44,13 +45,16 @@ export class ProfileValidator {
    * @param resource - FHIR resource to validate
    * @param resourceType - Expected resource type
    * @param profileUrl - Optional specific profile URL to validate against
+   * @param fhirVersion - FHIR version for validation
+   * @param settings - Validation settings including profileSources configuration
    * @returns Array of profile validation issues
    */
   async validate(
     resource: any,
     resourceType: string,
     profileUrl?: string,
-    fhirVersion?: 'R4' | 'R5' | 'R6' // Task 2.4: Accept FHIR version parameter
+    fhirVersion?: 'R4' | 'R5' | 'R6', // Task 2.4: Accept FHIR version parameter
+    settings?: ValidationSettings
   ): Promise<ValidationIssue[]> {
     const startTime = Date.now();
     const issues: ValidationIssue[] = [];
@@ -80,7 +84,8 @@ export class ProfileValidator {
           resource,
           resourceType,
           profile,
-          fhirVersion
+          fhirVersion,
+          settings
         );
         issues.push(...profileIssues);
       }
@@ -141,11 +146,12 @@ export class ProfileValidator {
     resource: any,
     resourceType: string,
     profileUrl: string,
-    fhirVersion: 'R4' | 'R5' | 'R6'
+    fhirVersion: 'R4' | 'R5' | 'R6',
+    settings?: ValidationSettings
   ): Promise<ValidationIssue[]> {
     if (this.hapiAvailable) {
       // Use HAPI for comprehensive profile validation
-      return this.validateWithHapi(resource, resourceType, profileUrl, fhirVersion);
+      return this.validateWithHapi(resource, resourceType, profileUrl, fhirVersion, settings);
     } else {
       // Fallback to basic profile checking
       return this.validateWithBasicProfileCheck(resource, resourceType, profileUrl);
@@ -160,7 +166,8 @@ export class ProfileValidator {
     resource: any,
     resourceType: string,
     profileUrl: string,
-    fhirVersion: 'R4' | 'R5' | 'R6'
+    fhirVersion: 'R4' | 'R5' | 'R6',
+    settings?: ValidationSettings
   ): Promise<ValidationIssue[]> {
     try {
       console.log(`[ProfileValidator] Using HAPI validator for ${fhirVersion} profile: ${profileUrl}`);
@@ -175,11 +182,26 @@ export class ProfileValidator {
         );
       }
 
+      // Determine profile resolution mode based on settings
+      const profileSources = settings?.profileSources || 'both';
+      let mode: 'online' | 'offline' = 'online';
+      
+      if (profileSources === 'local') {
+        mode = 'offline';
+      } else if (profileSources === 'simplifier') {
+        mode = 'online';
+      } else {
+        // 'both' - use online mode for better profile resolution
+        mode = 'online';
+      }
+
+      console.log(`[ProfileValidator] Profile sources: ${profileSources}, mode: ${mode}`);
+
       // Build validation options with profile and IG packages
       const options: HapiValidationOptions = {
         fhirVersion,
         profile: profileUrl,
-        mode: 'online', // Use online mode for better profile resolution
+        mode,
         igPackages: igPackages.length > 0 ? igPackages : undefined,
       };
 
