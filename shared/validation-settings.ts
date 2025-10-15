@@ -332,14 +332,14 @@ export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
   },
   mode: 'online',
   terminologyFallback: {
-    local: 'http://localhost:8081/fhir',
-    remote: 'https://tx.fhir.org/r4'
+    local: 'n/a',  // No local terminology server
+    remote: 'https://tx.fhir.org/r4'  // Primary: tx.fhir.org, fallback: Ontoserver in code
   },
   offlineConfig: {
-    ontoserverUrl: 'http://localhost:8081/fhir',
+    ontoserverUrl: 'https://r4.ontoserver.csiro.au/fhir',  // Public Ontoserver for fallback
     profileCachePath: '/opt/fhir/igs/'
   },
-  profileSources: 'both', // Task 4.13: Default to both local and Simplifier
+  profileSources: 'simplifier', // Fetch profiles from Simplifier, resolve locally
   autoRevalidateAfterEdit: false
 };
 
@@ -363,14 +363,14 @@ export const DEFAULT_VALIDATION_SETTINGS_R5: ValidationSettings = {
   },
   mode: 'online',
   terminologyFallback: {
-    local: 'http://localhost:8081/fhir',
-    remote: 'https://tx.fhir.org/r5'
+    local: 'n/a',  // No local terminology server
+    remote: 'https://tx.fhir.org/r5'  // Primary: tx.fhir.org, fallback: Ontoserver in code
   },
   offlineConfig: {
-    ontoserverUrl: 'http://localhost:8081/fhir',
+    ontoserverUrl: 'https://r4.ontoserver.csiro.au/fhir',  // Public Ontoserver for fallback
     profileCachePath: '/opt/fhir/igs/'
   },
-  profileSources: 'both', // Task 4.13: Default to both local and Simplifier
+  profileSources: 'simplifier', // Fetch profiles from Simplifier, resolve locally
   autoRevalidateAfterEdit: false
 };
 

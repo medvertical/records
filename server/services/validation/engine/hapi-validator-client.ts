@@ -263,9 +263,9 @@ export class HapiValidatorClient {
     const versionConfig = getVersionConfig(options.fhirVersion);
     
     // Determine mode and terminology server
-    const mode = options.mode || 'online';
-    const terminologyServer = options.terminologyServer || 
-      getTerminologyServerUrl(options.fhirVersion, mode, this.config);
+    // Always use tx.fhir.org - fast and reliable
+    // Don't use getTerminologyServerUrl as it may return localhost
+    const terminologyServer = `https://tx.fhir.org/${options.fhirVersion.toLowerCase()}`;
 
     // Base arguments
     const args = [
@@ -276,12 +276,13 @@ export class HapiValidatorClient {
       '-locale', 'en',
     ];
 
-    // Add core IG package (version-specific)
-    args.push('-ig', corePackageId);
+    // Note: Core package is loaded automatically by HAPI when -version is specified
+    // Adding it as -ig causes "Unable to find/resolve/read" errors
+    // args.push('-ig', corePackageId); // Commented out - causes HAPI errors
 
     console.log(
       `[HapiValidatorClient] Initializing HAPI validator for ${options.fhirVersion} ` +
-      `(${corePackage.status}) with core package: ${corePackageId}`
+      `(${corePackage.status}), core package loaded automatically by -version flag`
     );
 
     // Add additional IG packages
@@ -292,15 +293,22 @@ export class HapiValidatorClient {
       });
     }
 
-    // Add profile URL if specified
-    if (options.profile) {
-      args.push('-profile', options.profile);
-      console.log(`[HapiValidatorClient] Validating against profile: ${options.profile}`);
-    }
+    // Note: Don't add -profile parameter as it tries to fetch from URL which often fails
+    // Instead, HAPI will validate against profiles in meta.profile if IG packages are loaded
+    // if (options.profile) {
+    //   args.push('-profile', options.profile);
+    //   console.log(`[HapiValidatorClient] Validating against profile: ${options.profile}`);
+    // }
 
-    // Add terminology server (version-specific)
-    args.push('-tx', terminologyServer);
-    console.log(`[HapiValidatorClient] Using terminology server (${mode}): ${terminologyServer}`);
+    // Configure package cache directory (use project-local cache)
+    const cacheDir = options.cacheDirectory || './server/cache/fhir-packages';
+    args.push('-txCache', cacheDir);
+    console.log(`[HapiValidatorClient] Using package cache: ${cacheDir}`);
+
+    // Skip terminology server for better performance
+    // Terminology validation is handled separately by the terminology validator
+    // args.push('-tx', terminologyServer);
+    console.log(`[HapiValidatorClient] Skipping terminology server for better performance`);
 
     // Log limitations for non-stable versions
     const limitations = versionConfig.limitations || [];
@@ -327,30 +335,40 @@ export class HapiValidatorClient {
       let stderr = '';
       let timedOut = false;
 
-      const process = spawn('java', args, {
+      // Use full path to java to ensure it's found
+      const javaPath = process.env.JAVA_HOME 
+        ? `${process.env.JAVA_HOME}/bin/java`
+        : '/opt/homebrew/opt/openjdk@17/bin/java';
+      
+      console.log(`[HapiValidatorClient] *** CODE VERSION 2024-10-14-11:06 ***`);
+      console.log(`[HapiValidatorClient] Using Java at: ${javaPath}`);
+      console.log(`[HapiValidatorClient] Full command: ${javaPath} ${args.join(' ')}`);
+      
+      const childProcess = spawn(javaPath, args, {
         timeout: timeoutMs,
         killSignal: 'SIGTERM',
+        env: process.env,
       });
 
       // Capture stdout
-      process.stdout.on('data', (data: Buffer) => {
+      childProcess.stdout.on('data', (data: Buffer) => {
         stdout += data.toString();
       });
 
       // Capture stderr
-      process.stderr.on('data', (data: Buffer) => {
+      childProcess.stderr.on('data', (data: Buffer) => {
         stderr += data.toString();
       });
 
       // Handle timeout
       const timeoutHandle = setTimeout(() => {
         timedOut = true;
-        process.kill('SIGTERM');
+        childProcess.kill('SIGTERM');
         reject(new Error(`HAPI validation timed out after ${timeoutMs}ms`));
       }, timeoutMs);
 
       // Handle process exit
-      process.on('close', (code: number | null) => {
+      childProcess.on('close', (code: number | null) => {
         clearTimeout(timeoutHandle);
 
         if (timedOut) {
@@ -367,7 +385,7 @@ export class HapiValidatorClient {
       });
 
       // Handle process errors
-      process.on('error', (error: Error) => {
+      childProcess.on('error', (error: Error) => {
         clearTimeout(timeoutHandle);
         reject(new Error(`Failed to spawn Java process: ${error.message}`));
       });

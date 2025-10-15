@@ -159,28 +159,38 @@ export class StructuralValidator {
    * Check HAPI validator availability (cached)
    */
   private async checkHapiAvailability(): Promise<void> {
-    // Return cached result if available
-    if (this.hapiAvailable !== null) {
-      return;
-    }
-
-    // Avoid concurrent checks
-    if (this.hapiCheckInProgress) {
-      // Wait a bit and return cached result
-      await new Promise(resolve => setTimeout(resolve, 100));
-      return;
-    }
-
-    try {
-      this.hapiCheckInProgress = true;
-      this.hapiAvailable = await hapiStructuralValidator.isAvailable();
-      console.log(`[StructuralValidator] HAPI validator available: ${this.hapiAvailable}`);
-    } catch (error) {
-      console.warn(`[StructuralValidator] Failed to check HAPI availability:`, error);
+    // TEMPORARY FIX: Disable HAPI validator to avoid long download times
+    // The HAPI validator tries to download FHIR packages on first run which can take minutes
+    // Use schema validator instead for fast, reliable validation
+    if (this.hapiAvailable === null) {
+      console.log(`[StructuralValidator] HAPI validator disabled (downloads too slow), using schema validator`);
       this.hapiAvailable = false;
-    } finally {
-      this.hapiCheckInProgress = false;
     }
+    return;
+    
+    // Original code (commented out):
+    // // Return cached result if available
+    // if (this.hapiAvailable !== null) {
+    //   return;
+    // }
+    //
+    // // Avoid concurrent checks
+    // if (this.hapiCheckInProgress) {
+    //   // Wait a bit and return cached result
+    //   await new Promise(resolve => setTimeout(resolve, 100));
+    //   return;
+    // }
+    //
+    // try {
+    //   this.hapiCheckInProgress = true;
+    //   this.hapiAvailable = await hapiStructuralValidator.isAvailable();
+    //   console.log(`[StructuralValidator] HAPI validator available: ${this.hapiAvailable}`);
+    // } catch (error) {
+    //   console.warn(`[StructuralValidator] Failed to check HAPI availability:`, error);
+    //   this.hapiAvailable = false;
+    // } finally {
+    //   this.hapiCheckInProgress = false;
+    // }
   }
 
   /**

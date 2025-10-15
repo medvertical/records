@@ -23,6 +23,9 @@ export interface HapiValidationOptions {
   
   /** Timeout in milliseconds (default: from config) */
   timeout?: number;
+  
+  /** Package cache directory (overrides default ~/.fhir/packages) */
+  cacheDirectory?: string;
 }
 
 export interface HapiOperationOutcome {

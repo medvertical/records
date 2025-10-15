@@ -66,9 +66,9 @@ export function loadHapiValidatorConfig(): HapiValidatorConfig {
         r6: process.env.HAPI_TX_ONLINE_R6 || 'https://tx.fhir.org/r6',
       },
       offline: {
-        r4: process.env.HAPI_TX_OFFLINE_R4 || 'http://localhost:8081/fhir',
-        r5: process.env.HAPI_TX_OFFLINE_R5 || 'http://localhost:8082/fhir',
-        r6: process.env.HAPI_TX_OFFLINE_R6 || 'http://localhost:8083/fhir',
+        r4: 'n/a',  // Disabled - no local terminology server
+        r5: 'n/a',  // Disabled - no local terminology server
+        r6: 'n/a',  // Disabled - no local terminology server
       },
     },
   };

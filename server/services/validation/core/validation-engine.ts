@@ -332,12 +332,12 @@ export class ValidationEngine extends EventEmitter {
 
   private getAspectTimeoutMs(aspect: ValidationAspect, settings: ValidationSettings): number {
     const defaults: Record<ValidationAspect, number> = {
-      structural: 5000,
-      profile: 45000,
-      terminology: 60000,
-      reference: 30000,
-      businessRule: 30000,
-      metadata: 5000,
+      structural: 20000,   // 20s - allow first-time package loads
+      profile: 30000,      // 30s - allow first-time profile downloads
+      terminology: 20000,  // 20s - terminology server + caching
+      reference: 10000,    // 10s
+      businessRule: 10000, // 10s
+      metadata: 5000,      // 5s
     } as const;
 
     // Settings may carry per-aspect timeout; fall back to defaults

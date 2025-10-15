@@ -203,6 +203,7 @@ export class ProfileValidator {
         profile: profileUrl,
         mode,
         igPackages: igPackages.length > 0 ? igPackages : undefined,
+        cacheDirectory: settings?.offlineConfig?.profileCachePath || './server/cache/fhir-packages',
       };
 
       // Call HAPI validator
@@ -248,6 +249,16 @@ export class ProfileValidator {
     // Check if profile URL indicates a specific IG package
     const profileLower = profileUrl.toLowerCase();
 
+    // US Core profiles
+    if (profileLower.includes('hl7.org/fhir/us/core')) {
+      if (fhirVersion === 'R4') {
+        packages.push('hl7.fhir.us.core#7.0.0');
+      } else if (fhirVersion === 'R5') {
+        packages.push('hl7.fhir.us.core#6.1.0');
+      }
+      console.log(`[ProfileValidator] Detected US Core profile, adding US Core package for ${fhirVersion}`);
+    }
+
     // German healthcare profiles (MII, ISiK, KBV)
     if (profileLower.includes('medizininformatik') || profileLower.includes('mii')) {
       // MII profile
@@ -281,21 +292,9 @@ export class ProfileValidator {
       packages.push(...uvPackages);
     }
 
-    // If no specific IG detected but profile is not from core spec,
-    // load common German profiles as a fallback (for German healthcare context)
-    if (packages.length === 0 && !profileLower.includes('hl7.org/fhir/StructureDefinition')) {
-      console.log(
-        `[ProfileValidator] Profile ${profileUrl} not matched to specific IG, ` +
-        `loading common German profiles for ${fhirVersion}`
-      );
-      
-      // Load top German profiles as fallback
-      const commonProfiles = getGermanPackagesForVersion(fhirVersion)
-        .filter(pkg => pkg.status === 'active')
-        .slice(0, 2) // Limit to top 2 to avoid overloading
-        .map(pkg => `${pkg.id}@${pkg.version}`);
-      packages.push(...commonProfiles);
-    }
+    // If no specific IG detected but profile is not from core spec or international profiles,
+    // don't load any packages - let HAPI try to resolve from online sources
+    // Removed German profile fallback as it causes errors for non-German profiles
 
     return [...new Set(packages)]; // Remove duplicates
   }

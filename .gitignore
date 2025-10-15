@@ -20,3 +20,7 @@ server-log.txt
 
 # HAPI FHIR Validator JAR (large binary)
 server/lib/*.jar
+
+# FHIR package cache (downloaded by HAPI validator)
+server/cache/fhir-packages/*
+!server/cache/fhir-packages/.gitkeep
