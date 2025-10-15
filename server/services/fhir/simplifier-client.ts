@@ -544,8 +544,6 @@ export class SimplifierClient {
 
   async getPackageDetails(packageId: string): Promise<SimplifierPackage | null> {
     try {
-
-
       const response: AxiosResponse = await axios.get(
         `${this.packageServerUrl}/packages/${packageId}`,
         { headers: this.headers }
@@ -562,7 +560,7 @@ export class SimplifierClient {
         author: pkg.author || 'Unknown',
         publishedDate: pkg.publishedDate || new Date().toISOString(),
         dependencies: pkg.dependencies || [],
-        downloadUrl: pkg.downloadUrl || `${this.baseUrl}/packages/${pkg.id}`,
+        downloadUrl: pkg.downloadUrl || `${this.packageServerUrl}/packages/${pkg.id}`,
         canonicalUrl: pkg.canonicalUrl,
         keywords: pkg.keywords || [],
         status: pkg.status || 'active'
@@ -576,7 +574,7 @@ export class SimplifierClient {
   async getPackageProfiles(packageId: string): Promise<SimplifierProfile[]> {
     try {
       const response: AxiosResponse = await axios.get(
-        `${this.baseUrl}/packages/${packageId}/profiles`,
+        `${this.simplifierApiUrl}/packages/${packageId}/profiles`,
         { headers: this.headers }
       );
 
@@ -604,8 +602,8 @@ export class SimplifierClient {
   async downloadPackage(packageId: string, version?: string): Promise<Buffer | null> {
     try {
       const url = version 
-        ? `${this.baseUrl}/packages/${packageId}/${version}/download`
-        : `${this.baseUrl}/packages/${packageId}/download`;
+        ? `${this.packageServerUrl}/packages/${packageId}/${version}/download`
+        : `${this.packageServerUrl}/packages/${packageId}/download`;
 
       const response: AxiosResponse<Buffer> = await axios.get(url, {
         headers: this.headers,
@@ -674,7 +672,7 @@ export class SimplifierClient {
       }
 
       const response: AxiosResponse = await axios.get(
-        `${this.baseUrl}/resources/search`,
+        `${this.simplifierApiUrl}/resources/search`,
         {
           params,
           headers: this.headers

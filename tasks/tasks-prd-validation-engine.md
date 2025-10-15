@@ -10,7 +10,7 @@
 ### Core Validation Engine
 - `server/services/validation/core/validation-engine.ts` - Main orchestrator for 6-aspect validation
 - `server/services/validation/engine/structural-validator.ts` - HAPI-based structural validation
-- `server/services/validation/engine/profile-validator.ts` - Profile conformance validation
+- `server/services/validation/engine/profile-validator.ts` - ✅ ENHANCED - Profile conformance with ProfileResolver integration (540 lines)
 - `server/services/validation/engine/terminology-validator.ts` - ✅ REFACTORED - Direct HTTP terminology validation (295 lines)
 - `server/services/validation/engine/reference-validator.ts` - Reference integrity validation
 - `server/services/validation/engine/business-rule-validator.ts` - FHIRPath/JSONPath rule execution
@@ -36,7 +36,17 @@
 - `server/services/validation/utils/process-warmup.ts` - ✅ Core package pre-loading for R4/R5/R6 (200 lines)
 
 ### New Components (Created - Task 4.0)
-- `server/services/validation/utils/profile-resolver.ts` - ✅ Smart canonical URL resolution (350 lines)
+- `server/services/validation/utils/profile-resolver.ts` - ✅ Smart canonical URL resolution with notifications (1230 lines)
+- `server/services/validation/utils/package-dependency-resolver.ts` - ✅ IG package dependency graph resolution (450 lines)
+- `server/services/validation/utils/version-resolver.ts` - ✅ Semantic versioning and version range resolution (280 lines)
+- `server/services/validation/utils/profile-metadata-extractor.ts` - ✅ StructureDefinition metadata extraction and analysis (420 lines)
+- `server/services/validation/utils/german-profile-detector.ts` - ✅ MII/ISiK/KBV/Basisprofil auto-detection (350 lines)
+- `server/services/validation/utils/profile-notification-service.ts` - ✅ Event-based notification system for profile downloads (250 lines)
+- `server/services/validation/utils/__tests__/profile-resolver.test.ts` - ✅ Comprehensive unit tests with mocked dependencies (850 lines, 55 tests passing)
+- `client/src/components/profiles/profile-notification-center.tsx` - ✅ UI component for profile notifications with toast integration (330 lines)
+- `client/src/hooks/use-profile-notifications.ts` - ✅ React hook for notification management (220 lines)
+- `migrations/014_profile_cache_schema.sql` - ✅ Database schema for profile caching with 4 tables and views (400 lines)
+- `docs/api/profile-resolution-api.md` - ✅ Complete API documentation for 9 profile resolution endpoints
 
 ### New Components (To Be Created)
 - `server/services/validation/utils/connectivity-detector.ts` - Network health monitoring
@@ -54,14 +64,15 @@
 
 ### API Routes
 - `server/routes/validation.ts` - ✅ Validation API endpoints (added error explanation routes)
-- `server/routes/profiles.ts` - Profile management endpoints
+- `server/routes/api/fhir/profiles.ts` - ✅ ENHANCED - Profile management with resolution and notification endpoints (535 lines)
 
 ### Tests
 - `server/services/validation/terminology/__tests__/direct-terminology-client.test.ts` - ✅ Unit tests for DirectTerminologyClient (270 lines, 20 tests passing)
 - `tests/integration/terminology-validation.integration.test.ts` - ✅ Integration tests with real tx.fhir.org (250 lines)
 - `server/services/validation/utils/__tests__/error-mapping-engine.test.ts` - ✅ Unit tests for ErrorMappingEngine (250 lines, 27 tests passing)
+- `server/services/validation/utils/__tests__/profile-resolver.test.ts` - ✅ Unit tests for ProfileResolver, VersionResolver, GermanProfileDetector, ProfileMetadataExtractor (850 lines, 55 tests passing)
+- `tests/integration/profile-resolution.integration.test.ts` - ✅ Integration tests for complete profile resolution workflow (650 lines, 21 tests passing)
 - `server/services/validation/__tests__/terminology-validator.test.ts` - Terminology validation tests (to be created)
-- `server/services/validation/__tests__/profile-resolver.test.ts` - Profile resolution tests (to be created)
 - `tests/integration/validation-engine.test.ts` - Integration tests (to be created)
 
 ---
@@ -111,21 +122,21 @@
   - [x] 3.12 Write unit tests for ProcessPoolManager with mocked Java processes (DEFERRED - MVP complete)
   - [x] 3.13 Write integration tests measuring validation performance improvement (DEFERRED - MVP complete)
 
-- [ ] **4.0 Smart Profile Resolution** - Build intelligent profile resolver with automatic canonical URL resolution and caching
+- [x] **4.0 Smart Profile Resolution** - Build intelligent profile resolver with automatic canonical URL resolution and caching
   - [x] 4.1 Create `ProfileResolver` class with canonical URL → local profile mapping
   - [x] 4.2 Implement multi-source profile search: local cache → Simplifier → FHIR Registry
   - [x] 4.3 Add canonical URL normalization (handle version suffixes, trailing slashes)
-  - [ ] 4.4 Implement automatic profile download with dependency resolution
-  - [ ] 4.5 Create profile cache schema in database: canonical_url, version, content, dependencies
-  - [ ] 4.6 Add IG package dependency graph resolution (identify and download required packages)
-  - [ ] 4.7 Implement version-aware profile selection (prefer exact version, fallback to latest)
-  - [ ] 4.8 Add profile metadata extraction from StructureDefinition resources
-  - [ ] 4.9 Create auto-detection for German profiles (MII, ISiK, KBV) based on canonical patterns
-  - [ ] 4.10 Integrate ProfileResolver into `ProfileValidator` validation workflow
-  - [ ] 4.11 Add API endpoint: POST /api/profiles/resolve with {canonicalUrl, version?}
-  - [ ] 4.12 Create UI notification when profiles are auto-downloaded
-  - [ ] 4.13 Write unit tests for ProfileResolver with mocked Simplifier responses
-  - [ ] 4.14 Write integration tests with real profile downloads and caching
+  - [x] 4.4 Implement automatic profile download with dependency resolution
+  - [x] 4.5 Create profile cache schema in database: canonical_url, version, content, dependencies
+  - [x] 4.6 Add IG package dependency graph resolution (identify and download required packages)
+  - [x] 4.7 Implement version-aware profile selection (prefer exact version, fallback to latest)
+  - [x] 4.8 Add profile metadata extraction from StructureDefinition resources
+  - [x] 4.9 Create auto-detection for German profiles (MII, ISiK, KBV) based on canonical patterns
+  - [x] 4.10 Integrate ProfileResolver into `ProfileValidator` validation workflow
+  - [x] 4.11 Add API endpoint: POST /api/profiles/resolve with {canonicalUrl, version?}
+  - [x] 4.12 Create UI notification when profiles are auto-downloaded
+  - [x] 4.13 Write unit tests for ProfileResolver with mocked Simplifier responses
+  - [x] 4.14 Write integration tests with real profile downloads and caching
 
 - [ ] **5.0 Connectivity Detection & Auto-Fallback** - Implement network health monitoring with automatic online/offline mode switching
   - [ ] 5.1 Create `ConnectivityDetector` class with periodic health check scheduling

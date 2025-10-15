@@ -31,6 +31,8 @@ import {
   getCorePackageId,
 } from '../../../config/fhir-package-versions';
 import { addR6WarningIfNeeded } from '../utils/r6-support-warnings';
+import { getProfileResolver } from '../utils/profile-resolver';
+import { GermanProfileDetector } from '../utils/german-profile-detector';
 
 // ============================================================================
 // Profile Validator
@@ -38,6 +40,11 @@ import { addR6WarningIfNeeded } from '../utils/r6-support-warnings';
 
 export class ProfileValidator {
   private hapiAvailable: boolean | null = null;
+  private profileResolver = getProfileResolver({
+    autoDownload: true,
+    resolvePackageDependencies: true,
+    maxPackageDependencyDepth: 3,
+  });
 
   /**
    * Validate resource against FHIR profiles
@@ -161,6 +168,7 @@ export class ProfileValidator {
   /**
    * Validate using HAPI FHIR Validator with profile
    * Task 2.8: Enhanced with version-specific IG package loading
+   * Task 4.10: Integrated ProfileResolver for automatic profile resolution
    */
   private async validateWithHapi(
     resource: any,
@@ -171,6 +179,9 @@ export class ProfileValidator {
   ): Promise<ValidationIssue[]> {
     try {
       console.log(`[ProfileValidator] Using HAPI validator for ${fhirVersion} profile: ${profileUrl}`);
+
+      // Task 4.10: Resolve profile using ProfileResolver
+      await this.resolveProfileBeforeValidation(profileUrl, settings);
 
       // Load version-specific IG packages (Task 2.8)
       const igPackages = this.getIgPackagesForProfile(profileUrl, fhirVersion);
@@ -236,8 +247,57 @@ export class ProfileValidator {
   }
 
   /**
+   * Resolve profile before validation
+   * Task 4.10: Use ProfileResolver to auto-download and cache profiles
+   * 
+   * @param profileUrl - Profile URL to resolve
+   * @param settings - Validation settings
+   */
+  private async resolveProfileBeforeValidation(
+    profileUrl: string,
+    settings?: ValidationSettings
+  ): Promise<void> {
+    try {
+      console.log(`[ProfileValidator] Resolving profile: ${profileUrl}`);
+      
+      // Use ProfileResolver to resolve the profile
+      // This will automatically:
+      // - Check cache
+      // - Download if missing
+      // - Detect German profiles
+      // - Resolve dependencies
+      // - Extract metadata
+      const result = await this.profileResolver.resolveProfile(profileUrl, undefined, settings);
+      
+      if (result.germanProfile?.isGermanProfile) {
+        console.log(
+          `[ProfileValidator] ✓ German profile detected: ${result.germanProfile.family.toUpperCase()} ` +
+          `(${result.germanProfile.confidence}% confidence)`
+        );
+        
+        if (result.germanProfile.recommendedPackage) {
+          console.log(`[ProfileValidator] Recommended package: ${result.germanProfile.recommendedPackage}`);
+        }
+      }
+      
+      if (result.metadata) {
+        console.log(
+          `[ProfileValidator] Profile metadata extracted: ` +
+          `${result.metadata.elements.length} elements, ` +
+          `${result.metadata.constraints.length} constraints`
+        );
+      }
+      
+    } catch (error) {
+      console.warn(`[ProfileValidator] Profile resolution failed (continuing with validation):`, error);
+      // Don't throw - let validation proceed even if resolution fails
+    }
+  }
+
+  /**
    * Get IG packages for a specific profile and FHIR version
    * Task 2.8: Version-specific IG package selection
+   * Task 4.10: Enhanced with German profile auto-detection
    * 
    * @param profileUrl - Profile URL to validate against
    * @param fhirVersion - FHIR version (R4, R5, R6)
@@ -245,6 +305,18 @@ export class ProfileValidator {
    */
   private getIgPackagesForProfile(profileUrl: string, fhirVersion: 'R4' | 'R5' | 'R6'): string[] {
     const packages: string[] = [];
+
+    // Task 4.10: Use German profile detector for better detection
+    const germanProfile = GermanProfileDetector.detectGermanProfile(profileUrl);
+    
+    if (germanProfile.isGermanProfile && germanProfile.recommendedPackage) {
+      console.log(
+        `[ProfileValidator] German ${germanProfile.family.toUpperCase()} profile detected, ` +
+        `adding package: ${germanProfile.recommendedPackage}`
+      );
+      packages.push(germanProfile.recommendedPackage);
+      return packages;
+    }
 
     // Check if profile URL indicates a specific IG package
     const profileLower = profileUrl.toLowerCase();
@@ -257,31 +329,6 @@ export class ProfileValidator {
         packages.push('hl7.fhir.us.core#6.1.0');
       }
       console.log(`[ProfileValidator] Detected US Core profile, adding US Core package for ${fhirVersion}`);
-    }
-
-    // German healthcare profiles (MII, ISiK, KBV)
-    if (profileLower.includes('medizininformatik') || profileLower.includes('mii')) {
-      // MII profile
-      const miiPackages = getGermanPackagesForVersion(fhirVersion)
-        .filter(pkg => pkg.id.includes('medizininformatik'))
-        .map(pkg => `${pkg.id}@${pkg.version}`);
-      packages.push(...miiPackages);
-    }
-
-    if (profileLower.includes('isik') || profileLower.includes('gematik')) {
-      // ISiK profile
-      const isikPackages = getGermanPackagesForVersion(fhirVersion)
-        .filter(pkg => pkg.id.includes('isik') || pkg.id.includes('gematik'))
-        .map(pkg => `${pkg.id}@${pkg.version}`);
-      packages.push(...isikPackages);
-    }
-
-    if (profileLower.includes('kbv')) {
-      // KBV profile
-      const kbvPackages = getGermanPackagesForVersion(fhirVersion)
-        .filter(pkg => pkg.id.includes('kbv'))
-        .map(pkg => `${pkg.id}@${pkg.version}`);
-      packages.push(...kbvPackages);
     }
 
     // International profiles (UV Extensions, IPS)
