@@ -10,6 +10,7 @@
 
 import { logger } from '../../../utils/logger.js';
 import type { ValidationSettings } from '@shared/validation-settings';
+import { getTerminologyServerManager, type CodeValidationResult as ServerCodeValidationResult } from './terminology-server-manager';
 
 // ============================================================================
 // Types
@@ -125,10 +126,11 @@ export class TerminologyAdapter {
   }
 
   /**
-   * Validate a code against a ValueSet
+   * Validate a code against a CodeSystem/ValueSet
+   * Now uses TerminologyServerManager for multi-server fallback
    * @param code - Code to validate
    * @param system - Code system
-   * @param valueSetUrl - ValueSet URL to validate against
+   * @param valueSetUrl - ValueSet URL to validate against (optional)
    * @param settings - Validation settings
    * @returns Validation result
    */
@@ -139,9 +141,21 @@ export class TerminologyAdapter {
     settings: ValidationSettings
   ): Promise<TerminologyValidationResult> {
     try {
+      // Use TerminologyServerManager if available (fixed URL encoding)
+      if (settings.terminologyServers && settings.terminologyServers.length > 0) {
+        console.log(`[TerminologyAdapter] Using TerminologyServerManager for ${system}/${code}`);
+        return this.validateCodeWithServerManager(code, system, settings);
+      }
+      
+      console.log(`[TerminologyAdapter] Using legacy fallback for ${system}/${code} (terminologyServers: ${settings.terminologyServers?.length || 0})`);
+      console.log(`[TerminologyAdapter] Resolving ValueSet: ${valueSetUrl}`);
+      // Legacy fallback: resolve ValueSet manually
       const valueSet = await this.resolveValueSet(valueSetUrl, settings);
+      console.log(`[TerminologyAdapter] ValueSet resolved, expansion contains ${valueSet.expansion?.contains?.length || 0} codes`);
       
       if (!valueSet.expansion?.contains) {
+        console.error(`[TerminologyAdapter] ERROR: ValueSet expansion is empty or missing!`);
+        console.error(`[TerminologyAdapter] ValueSet:`, JSON.stringify(valueSet, null, 2));
         return {
           valid: false,
           message: 'ValueSet expansion is empty or unavailable',
@@ -149,11 +163,27 @@ export class TerminologyAdapter {
           system
         };
       }
+      
+      console.log(`[TerminologyAdapter] First few codes in expansion:`, valueSet.expansion.contains.slice(0, 5).map(c => ({code: c.code, system: c.system})));
 
       // Check if code exists in expansion
+      // For simple code fields, system might be empty, so check if code matches
+      console.log(`[TerminologyAdapter] Looking for code "${code}" with system "${system}" in expansion`);
+      console.log(`[TerminologyAdapter] Available codes:`, valueSet.expansion.contains.map(c => ({code: c.code, system: c.system})));
+      
       const found = valueSet.expansion.contains.find(
-        c => c.code === code && c.system === system
+        c => c.code === code && (system === '' || c.system === system)
       );
+      
+      console.log(`[TerminologyAdapter] Code found:`, found ? 'YES' : 'NO');
+      if (!found) {
+        console.log(`[TerminologyAdapter] No match found. Checking individual codes:`);
+        valueSet.expansion.contains.forEach(c => {
+          const codeMatch = c.code === code;
+          const systemMatch = system === '' || c.system === system;
+          console.log(`  Code "${c.code}" (${codeMatch ? 'MATCH' : 'NO'}) + System "${c.system}" (${systemMatch ? 'MATCH' : 'NO'}) = ${codeMatch && systemMatch ? 'FOUND' : 'NO'}`);
+        });
+      }
 
       if (found) {
         return {
@@ -492,6 +522,68 @@ export class TerminologyAdapter {
     }
     
     logger.debug(`[TerminologyAdapter] Metrics: ${source} failure`);
+  }
+
+  /**
+   * Validate code using TerminologyServerManager (multi-server fallback)
+   * @param code - Code to validate
+   * @param system - Code system
+   * @param settings - Validation settings with terminologyServers
+   * @returns Validation result
+   */
+  private async validateCodeWithServerManager(
+    code: string,
+    system: string,
+    settings: ValidationSettings
+  ): Promise<TerminologyValidationResult> {
+    try {
+      console.log(`[TerminologyAdapter] validateCodeWithServerManager called for ${system}/${code}`);
+      console.log(`[TerminologyAdapter] Settings terminologyServers:`, settings.terminologyServers?.length || 0);
+      
+      // Get or create server manager with current settings
+      const serverManager = getTerminologyServerManager(settings.terminologyServers);
+      
+      // Detect FHIR version (use R5 for better compatibility)
+      const fhirVersion = 'R5'; // Use R5 for better terminology server compatibility
+      console.log(`[TerminologyAdapter] Using FHIR version: ${fhirVersion} for ${system}/${code}`);
+      
+      console.log(`[TerminologyAdapter] Calling serverManager.validateCode for ${system}/${code} with FHIR version ${fhirVersion}`);
+      
+      // Validate using server manager (handles fallback automatically)
+      const valueSetUrl = fhirVersion === 'R5' ? 'http://hl7.org/fhir/ValueSet/administrative-gender' : 'http://hl7.org/fhir/ValueSet/administrative-gender';
+      console.log(`[TerminologyAdapter] Using ValueSet URL: ${valueSetUrl}`);
+      
+      const result: ServerCodeValidationResult = await serverManager.validateCode(
+        system,
+        code,
+        fhirVersion,
+        valueSetUrl
+      );
+      
+      logger.debug(
+        `[TerminologyAdapter] Code validation via ${result.serverUsed}: ` +
+        `${system}/${code} = ${result.valid} (${result.responseTime}ms, cached: ${result.cached})`
+      );
+      
+      return {
+        valid: result.valid,
+        display: result.display,
+        code,
+        system,
+        source: result.cached ? 'cache' : 'tx.fhir.org' // Simplified source
+      };
+      
+    } catch (error) {
+      logger.error('[TerminologyAdapter] Server manager validation failed:', error);
+      
+      // Return invalid with error message
+      return {
+        valid: false,
+        message: error instanceof Error ? error.message : 'Terminology validation failed',
+        code,
+        system
+      };
+    }
   }
 
   /**

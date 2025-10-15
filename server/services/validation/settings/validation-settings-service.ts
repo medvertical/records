@@ -180,6 +180,8 @@ export class ValidationSettingsService extends EventEmitter {
         ...(update.mode && { mode: update.mode }),
         ...(update.useFhirValidateOperation !== undefined && { useFhirValidateOperation: update.useFhirValidateOperation }),
         ...(update.autoRevalidateAfterEdit !== undefined && { autoRevalidateAfterEdit: update.autoRevalidateAfterEdit }),
+        terminologyServers: update.terminologyServers || currentSettings.terminologyServers,
+        circuitBreaker: update.circuitBreaker || currentSettings.circuitBreaker,
         terminologyFallback: update.terminologyFallback ? {
           ...currentSettings.terminologyFallback,
           ...update.terminologyFallback

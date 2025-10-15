@@ -148,7 +148,8 @@ export function setupValidationSettingsRoutes(app: Express) {
       const hasValidFields = update.aspects || update.performance || update.resourceTypes || 
         update.mode !== undefined || update.useFhirValidateOperation !== undefined ||
         update.terminologyFallback || update.offlineConfig || update.profileSources || 
-        update.autoRevalidateAfterEdit !== undefined;
+        update.autoRevalidateAfterEdit !== undefined ||
+        update.terminologyServers || update.circuitBreaker;
       
       if (!hasValidFields) {
         return res.status(400).json({

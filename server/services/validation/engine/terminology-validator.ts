@@ -78,8 +78,9 @@ export class TerminologyValidator {
         return cachedResult.issues;
       }
 
-      // Check HAPI availability
-      await this.checkHapiAvailability();
+      // TEMPORARY: Skip HAPI for terminology validation (too slow)
+      // Use ServerManager-based validation instead
+      this.hapiAvailable = false;
 
       // Perform validation
       if (this.hapiAvailable) {
@@ -87,8 +88,8 @@ export class TerminologyValidator {
         const hapiIssues = await this.validateWithHapi(resource, resourceType, fhirVersion, mode);
         issues.push(...hapiIssues);
       } else {
-        // Fallback to basic terminology validation
-        console.log(`[TerminologyValidator] HAPI not available, using fallback validation`);
+        // Use ServerManager-based fallback validation (fast with multi-server support)
+        console.log(`[TerminologyValidator] Using ServerManager-based validation`);
         const fallbackIssues = await this.validateWithFallback(resource, resourceType, settings);
         issues.push(...fallbackIssues);
       }
@@ -304,10 +305,12 @@ export class TerminologyValidator {
       const value = this.getFieldValue(resource, pathInfo.path);
       if (value) {
         if (typeof value === 'string') {
-          // Simple code field
+          // Simple code field - infer system from ValueSet URL
+          const system = this.inferSystemFromValueSet(pathInfo.valueSetUrl);
+          console.log(`[TerminologyValidator] Extracted code: "${value}" with system: "${system}" from ValueSet: "${pathInfo.valueSetUrl}"`);
           codes.push({
             code: value,
-            system: '', // System would need to be inferred
+            system: system,
             valueSetUrl: pathInfo.valueSetUrl,
             path: pathInfo.path,
           });
@@ -519,6 +522,24 @@ export class TerminologyValidator {
     }
 
     return servers;
+  }
+
+  /**
+   * Infer the code system from a ValueSet URL
+   */
+  private inferSystemFromValueSet(valueSetUrl?: string): string {
+    if (!valueSetUrl) return '';
+    
+    // Map common ValueSet URLs to their corresponding code systems
+    const valueSetToSystemMap: Record<string, string> = {
+      'http://hl7.org/fhir/ValueSet/administrative-gender': 'http://hl7.org/fhir/administrative-gender',
+      'http://hl7.org/fhir/ValueSet/observation-status': 'http://hl7.org/fhir/observation-status',
+      'http://hl7.org/fhir/ValueSet/encounter-status': 'http://hl7.org/fhir/encounter-status',
+      'http://hl7.org/fhir/ValueSet/condition-clinical': 'http://terminology.hl7.org/CodeSystem/condition-clinical',
+      'http://hl7.org/fhir/ValueSet/condition-ver-status': 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
+    };
+    
+    return valueSetToSystemMap[valueSetUrl] || '';
   }
 }
 

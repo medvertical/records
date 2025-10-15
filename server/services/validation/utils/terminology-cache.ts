@@ -122,6 +122,21 @@ export class TerminologyCache<T = any> {
   }
 
   /**
+   * Simple get for code validation (unified cache key format)
+   * Format: system|code -> result
+   */
+  async getCodeValidation(system: string, code: string): Promise<T | null> {
+    return this.get('validate-code', { system, code });
+  }
+
+  /**
+   * Simple set for code validation (unified cache key format)
+   */
+  async setCodeValidation(system: string, code: string, result: T, ttl?: number): Promise<void> {
+    return this.set('validate-code', { system, code }, result, ttl);
+  }
+
+  /**
    * Set value in cache
    */
   async set(

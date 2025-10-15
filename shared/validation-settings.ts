@@ -19,6 +19,63 @@ export interface ValidationAspectConfig {
 }
 
 // ============================================================================
+// Terminology Server Configuration
+// ============================================================================
+
+export type ServerStatus = 
+  | 'healthy'      // Working normally
+  | 'degraded'     // Slow responses
+  | 'unhealthy'    // Failing requests
+  | 'circuit-open' // Circuit breaker activated
+  | 'unknown';     // Not yet tested
+
+export interface TerminologyServer {
+  /** Unique identifier */
+  id: string;
+  
+  /** Display name */
+  name: string;
+  
+  /** Base FHIR URL */
+  url: string;
+  
+  /** Active/inactive toggle */
+  enabled: boolean;
+  
+  /** Supported FHIR versions (auto-detected) */
+  fhirVersions: ('R4' | 'R5' | 'R6')[];
+  
+  /** Health status */
+  status: ServerStatus;
+  
+  /** Circuit breaker failure count */
+  failureCount: number;
+  
+  /** Last failure timestamp */
+  lastFailureTime: number | null;
+  
+  /** Circuit breaker state */
+  circuitOpen: boolean;
+  
+  /** Average response time in ms */
+  responseTimeAvg: number;
+  
+  /** Test score (0-100) from terminology-server-test */
+  testScore?: number;
+}
+
+export interface CircuitBreakerConfig {
+  /** Open circuit after N failures */
+  failureThreshold: number;
+  
+  /** Reset circuit after N milliseconds */
+  resetTimeout: number;
+  
+  /** Try one request after N milliseconds */
+  halfOpenTimeout: number;
+}
+
+// ============================================================================
 // Simplified Validation Settings
 // ============================================================================
 
@@ -46,13 +103,19 @@ export interface ValidationSettings {
     excludedTypes: string[];    // List of resource types to exclude
   };
 
+  /** Multiple Terminology Servers (ordered by priority) */
+  terminologyServers?: TerminologyServer[];
+
+  /** Circuit Breaker Configuration */
+  circuitBreaker?: CircuitBreakerConfig;
+
   /** Validation Mode (Online/Offline) for terminology validation */
   mode?: 'online' | 'offline'; // Default: 'online'
 
   /** Task 8.2: Use FHIR server's $validate operation when available */
   useFhirValidateOperation?: boolean; // Default: false
   
-  /** Terminology Fallback Configuration */
+  /** Terminology Fallback Configuration (DEPRECATED - use terminologyServers instead) */
   terminologyFallback?: {
     local?: string;  // Local terminology server URL (e.g., http://localhost:8081/fhir)
     remote?: string; // Remote terminology server URL (e.g., https://tx.fhir.org)
@@ -312,6 +375,74 @@ export const VALIDATION_CONFIGS = {
   }
 } as const;
 
+// ============================================================================
+// Default Terminology Servers (Based on Test Results)
+// ============================================================================
+
+/**
+ * Default terminology servers based on TERMINOLOGY_SERVER_TEST_RESULTS.md
+ * 
+ * Priority order (sequential fallback):
+ * 1. tx.fhir.org/r5 - Primary (98/100 score, fastest, most complete)
+ * 2. tx.fhir.org/r4 - Secondary (98/100 score, R4 support)
+ * 3. CSIRO R4 - Fallback (96/100 score, offline-capable)
+ * 
+ * NOTE: CSIRO R5 NOT included - test results show it's broken (61/100)
+ * - ValueSet expansion fails (404 errors)
+ * - Code validation fails (404 errors)
+ * - Missing FHIR core ValueSets
+ */
+export const DEFAULT_TERMINOLOGY_SERVERS: TerminologyServer[] = [
+  {
+    id: 'tx-fhir-org-r5',
+    name: 'HL7 TX Server (R5)',
+    url: 'https://tx.fhir.org/r5',
+    enabled: true,
+    fhirVersions: ['R5', 'R6'],
+    status: 'unknown',
+    failureCount: 0,
+    lastFailureTime: null,
+    circuitOpen: false,
+    responseTimeAvg: 0,
+    testScore: 98 // Excellent - fastest and most complete
+  },
+  {
+    id: 'tx-fhir-org-r4',
+    name: 'HL7 TX Server (R4)',
+    url: 'https://tx.fhir.org/r4',
+    enabled: true,
+    fhirVersions: ['R4'],
+    status: 'unknown',
+    failureCount: 0,
+    lastFailureTime: null,
+    circuitOpen: false,
+    responseTimeAvg: 0,
+    testScore: 98 // Excellent performance
+  },
+  {
+    id: 'csiro-ontoserver-r4',
+    name: 'CSIRO Ontoserver (R4)',
+    url: 'https://r4.ontoserver.csiro.au/fhir',
+    enabled: true,
+    fhirVersions: ['R4'],
+    status: 'unknown',
+    failureCount: 0,
+    lastFailureTime: null,
+    circuitOpen: false,
+    responseTimeAvg: 0,
+    testScore: 96 // Good for R4 fallback
+  }
+];
+
+/**
+ * Default circuit breaker configuration
+ */
+export const DEFAULT_CIRCUIT_BREAKER_CONFIG: CircuitBreakerConfig = {
+  failureThreshold: 5,        // Open circuit after 5 consecutive failures
+  resetTimeout: 1800000,      // 30 minutes before full reset
+  halfOpenTimeout: 300000     // 5 minutes before trying one request
+};
+
 export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
   aspects: {
     structural: { enabled: true, severity: 'error' },
@@ -330,10 +461,12 @@ export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
     includedTypes: R4_DEFAULT_INCLUDED_RESOURCE_TYPES,
     excludedTypes: []
   },
+  terminologyServers: DEFAULT_TERMINOLOGY_SERVERS,
+  circuitBreaker: DEFAULT_CIRCUIT_BREAKER_CONFIG,
   mode: 'online',
   terminologyFallback: {
     local: 'n/a',  // No local terminology server
-    remote: 'https://tx.fhir.org/r4'  // Primary: tx.fhir.org, fallback: Ontoserver in code
+    remote: 'https://tx.fhir.org/r4'  // DEPRECATED - use terminologyServers instead
   },
   offlineConfig: {
     ontoserverUrl: 'https://r4.ontoserver.csiro.au/fhir',  // Public Ontoserver for fallback
@@ -361,10 +494,12 @@ export const DEFAULT_VALIDATION_SETTINGS_R5: ValidationSettings = {
     includedTypes: R5_DEFAULT_INCLUDED_RESOURCE_TYPES,
     excludedTypes: []
   },
+  terminologyServers: DEFAULT_TERMINOLOGY_SERVERS,
+  circuitBreaker: DEFAULT_CIRCUIT_BREAKER_CONFIG,
   mode: 'online',
   terminologyFallback: {
     local: 'n/a',  // No local terminology server
-    remote: 'https://tx.fhir.org/r5'  // Primary: tx.fhir.org, fallback: Ontoserver in code
+    remote: 'https://tx.fhir.org/r5'  // DEPRECATED - use terminologyServers instead
   },
   offlineConfig: {
     ontoserverUrl: 'https://r4.ontoserver.csiro.au/fhir',  // Public Ontoserver for fallback
@@ -383,6 +518,8 @@ export interface ValidationSettingsUpdate {
   aspects?: Partial<ValidationSettings['aspects']>;
   performance?: Partial<ValidationSettings['performance']>;
   resourceTypes?: Partial<ValidationSettings['resourceTypes']>;
+  terminologyServers?: TerminologyServer[];
+  circuitBreaker?: CircuitBreakerConfig;
   mode?: 'online' | 'offline';
   useFhirValidateOperation?: boolean;
   terminologyFallback?: {
@@ -532,7 +669,8 @@ export function getUnavailableResourceTypes(resourceTypes: string[], version: FH
  * Get resource types that are new in R5 (not available in R4)
  */
 export function getR5SpecificResourceTypes(): string[] {
-  return R5_ALL_RESOURCE_TYPES.filter(type => !R4_ALL_RESOURCE_TYPES.includes(type));
+  const r4Types = R4_ALL_RESOURCE_TYPES as readonly string[];
+  return (R5_ALL_RESOURCE_TYPES as readonly string[]).filter((type: string) => !r4Types.includes(type));
 }
 
 /**
@@ -657,7 +795,7 @@ export function validateResourceTypeSettingsForVersion(
   // Check for R5-specific types when using R4
   if (version === 'R4') {
     const r5SpecificIncluded = resourceTypes.includedTypes.filter(type => 
-      getR5SpecificResourceTypes().includes(type)
+      getR5SpecificResourceTypes().includes(type as any)
     );
     if (r5SpecificIncluded.length > 0) {
       errors.push(`R5-specific resource types cannot be used with FHIR R4: ${r5SpecificIncluded.join(', ')}`);

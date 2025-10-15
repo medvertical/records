@@ -395,13 +395,14 @@ const resourceTypeIconMap: Record<string, ResourceTypeIcon> = {
   ClinicalImpression: FileArchive,
   DetectedIssue: AlertTriangle,
   GuidanceResponse: FileArchive,
-  Media: Camera,
-  NutritionOrder: Utensils,
-  RequestGroup: ClipboardList,
-  RiskAssessment: AlertTriangle,
-  SupplyRequest: Package,
-  SupplyDelivery: Package,
-  VisionPrescription: Eye,
+  // Duplicate entries removed - already defined above
+  // Media: Camera,
+  // NutritionOrder: Utensils,
+  // RequestGroup: ClipboardList,
+  // RiskAssessment: AlertTriangle,
+  // SupplyRequest: Package,
+  // SupplyDelivery: Package,
+  // VisionPrescription: Eye,
 };
 
 /**

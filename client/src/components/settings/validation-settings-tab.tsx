@@ -46,8 +46,11 @@ import {
 import type { 
   ValidationSettings, 
   ValidationSettingsUpdate,
-  FHIRVersion 
+  FHIRVersion,
+  TerminologyServer
 } from '@shared/validation-settings';
+import { TerminologyServersSection } from './terminology-servers-section';
+import { DEFAULT_TERMINOLOGY_SERVERS } from '@shared/validation-settings';
 
 // ============================================================================
 // Component
@@ -1054,6 +1057,31 @@ export function ValidationSettingsTab() {
               </Alert>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Terminology Servers */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Globe className="h-5 w-5" />
+            Terminology Servers
+          </CardTitle>
+          <CardDescription>
+            Configure multiple terminology servers with automatic fallback
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TerminologyServersSection
+            servers={settings.terminologyServers || DEFAULT_TERMINOLOGY_SERVERS}
+            onChange={(servers: TerminologyServer[]) => {
+              setSettings({
+                ...settings,
+                terminologyServers: servers
+              });
+            }}
+            onSave={saveSettings}
+          />
         </CardContent>
       </Card>
     </div>
