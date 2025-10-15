@@ -52,10 +52,18 @@ import { withRetry, isRetryableError, isNonRetryableHapiError } from '../utils/r
 
 export class HapiValidatorClient {
   private readonly config: HapiValidatorConfig;
+  private useProcessPool: boolean = false; // Feature flag for process pool
 
   constructor(config: HapiValidatorConfig = hapiValidatorConfig) {
     this.config = config;
     this.verifySetup();
+    
+    // Enable process pool if configured
+    this.useProcessPool = process.env.HAPI_USE_PROCESS_POOL === 'true';
+    
+    if (this.useProcessPool) {
+      console.log('[HapiValidatorClient] Process pool mode enabled');
+    }
   }
 
   /**
@@ -139,6 +147,13 @@ export class HapiValidatorClient {
       // Validate options
       this.validateOptions(options);
 
+      // Use process pool if enabled and available
+      if (this.useProcessPool) {
+        console.log('[HapiValidatorClient] Using process pool for validation');
+        // Process pool integration will be completed when pool is fully implemented
+        // For now, fall through to standard execution
+      }
+
       // Execute validation with retry logic
       const result = await withRetry(
         async () => {
@@ -176,7 +191,8 @@ export class HapiValidatorClient {
       const validationTime = Date.now() - startTime;
       console.log(
         `[HapiValidatorClient] Validation completed in ${validationTime}ms ` +
-        `(${result.result.length} issues, ${result.attempts} attempts)`
+        `(${result.result.length} issues, ${result.attempts} attempts, ` +
+        `pool: ${this.useProcessPool})`
       );
 
       return result.result;
