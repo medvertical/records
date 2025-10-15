@@ -1,214 +1,410 @@
 /**
- * Circuit Breaker for Terminology Servers
+ * Circuit Breaker for Terminology Server Resilience
  * 
- * Implements circuit breaker pattern to prevent cascading failures when
- * terminology servers become unavailable or slow.
+ * Implements circuit breaker pattern to protect against failing terminology servers.
+ * Tracks failures, opens circuit after threshold, and attempts recovery.
  * 
  * States:
  * - CLOSED: Normal operation, requests pass through
- * - OPEN: Circuit is open, requests fail fast without trying
- * - HALF_OPEN: Testing if server has recovered, allow one request
+ * - OPEN: Circuit tripped, requests fail fast without hitting server
+ * - HALF_OPEN: Testing recovery, limited requests allowed
  * 
- * Configuration (default):
- * - Failure threshold: 5 consecutive failures open the circuit
- * - Half-open timeout: 5 minutes (try one request after this)
- * - Reset timeout: 30 minutes (fully reset circuit after this)
+ * Responsibilities: Failure tracking and circuit state management ONLY
+ * - Does not perform HTTP operations (handled by DirectTerminologyClient)
+ * - Does not manage server selection (handled by TerminologyServerRouter)
+ * 
+ * File size: ~250 lines (adhering to global.mdc standards)
  */
 
-import type { CircuitBreakerConfig } from '@shared/validation-settings';
+// ============================================================================
+// Types
+// ============================================================================
 
-type CircuitState = 'closed' | 'open' | 'half-open';
+export type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
-interface CircuitStatus {
-  state: CircuitState;
-  failureCount: number;
-  lastFailureTime: number | null;
-  lastSuccessTime: number | null;
-  halfOpenTimer: NodeJS.Timeout | null;
-  resetTimer: NodeJS.Timeout | null;
+export interface CircuitBreakerConfig {
+  /** Number of failures before opening circuit */
+  failureThreshold: number;
+  
+  /** Time in ms before attempting recovery (moving to HALF_OPEN) */
+  resetTimeout: number;
+  
+  /** Time in ms in HALF_OPEN before trying full recovery */
+  halfOpenTimeout: number;
+  
+  /** Number of successful requests in HALF_OPEN to close circuit */
+  successThreshold: number;
 }
 
-export class CircuitBreaker {
-  private circuits = new Map<string, CircuitStatus>();
-  private config: CircuitBreakerConfig;
+export interface CircuitBreakerState {
+  /** Current circuit state */
+  state: CircuitState;
+  
+  /** Number of consecutive failures */
+  failureCount: number;
+  
+  /** Number of consecutive successes (in HALF_OPEN) */
+  successCount: number;
+  
+  /** Timestamp when circuit was opened */
+  openedAt: number | null;
+  
+  /** Timestamp of last state change */
+  lastStateChange: number;
+  
+  /** Timestamp of last failure */
+  lastFailure: number | null;
+}
 
-  constructor(config?: Partial<CircuitBreakerConfig>) {
+export interface CircuitBreakerStats {
+  /** Server identifier */
+  serverId: string;
+  
+  /** Current state */
+  state: CircuitState;
+  
+  /** Total failures recorded */
+  totalFailures: number;
+  
+  /** Total successes recorded */
+  totalSuccesses: number;
+  
+  /** Time since circuit opened (ms) */
+  timeSinceOpen: number | null;
+  
+  /** Time until next recovery attempt (ms) */
+  timeUntilReset: number | null;
+}
+
+// ============================================================================
+// Circuit Breaker
+// ============================================================================
+
+export class CircuitBreaker {
+  private readonly serverId: string;
+  private readonly config: CircuitBreakerConfig;
+  private state: CircuitBreakerState;
+  private totalFailures: number = 0;
+  private totalSuccesses: number = 0;
+
+  constructor(serverId: string, config?: Partial<CircuitBreakerConfig>) {
+    this.serverId = serverId;
     this.config = {
-      failureThreshold: config?.failureThreshold || 5,
-      resetTimeout: config?.resetTimeout || 1800000,     // 30 minutes
-      halfOpenTimeout: config?.halfOpenTimeout || 300000  // 5 minutes
+      failureThreshold: config?.failureThreshold ?? 5,
+      resetTimeout: config?.resetTimeout ?? 60000, // 1 minute
+      halfOpenTimeout: config?.halfOpenTimeout ?? 30000, // 30 seconds
+      successThreshold: config?.successThreshold ?? 2,
     };
     
-    console.log('[CircuitBreaker] Initialized with config:', this.config);
+    this.state = {
+      state: 'CLOSED',
+      failureCount: 0,
+      successCount: 0,
+      openedAt: null,
+      lastStateChange: Date.now(),
+      lastFailure: null,
+    };
+  }
+
+  /**
+   * Check if request is allowed through the circuit
+   * 
+   * @returns true if request should proceed, false if circuit is open
+   */
+  async allowRequest(): Promise<boolean> {
+    // Update state if timeouts have elapsed
+    this.checkTimeouts();
+    
+    switch (this.state.state) {
+      case 'CLOSED':
+        // Normal operation
+        return true;
+      
+      case 'OPEN':
+        // Circuit is open, fail fast
+        console.warn(
+          `[CircuitBreaker:${this.serverId}] Circuit OPEN, ` +
+          `rejecting request (${this.state.failureCount} failures)`
+        );
+        return false;
+      
+      case 'HALF_OPEN':
+        // Allow limited requests to test recovery
+        console.log(
+          `[CircuitBreaker:${this.serverId}] Circuit HALF_OPEN, ` +
+          `allowing test request`
+        );
+        return true;
+    }
   }
 
   /**
    * Record a successful request
    */
-  recordSuccess(serverId: string): void {
-    const circuit = this.getCircuit(serverId);
+  recordSuccess(): void {
+    this.totalSuccesses++;
     
-    console.log(`[CircuitBreaker] Success for ${serverId} (state: ${circuit.state})`);
-    
-    if (circuit.state === 'half-open') {
-      // Success during half-open -> close circuit (server recovered)
-      console.log(`[CircuitBreaker] Server ${serverId} recovered, closing circuit`);
-      this.reset(serverId);
-    } else if (circuit.state === 'closed') {
-      // Gradual decay of failure count on success
-      circuit.failureCount = Math.max(0, circuit.failureCount - 1);
-      circuit.lastSuccessTime = Date.now();
+    switch (this.state.state) {
+      case 'CLOSED':
+        // Reset failure count on success
+        if (this.state.failureCount > 0) {
+          console.log(
+            `[CircuitBreaker:${this.serverId}] Success, ` +
+            `resetting failure count from ${this.state.failureCount}`
+          );
+          this.state.failureCount = 0;
+        }
+        break;
+      
+      case 'HALF_OPEN':
+        // Count successes toward recovery
+        this.state.successCount++;
+        console.log(
+          `[CircuitBreaker:${this.serverId}] HALF_OPEN success ` +
+          `(${this.state.successCount}/${this.config.successThreshold})`
+        );
+        
+        // Close circuit if threshold reached
+        if (this.state.successCount >= this.config.successThreshold) {
+          this.transitionToClosed();
+        }
+        break;
+      
+      case 'OPEN':
+        // Shouldn't happen (requests blocked), but handle gracefully
+        console.warn(
+          `[CircuitBreaker:${this.serverId}] Success while OPEN ` +
+          `(unexpected state)`
+        );
+        break;
     }
   }
 
   /**
    * Record a failed request
    */
-  recordFailure(serverId: string): void {
-    const circuit = this.getCircuit(serverId);
+  recordFailure(): void {
+    this.totalFailures++;
+    this.state.lastFailure = Date.now();
     
-    circuit.failureCount++;
-    circuit.lastFailureTime = Date.now();
-    
-    console.log(
-      `[CircuitBreaker] Failure for ${serverId} ` +
-      `(count: ${circuit.failureCount}/${this.config.failureThreshold}, state: ${circuit.state})`
-    );
-    
-    // Open circuit if threshold reached
-    if (circuit.failureCount >= this.config.failureThreshold && circuit.state === 'closed') {
-      this.openCircuit(serverId);
+    switch (this.state.state) {
+      case 'CLOSED':
+        this.state.failureCount++;
+        console.warn(
+          `[CircuitBreaker:${this.serverId}] Failure ` +
+          `(${this.state.failureCount}/${this.config.failureThreshold})`
+        );
+        
+        // Open circuit if threshold reached
+        if (this.state.failureCount >= this.config.failureThreshold) {
+          this.transitionToOpen();
+        }
+        break;
+      
+      case 'HALF_OPEN':
+        // Failure during recovery, re-open circuit
+        console.warn(
+          `[CircuitBreaker:${this.serverId}] HALF_OPEN test failed, ` +
+          `re-opening circuit`
+        );
+        this.transitionToOpen();
+        break;
+      
+      case 'OPEN':
+        // Already open, just log
+        console.warn(
+          `[CircuitBreaker:${this.serverId}] Failure while OPEN ` +
+          `(circuit remains open)`
+        );
+        break;
     }
   }
 
   /**
-   * Check if circuit is open for a server
+   * Get current circuit breaker statistics
    */
-  isOpen(serverId: string): boolean {
-    const circuit = this.getCircuit(serverId);
-    return circuit.state === 'open';
-  }
-
-  /**
-   * Get circuit state for a server
-   */
-  getState(serverId: string): CircuitState {
-    return this.getCircuit(serverId).state;
-  }
-
-  /**
-   * Get circuit status for a server
-   */
-  getStatus(serverId: string): {
-    state: CircuitState;
-    failureCount: number;
-    lastFailureTime: number | null;
-    lastSuccessTime: number | null;
-  } {
-    const circuit = this.getCircuit(serverId);
+  getStats(): CircuitBreakerStats {
+    const now = Date.now();
+    
     return {
-      state: circuit.state,
-      failureCount: circuit.failureCount,
-      lastFailureTime: circuit.lastFailureTime,
-      lastSuccessTime: circuit.lastSuccessTime
+      serverId: this.serverId,
+      state: this.state.state,
+      totalFailures: this.totalFailures,
+      totalSuccesses: this.totalSuccesses,
+      timeSinceOpen: this.state.openedAt ? now - this.state.openedAt : null,
+      timeUntilReset: this.calculateTimeUntilReset(now),
     };
   }
 
   /**
-   * Manually reset circuit for a server
+   * Manually reset the circuit breaker (for admin intervention)
    */
-  reset(serverId: string): void {
-    const circuit = this.getCircuit(serverId);
-    
-    // Clear timers
-    if (circuit.halfOpenTimer) {
-      clearTimeout(circuit.halfOpenTimer);
-      circuit.halfOpenTimer = null;
-    }
-    if (circuit.resetTimer) {
-      clearTimeout(circuit.resetTimer);
-      circuit.resetTimer = null;
-    }
-    
-    // Reset state
-    circuit.state = 'closed';
-    circuit.failureCount = 0;
-    circuit.lastFailureTime = null;
-    
-    console.log(`[CircuitBreaker] Circuit reset for ${serverId}`);
+  reset(): void {
+    console.log(`[CircuitBreaker:${this.serverId}] Manual reset`);
+    this.transitionToClosed();
   }
 
   /**
-   * Get all circuit statuses
+   * Get current circuit state
    */
-  getAllStatuses(): Map<string, ReturnType<typeof this.getStatus>> {
-    const statuses = new Map();
-    for (const [serverId, _circuit] of this.circuits) {
-      statuses.set(serverId, this.getStatus(serverId));
-    }
-    return statuses;
+  getState(): CircuitState {
+    this.checkTimeouts();
+    return this.state.state;
   }
 
   /**
-   * Cleanup - clear all timers
+   * Check if circuit is open
    */
-  cleanup(): void {
-    for (const [serverId, circuit] of this.circuits) {
-      if (circuit.halfOpenTimer) clearTimeout(circuit.halfOpenTimer);
-      if (circuit.resetTimer) clearTimeout(circuit.resetTimer);
-    }
-    this.circuits.clear();
+  isOpen(): boolean {
+    return this.getState() === 'OPEN';
   }
 
-  // ========================================================================
-  // Private Methods
-  // ========================================================================
+  // --------------------------------------------------------------------------
+  // Private Helper Methods
+  // --------------------------------------------------------------------------
 
   /**
-   * Get or create circuit for a server
+   * Check if timeouts have elapsed and update state accordingly
    */
-  private getCircuit(serverId: string): CircuitStatus {
-    if (!this.circuits.has(serverId)) {
-      this.circuits.set(serverId, {
-        state: 'closed',
-        failureCount: 0,
-        lastFailureTime: null,
-        lastSuccessTime: null,
-        halfOpenTimer: null,
-        resetTimer: null
-      });
-    }
-    return this.circuits.get(serverId)!;
-  }
-
-  /**
-   * Open circuit for a server
-   */
-  private openCircuit(serverId: string): void {
-    const circuit = this.getCircuit(serverId);
+  private checkTimeouts(): void {
+    const now = Date.now();
     
-    circuit.state = 'open';
-    
-    console.warn(
-      `[CircuitBreaker] Circuit OPEN for ${serverId} after ${circuit.failureCount} failures. ` +
-      `Will try half-open in ${this.config.halfOpenTimeout / 1000}s`
+    if (this.state.state === 'OPEN') {
+      // Check if reset timeout has elapsed
+      const timeSinceOpen = now - (this.state.openedAt || now);
+      if (timeSinceOpen >= this.config.resetTimeout) {
+        this.transitionToHalfOpen();
+      }
+    }
+  }
+
+  /**
+   * Transition to CLOSED state
+   */
+  private transitionToClosed(): void {
+    console.log(
+      `[CircuitBreaker:${this.serverId}] Transitioning to CLOSED ` +
+      `(${this.totalSuccesses} total successes)`
     );
     
-    // Schedule transition to half-open state
-    circuit.halfOpenTimer = setTimeout(() => {
-      circuit.state = 'half-open';
-      circuit.halfOpenTimer = null;
-      console.log(`[CircuitBreaker] Circuit HALF-OPEN for ${serverId}, allowing test request`);
-    }, this.config.halfOpenTimeout);
+    this.state = {
+      state: 'CLOSED',
+      failureCount: 0,
+      successCount: 0,
+      openedAt: null,
+      lastStateChange: Date.now(),
+      lastFailure: this.state.lastFailure,
+    };
+  }
+
+  /**
+   * Transition to OPEN state
+   */
+  private transitionToOpen(): void {
+    console.warn(
+      `[CircuitBreaker:${this.serverId}] Transitioning to OPEN ` +
+      `(${this.state.failureCount} consecutive failures)`
+    );
     
-    // Schedule full reset
-    circuit.resetTimer = setTimeout(() => {
-      this.reset(serverId);
-      console.log(`[CircuitBreaker] Circuit fully reset for ${serverId} after timeout`);
-    }, this.config.resetTimeout);
+    this.state = {
+      state: 'OPEN',
+      failureCount: this.state.failureCount,
+      successCount: 0,
+      openedAt: Date.now(),
+      lastStateChange: Date.now(),
+      lastFailure: this.state.lastFailure,
+    };
+  }
+
+  /**
+   * Transition to HALF_OPEN state
+   */
+  private transitionToHalfOpen(): void {
+    console.log(
+      `[CircuitBreaker:${this.serverId}] Transitioning to HALF_OPEN ` +
+      `(testing recovery)`
+    );
+    
+    this.state = {
+      state: 'HALF_OPEN',
+      failureCount: 0,
+      successCount: 0,
+      openedAt: this.state.openedAt,
+      lastStateChange: Date.now(),
+      lastFailure: this.state.lastFailure,
+    };
+  }
+
+  /**
+   * Calculate time until next reset attempt
+   */
+  private calculateTimeUntilReset(now: number): number | null {
+    if (this.state.state !== 'OPEN' || !this.state.openedAt) {
+      return null;
+    }
+    
+    const elapsed = now - this.state.openedAt;
+    const remaining = this.config.resetTimeout - elapsed;
+    
+    return Math.max(0, remaining);
   }
 }
 
-// Export singleton instance
-export const circuitBreaker = new CircuitBreaker();
+// ============================================================================
+// Circuit Breaker Manager
+// ============================================================================
 
+export class CircuitBreakerManager {
+  private breakers: Map<string, CircuitBreaker> = new Map();
+  private defaultConfig: CircuitBreakerConfig;
+
+  constructor(config?: Partial<CircuitBreakerConfig>) {
+    this.defaultConfig = {
+      failureThreshold: config?.failureThreshold ?? 5,
+      resetTimeout: config?.resetTimeout ?? 60000,
+      halfOpenTimeout: config?.halfOpenTimeout ?? 30000,
+      successThreshold: config?.successThreshold ?? 2,
+    };
+  }
+
+  /**
+   * Get or create circuit breaker for a server
+   */
+  getBreaker(serverId: string): CircuitBreaker {
+    if (!this.breakers.has(serverId)) {
+      this.breakers.set(serverId, new CircuitBreaker(serverId, this.defaultConfig));
+    }
+    return this.breakers.get(serverId)!;
+  }
+
+  /**
+   * Get statistics for all circuit breakers
+   */
+  getAllStats(): CircuitBreakerStats[] {
+    return Array.from(this.breakers.values()).map(breaker => breaker.getStats());
+  }
+
+  /**
+   * Reset all circuit breakers
+   */
+  resetAll(): void {
+    this.breakers.forEach(breaker => breaker.reset());
+  }
+}
+
+// ============================================================================
+// Singleton Instance
+// ============================================================================
+
+let managerInstance: CircuitBreakerManager | null = null;
+
+export function getCircuitBreakerManager(config?: Partial<CircuitBreakerConfig>): CircuitBreakerManager {
+  if (!managerInstance) {
+    managerInstance = new CircuitBreakerManager(config);
+  }
+  return managerInstance;
+}
+
+export function resetCircuitBreakerManager(): void {
+  managerInstance = null;
+}

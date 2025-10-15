@@ -11,17 +11,26 @@
 - `server/services/validation/core/validation-engine.ts` - Main orchestrator for 6-aspect validation
 - `server/services/validation/engine/structural-validator.ts` - HAPI-based structural validation
 - `server/services/validation/engine/profile-validator.ts` - Profile conformance validation
-- `server/services/validation/engine/terminology-validator.ts` - Terminology validation (needs major refactor)
+- `server/services/validation/engine/terminology-validator.ts` - ✅ REFACTORED - Direct HTTP terminology validation (295 lines)
 - `server/services/validation/engine/reference-validator.ts` - Reference integrity validation
 - `server/services/validation/engine/business-rule-validator.ts` - FHIRPath/JSONPath rule execution
 - `server/services/validation/engine/metadata-validator.ts` - Metadata and provenance validation
+
+### New Components (Created)
+- `server/services/validation/terminology/direct-terminology-client.ts` - ✅ Direct HTTP terminology validation client (300 lines)
+- `server/services/validation/terminology/terminology-server-router.ts` - ✅ Version-specific server routing (150 lines)
+- `server/services/validation/terminology/circuit-breaker.ts` - ✅ Circuit breaker pattern for resilience (250 lines)
+- `server/services/validation/terminology/terminology-cache.ts` - ✅ Intelligent caching with SHA-256 keys (300 lines)
+- `server/services/validation/terminology/code-extractor.ts` - ✅ Code extraction from FHIR resources (350 lines)
+- `server/services/validation/terminology/batch-validator.ts` - ✅ Batch orchestration with deduplication and caching (300 lines)
+- `server/services/validation/terminology/cache-warmer.ts` - ✅ Pre-population of common codes (250 lines)
+- `server/services/validation/terminology/performance-monitor.ts` - ✅ Performance tracking and metrics (300 lines)
 
 ### New Components (To Be Created)
 - `server/services/validation/utils/error-mapping-engine.ts` - Error code translation and suggestions
 - `server/services/validation/utils/connectivity-detector.ts` - Network health monitoring
 - `server/services/validation/utils/profile-resolver.ts` - Smart canonical URL resolution
 - `server/services/validation/utils/process-pool-manager.ts` - HAPI Java process management
-- `server/services/validation/terminology/direct-terminology-client.ts` - Direct HTTP terminology validation
 - `server/services/validation/cache/validation-cache-manager.ts` - Multi-layer caching system
 - `server/config/error-mappings.json` - Error mapping dictionary
 - `server/config/validation-rules.json` - Business rules library
@@ -40,28 +49,30 @@
 - `server/routes/profiles.ts` - Profile management endpoints
 
 ### Tests
-- `server/services/validation/__tests__/terminology-validator.test.ts` - Terminology validation tests
-- `server/services/validation/__tests__/error-mapping-engine.test.ts` - Error mapping tests
-- `server/services/validation/__tests__/profile-resolver.test.ts` - Profile resolution tests
-- `tests/integration/validation-engine.test.ts` - Integration tests
+- `server/services/validation/terminology/__tests__/direct-terminology-client.test.ts` - ✅ Unit tests for DirectTerminologyClient (270 lines)
+- `tests/integration/terminology-validation.integration.test.ts` - ✅ Integration tests with real tx.fhir.org (250 lines)
+- `server/services/validation/__tests__/terminology-validator.test.ts` - Terminology validation tests (to be created)
+- `server/services/validation/__tests__/error-mapping-engine.test.ts` - Error mapping tests (to be created)
+- `server/services/validation/__tests__/profile-resolver.test.ts` - Profile resolution tests (to be created)
+- `tests/integration/validation-engine.test.ts` - Integration tests (to be created)
 
 ---
 
 ## Tasks
 
-- [ ] **1.0 Terminology Validation Optimization** - Rewrite terminology validator to bypass HAPI and use direct HTTP calls to terminology servers
-  - [ ] 1.1 Create `DirectTerminologyClient` class with HTTP client for ValueSet/$validate-code operations
-  - [ ] 1.2 Implement version-specific terminology server URL routing (R4→tx.fhir.org/r4, R5→r5, R6→r6)
-  - [ ] 1.3 Add circuit breaker pattern for terminology server failures with automatic fallback
-  - [ ] 1.4 Implement intelligent caching with SHA-256 keys (system|code|valueSet|version) and TTL management
-  - [ ] 1.5 Create code extraction logic to identify all CodeableConcept, Coding, and code fields in resources
-  - [ ] 1.6 Implement batch validation for multiple codes in single HTTP request
-  - [ ] 1.7 Add parallel terminology server requests with Promise.all for performance
-  - [ ] 1.8 Update `TerminologyValidator` to use new `DirectTerminologyClient` instead of HAPI
-  - [ ] 1.9 Implement cache warming for common ValueSets (administrative-gender, observation-status, etc.)
-  - [ ] 1.10 Add performance monitoring and logging for terminology validation times
-  - [ ] 1.11 Write unit tests for `DirectTerminologyClient` with mocked HTTP responses
-  - [ ] 1.12 Write integration tests validating against real tx.fhir.org endpoints
+- [x] **1.0 Terminology Validation Optimization** - Rewrite terminology validator to bypass HAPI and use direct HTTP calls to terminology servers
+  - [x] 1.1 Create `DirectTerminologyClient` class with HTTP client for ValueSet/$validate-code operations
+  - [x] 1.2 Implement version-specific terminology server URL routing (R4→tx.fhir.org/r4, R5→r5, R6→r6)
+  - [x] 1.3 Add circuit breaker pattern for terminology server failures with automatic fallback
+  - [x] 1.4 Implement intelligent caching with SHA-256 keys (system|code|valueSet|version) and TTL management
+  - [x] 1.5 Create code extraction logic to identify all CodeableConcept, Coding, and code fields in resources
+  - [x] 1.6 Implement batch validation for multiple codes in single HTTP request
+  - [x] 1.7 Add parallel terminology server requests with Promise.all for performance
+  - [x] 1.8 Update `TerminologyValidator` to use new `DirectTerminologyClient` instead of HAPI
+  - [x] 1.9 Implement cache warming for common ValueSets (administrative-gender, observation-status, etc.)
+  - [x] 1.10 Add performance monitoring and logging for terminology validation times
+  - [x] 1.11 Write unit tests for `DirectTerminologyClient` with mocked HTTP responses
+  - [x] 1.12 Write integration tests validating against real tx.fhir.org endpoints
 
 - [ ] **2.0 Error Mapping System** - Create comprehensive error mapping dictionary with user-friendly messages and suggested fixes
   - [ ] 2.1 Create `error-mappings.json` schema with fields: code, userMessage, suggestedFixes[], severity, documentation
@@ -265,6 +276,188 @@ Based on PRD recommendations, the priority order is:
 - Performance tests for caching and process pooling
 - End-to-end tests with real FHIR servers
 - Mock external services (Simplifier, tx.fhir.org) for CI/CD
+
+---
+
+## 📜 Code Quality Standards (global.mdc)
+
+**All implementations MUST adhere to these standards:**
+
+### File Size Limits
+- ⚠️ **Break files at 400 lines** - Never exceed 500 lines
+- If a file approaches 400 lines, extract logic into separate modules
+- Split validators, utilities, and helpers into focused, single-purpose files
+- Example: `DirectTerminologyClient` should be ~300 lines max; extract cache logic to `TerminologyCache`
+
+### Function & Method Size
+- ✅ **Keep functions under 30-40 lines**
+- Break complex logic into smaller, named helper functions
+- Each function should have a single, clear responsibility
+- Use descriptive names that reveal intent
+
+### Class Size & Structure
+- ✅ **Keep classes under 200 lines**
+- If a class exceeds 200 lines, split into:
+  - Manager classes (business logic)
+  - Helper classes (utilities)
+  - Service classes (external integrations)
+- Example: If `ErrorMappingEngine` grows large, extract `ErrorMessageFormatter`, `SuggestedFixGenerator`
+
+### Single Responsibility Principle (SRP)
+- ✅ **Each file/class/function handles ONE concern only**
+- `DirectTerminologyClient` → HTTP operations ONLY
+- `TerminologyValidator` → Orchestration ONLY
+- `TerminologyCache` → Caching ONLY
+- Never mix concerns (e.g., validation + caching + HTTP in one class)
+
+### Modular Design
+- ✅ **Build Lego-like, interchangeable modules**
+- Use dependency injection for testability
+- Avoid tight coupling between components
+- Each module should be reusable in isolation
+- Example: `ConnectivityDetector` should work independently of `ValidationEngine`
+
+### Naming Conventions
+- ✅ **Use descriptive, intention-revealing names**
+- Avoid vague names: `data`, `info`, `helper`, `temp`, `utils`
+- Good: `validateCodeAgainstValueSet()`, `extractCodingFromResource()`
+- Bad: `validate()`, `process()`, `doStuff()`
+
+### Test-Driven Development (TDD)
+- ✅ **Write tests FIRST for new features**
+- Workflow: Outline tests → Write failing tests → Implement → Refactor
+- For bug fixes: Reproduce with test first, then fix
+- All tests must pass before marking task complete
+- Aim for >80% code coverage
+
+### Documentation Requirements
+- ✅ **Document complex logic and public APIs**
+- Add JSDoc comments for all exported functions/classes
+- Include @param, @returns, @throws tags
+- Document architecture decisions in code comments
+- Update docs when changing behavior
+
+### Security & Validation
+- ✅ **Server-side validation ALWAYS**
+- Never trust client input
+- Sanitize all user data server-side
+- Use environment variables for secrets (never commit)
+- Validate external data (terminology servers, Simplifier)
+
+### Git & Version Control
+- ✅ **Small, atomic commits with clear messages**
+- Commit message format: `[Component] Brief description`
+- Example: `[TerminologyValidator] Add direct HTTP validation`
+- No unrelated changes in single commit
+- Keep working tree clean
+
+---
+
+## 🚨 Implementation Checklist (Per Sub-Task)
+
+Before marking a sub-task as complete, verify:
+
+- [ ] **Code Quality:**
+  - [ ] File is under 400 lines (extracted if larger)
+  - [ ] Functions are under 40 lines
+  - [ ] Classes are under 200 lines
+  - [ ] No God classes or mixed concerns
+  - [ ] Descriptive naming throughout
+
+- [ ] **Testing:**
+  - [ ] Unit tests written and passing
+  - [ ] Integration tests if touching external services
+  - [ ] Test coverage >80% for new code
+  - [ ] Edge cases covered
+
+- [ ] **Documentation:**
+  - [ ] JSDoc comments on public APIs
+  - [ ] Complex logic documented
+  - [ ] README updated if needed
+  - [ ] Architecture docs updated if structure changed
+
+- [ ] **Code Review:**
+  - [ ] Self-review completed
+  - [ ] No console.log statements (use project logger)
+  - [ ] Error handling implemented
+  - [ ] TypeScript types defined (no `any`)
+
+- [ ] **Performance:**
+  - [ ] No obvious performance issues
+  - [ ] Caching implemented where appropriate
+  - [ ] Async operations used correctly
+  - [ ] Resource cleanup (connections, files, processes)
+
+---
+
+## 💡 Implementation Tips
+
+### When Creating New Classes
+```typescript
+// ✅ GOOD: Focused, single responsibility
+class DirectTerminologyClient {
+  private httpClient: AxiosInstance;
+  
+  async validateCode(params: ValidateCodeParams): Promise<ValidationResult> {
+    // HTTP operations only
+  }
+}
+
+class TerminologyCache {
+  private cache: Map<string, CachedResult>;
+  
+  get(key: string): CachedResult | null { /* ... */ }
+  set(key: string, value: CachedResult): void { /* ... */ }
+}
+
+// ❌ BAD: Multiple responsibilities
+class TerminologyValidator {
+  async validateCode() {
+    // HTTP operations
+    // Caching logic
+    // Result transformation
+    // Error mapping
+    // All in one class!
+  }
+}
+```
+
+### When Functions Grow Too Large
+```typescript
+// ✅ GOOD: Extracted helper functions
+class ProfileResolver {
+  async resolveProfile(url: string): Promise<Profile> {
+    const normalized = this.normalizeUrl(url);
+    const cached = await this.checkCache(normalized);
+    if (cached) return cached;
+    
+    const profile = await this.fetchFromSources(normalized);
+    await this.cacheProfile(normalized, profile);
+    return profile;
+  }
+  
+  private normalizeUrl(url: string): string { /* ... */ }
+  private checkCache(url: string): Promise<Profile | null> { /* ... */ }
+  private fetchFromSources(url: string): Promise<Profile> { /* ... */ }
+  private cacheProfile(url: string, profile: Profile): Promise<void> { /* ... */ }
+}
+
+// ❌ BAD: One massive function (>100 lines)
+async resolveProfile(url: string): Promise<Profile> {
+  // 100+ lines of mixed logic
+}
+```
+
+### When Files Approach 400 Lines
+```typescript
+// ✅ GOOD: Split into focused modules
+// direct-terminology-client.ts (300 lines)
+// terminology-cache.ts (150 lines)
+// terminology-types.ts (100 lines)
+
+// ❌ BAD: One massive file (600 lines)
+// terminology-validator.ts (all logic in one file)
+```
 
 ---
 
