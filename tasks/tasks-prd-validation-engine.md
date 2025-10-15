@@ -35,9 +35,11 @@
 - `server/services/validation/utils/process-pool-manager.ts` - ✅ HAPI Java process pool management (400 lines)
 - `server/services/validation/utils/process-warmup.ts` - ✅ Core package pre-loading for R4/R5/R6 (200 lines)
 
+### New Components (Created - Task 4.0)
+- `server/services/validation/utils/profile-resolver.ts` - ✅ Smart canonical URL resolution (350 lines)
+
 ### New Components (To Be Created)
 - `server/services/validation/utils/connectivity-detector.ts` - Network health monitoring
-- `server/services/validation/utils/profile-resolver.ts` - Smart canonical URL resolution
 - `server/services/validation/cache/validation-cache-manager.ts` - Multi-layer caching system
 - `server/config/validation-rules.json` - Business rules library
 
@@ -110,9 +112,9 @@
   - [x] 3.13 Write integration tests measuring validation performance improvement (DEFERRED - MVP complete)
 
 - [ ] **4.0 Smart Profile Resolution** - Build intelligent profile resolver with automatic canonical URL resolution and caching
-  - [ ] 4.1 Create `ProfileResolver` class with canonical URL → local profile mapping
-  - [ ] 4.2 Implement multi-source profile search: local cache → Simplifier → FHIR Registry
-  - [ ] 4.3 Add canonical URL normalization (handle version suffixes, trailing slashes)
+  - [x] 4.1 Create `ProfileResolver` class with canonical URL → local profile mapping
+  - [x] 4.2 Implement multi-source profile search: local cache → Simplifier → FHIR Registry
+  - [x] 4.3 Add canonical URL normalization (handle version suffixes, trailing slashes)
   - [ ] 4.4 Implement automatic profile download with dependency resolution
   - [ ] 4.5 Create profile cache schema in database: canonical_url, version, content, dependencies
   - [ ] 4.6 Add IG package dependency graph resolution (identify and download required packages)
