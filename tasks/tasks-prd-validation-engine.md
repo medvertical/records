@@ -26,13 +26,16 @@
 - `server/services/validation/terminology/cache-warmer.ts` - ✅ Pre-population of common codes (250 lines)
 - `server/services/validation/terminology/performance-monitor.ts` - ✅ Performance tracking and metrics (300 lines)
 
+### New Components (Created - Task 2.0)
+- `server/config/error-mappings.json` - ✅ Error mapping dictionary with 20+ error codes
+- `server/services/validation/utils/error-mapping-engine.ts` - ✅ Error code translation engine (250 lines)
+- `client/src/components/validation/enhanced-validation-issue.tsx` - ✅ UI component for enhanced errors (300 lines)
+
 ### New Components (To Be Created)
-- `server/services/validation/utils/error-mapping-engine.ts` - Error code translation and suggestions
 - `server/services/validation/utils/connectivity-detector.ts` - Network health monitoring
 - `server/services/validation/utils/profile-resolver.ts` - Smart canonical URL resolution
 - `server/services/validation/utils/process-pool-manager.ts` - HAPI Java process management
 - `server/services/validation/cache/validation-cache-manager.ts` - Multi-layer caching system
-- `server/config/error-mappings.json` - Error mapping dictionary
 - `server/config/validation-rules.json` - Business rules library
 
 ### Supporting Services
@@ -45,14 +48,14 @@
 - `shared/validation-settings.ts` - Validation settings schema
 
 ### API Routes
-- `server/routes/validation.ts` - Validation API endpoints
+- `server/routes/validation.ts` - ✅ Validation API endpoints (added error explanation routes)
 - `server/routes/profiles.ts` - Profile management endpoints
 
 ### Tests
-- `server/services/validation/terminology/__tests__/direct-terminology-client.test.ts` - ✅ Unit tests for DirectTerminologyClient (270 lines)
+- `server/services/validation/terminology/__tests__/direct-terminology-client.test.ts` - ✅ Unit tests for DirectTerminologyClient (270 lines, 20 tests passing)
 - `tests/integration/terminology-validation.integration.test.ts` - ✅ Integration tests with real tx.fhir.org (250 lines)
+- `server/services/validation/utils/__tests__/error-mapping-engine.test.ts` - ✅ Unit tests for ErrorMappingEngine (250 lines, 27 tests passing)
 - `server/services/validation/__tests__/terminology-validator.test.ts` - Terminology validation tests (to be created)
-- `server/services/validation/__tests__/error-mapping-engine.test.ts` - Error mapping tests (to be created)
 - `server/services/validation/__tests__/profile-resolver.test.ts` - Profile resolution tests (to be created)
 - `tests/integration/validation-engine.test.ts` - Integration tests (to be created)
 
@@ -74,19 +77,19 @@
   - [x] 1.11 Write unit tests for `DirectTerminologyClient` with mocked HTTP responses
   - [x] 1.12 Write integration tests validating against real tx.fhir.org endpoints
 
-- [ ] **2.0 Error Mapping System** - Create comprehensive error mapping dictionary with user-friendly messages and suggested fixes
-  - [ ] 2.1 Create `error-mappings.json` schema with fields: code, userMessage, suggestedFixes[], severity, documentation
-  - [ ] 2.2 Populate error mappings for common HAPI validation codes (structure-failed, profile-mismatch, etc.)
-  - [ ] 2.3 Add terminology-specific error mappings (code-unknown, valueset-expansion-failed, binding-strength-violated)
-  - [ ] 2.4 Add profile validation error mappings (constraint-failed, extension-unknown, cardinality-violated)
-  - [ ] 2.5 Create `ErrorMappingEngine` class to translate ValidationIssue codes to user-friendly messages
-  - [ ] 2.6 Implement context variable substitution in error messages (e.g., {code}, {system}, {valueSet})
-  - [ ] 2.7 Add suggested fixes generation based on error type and resource context
-  - [ ] 2.8 Integrate ErrorMappingEngine into ValidationEngine result processing
-  - [ ] 2.9 Add API endpoint to retrieve error explanations: GET /api/validation/errors/:code
-  - [ ] 2.10 Create UI component to display enhanced errors with expandable suggestions
-  - [ ] 2.11 Write unit tests for ErrorMappingEngine with various error scenarios
-  - [ ] 2.12 Document error mapping JSON schema and contribution guidelines
+- [x] **2.0 Error Mapping System** - Create comprehensive error mapping dictionary with user-friendly messages and suggested fixes
+  - [x] 2.1 Create `error-mappings.json` schema with fields: code, userMessage, suggestedFixes[], severity, documentation
+  - [x] 2.2 Populate error mappings for common HAPI validation codes (structure-failed, profile-mismatch, etc.)
+  - [x] 2.3 Add terminology-specific error mappings (code-unknown, valueset-expansion-failed, binding-strength-violated)
+  - [x] 2.4 Add profile validation error mappings (constraint-failed, extension-unknown, cardinality-violated)
+  - [x] 2.5 Create `ErrorMappingEngine` class to translate ValidationIssue codes to user-friendly messages
+  - [x] 2.6 Implement context variable substitution in error messages (e.g., {code}, {system}, {valueSet})
+  - [x] 2.7 Add suggested fixes generation based on error type and resource context
+  - [x] 2.8 Integrate ErrorMappingEngine into ValidationEngine result processing
+  - [x] 2.9 Add API endpoint to retrieve error explanations: GET /api/validation/errors/:code
+  - [x] 2.10 Create UI component to display enhanced errors with expandable suggestions
+  - [x] 2.11 Write unit tests for ErrorMappingEngine with various error scenarios
+  - [x] 2.12 Document error mapping JSON schema and contribution guidelines
 
 - [ ] **3.0 HAPI Process Pool Management** - Implement Java process pooling to eliminate 20-30s startup delays
   - [ ] 3.1 Create `ProcessPoolManager` class to manage persistent Java processes

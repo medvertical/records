@@ -15,6 +15,7 @@ import { MetadataValidator } from '../engine/metadata-validator';
 import { getValidationSettingsService } from '../settings/validation-settings-service';
 import { FhirClient } from '../../fhir/fhir-client';
 import { TerminologyClient } from '../../fhir/terminology-client';
+import { getErrorMappingEngine } from '../utils/error-mapping-engine';
 import type {
   ValidationSettings,
   ValidationAspect,
@@ -40,6 +41,7 @@ export class ValidationEngine extends EventEmitter {
   private businessRuleValidator: BusinessRuleValidator;
   private metadataValidator: MetadataValidator;
   private settingsService: any;
+  private errorMappingEngine = getErrorMappingEngine();
   private fhirClient?: FhirClient;
   private terminologyClient?: TerminologyClient;
   private fhirVersion: 'R4' | 'R5' | 'R6'; // Task 2.3: Store detected FHIR version
@@ -139,9 +141,19 @@ export class ValidationEngine extends EventEmitter {
 
       result.validationTime = Date.now() - startTime;
       
+      // Enhance issues with user-friendly error messages
+      const enhancedIssues = this.errorMappingEngine.enhanceIssues(result.issues, {
+        resourceType: request.resourceType,
+        fhirVersion: this.fhirVersion,
+      });
+      
+      // Replace issues with enhanced versions (maintains backward compatibility)
+      result.issues = enhancedIssues as any;
+      
       console.log(`[ValidationEngine] Validation completed for ${request.resourceType}/${request.resource?.id}:`, {
         isValid: result.isValid,
         issueCount: result.issues.length,
+        enhancedIssues: enhancedIssues.filter(i => i.mapped).length,
         validationTime: result.validationTime
       });
       

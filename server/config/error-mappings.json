@@ -1,0 +1,316 @@
+{
+  "$schema": "error-mappings-schema.json",
+  "version": "1.0.0",
+  "lastUpdated": "2025-10-15",
+  "description": "FHIR validation error mappings - translates technical validation codes to user-friendly messages with suggested fixes",
+  
+  "mappings": {
+    "_comment": "Error mappings by validation aspect and error code",
+    
+    "structural": {
+      "structure-failed": {
+        "userMessage": "The resource structure does not match the FHIR {fhirVersion} specification",
+        "suggestedFixes": [
+          "Check that all required fields are present",
+          "Verify field names match the FHIR specification exactly (case-sensitive)",
+          "Ensure data types are correct (e.g., string, integer, boolean)",
+          "Review the FHIR {fhirVersion} specification: https://hl7.org/fhir/{fhirVersion}/"
+        ],
+        "severity": "error",
+        "documentation": "https://hl7.org/fhir/validation.html#structure"
+      },
+      
+      "invalid-datatype": {
+        "userMessage": "Field '{path}' has an invalid data type. Expected {expectedType}, got {actualType}",
+        "suggestedFixes": [
+          "Convert the value to the correct type: {expectedType}",
+          "Check the FHIR specification for {resourceType}.{path}",
+          "Common types: string, integer, decimal, boolean, dateTime, code"
+        ],
+        "severity": "error",
+        "documentation": "https://hl7.org/fhir/datatypes.html"
+      },
+      
+      "cardinality-violation": {
+        "userMessage": "Field '{path}' violates cardinality constraints. Expected {expectedCardinality}, found {actualCount} element(s)",
+        "suggestedFixes": [
+          "If too many: Remove extra elements to match cardinality {expectedCardinality}",
+          "If too few: Add required elements (minimum: {minCardinality})",
+          "Check if field should be an array or single value"
+        ],
+        "severity": "error",
+        "documentation": "https://hl7.org/fhir/conformance-rules.html#cardinality"
+      },
+      
+      "required-element-missing": {
+        "userMessage": "Required element '{path}' is missing from the resource",
+        "suggestedFixes": [
+          "Add the required field '{path}' to the resource",
+          "Check the {resourceType} resource definition for required elements",
+          "Required elements are marked with cardinality 1..* or 1..1"
+        ],
+        "severity": "error",
+        "documentation": "https://hl7.org/fhir/{resourceType}.html"
+      }
+    },
+    
+    "profile": {
+      "profile-mismatch": {
+        "userMessage": "Resource does not conform to profile '{profileUrl}'",
+        "suggestedFixes": [
+          "Review profile constraints at: {profileUrl}",
+          "Check that all profile-required fields are present",
+          "Verify extensions match the profile requirements",
+          "Ensure slicing constraints are met"
+        ],
+        "severity": "error",
+        "documentation": "https://hl7.org/fhir/profiling.html"
+      },
+      
+      "constraint-failed": {
+        "userMessage": "Profile constraint '{constraintId}' failed: {constraintDescription}",
+        "suggestedFixes": [
+          "Review the FHIRPath expression: {expression}",
+          "Check the constraint documentation in the profile",
+          "Common issue: Missing required extension or conditional field",
+          "Verify cross-field dependencies"
+        ],
+        "severity": "error",
+        "documentation": "https://hl7.org/fhir/conformance-rules.html#constraints"
+      },
+      
+      "extension-unknown": {
+        "userMessage": "Extension '{extensionUrl}' is not recognized or not allowed in this profile",
+        "suggestedFixes": [
+          "Verify the extension URL is correct",
+          "Check if extension is defined in the profile",
+          "Remove the extension if not required",
+          "Add the extension to the profile if it should be allowed"
+        ],
+        "severity": "warning",
+        "documentation": "https://hl7.org/fhir/extensibility.html"
+      },
+      
+      "profile-not-declared": {
+        "userMessage": "No profile is declared in meta.profile",
+        "suggestedFixes": [
+          "Add meta.profile array with canonical profile URL(s)",
+          "Example: \"meta\": { \"profile\": [\"http://hl7.org/fhir/StructureDefinition/Patient\"] }",
+          "Profiles define additional constraints beyond base FHIR"
+        ],
+        "severity": "info",
+        "documentation": "https://hl7.org/fhir/resource.html#Meta"
+      }
+    },
+    
+    "terminology": {
+      "code-unknown": {
+        "userMessage": "Code '{code}' is not found in code system '{system}'",
+        "suggestedFixes": [
+          "Check the spelling of the code: '{code}'",
+          "Verify you're using the correct code system: {system}",
+          "Search for valid codes at: https://terminology.hl7.org",
+          "Common issue: Using display text instead of code value"
+        ],
+        "severity": "error",
+        "documentation": "https://hl7.org/fhir/terminologies.html"
+      },
+      
+      "code-not-in-valueset": {
+        "userMessage": "Code '{code}' from system '{system}' is not valid in ValueSet '{valueSet}'",
+        "suggestedFixes": [
+          "Check if code exists in the required ValueSet",
+          "Expand the ValueSet to see allowed codes: GET {valueSet}/$expand",
+          "Verify binding strength (required vs extensible vs preferred)",
+          "Use a code from the ValueSet or request ValueSet update"
+        ],
+        "severity": "error",
+        "documentation": "https://hl7.org/fhir/terminologies.html#valuesets"
+      },
+      
+      "valueset-expansion-failed": {
+        "userMessage": "Could not expand ValueSet '{valueSet}'",
+        "suggestedFixes": [
+          "Check if ValueSet URL is correct and accessible",
+          "Verify terminology server is available",
+          "Try offline mode if using remote terminology server",
+          "Check ValueSet definition for circular dependencies"
+        ],
+        "severity": "warning",
+        "documentation": "https://hl7.org/fhir/valueset-operations.html#expand"
+      },
+      
+      "binding-strength-violated": {
+        "userMessage": "Code '{code}' violates {bindingStrength} binding to ValueSet '{valueSet}'",
+        "suggestedFixes": [
+          "For REQUIRED bindings: Must use code from ValueSet",
+          "For EXTENSIBLE bindings: Should use ValueSet, can extend if needed",
+          "For PREFERRED bindings: Suggested but not enforced",
+          "Review binding strength in profile or base specification"
+        ],
+        "severity": "error",
+        "documentation": "https://hl7.org/fhir/terminologies.html#strength"
+      },
+      
+      "invalid-display": {
+        "userMessage": "Display text '{display}' does not match the expected display for code '{code}'",
+        "suggestedFixes": [
+          "Update display to match terminology server: '{expectedDisplay}'",
+          "Display text is informational but should match canonical definition",
+          "Remove display if unsure (it's optional in most cases)"
+        ],
+        "severity": "warning",
+        "documentation": "https://hl7.org/fhir/datatypes.html#Coding"
+      },
+      
+      "terminology-servers-unavailable": {
+        "userMessage": "All terminology servers are unavailable (circuit breakers open)",
+        "suggestedFixes": [
+          "Check network connectivity",
+          "Try offline mode with local Ontoserver",
+          "Wait for servers to recover (circuit reset after 60 seconds)",
+          "Manually reset circuit breakers if servers are back online"
+        ],
+        "severity": "warning",
+        "documentation": "https://hl7.org/fhir/terminology-service.html"
+      }
+    },
+    
+    "reference": {
+      "reference-not-found": {
+        "userMessage": "Referenced resource '{reference}' could not be found",
+        "suggestedFixes": [
+          "Verify the reference ID is correct",
+          "Check that the referenced resource exists on the server",
+          "Ensure reference format is correct: ResourceType/id",
+          "For contained resources, use '#id' format"
+        ],
+        "severity": "error",
+        "documentation": "https://hl7.org/fhir/references.html"
+      },
+      
+      "reference-type-mismatch": {
+        "userMessage": "Reference '{reference}' points to wrong resource type. Expected {expectedType}, found {actualType}",
+        "suggestedFixes": [
+          "Change reference to point to {expectedType} resource",
+          "Verify the reference constraint in the profile",
+          "Check if multiple reference types are allowed"
+        ],
+        "severity": "error",
+        "documentation": "https://hl7.org/fhir/references.html#type"
+      },
+      
+      "circular-reference": {
+        "userMessage": "Circular reference detected: {referencePath}",
+        "suggestedFixes": [
+          "Remove circular reference to prevent infinite loops",
+          "Restructure references to avoid cycles",
+          "Use contained resources if both resources need to reference each other"
+        ],
+        "severity": "error",
+        "documentation": "https://hl7.org/fhir/references.html#contained"
+      }
+    },
+    
+    "businessRule": {
+      "fhirpath-evaluation-failed": {
+        "userMessage": "FHIRPath expression '{expression}' failed to evaluate",
+        "suggestedFixes": [
+          "Check FHIRPath syntax: {expression}",
+          "Verify all referenced fields exist in the resource",
+          "Test expression at: https://hl7.org/fhirpath.js/",
+          "Review FHIRPath specification for correct syntax"
+        ],
+        "severity": "error",
+        "documentation": "http://hl7.org/fhirpath/"
+      },
+      
+      "rule-violation": {
+        "userMessage": "Business rule '{ruleName}' failed: {ruleDescription}",
+        "suggestedFixes": [
+          "Review rule requirements: {ruleDescription}",
+          "Check cross-field dependencies",
+          "Verify conditional logic is met",
+          "Contact administrator if rule seems incorrect"
+        ],
+        "severity": "error",
+        "documentation": ""
+      }
+    },
+    
+    "metadata": {
+      "meta-lastUpdated-invalid": {
+        "userMessage": "meta.lastUpdated '{lastUpdated}' is invalid or in the future",
+        "suggestedFixes": [
+          "Use valid ISO 8601 datetime format: YYYY-MM-DDTHH:mm:ss.sssZ",
+          "Ensure timestamp is not in the future",
+          "Use server-assigned timestamp if unsure",
+          "Example: \"2024-10-15T14:30:00.000Z\""
+        ],
+        "severity": "error",
+        "documentation": "https://hl7.org/fhir/resource.html#Meta"
+      },
+      
+      "meta-versionId-inconsistent": {
+        "userMessage": "meta.versionId '{versionId}' is inconsistent with resource state",
+        "suggestedFixes": [
+          "Let the server assign versionId (don't set manually)",
+          "Ensure versionId matches the last update",
+          "VersionId should increment with each update"
+        ],
+        "severity": "warning",
+        "documentation": "https://hl7.org/fhir/resource.html#versions"
+      },
+      
+      "meta-security-invalid": {
+        "userMessage": "meta.security label '{securityLabel}' is not valid",
+        "suggestedFixes": [
+          "Use codes from http://hl7.org/fhir/ValueSet/security-labels",
+          "Common labels: N (normal), R (restricted), V (very restricted)",
+          "Verify your organization's security labeling policy"
+        ],
+        "severity": "warning",
+        "documentation": "https://hl7.org/fhir/security-labels.html"
+      }
+    },
+    
+    "system": {
+      "TIMEOUT": {
+        "userMessage": "Validation operation timed out after {timeout}ms",
+        "suggestedFixes": [
+          "Simplify the resource (remove unnecessary extensions or contained resources)",
+          "Increase timeout in validation settings",
+          "Check network connectivity to terminology servers",
+          "Try offline mode if using remote validation"
+        ],
+        "severity": "error",
+        "documentation": ""
+      },
+      
+      "NETWORK_ERROR": {
+        "userMessage": "Network error: Cannot reach validation server",
+        "suggestedFixes": [
+          "Check internet connectivity",
+          "Verify server URL in configuration",
+          "Try offline mode with local servers",
+          "Check firewall settings"
+        ],
+        "severity": "error",
+        "documentation": ""
+      },
+      
+      "VALIDATION_ERROR": {
+        "userMessage": "Validation failed due to internal error: {errorMessage}",
+        "suggestedFixes": [
+          "Check server logs for detailed error information",
+          "Verify resource is valid JSON",
+          "Try validating a simpler resource to isolate the issue",
+          "Contact administrator if error persists"
+        ],
+        "severity": "error",
+        "documentation": ""
+      }
+    }
+  }
+}
+
