@@ -387,10 +387,10 @@ export class HapiValidatorClient {
     args.push('-txCache', cacheDir);
     console.log(`[HapiValidatorClient] Using package cache: ${cacheDir}`);
 
-    // Skip terminology server for better performance
-    // Terminology validation is handled separately by the terminology validator
-    // args.push('-tx', terminologyServer);
-    console.log(`[HapiValidatorClient] Skipping terminology server for better performance`);
+    // Add terminology server to enable package downloads from Simplifier
+    // This allows HAPI to download German profiles and other IGs
+    args.push('-tx', terminologyServer);
+    console.log(`[HapiValidatorClient] Using terminology server for package downloads: ${terminologyServer}`);
 
     // Log limitations for non-stable versions
     const limitations = versionConfig.limitations || [];
