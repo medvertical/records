@@ -196,14 +196,15 @@ export class HapiValidatorClient {
       timer.startPhase('validation-execution', 'Executing HAPI validation with retry logic');
       const result = await withRetry(
         async () => {
-          // Create temporary file with resource JSON
+          // Create temporary files for resource JSON and output
           const tempFileStart = Date.now();
           tempFilePath = this.createTempFile(resource);
+          const outputFilePath = join(tmpdir(), `fhir-output-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.json`);
           timer.recordPhase('temp-file-creation', Date.now() - tempFileStart, 'Creating temporary resource file');
 
           // Build HAPI CLI arguments
           const argsStart = Date.now();
-          const args = this.buildValidatorArgs(tempFilePath, options);
+          const args = this.buildValidatorArgs(tempFilePath, outputFilePath, options);
           timer.recordPhase('args-building', Date.now() - argsStart, 'Building HAPI CLI arguments');
 
           // Execute HAPI validator
@@ -215,10 +216,17 @@ export class HapiValidatorClient {
             poolEnabled: this.useProcessPool,
           });
 
-          // Parse OperationOutcome
+          // Read and parse OperationOutcome from output file
           const parseStart = Date.now();
-          const operationOutcome = this.parseOperationOutcome(stdout, stderr);
-          timer.recordPhase('hapi-parse', Date.now() - parseStart, 'Parsing OperationOutcome from HAPI output');
+          const operationOutcome = this.readOperationOutcomeFile(outputFilePath, stdout, stderr);
+          timer.recordPhase('hapi-parse', Date.now() - parseStart, 'Reading and parsing OperationOutcome from file');
+
+          // Clean up output file
+          try {
+            unlinkSync(outputFilePath);
+          } catch (e) {
+            // Ignore cleanup errors
+          }
 
           // Map HAPI issues to ValidationIssue format
           const mapStart = Date.now();
