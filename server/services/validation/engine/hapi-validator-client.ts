@@ -60,11 +60,13 @@ export class HapiValidatorClient {
     this.config = config;
     this.verifySetup();
     
-    // Enable process pool if configured
-    this.useProcessPool = process.env.HAPI_USE_PROCESS_POOL === 'true';
+    // Enable process pool by default (disable with HAPI_USE_PROCESS_POOL=false)
+    this.useProcessPool = process.env.HAPI_USE_PROCESS_POOL !== 'false';
     
     if (this.useProcessPool) {
-      console.log('[HapiValidatorClient] Process pool mode enabled');
+      console.log('[HapiValidatorClient] Process pool mode ENABLED (warmed processes for faster validation)');
+    } else {
+      console.log('[HapiValidatorClient] Process pool mode DISABLED (slower validation)');
     }
   }
 

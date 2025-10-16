@@ -6,6 +6,7 @@ import { getConsolidatedValidationService, ConsolidatedValidationService } from 
 import { DashboardService } from "./services/dashboard/dashboard-service";
 import { setupAllRoutes } from "./routes/index.js";
 import { serverActivationService } from "./services/server-activation-service";
+import { initializeHapiProcessPool } from "./services/validation/engine/hapi-process-pool";
 
 let fhirClient: FhirClient;
 let consolidatedValidationService: ConsolidatedValidationService;
@@ -58,6 +59,15 @@ export async function setupRoutes(app: Express): Promise<Server> {
 
   // Initialize database and FHIR client first
   await initializeServices();
+  
+  // Initialize HAPI process pool (warm up Java processes)
+  try {
+    console.log('[Routes] Initializing HAPI process pool...');
+    await initializeHapiProcessPool();
+    console.log('[Routes] HAPI process pool initialized successfully');
+  } catch (error) {
+    console.warn('[Routes] HAPI process pool initialization failed (validation will use fallback):', error);
+  }
 
   // Setup all routes using modular structure
   setupAllRoutes(app, fhirClient, consolidatedValidationService, dashboardService);
