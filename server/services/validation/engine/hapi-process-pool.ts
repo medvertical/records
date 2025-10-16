@@ -359,10 +359,17 @@ export class HapiProcessPool extends EventEmitter {
       const defaultTimeout = getHapiTimeout();
       const timeoutMs = job.options.timeout || defaultTimeout;
       
-      console.log(`[HapiProcessPool] Spawning Java process with timeout: ${timeoutMs}ms`);
+      // CRITICAL FIX: Set package cache path so HAPI finds cached packages
+      const env = {
+        ...process.env,
+        FHIR_PACKAGE_CACHE_PATH: process.env.FHIR_PACKAGE_CACHE_PATH || '/Users/sheydin/.fhir/packages'
+      };
+      
+      console.log(`[HapiProcessPool] Spawning Java process with timeout: ${timeoutMs}ms, cache: ${env.FHIR_PACKAGE_CACHE_PATH}`);
       
       const childProcess = spawn(javaPath, args, {
         timeout: timeoutMs,
+        env: env,
       });
 
       let stdout = '';
