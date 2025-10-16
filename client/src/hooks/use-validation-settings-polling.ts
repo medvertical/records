@@ -13,6 +13,10 @@ import { useToast } from './use-toast';
 import { usePolling } from './use-polling';
 import type { ValidationSettings } from '@shared/validation-settings';
 
+// Module-level variable to track last seen settings across all hook instances
+// This prevents treating re-mounts as "initial loads"
+let lastSeenSettingsString: string | null = null;
+
 export interface ValidationSettingsPollingOptions {
   /** Polling interval in milliseconds */
   pollingInterval?: number;
@@ -104,7 +108,6 @@ export function useValidationSettingsPolling(options: ValidationSettingsPollingO
     error: null
   });
 
-  const lastSettingsRef = useRef<string | null>(null);
   const invalidateCacheRef = useRef(invalidateCache);
   const showNotificationsRef = useRef(showNotifications);
   const queryClientRef = useRef(queryClient);
@@ -139,72 +142,80 @@ export function useValidationSettingsPolling(options: ValidationSettingsPollingO
     }));
 
     // Check if settings have changed
-      if (lastSettingsRef.current !== newSettingsString) {
-        const previousSettings = lastSettingsRef.current ? JSON.parse(lastSettingsRef.current) : null;
-        lastSettingsRef.current = newSettingsString;
+      if (lastSeenSettingsString !== newSettingsString) {
+        const previousSettings = lastSeenSettingsString ? JSON.parse(lastSeenSettingsString) : null;
+        const isInitialLoad = previousSettings === null;
+        lastSeenSettingsString = newSettingsString;
 
         setState(prev => ({
           ...prev,
           settings: newSettings,
-          lastChange: new Date()
+          // Only update lastChange timestamp for actual changes, not initial loads
+          lastChange: isInitialLoad ? prev.lastChange : new Date()
         }));
 
-        // Invalidate React Query cache if enabled
-        if (invalidateCacheRef.current) {
-          // Invalidate both query key formats for validation settings
-          queryClientRef.current.invalidateQueries({ queryKey: ['validation-settings'] });
-          queryClientRef.current.invalidateQueries({ queryKey: ['/api/validation/settings'] });
-          
-          // Invalidate dashboard and resource queries to show updated counts
-          queryClientRef.current.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-          queryClientRef.current.invalidateQueries({ queryKey: ['/api/dashboard/fhir-server-stats'] });
-          queryClientRef.current.invalidateQueries({ queryKey: ['/api/dashboard/validation-stats'] });
-          queryClientRef.current.invalidateQueries({ queryKey: ['/api/dashboard/combined'] });
-          queryClientRef.current.invalidateQueries({ queryKey: ['/api/validation/bulk/progress'] });
-          queryClientRef.current.invalidateQueries({ queryKey: ['/api/validation/errors/recent'] });
-          queryClientRef.current.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
-        }
-
-        // Show notification if enabled
-        if (showNotificationsRef.current && previousSettings) {
-          toastRef.current({
-            title: "Settings Updated",
-            description: "Validation settings have been updated by another user.",
-            variant: "default"
-          });
-        }
-
-        // Emit custom event for other components to listen to
-        window.dispatchEvent(new CustomEvent('settingsChanged', {
-          detail: {
-            changeType: 'updated',
-            settingsId: newSettings?.id || 'current',
-            timestamp: new Date().toISOString(),
-            previousVersion: previousSettings,
-            newVersion: newSettings
+        // Only perform "change" actions if this is NOT the initial load
+        if (!isInitialLoad) {
+          // Invalidate React Query cache if enabled
+          if (invalidateCacheRef.current) {
+            // Invalidate both query key formats for validation settings
+            queryClientRef.current.invalidateQueries({ queryKey: ['validation-settings'] });
+            queryClientRef.current.invalidateQueries({ queryKey: ['/api/validation/settings'] });
+            
+            // Invalidate dashboard and resource queries to show updated counts
+            queryClientRef.current.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+            queryClientRef.current.invalidateQueries({ queryKey: ['/api/dashboard/fhir-server-stats'] });
+            queryClientRef.current.invalidateQueries({ queryKey: ['/api/dashboard/validation-stats'] });
+            queryClientRef.current.invalidateQueries({ queryKey: ['/api/dashboard/combined'] });
+            queryClientRef.current.invalidateQueries({ queryKey: ['/api/validation/bulk/progress'] });
+            queryClientRef.current.invalidateQueries({ queryKey: ['/api/validation/errors/recent'] });
+            queryClientRef.current.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
           }
-        }));
 
-        // Trigger server-side notification for all connected clients (polling-based)
-        try {
-          await fetch('/api/validation/settings/notify-change', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              changeType: 'polling_detected',
+          // Show notification if enabled
+          if (showNotificationsRef.current) {
+            toastRef.current({
+              title: "Settings Updated",
+              description: "Validation settings have been updated by another user.",
+              variant: "default"
+            });
+          }
+
+          // Emit custom event for other components to listen to
+          window.dispatchEvent(new CustomEvent('settingsChanged', {
+            detail: {
+              changeType: 'updated',
               settingsId: newSettings?.id || 'current',
+              timestamp: new Date().toISOString(),
               previousVersion: previousSettings,
               newVersion: newSettings
-            })
-          });
-        } catch (notificationError) {
-          console.warn('[ValidationSettingsPolling] Failed to trigger server notification:', notificationError);
-          // Don't fail the polling if notification fails
+            }
+          }));
+
+          // Trigger server-side notification for all connected clients (polling-based)
+          try {
+            await fetch('/api/validation/settings/notify-change', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                changeType: 'polling_detected',
+                settingsId: newSettings?.id || 'current',
+                previousVersion: previousSettings,
+                newVersion: newSettings
+              })
+            });
+          } catch (notificationError) {
+            console.warn('[ValidationSettingsPolling] Failed to trigger server notification:', notificationError);
+            // Don't fail the polling if notification fails
+          }
         }
 
-        console.log('[ValidationSettingsPolling] Settings changed:', {
+        // Always log for debugging (but distinguish initial vs change)
+        console.log(isInitialLoad 
+          ? '[ValidationSettingsPolling] Initial settings loaded:'
+          : '[ValidationSettingsPolling] Settings changed:', {
           previous: previousSettings,
           current: newSettings,
           timestamp: new Date().toISOString()
