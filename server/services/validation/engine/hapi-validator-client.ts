@@ -491,10 +491,16 @@ export class HapiValidatorClient {
   private parseOperationOutcome(stdout: string, stderr: string): HapiOperationOutcome {
     // HAPI outputs OperationOutcome as JSON to stdout
     try {
+      console.log(`[HapiValidatorClient] Parsing HAPI output (stdout length: ${stdout.length}, stderr length: ${stderr.length})`);
+      console.log(`[HapiValidatorClient] First 200 chars of stdout: ${stdout.substring(0, 200)}`);
+      
       // Find JSON output in stdout (HAPI may output other text before JSON)
       const jsonMatch = stdout.match(/\{[\s\S]*"resourceType"\s*:\s*"OperationOutcome"[\s\S]*\}/);
       
       if (!jsonMatch) {
+        console.log(`[HapiValidatorClient] ⚠️ NO OperationOutcome JSON found in stdout!`);
+        console.log(`[HapiValidatorClient] stdout contains: ${stdout.substring(0, 500)}`);
+        
         // No OperationOutcome found - check stderr for errors
         if (stderr.includes('Error') || stderr.includes('Exception')) {
           throw new Error(`HAPI validation error: ${stderr}`);
@@ -506,6 +512,8 @@ export class HapiValidatorClient {
           issue: []
         };
       }
+      
+      console.log(`[HapiValidatorClient] ✓ Found OperationOutcome JSON (${jsonMatch[0].length} chars)`);
 
       const operationOutcome = JSON.parse(jsonMatch[0]) as HapiOperationOutcome;
 
