@@ -124,6 +124,7 @@ class ServerRepository {
         url: serverData.url,
         isActive: serverData.isActive || false,
         authConfig: serverData.auth ? serverData.auth : null,
+        fhirVersion: serverData.fhirVersion || null,
         createdAt: now
       };
 
@@ -155,6 +156,9 @@ class ServerRepository {
       }
       if (updates.auth !== undefined) {
         updateData.authConfig = updates.auth;
+      }
+      if (updates.fhirVersion !== undefined) {
+        updateData.fhirVersion = updates.fhirVersion;
       }
 
       const result = await db.update(fhirServers)

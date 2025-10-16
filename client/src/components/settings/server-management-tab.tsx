@@ -19,6 +19,7 @@ interface ServerManagementTabProps {
 interface ServerFormData {
   name: string;
   url: string;
+  fhirVersion?: 'R4' | 'R5' | 'R6';
   authType: 'none' | 'basic' | 'bearer' | 'oauth2';
   username?: string;
   password?: string;
@@ -32,6 +33,7 @@ interface FhirServer {
   id: number;
   name: string;
   url: string;
+  fhirVersion?: string;
   isActive: boolean;
 }
 

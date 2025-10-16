@@ -24,6 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 interface ServerFormData {
   name: string;
   url: string;
+  fhirVersion?: 'R4' | 'R5' | 'R6';
   authType: 'none' | 'basic' | 'bearer' | 'oauth2';
   username?: string;
   password?: string;
@@ -37,6 +38,7 @@ interface FhirServer {
   id: number;
   name: string;
   url: string;
+  fhirVersion?: string;
   isActive: boolean;
 }
 
@@ -109,6 +111,7 @@ export function ServerForm({
     defaultValues: {
       name: editingServer?.name || '',
       url: editingServer?.url || '',
+      fhirVersion: editingServer?.fhirVersion as 'R4' | 'R5' | 'R6' || undefined,
       authType: 'none',
       username: '',
       password: '',
@@ -190,7 +193,7 @@ export function ServerForm({
     onSubmit(data);
   };
 
-  const handleTestConnection = () => {
+  const handleTestConnection = async () => {
     if (!url.trim()) {
       toast({
         title: "Missing Server URL",
@@ -210,7 +213,43 @@ export function ServerForm({
       return;
     }
 
-    onTestConnection(url);
+    // Test connection and handle FHIR version detection
+    try {
+      const { testFhirConnection } = await import('./connection-testing');
+      const result = await testFhirConnection(url);
+      
+      if (result.success && result.serverInfo?.fhirVersion) {
+        // Auto-populate the FHIR version field
+        setValue('fhirVersion', result.serverInfo.fhirVersion as 'R4' | 'R5' | 'R6');
+        
+        toast({
+          title: "✅ Connection Successful",
+          description: `Successfully connected to ${result.serverInfo.name} (${result.serverInfo.version}). Auto-detected FHIR version: ${result.serverInfo.fhirVersion}`,
+          variant: "default",
+          duration: 5000,
+        });
+      } else if (result.success) {
+        toast({
+          title: "✅ Connection Successful",
+          description: `Successfully connected to ${result.serverInfo?.name} (${result.serverInfo?.version}). FHIR version could not be detected automatically.`,
+          variant: "default",
+          duration: 5000,
+        });
+      } else {
+        toast({
+          title: "❌ Connection Failed",
+          description: result.error || "Failed to connect to the server",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Connection test error:', error);
+      toast({
+        title: "❌ Connection Failed",
+        description: "An error occurred while testing the connection",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -273,6 +312,41 @@ export function ServerForm({
                 {urlValidationStatus.warning}
               </p>
             )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="fhirVersion">FHIR Version</Label>
+            <Select 
+              value={watch('fhirVersion') || ''} 
+              onValueChange={(value: 'R4' | 'R5' | 'R6') => setValue('fhirVersion', value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select FHIR version" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="R4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                    R4 (Stable)
+                  </div>
+                </SelectItem>
+                <SelectItem value="R5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                    R5 (Trial Use)
+                  </div>
+                </SelectItem>
+                <SelectItem value="R6">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                    R6 (Ballot)
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">
+              Version will be auto-detected when testing connection, or select manually
+            </p>
           </div>
         </CardContent>
       </Card>

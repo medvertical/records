@@ -18,6 +18,7 @@ interface ConnectionTestResult {
     name?: string;
     version?: string;
     description?: string;
+    fhirVersion?: string;
   };
 }
 
@@ -71,11 +72,28 @@ export async function testFhirConnection(url: string): Promise<ConnectionTestRes
 
     const metadata = await response.json();
     
+    // Extract FHIR version from CapabilityStatement
+    let fhirVersion: string | undefined;
+    if (metadata.fhirVersion) {
+      // Parse version like "4.0.1" to "R4", "5.0.0" to "R5", etc.
+      const version = metadata.fhirVersion;
+      if (version.startsWith('4.')) {
+        fhirVersion = 'R4';
+      } else if (version.startsWith('5.')) {
+        fhirVersion = 'R5';
+      } else if (version.startsWith('6.')) {
+        fhirVersion = 'R6';
+      } else if (version.startsWith('3.')) {
+        fhirVersion = 'STU3';
+      }
+    }
+    
     // Extract server information
     const serverInfo = {
       name: metadata.software?.name || 'Unknown',
       version: metadata.software?.version || 'Unknown',
-      description: metadata.software?.description || 'No description available'
+      description: metadata.software?.description || 'No description available',
+      fhirVersion
     };
 
     return {

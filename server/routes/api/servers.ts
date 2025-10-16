@@ -58,13 +58,25 @@ export function setupServerRoutes(app: Express) {
       
       const server = await serverRepo.createServer(serverData);
       
-      // Detect and store FHIR version (Task 2.1)
-      console.log(`[ServerRoutes] Detecting FHIR version for new server ${server.id}...`);
-      const versionResult = await versionService.detectAndStoreVersion(
-        server.id,
-        server.url,
-        server.authConfig
-      );
+      // Handle FHIR version - use provided version or auto-detect
+      let versionResult;
+      if (serverData.fhirVersion) {
+        // Use manually provided version
+        console.log(`[ServerRoutes] Using manually provided FHIR version: ${serverData.fhirVersion}`);
+        versionResult = {
+          success: true,
+          version: serverData.fhirVersion,
+          source: 'manual'
+        };
+      } else {
+        // Auto-detect FHIR version (Task 2.1)
+        console.log(`[ServerRoutes] Auto-detecting FHIR version for new server ${server.id}...`);
+        versionResult = await versionService.detectAndStoreVersion(
+          server.id,
+          server.url,
+          server.authConfig
+        );
+      }
       
       res.status(201).json({
         ...server,
