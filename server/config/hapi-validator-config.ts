@@ -43,14 +43,18 @@ export interface HapiValidatorConfig {
 export function loadHapiValidatorConfig(): HapiValidatorConfig {
   const jarPath = process.env.HAPI_JAR_PATH || 'server/lib/validator_cli.jar';
   
+  // Import centralized timeout configuration
+  const { getHapiTimeout } = require('./validation-timeouts');
+  const hapiTimeout = getHapiTimeout();
+  
   return {
     // Paths
     jarPath: resolve(process.cwd(), jarPath),
     igCachePath: resolve(process.cwd(), process.env.HAPI_IG_CACHE_PATH || 'server/storage/igs'),
     terminologyCachePath: resolve(process.cwd(), process.env.HAPI_TERMINOLOGY_CACHE_PATH || 'server/storage/terminology'),
 
-    // Performance
-    timeout: parseInt(process.env.HAPI_TIMEOUT || '30000', 10),
+    // Performance - use centralized timeout configuration
+    timeout: parseInt(process.env.HAPI_TIMEOUT || String(hapiTimeout), 10),
     maxParallel: parseInt(process.env.HAPI_MAX_PARALLEL || '4', 10),
 
     // Version Support

@@ -573,18 +573,28 @@ export class ValidationEngine extends EventEmitter {
   // ------------------------------------------------------------------------
 
   private getAspectTimeoutMs(aspect: ValidationAspect, settings: ValidationSettings): number {
-    const defaults: Record<ValidationAspect, number> = {
-      structural: 20000,   // 20s - allow first-time package loads
-      profile: 30000,      // 30s - allow first-time profile downloads
-      terminology: 20000,  // 20s - terminology server + caching
-      reference: 10000,    // 10s
-      businessRules: 10000, // 10s
-      metadata: 5000,      // 5s
-    } as const;
+    // Import centralized timeout configuration
+    const { getAspectTimeout } = require('../../../config/validation-timeouts');
+    
+    // Map aspect names to timeout configuration keys
+    const aspectMap: Record<ValidationAspect, keyof import('../../../config/validation-timeouts').ValidationTimeouts['validationEngine']> = {
+      structural: 'structural',
+      profile: 'profile',
+      terminology: 'terminology',
+      reference: 'reference',
+      businessRules: 'businessRules',
+      metadata: 'metadata',
+    };
 
-    // Settings may carry per-aspect timeout; fall back to defaults
+    // Settings may carry per-aspect timeout; fall back to centralized config
     const configured = (settings as any)[aspect]?.timeoutMs;
-    return typeof configured === 'number' && configured > 0 ? configured : defaults[aspect];
+    if (typeof configured === 'number' && configured > 0) {
+      return configured;
+    }
+    
+    // Use centralized timeout configuration
+    const configKey = aspectMap[aspect];
+    return configKey ? getAspectTimeout(configKey) : 30000; // 30s fallback
   }
 
   private timeoutPromise(ms: number, aspect: ValidationAspect): Promise<never> {

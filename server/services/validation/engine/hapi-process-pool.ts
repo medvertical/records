@@ -175,11 +175,16 @@ export class HapiProcessPool extends EventEmitter {
     const resourceJson = JSON.stringify(resource, null, 2);
 
     return new Promise<HapiOperationOutcome>((resolve, reject) => {
+      // Use centralized timeout configuration
+      const { getHapiTimeout } = require('../../../config/validation-timeouts');
+      const defaultTimeout = getHapiTimeout();
+      const timeoutMs = options.timeout || defaultTimeout;
+      
       const timeout = setTimeout(() => {
-        reject(new Error(`Validation timeout after ${options.timeout || 30000}ms`));
+        reject(new Error(`Validation timeout after ${timeoutMs}ms`));
         this.jobQueue = this.jobQueue.filter(j => j.id !== jobId);
         this.activeJobs.delete(jobId);
-      }, options.timeout || 30000);
+      }, timeoutMs);
 
       const job: ValidationJob = {
         id: jobId,
@@ -259,8 +264,13 @@ export class HapiProcessPool extends EventEmitter {
         ? `${process.env.JAVA_HOME}/bin/java`
         : '/opt/homebrew/opt/openjdk@17/bin/java';
       
+      // Use centralized timeout configuration
+      const { getHapiTimeout } = require('../../../config/validation-timeouts');
+      const defaultTimeout = getHapiTimeout();
+      const timeoutMs = job.options.timeout || defaultTimeout;
+      
       const childProcess = spawn(javaPath, args, {
-        timeout: job.options.timeout || 30000,
+        timeout: timeoutMs,
       });
 
       let stdout = '';

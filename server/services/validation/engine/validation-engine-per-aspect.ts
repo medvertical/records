@@ -42,16 +42,21 @@ export interface ValidationSettingsSnapshot {
 }
 
 /**
- * Default timeouts per aspect (in milliseconds)
+ * Get default timeouts per aspect from centralized configuration
  */
-const ASPECT_TIMEOUTS: Record<ValidationAspectType, number> = {
-  structural: 5000,
-  profile: 45000,
-  terminology: 60000,
-  reference: 30000,
-  businessRule: 30000,
-  metadata: 5000,
-};
+function getAspectTimeouts(): Record<ValidationAspectType, number> {
+  const { getValidationTimeouts } = require('../../../config/validation-timeouts');
+  const timeouts = getValidationTimeouts();
+  
+  return {
+    structural: timeouts.validationEngine.structural,
+    profile: timeouts.validationEngine.profile,
+    terminology: timeouts.validationEngine.terminology,
+    reference: timeouts.validationEngine.reference,
+    businessRule: timeouts.validationEngine.businessRules,
+    metadata: timeouts.validationEngine.metadata,
+  };
+}
 
 /**
  * Compute SHA-256 hash for settings snapshot
@@ -218,7 +223,8 @@ export class ValidationEnginePerAspect {
     profileUrl?: string
   ): Promise<PerAspectValidationResult> {
     const startTime = Date.now();
-    const timeoutMs = settings.aspects[aspect]?.timeoutMs || ASPECT_TIMEOUTS[aspect];
+    const aspectTimeouts = getAspectTimeouts();
+    const timeoutMs = settings.aspects[aspect]?.timeoutMs || aspectTimeouts[aspect];
     
     try {
       // Wrap validation in timeout promise

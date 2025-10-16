@@ -112,8 +112,9 @@ export const Environment = {
   // FHIR
   DEFAULT_FHIR_VERSION: getEnvVar('DEFAULT_FHIR_VERSION', 'R4'),
   
-  // Validation
-  VALIDATION_TIMEOUT_MS: getEnvNumber('VALIDATION_TIMEOUT_MS', 30000),
+  // Validation - use centralized timeout configuration
+  // Note: This is deprecated, use validation-timeouts.ts instead
+  VALIDATION_TIMEOUT_MS: getEnvNumber('VALIDATION_TIMEOUT_MS', 90000),  // Default to profile validation timeout
   VALIDATION_BATCH_SIZE: getEnvNumber('VALIDATION_BATCH_SIZE', 10),
   
   // Cache
@@ -155,4 +156,12 @@ export function logFeatureFlags(): void {
   console.log(`   PERFORMANCE_TRACKING: ${FeatureFlags.ENABLE_PERFORMANCE_TRACKING ? '📊 Enabled' : 'Disabled'}`);
   console.log(`   AUDIT_TRAIL: ${FeatureFlags.ENABLE_AUDIT_TRAIL ? '📝 Enabled' : 'Disabled'}`);
   console.log(`   STRICT_VALIDATION: ${FeatureFlags.STRICT_VALIDATION_MODE ? '🔒 Enabled' : 'Disabled'}`);
+  
+  // Log validation timeout configuration
+  try {
+    const { logTimeoutConfiguration } = require('./validation-timeouts');
+    logTimeoutConfiguration();
+  } catch (error) {
+    console.warn('Failed to log timeout configuration:', error);
+  }
 }

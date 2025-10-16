@@ -76,7 +76,7 @@ export class ProfileValidator {
       const profilesToValidate = this.collectProfiles(resource, profileUrl);
 
       if (profilesToValidate.length === 0) {
-        console.log(`[ProfileValidator] No profiles declared, performing basic validation`);
+        console.log(`[ProfileValidator] No profiles to validate against (not even base profile)`);
         return this.performBasicProfileValidation(resource, resourceType);
       }
 
@@ -143,7 +143,44 @@ export class ProfileValidator {
       });
     }
 
+    // If no profiles collected, add base FHIR profile for resource type
+    if (profiles.size === 0 && resource.resourceType) {
+      const baseProfile = this.getBaseProfileForResourceType(resource.resourceType);
+      if (baseProfile) {
+        console.log(`[ProfileValidator] No profiles declared, using base profile: ${baseProfile}`);
+        profiles.add(baseProfile);
+      }
+    }
+
     return Array.from(profiles);
+  }
+
+  /**
+   * Get base FHIR profile URL for a resource type
+   * @param resourceType - FHIR resource type
+   * @returns Base profile URL or null if not a standard resource
+   */
+  private getBaseProfileForResourceType(resourceType: string): string | null {
+    // Base FHIR profiles follow pattern: http://hl7.org/fhir/StructureDefinition/{ResourceType}
+    const standardResources = [
+      'Patient', 'Practitioner', 'Organization', 'Location',
+      'Observation', 'Condition', 'Procedure', 'MedicationRequest',
+      'AllergyIntolerance', 'Immunization', 'DiagnosticReport',
+      'Encounter', 'CarePlan', 'Goal', 'ServiceRequest',
+      'Specimen', 'Device', 'Medication', 'Substance',
+      'DocumentReference', 'Binary', 'Bundle', 'Composition',
+      'CareTeam', 'RelatedPerson', 'PractitionerRole', 'HealthcareService',
+      'Endpoint', 'Schedule', 'Slot', 'Appointment', 'AppointmentResponse',
+      'Communication', 'CommunicationRequest', 'MessageHeader',
+      'OperationOutcome', 'Parameters', 'Subscription', 'ValueSet',
+      'CodeSystem', 'StructureDefinition', 'CapabilityStatement'
+    ];
+
+    if (standardResources.includes(resourceType)) {
+      return `http://hl7.org/fhir/StructureDefinition/${resourceType}`;
+    }
+
+    return null;
   }
 
   /**
@@ -180,8 +217,23 @@ export class ProfileValidator {
     try {
       console.log(`[ProfileValidator] Using HAPI validator for ${fhirVersion} profile: ${profileUrl}`);
 
-      // Task 4.10: Resolve profile using ProfileResolver
-      await this.resolveProfileBeforeValidation(profileUrl, settings);
+      // Task 4.10: Resolve profile using ProfileResolver (with timeout)
+      // Wrap profile resolution in timeout to prevent hanging
+      // Use centralized timeout configuration
+      const { getProfileResolutionTimeout } = require('../../../config/validation-timeouts');
+      const resolutionTimeout = getProfileResolutionTimeout();
+      
+      try {
+        await Promise.race([
+          this.resolveProfileBeforeValidation(profileUrl, settings),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`Profile resolution timeout after ${resolutionTimeout}ms`)), resolutionTimeout)
+          )
+        ]);
+      } catch (error) {
+        console.warn(`[ProfileValidator] Profile resolution failed/timed out (timeout: ${resolutionTimeout}ms):`, error);
+        // Continue with validation even if resolution fails - HAPI may have cached profile
+      }
 
       // Load version-specific IG packages (Task 2.8)
       const igPackages = this.getIgPackagesForProfile(profileUrl, fhirVersion);
@@ -215,6 +267,7 @@ export class ProfileValidator {
         mode,
         igPackages: igPackages.length > 0 ? igPackages : undefined,
         cacheDirectory: settings?.offlineConfig?.profileCachePath || './server/cache/fhir-packages',
+        timeout: 60000, // 60 seconds for profile validation (HAPI can be slow with profile loading)
       };
 
       // Call HAPI validator
@@ -257,6 +310,12 @@ export class ProfileValidator {
     profileUrl: string,
     settings?: ValidationSettings
   ): Promise<void> {
+    // Skip resolution for core FHIR profiles (already in HAPI)
+    if (profileUrl.startsWith('http://hl7.org/fhir/StructureDefinition/')) {
+      console.log(`[ProfileValidator] Skipping resolution for core FHIR profile: ${profileUrl}`);
+      return;
+    }
+
     try {
       console.log(`[ProfileValidator] Resolving profile: ${profileUrl}`);
       
