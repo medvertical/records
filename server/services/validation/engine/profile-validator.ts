@@ -33,6 +33,7 @@ import {
 import { addR6WarningIfNeeded } from '../utils/r6-support-warnings';
 import { getProfileResolver } from '../utils/profile-resolver';
 import { GermanProfileDetector } from '../utils/german-profile-detector';
+import { getProfileResolutionTimeout } from '../../../config/validation-timeouts'; // CRITICAL FIX: Import centralized timeout
 
 // ============================================================================
 // Profile Validator
@@ -220,8 +221,8 @@ export class ProfileValidator {
       // Task 4.10: Resolve profile using ProfileResolver (with timeout)
       // Wrap profile resolution in timeout to prevent hanging
       // Use centralized timeout configuration
-      const { getProfileResolutionTimeout } = require('../../../config/validation-timeouts');
       const resolutionTimeout = getProfileResolutionTimeout();
+      console.log(`[ProfileValidator] Profile resolution timeout configured: ${resolutionTimeout}ms`);
       
       try {
         await Promise.race([

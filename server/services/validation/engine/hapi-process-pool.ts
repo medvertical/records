@@ -20,6 +20,7 @@ import { tmpdir } from 'os';
 import { EventEmitter } from 'events';
 import type { HapiValidationOptions, HapiOperationOutcome } from './hapi-validator-types';
 import { hapiValidatorConfig } from '../../../config/hapi-validator-config';
+import { getHapiTimeout } from '../../../config/validation-timeouts'; // CRITICAL FIX: Import centralized timeout
 
 // ============================================================================
 // Types
@@ -176,9 +177,10 @@ export class HapiProcessPool extends EventEmitter {
 
     return new Promise<HapiOperationOutcome>((resolve, reject) => {
       // Use centralized timeout configuration
-      const { getHapiTimeout } = require('../../../config/validation-timeouts');
       const defaultTimeout = getHapiTimeout();
       const timeoutMs = options.timeout || defaultTimeout;
+      
+      console.log(`[HapiProcessPool] Job ${jobId} timeout: ${timeoutMs}ms (default: ${defaultTimeout}ms)`);
       
       const timeout = setTimeout(() => {
         reject(new Error(`Validation timeout after ${timeoutMs}ms`));
@@ -265,9 +267,10 @@ export class HapiProcessPool extends EventEmitter {
         : '/opt/homebrew/opt/openjdk@17/bin/java';
       
       // Use centralized timeout configuration
-      const { getHapiTimeout } = require('../../../config/validation-timeouts');
       const defaultTimeout = getHapiTimeout();
       const timeoutMs = job.options.timeout || defaultTimeout;
+      
+      console.log(`[HapiProcessPool] Spawning Java process with timeout: ${timeoutMs}ms`);
       
       const childProcess = spawn(javaPath, args, {
         timeout: timeoutMs,

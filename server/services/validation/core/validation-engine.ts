@@ -20,6 +20,7 @@ import { getConnectivityDetector, type ConnectivityMode } from '../utils/connect
 import { getGracefulDegradationHandler } from '../utils/graceful-degradation-handler';
 import { performanceBaselineTracker } from '../../performance/performance-baseline'; // Task 10.3
 import { createValidationTimer, globalTimingAggregator } from '../utils/validation-timing'; // Task 10.4
+import { getAspectTimeout } from '../../../config/validation-timeouts'; // CRITICAL FIX: Import centralized timeout config
 import type {
   ValidationSettings,
   ValidationAspect,
@@ -573,9 +574,6 @@ export class ValidationEngine extends EventEmitter {
   // ------------------------------------------------------------------------
 
   private getAspectTimeoutMs(aspect: ValidationAspect, settings: ValidationSettings): number {
-    // Import centralized timeout configuration
-    const { getAspectTimeout } = require('../../../config/validation-timeouts');
-    
     // Map aspect names to timeout configuration keys
     const aspectMap: Record<ValidationAspect, keyof import('../../../config/validation-timeouts').ValidationTimeouts['validationEngine']> = {
       structural: 'structural',
@@ -589,12 +587,20 @@ export class ValidationEngine extends EventEmitter {
     // Settings may carry per-aspect timeout; fall back to centralized config
     const configured = (settings as any)[aspect]?.timeoutMs;
     if (typeof configured === 'number' && configured > 0) {
+      console.log(`[ValidationEngine] Using configured timeout for ${aspect}: ${configured}ms`);
       return configured;
     }
     
     // Use centralized timeout configuration
     const configKey = aspectMap[aspect];
-    return configKey ? getAspectTimeout(configKey) : 30000; // 30s fallback
+    if (!configKey) {
+      console.warn(`[ValidationEngine] No timeout config for aspect ${aspect}, using fallback 90000ms`);
+      return 90000; // Use profile timeout as fallback
+    }
+    
+    const timeout = getAspectTimeout(configKey);
+    console.log(`[ValidationEngine] Using centralized timeout for ${aspect}: ${timeout}ms`);
+    return timeout;
   }
 
   private timeoutPromise(ms: number, aspect: ValidationAspect): Promise<never> {

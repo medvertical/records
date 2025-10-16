@@ -20,6 +20,7 @@ import { TerminologyValidator } from './terminology-validator';
 import { ReferenceValidator } from './reference-validator';
 import { BusinessRuleValidator } from './business-rule-validator';
 import { MetadataValidator } from './metadata-validator';
+import { getValidationTimeouts } from '../../../config/validation-timeouts'; // CRITICAL FIX: Import centralized timeout config
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -45,8 +46,16 @@ export interface ValidationSettingsSnapshot {
  * Get default timeouts per aspect from centralized configuration
  */
 function getAspectTimeouts(): Record<ValidationAspectType, number> {
-  const { getValidationTimeouts } = require('../../../config/validation-timeouts');
   const timeouts = getValidationTimeouts();
+  
+  console.log('[ValidationEnginePerAspect] Loading aspect timeouts from centralized config:', {
+    structural: timeouts.validationEngine.structural,
+    profile: timeouts.validationEngine.profile,
+    terminology: timeouts.validationEngine.terminology,
+    reference: timeouts.validationEngine.reference,
+    businessRules: timeouts.validationEngine.businessRules,
+    metadata: timeouts.validationEngine.metadata,
+  });
   
   return {
     structural: timeouts.validationEngine.structural,
@@ -225,6 +234,8 @@ export class ValidationEnginePerAspect {
     const startTime = Date.now();
     const aspectTimeouts = getAspectTimeouts();
     const timeoutMs = settings.aspects[aspect]?.timeoutMs || aspectTimeouts[aspect];
+    
+    console.log(`[ValidationEnginePerAspect] Validating aspect ${aspect} with timeout: ${timeoutMs}ms`);
     
     try {
       // Wrap validation in timeout promise
