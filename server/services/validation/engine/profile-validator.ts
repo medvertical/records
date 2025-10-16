@@ -144,13 +144,10 @@ export class ProfileValidator {
       });
     }
 
-    // If no profiles collected, add base FHIR profile for resource type
-    if (profiles.size === 0 && resource.resourceType) {
-      const baseProfile = this.getBaseProfileForResourceType(resource.resourceType);
-      if (baseProfile) {
-        console.log(`[ProfileValidator] No profiles declared, using base profile: ${baseProfile}`);
-        profiles.add(baseProfile);
-      }
+    // If no profiles declared, skip profile validation
+    // Base FHIR profiles are already validated by structural validation
+    if (profiles.size === 0) {
+      console.log(`[ProfileValidator] No profiles declared in meta.profile, skipping profile validation`);
     }
 
     return Array.from(profiles);
@@ -185,6 +182,14 @@ export class ProfileValidator {
   }
 
   /**
+   * Check if profile is a base FHIR profile
+   * Base profiles are already validated by structural validation, no need for HAPI
+   */
+  private isBaseFhirProfile(profileUrl: string): boolean {
+    return profileUrl.startsWith('http://hl7.org/fhir/StructureDefinition/');
+  }
+
+  /**
    * Validate resource against a specific profile
    */
   private async validateAgainstProfile(
@@ -194,11 +199,18 @@ export class ProfileValidator {
     fhirVersion: 'R4' | 'R5' | 'R6',
     settings?: ValidationSettings
   ): Promise<ValidationIssue[]> {
+    // Skip HAPI for base FHIR profiles (already validated by structural validation)
+    if (this.isBaseFhirProfile(profileUrl)) {
+      console.log(`[ProfileValidator] Base FHIR profile detected, using fast validation: ${profileUrl}`);
+      return this.validateWithBasicProfileCheck(resource, resourceType, profileUrl);
+    }
+    
+    // For custom profiles (German KBV/MII, US Core, etc.), use HAPI if available
     if (this.hapiAvailable) {
-      // Use HAPI for comprehensive profile validation
+      console.log(`[ProfileValidator] Custom profile detected, using HAPI validation: ${profileUrl}`);
       return this.validateWithHapi(resource, resourceType, profileUrl, fhirVersion, settings);
     } else {
-      // Fallback to basic profile checking
+      // Fallback to basic profile checking if HAPI unavailable
       return this.validateWithBasicProfileCheck(resource, resourceType, profileUrl);
     }
   }
@@ -435,14 +447,18 @@ export class ProfileValidator {
   }
 
   /**
-   * Basic profile validation (fallback when HAPI unavailable)
+   * Basic profile validation (fallback when HAPI unavailable OR for base FHIR profiles)
    */
   private async validateWithBasicProfileCheck(
     resource: any,
     resourceType: string,
     profileUrl: string
   ): Promise<ValidationIssue[]> {
-    console.log(`[ProfileValidator] Using basic profile check (HAPI not available)`);
+    const isBaseProfile = this.isBaseFhirProfile(profileUrl);
+    console.log(
+      `[ProfileValidator] Using basic profile check for ${profileUrl} ` +
+      `(${isBaseProfile ? 'base profile - fast path' : 'HAPI not available'})`
+    );
     
     // Just verify the profile is declared in meta.profile
     if (!resource.meta?.profile || !Array.isArray(resource.meta.profile)) {
@@ -471,6 +487,7 @@ export class ProfileValidator {
     }
 
     // Profile is declared - basic validation passed
+    console.log(`[ProfileValidator] Profile ${profileUrl} is declared in meta.profile - validation passed`);
     return [];
   }
 
