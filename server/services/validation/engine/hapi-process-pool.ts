@@ -124,14 +124,14 @@ export class HapiProcessPool extends EventEmitter {
   }
 
   /**
-   * Spawn a new HAPI validator process
+   * Spawn a new HAPI validator process and warm it up
    */
   private async spawnProcess(): Promise<void> {
     const processId = `hapi-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     const processInfo: HapiProcess = {
       id: processId,
-      process: null as any, // Will be set below
+      process: null as any,
       status: 'starting',
       lastUsed: new Date(),
       validationCount: 0,
@@ -139,24 +139,111 @@ export class HapiProcessPool extends EventEmitter {
       createdAt: new Date(),
     };
 
-    try {
-      // For now, we'll use a marker that the process is spawned
-      // In a full implementation, we'd keep the process running
-      // and communicate via stdin/stdout
-      
-      // This is a simplified version - just mark as idle
-      // A full implementation would actually keep Java process running
-      processInfo.status = 'idle';
-      processInfo.process = {} as any; // Placeholder
+    this.processes.set(processId, processInfo);
 
-      this.processes.set(processId, processInfo);
+    try {
+      console.log(`[HapiProcessPool] Spawning and warming up HAPI process ${processId}...`);
       
-      console.log(`[HapiProcessPool] Spawned process ${processId}`);
-      this.emit('processSpawned', { processId });
+      // Warm up the process by validating a dummy resource
+      // This loads all FHIR packages into memory
+      const dummyResource = {
+        resourceType: 'Patient',
+        id: 'warmup',
+        name: [{ family: 'Warmup' }]
+      };
+      
+      const dummyOptions: HapiValidationOptions = {
+        fhirVersion: 'R4',
+        timeout: 30000,
+        mode: 'online'
+      };
+      
+      const startWarmup = Date.now();
+      
+      // Execute warmup validation
+      await this.executeWarmupValidation(dummyResource, dummyOptions, processInfo);
+      
+      const warmupTime = Date.now() - startWarmup;
+      
+      processInfo.status = 'idle';
+      console.log(`[HapiProcessPool] Process ${processId} warmed up in ${warmupTime}ms and ready`);
+      this.emit('processSpawned', { processId, warmupTime });
 
     } catch (error) {
+      console.error(`[HapiProcessPool] Failed to spawn/warmup process ${processId}:`, error);
       processInfo.status = 'failed';
+      this.processes.delete(processId);
       this.emit('processError', { processId, error });
+      throw error;
+    }
+  }
+
+  /**
+   * Warm up a process by executing a validation
+   * This loads FHIR packages into memory
+   */
+  private async executeWarmupValidation(
+    resource: any,
+    options: HapiValidationOptions,
+    process: HapiProcess
+  ): Promise<void> {
+    console.log(`[HapiProcessPool] Warming up process ${process.id} (loading FHIR packages)...`);
+    
+    // Use the regular execution but don't add to queue
+    const tempFilePath = join(tmpdir(), `hapi-warmup-${process.id}.json`);
+    writeFileSync(tempFilePath, JSON.stringify(resource, null, 2));
+
+    try {
+      const args = this.buildValidatorArgs(tempFilePath, options);
+      
+      const javaPath = process.env.JAVA_HOME 
+        ? `${process.env.JAVA_HOME}/bin/java`
+        : '/opt/homebrew/opt/openjdk@17/bin/java';
+      
+      const defaultTimeout = getHapiTimeout();
+      
+      // Set environment to use cached packages
+      const env = {
+        ...process.env,
+        FHIR_PACKAGE_CACHE_PATH: process.env.FHIR_PACKAGE_CACHE_PATH || '/Users/sheydin/.fhir/packages'
+      };
+      
+      await new Promise<void>((resolve, reject) => {
+        const childProcess = spawn(javaPath, args, {
+          timeout: defaultTimeout,
+          env: env
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        childProcess.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+
+        childProcess.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        childProcess.on('close', (code) => {
+          unlinkSync(tempFilePath);
+          
+          if (code === 0 || code === 1) {
+            // Success (code 1 is normal for HAPI with validation issues)
+            console.log(`[HapiProcessPool] Warmup complete for ${process.id}`);
+            resolve();
+          } else {
+            reject(new Error(`Warmup failed with code ${code}: ${stderr}`));
+          }
+        });
+
+        childProcess.on('error', (error) => {
+          try { unlinkSync(tempFilePath); } catch {}
+          reject(error);
+        });
+      });
+    } catch (error) {
+      try { unlinkSync(tempFilePath); } catch {}
       throw error;
     }
   }
