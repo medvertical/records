@@ -186,7 +186,9 @@ export class ProfileValidator {
    * Base profiles are already validated by structural validation, no need for HAPI
    */
   private isBaseFhirProfile(profileUrl: string): boolean {
-    return profileUrl.startsWith('http://hl7.org/fhir/StructureDefinition/');
+    const isBase = profileUrl.startsWith('http://hl7.org/fhir/StructureDefinition/');
+    console.log(`[ProfileValidator] isBaseFhirProfile("${profileUrl}"): ${isBase}`);
+    return isBase;
   }
 
   /**
@@ -288,9 +290,13 @@ export class ProfileValidator {
 
       // Call HAPI validator
       const allIssues = await hapiValidatorClient.validateResource(resource, options);
+      
+      console.log(`[ProfileValidator] HAPI returned ${allIssues.length} total issues`);
 
       // Filter to profile-related issues only
       const profileIssues = this.filterProfileIssues(allIssues);
+      
+      console.log(`[ProfileValidator] After filtering: ${profileIssues.length} profile issues (filtered out ${allIssues.length - profileIssues.length} non-profile issues)`);
 
       console.log(
         `[ProfileValidator] HAPI validation complete: ${profileIssues.length} profile issues ` +
@@ -425,9 +431,12 @@ export class ProfileValidator {
    * Filter HAPI validation issues to only profile-related ones
    */
   private filterProfileIssues(allIssues: ValidationIssue[]): ValidationIssue[] {
-    return allIssues.filter(issue => {
+    console.log(`[ProfileValidator] Filtering ${allIssues.length} issues...`);
+    
+    const profileIssues = allIssues.filter(issue => {
       // Already tagged as profile by hapi-issue-mapper
       if (issue.aspect === 'profile') {
+        console.log(`[ProfileValidator] ✓ Keeping issue (aspect=profile): ${issue.message?.substring(0, 60)}`);
         return true;
       }
 
@@ -443,10 +452,20 @@ export class ProfileValidator {
         'structuredefinition',
       ];
 
-      return profileKeywords.some(keyword => 
+      const hasKeyword = profileKeywords.some(keyword => 
         code.includes(keyword) || message.includes(keyword)
       );
+      
+      if (hasKeyword) {
+        console.log(`[ProfileValidator] ✓ Keeping issue (keyword match): ${issue.message?.substring(0, 60)}`);
+      } else {
+        console.log(`[ProfileValidator] ✗ Filtering out (aspect=${issue.aspect}): ${issue.message?.substring(0, 60)}`);
+      }
+      
+      return hasKeyword;
     });
+    
+    return profileIssues;
   }
 
   /**
