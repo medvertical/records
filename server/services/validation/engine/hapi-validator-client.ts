@@ -375,12 +375,14 @@ export class HapiValidatorClient {
       });
     }
 
-    // Note: Don't add -profile parameter as it tries to fetch from URL which often fails
-    // Instead, HAPI will validate against profiles in meta.profile if IG packages are loaded
-    // if (options.profile) {
-    //   args.push('-profile', options.profile);
-    //   console.log(`[HapiValidatorClient] Validating against profile: ${options.profile}`);
-    // }
+    // Add -profile parameter to explicitly validate against the profile
+    // HAPI needs this to know which StructureDefinition to use from the loaded package
+    if (options.profile) {
+      args.push('-profile', options.profile);
+      console.log(`[HapiValidatorClient] Explicitly validating against profile: ${options.profile}`);
+    } else {
+      console.log(`[HapiValidatorClient] No explicit profile - will validate against profiles in meta.profile`);
+    }
 
     // Configure package cache directory (use project-local cache)
     const cacheDir = options.cacheDirectory || './server/cache/fhir-packages';
