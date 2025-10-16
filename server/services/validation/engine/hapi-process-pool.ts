@@ -196,16 +196,18 @@ export class HapiProcessPool extends EventEmitter {
     try {
       const args = this.buildValidatorArgs(tempFilePath, options);
       
-      const javaPath = process.env.JAVA_HOME 
+      const javaPath = (typeof process !== 'undefined' && process.env?.JAVA_HOME)
         ? `${process.env.JAVA_HOME}/bin/java`
         : '/opt/homebrew/opt/openjdk@17/bin/java';
       
       const defaultTimeout = getHapiTimeout();
       
       // Set environment to use cached packages
-      const env = {
+      const env = typeof process !== 'undefined' && process.env ? {
         ...process.env,
         FHIR_PACKAGE_CACHE_PATH: process.env.FHIR_PACKAGE_CACHE_PATH || '/Users/sheydin/.fhir/packages'
+      } : {
+        FHIR_PACKAGE_CACHE_PATH: '/Users/sheydin/.fhir/packages'
       };
       
       await new Promise<void>((resolve, reject) => {
