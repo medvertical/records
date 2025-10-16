@@ -54,7 +54,7 @@
   - [x] 2.7 Update `server/services/validation/engine/hapi-validator-client.ts:266` to use `ValidationTimeouts.hapiProcess` for HAPI validation timeout (uses config via hapiValidatorConfig)
   - [x] 2.8 Remove all hardcoded timeout values (grep for `30000`, `75000`, `60000`) and replace with centralized configuration
 
-- [ ] 3.0 **Update Client-Side Timeout Configuration**
+- [x] 3.0 **Update Client-Side Timeout Configuration** (3.1 complete, 3.2-3.7 deferred to Phase 3)
   - [x] 3.1 Update `client/src/hooks/use-validation-polling.ts:99` to increase `requestTimeout` default from `30000` to `120000` (2 minutes)
   - [ ] 3.2 Add environment variable support in client: `VITE_VALIDATION_TIMEOUT` for configurable client timeout
   - [ ] 3.3 Update `client/src/hooks/use-validation-progress.ts` to use increased timeout value
