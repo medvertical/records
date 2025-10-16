@@ -21,7 +21,7 @@
  */
 
 import { spawn } from 'child_process';
-import { writeFileSync, unlinkSync, existsSync } from 'fs';
+import { writeFileSync, unlinkSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import type { ValidationIssue } from '../types/validation-types';
