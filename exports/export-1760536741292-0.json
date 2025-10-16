@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "exportId": "export-1760536741292-0",
+    "exportedAt": "2025-10-15T13:59:01.292Z",
+    "options": {
+      "compress": false,
+      "resourceTypes": [
+        "Patient",
+        "Observation"
+      ],
+      "severities": [
+        "error",
+        "warning"
+      ],
+      "aspects": [
+        "structural",
+        "profile"
+      ]
+    },
+    "recordCount": 1
+  },
+  "validationResults": [
+    {
+      "id": 1,
+      "resourceId": "Patient/123",
+      "resourceType": "Patient",
+      "aspect": "structural",
+      "isValid": false,
+      "issueCount": 2,
+      "validatedAt": "2025-10-15T13:59:01.292Z"
+    }
+  ],
+  "validationMessages": []
+}

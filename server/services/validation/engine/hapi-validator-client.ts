@@ -45,6 +45,8 @@ import type {
 } from './hapi-validator-types';
 import { mapOperationOutcomeToIssues } from './hapi-issue-mapper';
 import { withRetry, isRetryableError, isNonRetryableHapiError } from '../utils/retry-helper';
+import { createValidationTimer, globalTimingAggregator, type ValidationTimingBreakdown } from '../utils/validation-timing'; // Task 10.4
+import { getHapiProcessPool } from './hapi-process-pool'; // Task 10.6
 
 // ============================================================================
 // HAPI Validator Client
@@ -143,34 +145,85 @@ export class HapiValidatorClient {
     const startTime = Date.now();
     let tempFilePath: string | null = null;
 
+    // Task 10.4: Create timing tracker
+    const timer = createValidationTimer(resource.resourceType, 'hapi');
+
     try {
       // Validate options
+      timer.startPhase('options-validation', 'Validating options');
       this.validateOptions(options);
+      timer.endPhase();
 
-      // Use process pool if enabled and available
+      // Task 10.6: Use process pool if enabled and available
       if (this.useProcessPool) {
         console.log('[HapiValidatorClient] Using process pool for validation');
-        // Process pool integration will be completed when pool is fully implemented
-        // For now, fall through to standard execution
+        timer.startPhase('pool-validation', 'Validating via process pool');
+        
+        try {
+          const pool = getHapiProcessPool();
+          const operationOutcome = await pool.validate(resource, options);
+          
+          // Map HAPI issues to ValidationIssue format
+          const issues = mapOperationOutcomeToIssues(operationOutcome, options.fhirVersion);
+          
+          timer.endPhase();
+          
+          const validationTime = Date.now() - startTime;
+          const breakdown = timer.getBreakdown();
+          globalTimingAggregator.add(breakdown);
+
+          console.log(
+            `[HapiValidatorClient] Pool validation completed in ${validationTime}ms ` +
+            `(${issues.length} issues, pool stats: ${JSON.stringify(pool.getStats())})`
+          );
+
+          if (process.env.LOG_VALIDATION_TIMING === 'true') {
+            console.log(timer.formatBreakdown());
+          }
+
+          return issues;
+
+        } catch (poolError) {
+          console.warn('[HapiValidatorClient] Pool validation failed, falling back to spawn:', poolError);
+          timer.endPhase();
+          // Fall through to standard execution
+        }
       }
 
-      // Execute validation with retry logic
+      // Execute validation with retry logic (standard spawn-based approach)
+      timer.startPhase('validation-execution', 'Executing HAPI validation with retry logic');
       const result = await withRetry(
         async () => {
           // Create temporary file with resource JSON
+          const tempFileStart = Date.now();
           tempFilePath = this.createTempFile(resource);
+          timer.recordPhase('temp-file-creation', Date.now() - tempFileStart, 'Creating temporary resource file');
 
           // Build HAPI CLI arguments
+          const argsStart = Date.now();
           const args = this.buildValidatorArgs(tempFilePath, options);
+          timer.recordPhase('args-building', Date.now() - argsStart, 'Building HAPI CLI arguments');
 
           // Execute HAPI validator
+          const executeStart = Date.now();
           const { stdout, stderr } = await this.executeValidator(args, options.timeout);
+          const executeTime = Date.now() - executeStart;
+          timer.recordPhase('hapi-spawn', executeTime, 'Spawning Java process and validation', {
+            timeout: options.timeout,
+            poolEnabled: this.useProcessPool,
+          });
 
           // Parse OperationOutcome
+          const parseStart = Date.now();
           const operationOutcome = this.parseOperationOutcome(stdout, stderr);
+          timer.recordPhase('hapi-parse', Date.now() - parseStart, 'Parsing OperationOutcome from HAPI output');
 
           // Map HAPI issues to ValidationIssue format
-          return mapOperationOutcomeToIssues(operationOutcome, options.fhirVersion);
+          const mapStart = Date.now();
+          const issues = mapOperationOutcomeToIssues(operationOutcome, options.fhirVersion);
+          timer.recordPhase('post-processing', Date.now() - mapStart, 'Mapping HAPI issues to ValidationIssue format');
+
+          return issues;
         },
         {
           maxAttempts: 3,
@@ -187,13 +240,24 @@ export class HapiValidatorClient {
           },
         }
       );
+      timer.endPhase();
 
       const validationTime = Date.now() - startTime;
+      
+      // Task 10.4: Get timing breakdown
+      const breakdown = timer.getBreakdown();
+      globalTimingAggregator.add(breakdown);
+
       console.log(
         `[HapiValidatorClient] Validation completed in ${validationTime}ms ` +
         `(${result.result.length} issues, ${result.attempts} attempts, ` +
         `pool: ${this.useProcessPool})`
       );
+      
+      // Log detailed timing in debug mode
+      if (process.env.LOG_VALIDATION_TIMING === 'true') {
+        console.log(timer.formatBreakdown());
+      }
 
       return result.result;
 
@@ -603,6 +667,42 @@ export class HapiValidatorClient {
         message: `Validator setup test failed: ${error instanceof Error ? error.message : String(error)}`
       };
     }
+  }
+
+  // ========================================================================
+  // Task 10.6: Process Pool Methods
+  // ========================================================================
+
+  /**
+   * Get process pool statistics
+   */
+  getPoolStats() {
+    if (!this.useProcessPool) {
+      return {
+        enabled: false,
+        message: 'Process pool is not enabled',
+      };
+    }
+
+    try {
+      const pool = getHapiProcessPool();
+      return {
+        enabled: true,
+        ...pool.getStats(),
+      };
+    } catch (error) {
+      return {
+        enabled: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Check if process pool is enabled
+   */
+  isPoolEnabled(): boolean {
+    return this.useProcessPool;
   }
 }
 

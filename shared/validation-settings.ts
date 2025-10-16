@@ -132,6 +132,48 @@ export interface ValidationSettings {
 
   /** Auto-Revalidation Settings */
   autoRevalidateAfterEdit?: boolean; // Automatically revalidate after resource edit (default: false)
+
+  /** Task 6.6 & 6.7: Recursive Reference Validation Configuration */
+  recursiveReferenceValidation?: {
+    enabled: boolean;              // Enable recursive validation (default: false)
+    maxDepth: number;              // Maximum depth (1-3, default: 1)
+    validateExternal: boolean;     // Validate external references (default: false)
+    validateContained: boolean;    // Validate contained references recursively (default: true)
+    validateBundleEntries: boolean; // Validate Bundle entries recursively (default: true)
+    excludeResourceTypes?: string[]; // Resource types to exclude
+    maxReferencesPerResource?: number; // Max references to follow per resource (default: 10)
+    timeoutMs?: number;            // Timeout in milliseconds (default: 30000)
+  };
+
+  /** Task 7.12: Multi-Layer Cache Configuration */
+  cacheConfig?: {
+    /** Cache layers configuration */
+    layers?: {
+      L1?: 'enabled' | 'disabled';  // In-memory cache
+      L2?: 'enabled' | 'disabled';  // Database cache
+      L3?: 'enabled' | 'disabled';  // Filesystem cache
+    };
+    /** L1 (Memory) cache size limit in MB (default: 100) */
+    l1MaxSizeMb?: number;
+    /** L2 (Database) cache size limit in GB (default: 1) */
+    l2MaxSizeGb?: number;
+    /** L3 (Filesystem) cache size limit in GB (default: 5) */
+    l3MaxSizeGb?: number;
+    /** Time-to-live (TTL) configuration in milliseconds */
+    ttl?: {
+      validation?: number;    // Validation results (default: 5 min)
+      profile?: number;       // FHIR profiles (default: 30 min)
+      terminology?: number;   // Terminology codes (default: 1 hour)
+      igPackage?: number;     // IG packages (default: 24 hours)
+      default?: number;       // Default TTL (default: 15 min)
+    };
+    /** Enable cache warming on startup (default: false) */
+    enableWarmup?: boolean;
+    /** Custom profiles to warm (default: common FHIR core profiles) */
+    warmupProfiles?: string[];
+    /** Custom terminology systems to warm (default: LOINC, SNOMED, ICD-10) */
+    warmupTerminologySystems?: string[];
+  };
 }
 
 // ============================================================================
@@ -443,6 +485,31 @@ export const DEFAULT_CIRCUIT_BREAKER_CONFIG: CircuitBreakerConfig = {
   halfOpenTimeout: 300000     // 5 minutes before trying one request
 };
 
+/**
+ * Default Cache Configuration
+ * Task 7.12: Multi-layer cache settings
+ */
+export const DEFAULT_CACHE_CONFIG = {
+  layers: {
+    L1: 'enabled' as const,
+    L2: 'disabled' as const,  // Disabled by default (requires database)
+    L3: 'disabled' as const   // Disabled by default (requires filesystem)
+  },
+  l1MaxSizeMb: 100,  // 100 MB for in-memory cache
+  l2MaxSizeGb: 1,    // 1 GB for database cache
+  l3MaxSizeGb: 5,    // 5 GB for filesystem cache
+  ttl: {
+    validation: 5 * 60 * 1000,      // 5 minutes
+    profile: 30 * 60 * 1000,        // 30 minutes
+    terminology: 60 * 60 * 1000,    // 1 hour
+    igPackage: 24 * 60 * 60 * 1000, // 24 hours
+    default: 15 * 60 * 1000         // 15 minutes
+  },
+  enableWarmup: false,  // Disabled by default
+  warmupProfiles: [],   // Empty = use common FHIR core profiles
+  warmupTerminologySystems: []  // Empty = use common terminology systems
+};
+
 export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
   aspects: {
     structural: { enabled: true, severity: 'error' },
@@ -473,7 +540,8 @@ export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
     profileCachePath: '/opt/fhir/igs/'
   },
   profileSources: 'simplifier', // Fetch profiles from Simplifier, resolve locally
-  autoRevalidateAfterEdit: false
+  autoRevalidateAfterEdit: false,
+  cacheConfig: DEFAULT_CACHE_CONFIG
 };
 
 export const DEFAULT_VALIDATION_SETTINGS_R5: ValidationSettings = {
@@ -506,7 +574,8 @@ export const DEFAULT_VALIDATION_SETTINGS_R5: ValidationSettings = {
     profileCachePath: '/opt/fhir/igs/'
   },
   profileSources: 'simplifier', // Fetch profiles from Simplifier, resolve locally
-  autoRevalidateAfterEdit: false
+  autoRevalidateAfterEdit: false,
+  cacheConfig: DEFAULT_CACHE_CONFIG
 };
 
 // ============================================================================
@@ -532,6 +601,8 @@ export interface ValidationSettingsUpdate {
   };
   profileSources?: 'local' | 'simplifier' | 'both';
   autoRevalidateAfterEdit?: boolean;
+  recursiveReferenceValidation?: Partial<ValidationSettings['recursiveReferenceValidation']>;
+  cacheConfig?: Partial<ValidationSettings['cacheConfig']>;
 }
 
 // ============================================================================

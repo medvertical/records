@@ -1,0 +1,29 @@
+{
+  "resourceType": "Observation",
+  "id": "test-observation-invalid-status",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2024-10-16T10:00:00Z"
+  },
+  "status": "invalid-status-value",
+  "code": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "8867-4",
+        "display": "Heart rate"
+      }
+    ]
+  },
+  "subject": {
+    "reference": "Patient/test-patient-simple"
+  },
+  "effectiveDateTime": "2024-10-16T10:00:00Z",
+  "valueQuantity": {
+    "value": 72,
+    "unit": "beats/minute",
+    "system": "http://unitsofmeasure.org",
+    "code": "/min"
+  }
+}
+

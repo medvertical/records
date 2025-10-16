@@ -33,6 +33,7 @@ import { getTerminologyServerRouter } from '../terminology/terminology-server-ro
 import { getCircuitBreakerManager } from '../terminology/circuit-breaker';
 import { getBatchValidator } from '../terminology/batch-validator';
 import { addR6WarningIfNeeded } from '../utils/r6-support-warnings';
+import { getGracefulDegradationHandler } from '../utils/graceful-degradation-handler';
 
 // ============================================================================
 // Terminology Validator (Optimized)
@@ -45,6 +46,7 @@ export class TerminologyValidator {
   private router = getTerminologyServerRouter();
   private circuitBreakerManager = getCircuitBreakerManager();
   private batchValidator = getBatchValidator();
+  private degradationHandler = getGracefulDegradationHandler();
 
   /**
    * Validate resource terminology using direct HTTP calls

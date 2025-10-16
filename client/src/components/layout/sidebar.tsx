@@ -15,7 +15,8 @@ import {
   Settings,
   Loader2, 
   Package,
-  Server
+  Server,
+  Activity
 } from "lucide-react";
 import { useQuickAccessItems, useQuickAccessCounts } from "@/hooks/use-quick-access-preferences";
 import { ManageQuickAccessDialog } from "@/components/dashboard/AddQuickAccessDialog";
@@ -25,6 +26,7 @@ const navigationItems = [
   { href: "/", label: "Dashboard", icon: ChartPie },
   { href: "/resources", label: "Browse Resources", icon: Database },
   { href: "/packages", label: "Package Management", icon: Package },
+  { href: "/performance", label: "Performance", icon: Activity },
 ];
 
 const settingsItem = { href: "/settings", label: "Settings", icon: Settings };

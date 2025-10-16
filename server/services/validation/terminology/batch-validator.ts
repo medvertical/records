@@ -112,6 +112,8 @@ export interface BatchProgress {
 
 export class TerminologyBatchValidator {
   private readonly defaultMaxBatchSize: number = 100;
+  private readonly defaultMaxConcurrentBatches: number = 4; // Task 10.7: Parallel batch processing
+  private pendingValidations: Map<string, Promise<ValidationResult>> = new Map(); // Task 10.7: Request deduplication
 
   /**
    * Validate multiple codes in an optimized batch
@@ -292,18 +294,31 @@ export class TerminologyBatchValidator {
   ): Promise<Map<string, CodeValidationResult>> {
     const results = new Map<string, CodeValidationResult>();
     
-    // Process in batches to avoid overwhelming the server
+    // Task 10.7: Process multiple batches in parallel for better throughput
+    const batches: ExtractedCode[][] = [];
     for (let i = 0; i < codes.length; i += maxBatchSize) {
-      const batch = codes.slice(i, i + maxBatchSize);
-      
-      console.log(
-        `[BatchValidator] Processing batch ${Math.floor(i / maxBatchSize) + 1}: ` +
-        `${batch.length} codes`
-      );
+      batches.push(codes.slice(i, i + maxBatchSize));
+    }
 
-      // Validate batch codes in parallel
-      const batchResults = await Promise.all(
-        batch.map(async (code) => {
+    console.log(
+      `[BatchValidator] Task 10.7: Processing ${batches.length} batches in parallel ` +
+      `(max concurrent: ${this.defaultMaxConcurrentBatches})`
+    );
+
+    // Process batches with controlled concurrency
+    for (let i = 0; i < batches.length; i += this.defaultMaxConcurrentBatches) {
+      const batchSlice = batches.slice(i, i + this.defaultMaxConcurrentBatches);
+      
+      const batchPromises = batchSlice.map(async (batch, batchIndex) => {
+        const actualBatchNum = i + batchIndex + 1;
+        console.log(
+          `[BatchValidator] Processing batch ${actualBatchNum}/${batches.length}: ` +
+          `${batch.length} codes`
+        );
+
+        // Validate batch codes in parallel with request deduplication
+        const batchResults = await Promise.all(
+          batch.map(async (code) => {
           try {
             const params: ValidateCodeParams = {
               system: code.system,
@@ -313,7 +328,27 @@ export class TerminologyBatchValidator {
               fhirVersion,
             };
 
-            const result = await validateFn(params, serverUrl);
+            // Task 10.7: Request deduplication - reuse pending validations
+            const dedupKey = `${params.system}|${params.code}|${params.valueSet || ''}|${params.fhirVersion}`;
+            
+            let resultPromise = this.pendingValidations.get(dedupKey);
+            if (!resultPromise) {
+              resultPromise = validateFn(params, serverUrl).catch(err => {
+                // Ensure promise is removed even on error
+                this.pendingValidations.delete(dedupKey);
+                throw err; // Re-throw for caller to handle
+              });
+              this.pendingValidations.set(dedupKey, resultPromise);
+              
+              // Clean up after successful completion
+              resultPromise.then(() => {
+                this.pendingValidations.delete(dedupKey);
+              }).catch(() => {
+                // Already handled above
+              });
+            }
+
+            const result = await resultPromise;
             
             return {
               path: code.path,
@@ -343,10 +378,22 @@ export class TerminologyBatchValidator {
         })
       );
 
-      // Add batch results to map
-      for (const { path, validationResult } of batchResults) {
-        results.set(path, validationResult);
-      }
+        // Add batch results to map
+        for (const { path, validationResult } of batchResults) {
+          results.set(path, validationResult);
+        }
+
+        return batchResults;
+      });
+
+      // Task 10.7: Wait for all parallel batches to complete
+      const allBatchResults = await Promise.all(batchPromises);
+      
+      // Results are already added to the map in each batch promise
+      console.log(
+        `[BatchValidator] Completed ${batchSlice.length} parallel batches ` +
+        `(${allBatchResults.reduce((sum, br) => sum + br.length, 0)} codes validated)`
+      );
     }
 
     return results;
@@ -443,6 +490,30 @@ export class TerminologyBatchValidator {
       totalTime,
       bySystem: systemStats,
     };
+  }
+
+  // ========================================================================
+  // Task 10.7: Performance Monitoring Methods
+  // ========================================================================
+
+  /**
+   * Get request deduplication statistics
+   */
+  getDeduplicationStats(): {
+    pendingValidations: number;
+    estimatedSavedRequests: number;
+  } {
+    return {
+      pendingValidations: this.pendingValidations.size,
+      estimatedSavedRequests: this.pendingValidations.size, // Each pending validation may be shared by multiple requests
+    };
+  }
+
+  /**
+   * Clear pending validations (for testing)
+   */
+  clearPendingValidations(): void {
+    this.pendingValidations.clear();
   }
 }
 

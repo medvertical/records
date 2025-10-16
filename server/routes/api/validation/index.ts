@@ -23,3 +23,10 @@ export { default as validateByIdsRoutes } from './validate-by-ids';
 // Export cache management routes
 export { default as cacheClearRoutes } from './cache-clear';
 export { default as analyticsCacheRoutes } from './analytics-cache';
+export { default as cacheManagementRoutes } from './cache-management';
+
+// Export connectivity routes
+export { default as connectivityRoutes } from './connectivity';
+
+// Export business rules routes
+export { default as businessRulesRoutes } from './business-rules';

@@ -14,12 +14,17 @@ import {
   singleRevalidateRoutes,
   validateByIdsRoutes,
   cacheClearRoutes,
-  analyticsCacheRoutes
+  analyticsCacheRoutes,
+  cacheManagementRoutes,
+  connectivityRoutes,
+  businessRulesRoutes
 } from "./api/validation";
 import { setupFhirRoutes, setupProfileRoutes } from "./api/fhir";
 import { setupDashboardRoutes } from "./api/dashboard";
 import { setupServerRoutes } from "./api/servers";
 import { performanceRoutes } from "./api/performance";
+import performanceBaselineRoutes from "./api/performance-baseline";
+import validationStreamingRoutes from "./api/validation-streaming";
 import adminRoutes from "./api/admin/clear-validation-results";
 import healthCheckRoutes from "./api/health/health-checks";
 import dashboardSettingsRouter from "./api/settings/dashboard-settings";
@@ -46,12 +51,19 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   app.use('/api/validation', singleRevalidateRoutes);
   app.use('/api/validation', validateByIdsRoutes);
   app.use('/api/validation/cache', cacheClearRoutes);
+  app.use('/api/validation/cache', cacheManagementRoutes);
   app.use('/api/validation/analytics', analyticsCacheRoutes);
+  app.use('/api/validation/connectivity', connectivityRoutes);
+  app.use('/api/validation/rules', businessRulesRoutes);
+  
+  // Streaming validation routes (Task 10.11)
+  app.use('/api/validate', validationStreamingRoutes);
   
   // FHIR resource edit routes are registered inside setupFhirRoutes() to ensure fhirClient middleware is applied
   
   // Performance monitoring routes
   app.use('/api/performance', performanceRoutes);
+  app.use('/api/performance', performanceBaselineRoutes);
   
   // Admin routes
   app.use('/api/admin', adminRoutes);

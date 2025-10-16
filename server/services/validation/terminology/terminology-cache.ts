@@ -111,13 +111,20 @@ export class TerminologyCache {
   private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(config?: Partial<CacheConfig>) {
+    // Task 10.7: More aggressive caching for better performance
     this.config = {
-      maxSize: config?.maxSize ?? 10000,
-      defaultTtl: config?.defaultTtl ?? 3600000, // 1 hour
+      maxSize: config?.maxSize ?? 50000, // Increased from 10000 to 50000
+      defaultTtl: config?.defaultTtl ?? 7200000, // Increased from 1hr to 2hrs for stable terminology
       offlineTtl: config?.offlineTtl ?? Infinity, // Persistent
       autoCleanup: config?.autoCleanup ?? true,
-      cleanupInterval: config?.cleanupInterval ?? 300000, // 5 minutes
+      cleanupInterval: config?.cleanupInterval ?? 600000, // Increased from 5min to 10min
     };
+    
+    console.log('[TerminologyCache] Task 10.7: Initialized with aggressive caching:', {
+      maxSize: this.config.maxSize,
+      defaultTtl: `${this.config.defaultTtl / 1000 / 60}min`,
+      cleanupInterval: `${this.config.cleanupInterval / 1000 / 60}min`,
+    });
     
     if (this.config.autoCleanup) {
       this.startAutoCleanup();

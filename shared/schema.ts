@@ -245,6 +245,48 @@ export const systemSettings = pgTable("system_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+/**
+ * Validation Cache Table (L2 Cache)
+ * Task 7.4: Database schema for persistent caching
+ */
+export const validationCache = pgTable("validation_cache", {
+  id: serial("id").primaryKey(),
+  
+  // Cache key (SHA-256 hash of resource + settings + version)
+  cacheKey: text("cache_key").notNull().unique(),
+  
+  // Category for grouping (validation, profile, terminology, igPackage)
+  category: text("category").notNull(),
+  
+  // The cached value (stored as JSON)
+  value: jsonb("value").notNull(),
+  
+  // Resource hash (for efficient lookups)
+  resourceHash: text("resource_hash"),
+  
+  // Settings hash (for invalidation on settings change)
+  settingsHash: text("settings_hash"),
+  
+  // FHIR version
+  fhirVersion: text("fhir_version"),
+  
+  // Size in bytes
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  
+  // Hit count
+  hits: integer("hits").notNull().default(0),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  accessedAt: timestamp("accessed_at"),
+  
+  // Metadata
+  resourceType: text("resource_type"),
+  validationProfile: text("validation_profile"),
+});
+
 // Audit trail table removed - no longer needed in simplified schema
 
 // Legacy validation settings table removed - no longer needed
@@ -277,6 +319,12 @@ export const insertValidationSettingsSchema = createInsertSchema(validationSetti
 export const insertEditAuditTrailSchema = createInsertSchema(editAuditTrail).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertValidationCacheSchema = createInsertSchema(validationCache).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 export const insertDashboardCardSchema = createInsertSchema(dashboardCards).omit({

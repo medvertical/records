@@ -360,3 +360,4 @@ COMMENT ON COLUMN profiles_cache.resolution_time_ms IS 'Time taken to resolve th
 COMMENT ON COLUMN profiles_cache.validation_count IS 'Number of times this profile was used in validation';
 
 COMMENT ON FUNCTION cleanup_profile_cache IS 'Maintenance function to clean old unused cached profiles and packages';
+

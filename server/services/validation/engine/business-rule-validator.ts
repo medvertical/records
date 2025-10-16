@@ -10,9 +10,42 @@
 
 import type { ValidationIssue } from '../types/validation-types';
 import moment from 'moment';
+import fhirpath from 'fhirpath';
+
+// Lazy load to avoid circular dependencies
+let businessRulesService: any = null;
+async function getBusinessRulesService() {
+  if (!businessRulesService) {
+    const module = await import('../../business-rules-service');
+    businessRulesService = module.businessRulesService;
+  }
+  return businessRulesService;
+}
+
+/**
+ * Task 9.12: Performance metrics for rule execution
+ */
+interface RulePerformanceMetrics {
+  ruleId: string;
+  ruleName: string;
+  executionCount: number;
+  totalExecutionTimeMs: number;
+  averageExecutionTimeMs: number;
+  minExecutionTimeMs: number;
+  maxExecutionTimeMs: number;
+  failureCount: number;
+  errorCount: number;
+  lastExecutedAt: Date;
+}
 
 export class BusinessRuleValidator {
   private businessRules: Map<string, Array<{name: string, description: string, validator: Function}>> = new Map();
+  private customRulesCache: Map<string, any[]> = new Map();
+  private customRulesCacheExpiry: number = 0;
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+  // Task 9.12: Performance monitoring
+  private performanceMetrics: Map<string, RulePerformanceMetrics> = new Map();
 
   constructor() {
     this.initializeBusinessRules();
@@ -93,7 +126,7 @@ export class BusinessRuleValidator {
     console.log(`[BusinessRuleValidator] Validating ${resourceType} resource business rules...`);
 
     try {
-      // Get business rules for this resource type
+      // Get built-in business rules for this resource type
       const rules = this.businessRules.get(resourceType) || [];
       
       for (const rule of rules) {
@@ -105,6 +138,10 @@ export class BusinessRuleValidator {
         }
       }
 
+      // Task 9.11: Load and execute custom FHIRPath rules from database
+      const customRuleIssues = await this.executeCustomRules(resource, resourceType);
+      issues.push(...customRuleIssues);
+
       const validationTime = Date.now() - startTime;
       console.log(`[BusinessRuleValidator] Validated ${resourceType} business rules in ${validationTime}ms, found ${issues.length} issues`);
 
@@ -113,6 +150,266 @@ export class BusinessRuleValidator {
     }
 
     return issues;
+  }
+
+  /**
+   * Task 9.11: Execute custom FHIRPath rules from database
+   */
+  private async executeCustomRules(resource: any, resourceType: string): Promise<ValidationIssue[]> {
+    const issues: ValidationIssue[] = [];
+
+    try {
+      // Load custom rules from database (with caching)
+      const customRules = await this.loadCustomRules(resourceType);
+
+      if (customRules.length === 0) {
+        return issues;
+      }
+
+      console.log(`[BusinessRuleValidator] Executing ${customRules.length} custom FHIRPath rules for ${resourceType}`);
+
+      // Execute each custom rule
+      for (const rule of customRules) {
+        try {
+          const startTime = Date.now();
+
+          // Evaluate FHIRPath expression
+          const result = fhirpath.evaluate(resource, rule.fhirPathExpression);
+
+          const executionTime = Date.now() - startTime;
+
+          // Check if rule passed (expression should return true or truthy value)
+          const passed = Array.isArray(result)
+            ? result.length > 0 && result.every((r) => r === true || r)
+            : result === true || !!result;
+
+          // Task 9.12: Record performance metrics
+          this.recordRuleExecution(rule.id, rule.name, executionTime, passed, false);
+
+          if (!passed) {
+            // Rule failed - create validation issue
+            issues.push({
+              id: `custom-rule-${rule.id}-${Date.now()}`,
+              aspect: 'business-rules',
+              severity: rule.severity as 'error' | 'warning' | 'info',
+              code: `custom-rule-${rule.id}`,
+              message: rule.name,
+              path: '',
+              humanReadable: rule.description,
+              details: {
+                ruleName: rule.name,
+                ruleId: rule.id,
+                expression: rule.fhirPathExpression,
+                result,
+                executionTimeMs: executionTime,
+                resourceType: resourceType,
+                validationType: 'custom-fhirpath-rule',
+              },
+              validationMethod: 'custom-fhirpath-rule',
+              timestamp: new Date().toISOString(),
+              resourceType: resourceType,
+              schemaVersion: 'R4',
+            });
+          }
+
+          console.log(`[BusinessRuleValidator] Custom rule '${rule.name}' ${passed ? 'passed' : 'failed'} in ${executionTime}ms`);
+
+        } catch (error: any) {
+          console.error(`[BusinessRuleValidator] Custom rule '${rule.name}' execution error:`, error);
+
+          // Task 9.12: Record error in performance metrics
+          this.recordRuleExecution(rule.id, rule.name, 0, false, true);
+
+          // Create error issue
+          issues.push({
+            id: `custom-rule-error-${rule.id}-${Date.now()}`,
+            aspect: 'business-rules',
+            severity: 'warning',
+            code: `custom-rule-execution-error`,
+            message: `Error executing custom rule: ${rule.name}`,
+            path: '',
+            humanReadable: `Custom rule "${rule.name}" failed to execute: ${error.message}`,
+            details: {
+              ruleName: rule.name,
+              ruleId: rule.id,
+              expression: rule.fhirPathExpression,
+              error: error.message,
+              resourceType: resourceType,
+              validationType: 'custom-fhirpath-rule-error',
+            },
+            validationMethod: 'custom-fhirpath-rule',
+            timestamp: new Date().toISOString(),
+            resourceType: resourceType,
+            schemaVersion: 'R4',
+          });
+        }
+      }
+
+    } catch (error: any) {
+      console.error('[BusinessRuleValidator] Failed to load custom rules:', error);
+      // Don't fail validation if custom rules can't be loaded
+    }
+
+    return issues;
+  }
+
+  /**
+   * Task 9.11: Load custom rules from database with caching
+   */
+  private async loadCustomRules(resourceType: string): Promise<any[]> {
+    try {
+      // Check cache first
+      const now = Date.now();
+      if (this.customRulesCacheExpiry > now && this.customRulesCache.has(resourceType)) {
+        console.log(`[BusinessRuleValidator] Using cached custom rules for ${resourceType}`);
+        return this.customRulesCache.get(resourceType) || [];
+      }
+
+      // Load from database
+      const service = await getBusinessRulesService();
+      if (!service) {
+        console.warn('[BusinessRuleValidator] Business rules service not available');
+        return [];
+      }
+
+      const rules = await service.getRulesByResourceType(resourceType);
+
+      // Update cache
+      this.customRulesCache.set(resourceType, rules);
+      this.customRulesCacheExpiry = now + this.CACHE_TTL_MS;
+
+      console.log(`[BusinessRuleValidator] Loaded ${rules.length} custom rules from database for ${resourceType}`);
+
+      return rules;
+
+    } catch (error: any) {
+      console.error('[BusinessRuleValidator] Error loading custom rules:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Task 9.11: Clear custom rules cache (call when rules are updated)
+   */
+  clearCustomRulesCache(): void {
+    this.customRulesCache.clear();
+    this.customRulesCacheExpiry = 0;
+    console.log('[BusinessRuleValidator] Custom rules cache cleared');
+  }
+
+  /**
+   * Task 9.12: Record rule execution metrics
+   */
+  private recordRuleExecution(
+    ruleId: string,
+    ruleName: string,
+    executionTimeMs: number,
+    passed: boolean,
+    hadError: boolean
+  ): void {
+    const existing = this.performanceMetrics.get(ruleId);
+
+    if (existing) {
+      // Update existing metrics
+      const newCount = existing.executionCount + 1;
+      const newTotalTime = existing.totalExecutionTimeMs + executionTimeMs;
+
+      this.performanceMetrics.set(ruleId, {
+        ruleId,
+        ruleName,
+        executionCount: newCount,
+        totalExecutionTimeMs: newTotalTime,
+        averageExecutionTimeMs: newTotalTime / newCount,
+        minExecutionTimeMs: Math.min(existing.minExecutionTimeMs, executionTimeMs),
+        maxExecutionTimeMs: Math.max(existing.maxExecutionTimeMs, executionTimeMs),
+        failureCount: existing.failureCount + (passed ? 0 : 1),
+        errorCount: existing.errorCount + (hadError ? 1 : 0),
+        lastExecutedAt: new Date(),
+      });
+    } else {
+      // Create new metrics entry
+      this.performanceMetrics.set(ruleId, {
+        ruleId,
+        ruleName,
+        executionCount: 1,
+        totalExecutionTimeMs: executionTimeMs,
+        averageExecutionTimeMs: executionTimeMs,
+        minExecutionTimeMs: executionTimeMs,
+        maxExecutionTimeMs: executionTimeMs,
+        failureCount: passed ? 0 : 1,
+        errorCount: hadError ? 1 : 0,
+        lastExecutedAt: new Date(),
+      });
+    }
+  }
+
+  /**
+   * Task 9.12: Get performance metrics for all rules
+   */
+  getPerformanceMetrics(): RulePerformanceMetrics[] {
+    return Array.from(this.performanceMetrics.values()).sort(
+      (a, b) => b.executionCount - a.executionCount
+    );
+  }
+
+  /**
+   * Task 9.12: Get performance metrics for a specific rule
+   */
+  getRulePerformanceMetrics(ruleId: string): RulePerformanceMetrics | null {
+    return this.performanceMetrics.get(ruleId) || null;
+  }
+
+  /**
+   * Task 9.12: Clear performance metrics
+   */
+  clearPerformanceMetrics(): void {
+    this.performanceMetrics.clear();
+    console.log('[BusinessRuleValidator] Performance metrics cleared');
+  }
+
+  /**
+   * Task 9.12: Get performance summary statistics
+   */
+  getPerformanceSummary(): {
+    totalRules: number;
+    totalExecutions: number;
+    averageExecutionTimeMs: number;
+    slowestRules: { ruleId: string; ruleName: string; avgTimeMs: number }[];
+    mostFailedRules: { ruleId: string; ruleName: string; failureRate: number }[];
+  } {
+    const metrics = this.getPerformanceMetrics();
+
+    const totalExecutions = metrics.reduce((sum, m) => sum + m.executionCount, 0);
+    const totalTime = metrics.reduce((sum, m) => sum + m.totalExecutionTimeMs, 0);
+
+    // Get slowest rules (top 5 by average execution time)
+    const slowestRules = metrics
+      .map((m) => ({
+        ruleId: m.ruleId,
+        ruleName: m.ruleName,
+        avgTimeMs: m.averageExecutionTimeMs,
+      }))
+      .sort((a, b) => b.avgTimeMs - a.avgTimeMs)
+      .slice(0, 5);
+
+    // Get rules with highest failure rate (top 5)
+    const mostFailedRules = metrics
+      .map((m) => ({
+        ruleId: m.ruleId,
+        ruleName: m.ruleName,
+        failureRate: m.executionCount > 0 ? m.failureCount / m.executionCount : 0,
+      }))
+      .filter((m) => m.failureRate > 0)
+      .sort((a, b) => b.failureRate - a.failureRate)
+      .slice(0, 5);
+
+    return {
+      totalRules: metrics.length,
+      totalExecutions,
+      averageExecutionTimeMs: totalExecutions > 0 ? totalTime / totalExecutions : 0,
+      slowestRules,
+      mostFailedRules,
+    };
   }
 
   /**

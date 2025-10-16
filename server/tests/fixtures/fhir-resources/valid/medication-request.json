@@ -1,0 +1,61 @@
+{
+  "resourceType": "MedicationRequest",
+  "id": "test-medication-request",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2024-10-16T10:00:00Z"
+  },
+  "status": "active",
+  "intent": "order",
+  "medicationCodeableConcept": {
+    "coding": [
+      {
+        "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "code": "197361",
+        "display": "Lisinopril 10 MG Oral Tablet"
+      }
+    ],
+    "text": "Lisinopril 10mg tablet"
+  },
+  "subject": {
+    "reference": "Patient/test-patient-simple",
+    "display": "John Smith"
+  },
+  "authoredOn": "2024-10-16T10:00:00Z",
+  "requester": {
+    "reference": "Practitioner/example",
+    "display": "Dr. Example"
+  },
+  "dosageInstruction": [
+    {
+      "text": "Take 1 tablet daily",
+      "timing": {
+        "repeat": {
+          "frequency": 1,
+          "period": 1,
+          "periodUnit": "d"
+        }
+      },
+      "route": {
+        "coding": [
+          {
+            "system": "http://snomed.info/sct",
+            "code": "26643006",
+            "display": "Oral route"
+          }
+        ]
+      },
+      "doseAndRate": [
+        {
+          "doseQuantity": {
+            "value": 1,
+            "unit": "tablet",
+            "system": "http://unitsofmeasure.org",
+            "code": "{tablet}"
+          }
+        }
+      ]
+    }
+  ]
+}
+
