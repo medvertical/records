@@ -95,7 +95,7 @@ const GERMAN_PROFILE_CONFIGS: Record<GermanProfileFamily, GermanProfileConfig> =
       'mii-ig',
     ],
     packages: [
-      'de.medizininformatikinitiative.kerndatensatz.person',
+      'de.medizininformatikinitiative.kerndatensatz.person#2025.0.1',
       'de.medizininformatikinitiative.kerndatensatz.diagnose',
       'de.medizininformatikinitiative.kerndatensatz.medikation',
       'de.medizininformatikinitiative.kerndatensatz.laborbefund',
