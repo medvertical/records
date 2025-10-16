@@ -5,6 +5,8 @@
  * All flags default to production-safe values (disabled/false).
  */
 
+import { logTimeoutConfiguration } from './validation-timeouts';
+
 /**
  * Environment variable getter with type safety
  */
@@ -159,7 +161,6 @@ export function logFeatureFlags(): void {
   
   // Log validation timeout configuration
   try {
-    const { logTimeoutConfiguration } = require('./validation-timeouts');
     logTimeoutConfiguration();
   } catch (error) {
     console.warn('Failed to log timeout configuration:', error);

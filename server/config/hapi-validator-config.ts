@@ -6,6 +6,7 @@
  */
 
 import { resolve } from 'path';
+import { getHapiTimeout } from './validation-timeouts';
 
 export interface HapiValidatorConfig {
   // Paths
@@ -43,8 +44,7 @@ export interface HapiValidatorConfig {
 export function loadHapiValidatorConfig(): HapiValidatorConfig {
   const jarPath = process.env.HAPI_JAR_PATH || 'server/lib/validator_cli.jar';
   
-  // Import centralized timeout configuration
-  const { getHapiTimeout } = require('./validation-timeouts');
+  // Use centralized timeout configuration
   const hapiTimeout = getHapiTimeout();
   
   return {
