@@ -60,14 +60,18 @@ export async function setupRoutes(app: Express): Promise<Server> {
   // Initialize database and FHIR client first
   await initializeServices();
   
-  // Initialize HAPI process pool (warm up Java processes)
-  try {
-    console.log('[Routes] Initializing HAPI process pool...');
-    await initializeHapiProcessPool();
-    console.log('[Routes] HAPI process pool initialized successfully');
-  } catch (error) {
-    console.warn('[Routes] HAPI process pool initialization failed (validation will use fallback):', error);
-  }
+  // NOTE: HAPI process pool warmup disabled
+  // The pool implementation spawns new processes anyway (doesn't reuse warm ones)
+  // This wastes 40-60s on startup for no benefit
+  // TODO: Implement stdin/stdout IPC to actually reuse processes
+  // 
+  // try {
+  //   console.log('[Routes] Initializing HAPI process pool...');
+  //   await initializeHapiProcessPool();
+  //   console.log('[Routes] HAPI process pool initialized successfully');
+  // } catch (error) {
+  //   console.warn('[Routes] HAPI process pool initialization failed (validation will use fallback):', error);
+  // }
 
   // Setup all routes using modular structure
   setupAllRoutes(app, fhirClient, consolidatedValidationService, dashboardService);
