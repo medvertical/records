@@ -96,6 +96,8 @@ const GERMAN_PROFILE_CONFIGS: Record<GermanProfileFamily, GermanProfileConfig> =
     ],
     packages: [
       'de.medizininformatikinitiative.kerndatensatz.person#2025.0.1',
+      'de.basisprofil.r4#1.5.0',  // Required dependency for slices
+      'de.medizininformatikinitiative.kerndatensatz.meta#2025.0.1',  // Required for shared definitions
       'de.medizininformatikinitiative.kerndatensatz.diagnose',
       'de.medizininformatikinitiative.kerndatensatz.medikation',
       'de.medizininformatikinitiative.kerndatensatz.laborbefund',
