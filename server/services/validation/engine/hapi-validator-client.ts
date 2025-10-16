@@ -338,7 +338,7 @@ export class HapiValidatorClient {
    * - Profile URL (if specified)
    * - Terminology server (version-specific, mode-dependent)
    */
-  private buildValidatorArgs(tempFilePath: string, options: HapiValidationOptions): string[] {
+  private buildValidatorArgs(tempFilePath: string, outputFilePath: string, options: HapiValidationOptions): string[] {
     // Get version-specific core package (from fhir-package-versions.ts)
     const corePackageId = getCorePackageId(options.fhirVersion);
     const corePackage = getCorePackage(options.fhirVersion);
@@ -350,11 +350,12 @@ export class HapiValidatorClient {
     const terminologyServer = `https://tx.fhir.org/${options.fhirVersion.toLowerCase()}`;
 
     // Base arguments
+    // Use output file instead of stdout - HAPI mixes OperationOutcome with other text on stdout
     const args = [
       '-jar', this.config.jarPath,
       tempFilePath,
       '-version', corePackage.version,  // Use version from fhir-package-versions
-      '-output', 'json',
+      '-output', outputFilePath,  // Output to file for clean JSON
       '-locale', 'en',
     ];
 
@@ -486,9 +487,36 @@ export class HapiValidatorClient {
   }
 
   /**
-   * Parse OperationOutcome from HAPI output
+   * Read OperationOutcome from HAPI output file
    */
-  private parseOperationOutcome(stdout: string, stderr: string): HapiOperationOutcome {
+  private readOperationOutcomeFile(outputFile: string, stdout: string, stderr: string): HapiOperationOutcome {
+    try {
+      // Read the output file that HAPI wrote
+      const fileContent = readFileSync(outputFile, 'utf-8');
+      console.log(`[HapiValidatorClient] Read output file (${fileContent.length} chars)`);
+      
+      const operationOutcome = JSON.parse(fileContent) as HapiOperationOutcome;
+      
+      if (!operationOutcome.resourceType || operationOutcome.resourceType !== 'OperationOutcome') {
+        throw new Error('Invalid OperationOutcome structure');
+      }
+      
+      const issueCount = operationOutcome.issue?.length || 0;
+      console.log(`[HapiValidatorClient] ✓ Parsed OperationOutcome with ${issueCount} issues`);
+      
+      return operationOutcome;
+      
+    } catch (error) {
+      console.error('[HapiValidatorClient] Failed to read output file:', error);
+      console.log('[HapiValidatorClient] Falling back to parsing stdout...');
+      return this.parseOperationOutcomeFromStdout(stdout, stderr);
+    }
+  }
+
+  /**
+   * Parse OperationOutcome from HAPI stdout (fallback method)
+   */
+  private parseOperationOutcomeFromStdout(stdout: string, stderr: string): HapiOperationOutcome {
     // HAPI outputs OperationOutcome as JSON to stdout
     try {
       console.log(`[HapiValidatorClient] Parsing HAPI output (stdout length: ${stdout.length}, stderr length: ${stderr.length})`);
