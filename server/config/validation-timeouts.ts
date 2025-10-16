@@ -54,12 +54,12 @@ export interface ValidationTimeouts {
  */
 const DEFAULT_TIMEOUTS: ValidationTimeouts = {
   // Client timeout must be longest to allow server to complete
-  clientHttp: 120000, // 2 minutes
+  clientHttp: 240000, // 4 minutes (increased for slow profile downloads)
   
   // Validation engine timeouts per aspect
   validationEngine: {
     structural: 20000,   // 20s - basic FHIR structure validation
-    profile: 90000,      // 90s - profile resolution + HAPI validation
+    profile: 180000,     // 180s (3 min) - profile resolution + HAPI validation (increased for first-time downloads)
     terminology: 30000,  // 30s - code validation against value sets
     reference: 15000,    // 15s - reference resolution
     businessRules: 15000, // 15s - custom business logic
@@ -67,10 +67,10 @@ const DEFAULT_TIMEOUTS: ValidationTimeouts = {
   },
   
   // HAPI process timeout (must be less than validation engine profile timeout)
-  hapiProcess: 75000, // 75s - HAPI Java process execution
+  hapiProcess: 150000, // 150s (2.5 min) - HAPI Java process execution (increased)
   
   // Profile resolution timeout (must be less than HAPI process timeout)
-  profileResolution: 30000, // 30s - download and parse StructureDefinitions
+  profileResolution: 60000, // 60s (1 min) - download and parse StructureDefinitions (increased)
   
   // Other timeouts
   terminologyLookup: 10000, // 10s - single terminology server call
