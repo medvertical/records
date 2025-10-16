@@ -396,6 +396,14 @@ export class ProfileValidator {
         `adding package: ${germanProfile.recommendedPackage}`
       );
       packages.push(germanProfile.recommendedPackage);
+      
+      // Add dependencies for MII profiles to fix slice validation
+      if (germanProfile.family === 'mii') {
+        packages.push('de.basisprofil.r4#1.5.0');
+        packages.push('de.medizininformatikinitiative.kerndatensatz.meta#2025.0.1');
+        console.log(`[ProfileValidator] Added MII dependencies for slice validation`);
+      }
+      
       return packages;
     }
 
