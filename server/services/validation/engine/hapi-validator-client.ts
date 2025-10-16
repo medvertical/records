@@ -424,10 +424,19 @@ export class HapiValidatorClient {
       console.log(`[HapiValidatorClient] Using Java at: ${javaPath}`);
       console.log(`[HapiValidatorClient] Full command: ${javaPath} ${args.join(' ')}`);
       
+      // Use cached packages from home directory (already downloaded)
+      // This makes HAPI use existing packages instead of re-downloading
+      const env = {
+        ...process.env,
+        FHIR_PACKAGE_CACHE_PATH: process.env.FHIR_PACKAGE_CACHE_PATH || '/Users/sheydin/.fhir/packages'
+      };
+      
+      console.log(`[HapiValidatorClient] Package cache path: ${env.FHIR_PACKAGE_CACHE_PATH}`);
+      
       const childProcess = spawn(javaPath, args, {
         timeout: timeoutMs,
         killSignal: 'SIGTERM',
-        env: process.env,
+        env: env,
       });
 
       // Capture stdout
