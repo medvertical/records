@@ -11,6 +11,7 @@
 import { logger } from '../../../utils/logger.js';
 import type { ValidationSettings } from '@shared/validation-settings';
 import { getTerminologyServerManager, type CodeValidationResult as ServerCodeValidationResult } from './terminology-server-manager';
+import { getCoreCodeValidator } from './core-code-validator';
 
 // ============================================================================
 // Types
@@ -80,6 +81,7 @@ export class TerminologyAdapter {
   private cacheExpiryMs: number = 60 * 60 * 1000; // 1 hour default
   private cacheTimestamps: Map<string, number> = new Map();
   private currentMode: 'online' | 'offline' = 'online';
+  private coreValidator = getCoreCodeValidator();
 
   // Task 3.5/3.6: Mode-specific TTL configuration
   private readonly ONLINE_TTL_MS = 60 * 60 * 1000; // 1 hour for online
@@ -141,6 +143,24 @@ export class TerminologyAdapter {
     settings: ValidationSettings
   ): Promise<TerminologyValidationResult> {
     try {
+      // Check if this is a core FHIR code system first
+      const coreResult = this.coreValidator.validateCode(system, code);
+      
+      if (coreResult.isCoreSystem) {
+        console.log(
+          `[TerminologyAdapter] Core code validation: ${code} in system: ${system} = ${coreResult.valid}`
+        );
+        
+        return {
+          valid: coreResult.valid,
+          display: coreResult.display,
+          message: coreResult.message,
+          code,
+          system,
+          source: 'cache', // Use 'cache' to indicate no server call needed
+        };
+      }
+      
       // Use TerminologyServerManager if available (fixed URL encoding)
       if (settings.terminologyServers && settings.terminologyServers.length > 0) {
         console.log(`[TerminologyAdapter] Using TerminologyServerManager for ${system}/${code}`);

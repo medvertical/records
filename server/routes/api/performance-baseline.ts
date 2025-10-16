@@ -4,14 +4,14 @@
  */
 
 import express from 'express';
-import { performanceBaselineTracker } from '../services/performance/performance-baseline';
-import { globalTimingAggregator } from '../services/validation/utils/validation-timing'; // Task 10.4
-import { hapiValidatorClient } from '../services/validation/engine/hapi-validator-client'; // Task 10.6
-import { getBatchValidator } from '../services/validation/terminology/batch-validator'; // Task 10.7
-import { getTerminologyCache } from '../services/validation/terminology/terminology-cache'; // Task 10.7
-import { getProfilePreloader } from '../services/validation/profiles/profile-preloader'; // Task 10.8
-import { getBatchedReferenceChecker } from '../services/validation/utils/batched-reference-checker'; // Task 10.9
-import { getValidationEngine } from '../services/validation/core/validation-engine'; // Task 10.10
+import { performanceBaselineTracker } from '../../services/performance/performance-baseline.js';
+import { globalTimingAggregator } from '../../services/validation/utils/validation-timing.js'; // Task 10.4
+import { hapiValidatorClient } from '../../services/validation/engine/hapi-validator-client.js'; // Task 10.6
+import { getBatchValidator } from '../../services/validation/terminology/batch-validator.js'; // Task 10.7
+import { getTerminologyCache } from '../../services/validation/terminology/terminology-cache.js'; // Task 10.7
+import { getProfilePreloader } from '../../services/validation/profiles/profile-preloader.js'; // Task 10.8
+import { getBatchedReferenceChecker } from '../../services/validation/utils/batched-reference-checker.js'; // Task 10.9
+import { getValidationEngine } from '../../services/validation/core/validation-engine.js'; // Task 10.10
 
 const router = express.Router();
 

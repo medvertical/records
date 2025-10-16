@@ -4,8 +4,8 @@
  */
 
 import express from 'express';
-import { getStreamingValidator } from '../services/validation/streaming/streaming-validator';
-import type { ValidationRequest } from '../services/validation/types/validation-types';
+import { getStreamingValidator } from '../../services/validation/streaming/streaming-validator.js';
+import type { ValidationRequest } from '../../services/validation/types/validation-types.js';
 
 const router = express.Router();
 

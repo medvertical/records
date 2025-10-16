@@ -21,6 +21,40 @@
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import type { ValidationSettings, TerminologyServer } from '@shared/validation-settings';
+import { getCoreCodeValidator } from './core-code-validator';
+
+// ============================================================================
+// External System Detection
+// ============================================================================
+
+/**
+ * Known external code system patterns that FHIR references but
+ * that are typically NOT available in FHIR terminology servers.
+ * 
+ * These systems should be validated locally or gracefully degraded.
+ */
+const KNOWN_EXTERNAL_SYSTEM_PATTERNS = [
+  'http://iso.org/',                            // ISO standards (3166, 639, etc.)
+  'http://unitsofmeasure.org',                  // UCUM units
+  'urn:ietf:bcp:13',                            // MIME types (RFC 2046)
+  'urn:ietf:rfc:',                              // IETF RFCs
+  'http://www.iana.org/',                       // IANA registries
+  'http://unstats.un.org/',                     // UN statistics
+  'http://www.wmo.int/',                        // World Meteorological Organization
+  'urn:iso:std:iso:',                           // ISO URN namespace
+  'http://www.whocc.no/atc',                    // ATC codes (not always in servers)
+  'urn:oid:',                                   // OID-based systems (varies)
+];
+
+/**
+ * Check if a code system is a known external standard
+ * that typically cannot be validated via FHIR terminology servers
+ */
+function isKnownExternalSystem(system: string): boolean {
+  return KNOWN_EXTERNAL_SYSTEM_PATTERNS.some(pattern => 
+    system.startsWith(pattern)
+  );
+}
 
 // ============================================================================
 // Types
@@ -90,6 +124,7 @@ export interface TerminologyServerHealth {
 export class DirectTerminologyClient {
   private httpClient: AxiosInstance;
   private readonly timeout: number = 10000; // 10s default timeout
+  private coreValidator = getCoreCodeValidator();
   
   constructor(timeout?: number) {
     if (timeout) {
@@ -119,6 +154,45 @@ export class DirectTerminologyClient {
     const startTime = Date.now();
     
     try {
+      // Step 1: Check if this is a core FHIR code system first
+      const coreResult = this.coreValidator.validateCode(params.system, params.code);
+      
+      if (coreResult.isCoreSystem) {
+        const responseTime = Date.now() - startTime;
+        console.log(
+          `[DirectTerminologyClient] Core code validation: ${params.code} ` +
+          `in system: ${params.system} = ${coreResult.valid} (${responseTime}ms, no server call)`
+        );
+        
+        return {
+          valid: coreResult.valid,
+          display: coreResult.display,
+          message: coreResult.message,
+          responseTime,
+          serverUrl: 'core-validator',
+        };
+      }
+      
+      // Step 2: Check if this is a known external system (not in core validator)
+      // These systems cannot be validated via terminology servers - graceful degradation
+      if (isKnownExternalSystem(params.system)) {
+        const responseTime = Date.now() - startTime;
+        console.log(
+          `[DirectTerminologyClient] Known external system: ${params.system} ` +
+          `(code: ${params.code}) - graceful degradation (not available in terminology servers)`
+        );
+        
+        return {
+          valid: true, // Don't block validation for external systems
+          display: params.display, // Use provided display if available
+          message: `Code system '${params.system}' is an external standard not available in FHIR terminology servers`,
+          code: 'external-system-unvalidatable',
+          responseTime,
+          serverUrl: 'graceful-degradation',
+        };
+      }
+      
+      // Step 3: Not a core system or known external - proceed with server validation
       // Build FHIR operation URL
       const operationUrl = this.buildValidateCodeUrl(serverUrl, params);
       
@@ -127,7 +201,7 @@ export class DirectTerminologyClient {
       
       console.log(
         `[DirectTerminologyClient] Validating code: ${params.code} ` +
-        `in system: ${params.system} (${params.fhirVersion})`
+        `in system: ${params.system} (${params.fhirVersion}) via server`
       );
       
       // Execute HTTP GET request with parameters
@@ -353,6 +427,23 @@ export class DirectTerminologyClient {
           `[DirectTerminologyClient] HTTP ${status} from ${serverUrl}: ` +
           `${axiosError.response.data?.issue?.[0]?.diagnostics || 'Unknown error'}`
         );
+        
+        // Special handling for 422 (Unprocessable Entity)
+        // If it's a known external system, gracefully degrade instead of failing
+        if (status === 422 && isKnownExternalSystem(params.system)) {
+          console.log(
+            `[DirectTerminologyClient] HTTP 422 for external system ${params.system} ` +
+            `- gracefully degrading (server cannot validate external standards)`
+          );
+          
+          return {
+            valid: true, // Don't block validation
+            message: `Terminology server cannot validate external code system '${params.system}'`,
+            code: 'external-system-unvalidatable',
+            responseTime,
+            serverUrl: 'graceful-degradation',
+          };
+        }
         
         return {
           valid: false,

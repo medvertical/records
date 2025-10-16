@@ -165,8 +165,11 @@ export class CodeExtractor {
     for (const [key, value] of Object.entries(obj)) {
       const newPath = currentPath ? `${currentPath}.${key}` : key;
       
-      // Check if this is a known code field
-      if (this.isPrimitiveCodeField(key, value)) {
+      // Check if this is a known code field (globally or in context)
+      const isGlobalCodeField = this.isPrimitiveCodeField(key, value);
+      const isContextCodeField = typeof value === 'string' && this.isConfiguredCodeField(newPath, context);
+      
+      if (isGlobalCodeField || isContextCodeField) {
         this.extractFromPrimitiveCode(key, value as string, newPath, codes, context);
       } else {
         this.extractFromObject(value, resourceType, newPath, codes, context);
@@ -245,9 +248,30 @@ export class CodeExtractor {
     context?: ResourceTypeContext
   ): void {
     // Try to find system from context
-    const fieldDef = context?.codeFields.find(f => 
-      f.path.endsWith(fieldName) && f.type === 'code'
-    );
+    // Match both exact path and array-indexed paths (e.g., identifier.use matches identifier[0].use)
+    const normalizedPath = path.replace(/\[\d+\]/g, ''); // Remove array indices
+    
+    // Find matching field definition
+    // Match by exact normalized path or by matching the last two segments (e.g., "identifier.use")
+    const fieldDef = context?.codeFields.find(f => {
+      if (f.type !== 'code') return false;
+      
+      // Exact match on normalized path
+      if (f.path === normalizedPath) return true;
+      
+      // Match if the configured path is a suffix of the normalized path
+      // e.g., "name.use" matches "name[0].use" (normalized to "name.use")
+      // but "identifier.use" does NOT match "name.use"
+      const pathParts = normalizedPath.split('.');
+      const configParts = f.path.split('.');
+      
+      // Must have same number of parts (or path has more due to deeper nesting)
+      if (pathParts.length < configParts.length) return false;
+      
+      // Check if the last N parts match (where N is the length of config path)
+      const pathSuffix = pathParts.slice(-configParts.length).join('.');
+      return pathSuffix === f.path;
+    });
 
     codes.push({
       code,
@@ -288,7 +312,7 @@ export class CodeExtractor {
   }
 
   /**
-   * Check if field is a primitive code field
+   * Check if field is a primitive code field (globally recognized)
    */
   private isPrimitiveCodeField(fieldName: string, value: any): boolean {
     if (typeof value !== 'string') {
@@ -296,6 +320,8 @@ export class CodeExtractor {
     }
 
     // Common primitive code field names
+    // Note: 'system' is NOT included here because it's context-specific
+    // (e.g., telecom.system IS a code, but identifier.system is NOT)
     const codeFieldNames = [
       'status',
       'gender',
@@ -308,6 +334,27 @@ export class CodeExtractor {
     ];
 
     return codeFieldNames.includes(fieldName);
+  }
+
+  /**
+   * Check if a field path is explicitly configured in the context
+   */
+  private isConfiguredCodeField(path: string, context?: ResourceTypeContext): boolean {
+    if (!context) return false;
+    
+    const normalizedPath = path.replace(/\[\d+\]/g, '');
+    
+    return context.codeFields.some(f => {
+      if (f.type !== 'code') return false;
+      
+      const pathParts = normalizedPath.split('.');
+      const configParts = f.path.split('.');
+      
+      if (pathParts.length < configParts.length) return false;
+      
+      const pathSuffix = pathParts.slice(-configParts.length).join('.');
+      return pathSuffix === f.path;
+    });
   }
 
   // --------------------------------------------------------------------------
@@ -387,6 +434,42 @@ export class CodeExtractor {
           path: 'maritalStatus',
           valueSet: 'http://hl7.org/fhir/ValueSet/marital-status',
           type: 'CodeableConcept',
+        },
+        {
+          path: 'identifier.use',
+          system: 'http://hl7.org/fhir/identifier-use',
+          valueSet: 'http://hl7.org/fhir/ValueSet/identifier-use',
+          type: 'code',
+        },
+        {
+          path: 'name.use',
+          system: 'http://hl7.org/fhir/name-use',
+          valueSet: 'http://hl7.org/fhir/ValueSet/name-use',
+          type: 'code',
+        },
+        {
+          path: 'address.use',
+          system: 'http://hl7.org/fhir/address-use',
+          valueSet: 'http://hl7.org/fhir/ValueSet/address-use',
+          type: 'code',
+        },
+        {
+          path: 'telecom.use',
+          system: 'http://hl7.org/fhir/contact-point-use',
+          valueSet: 'http://hl7.org/fhir/ValueSet/contact-point-use',
+          type: 'code',
+        },
+        {
+          path: 'telecom.system',
+          system: 'http://hl7.org/fhir/contact-point-system',
+          valueSet: 'http://hl7.org/fhir/ValueSet/contact-point-system',
+          type: 'code',
+        },
+        {
+          path: 'contact.gender',
+          system: 'http://hl7.org/fhir/administrative-gender',
+          valueSet: 'http://hl7.org/fhir/ValueSet/administrative-gender',
+          type: 'code',
         },
       ],
     });

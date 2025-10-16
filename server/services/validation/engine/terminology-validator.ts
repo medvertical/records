@@ -5,6 +5,7 @@
  * Bypasses HAPI FHIR Validator for significant performance improvements.
  * 
  * Features:
+ * - Core FHIR code validation (no server calls for standard codes)
  * - Direct HTTP validation via DirectTerminologyClient
  * - Intelligent caching with SHA-256 keys and TTL management
  * - Circuit breaker pattern for resilience
@@ -13,14 +14,16 @@
  * - Online/offline mode support
  * 
  * Architecture:
+ * - CoreCodeValidator: Validates core FHIR codes (gender, status, etc.)
  * - CodeExtractor: Finds all codes in resource
  * - TerminologyCache: SHA-256 cache with TTL
- * - DirectTerminologyClient: HTTP validation
+ * - DirectTerminologyClient: HTTP validation (checks core codes first)
  * - TerminologyServerRouter: Version-specific URLs
  * - CircuitBreaker: Automatic fallback on failures
  * - BatchValidator: Orchestrates batch operations
  * 
  * Performance: ~10x faster than HAPI-based validation
+ * Core codes: Instant validation with zero network calls
  * File size: <400 lines (global.mdc compliance)
  */
 
@@ -236,10 +239,16 @@ export class TerminologyValidator {
    * Create ValidationIssue from code validation result
    */
   private createIssue(extractedCode: ExtractedCode, result: any): ValidationIssue {
+    // Determine severity based on the error code
+    // External systems that cannot be validated should be warnings, not errors
+    const severity = result.code === 'external-system-unvalidatable'
+      ? 'warning'  // Graceful degradation for external standards
+      : 'error';   // Real validation failure
+    
     return {
       id: `terminology-${Date.now()}-${extractedCode.path}`,
       aspect: 'terminology',
-      severity: 'error',
+      severity,
       code: result.code || 'invalid-code',
       message: result.message || `Invalid code: ${extractedCode.code} in system: ${extractedCode.system}`,
       path: extractedCode.path,
