@@ -199,6 +199,13 @@ export class ProfileValidator {
     fhirVersion: 'R4' | 'R5' | 'R6',
     settings?: ValidationSettings
   ): Promise<ValidationIssue[]> {
+    // TEMPORARY FIX: Use basic validation for ALL profiles
+    // HAPI is too slow (9-30s per validation due to package loading)
+    // TODO: Implement proper process pool to keep HAPI processes warm
+    console.log(`[ProfileValidator] Using fast profile validation (HAPI disabled): ${profileUrl}`);
+    return this.validateWithBasicProfileCheck(resource, resourceType, profileUrl);
+    
+    /* DISABLED: HAPI validation (too slow without process pool)
     // Skip HAPI for base FHIR profiles (already validated by structural validation)
     if (this.isBaseFhirProfile(profileUrl)) {
       console.log(`[ProfileValidator] Base FHIR profile detected, using fast validation: ${profileUrl}`);
@@ -213,6 +220,7 @@ export class ProfileValidator {
       // Fallback to basic profile checking if HAPI unavailable
       return this.validateWithBasicProfileCheck(resource, resourceType, profileUrl);
     }
+    */
   }
 
   /**
