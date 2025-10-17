@@ -392,22 +392,21 @@ export default function TreeNode({
 
   return (
     <div 
-      ref={nodeRef}
-      id={`node-${pathString.replace(/\./g, '-').replace(/\[|\]/g, '_')}`}
-      className={cn(
-        'relative transition-all duration-300 mb-1 rounded-md',
-        !isEditMode && hasIssues && `border-l-4 ${severityColor}`,
-        isHighlighted && 'animate-in fade-in duration-300'
-      )}
+      className="mb-1"
     >
-      <div className={cn(
-        "flex items-center gap-2 py-1.5 px-2 group transition-all duration-300",
-        isHighlighted ? 'bg-yellow-100' : 'hover:bg-gray-50'
-      )}>
+      <div 
+        ref={nodeRef}
+        id={`node-${pathString.replace(/\./g, '-').replace(/\[|\]/g, '_')}`}
+        className={cn(
+          "flex items-center gap-2 py-1.5 px-2 group transition-all duration-300 rounded-md",
+          !isEditMode && hasIssues && `border-l-4 ${severityColor}`,
+          isHighlighted ? 'bg-yellow-100 animate-in fade-in duration-300' : 'hover:bg-gray-50'
+        )}
+      >
         {/* Key column: 280px fixed width with indentation */}
         <div 
           className="flex items-center gap-1 flex-shrink-0 transition-all duration-200"
-          style={{ width: '280px', paddingLeft: `${level * 1.5 + 0.5}rem` }}
+          style={{ width: '280px', paddingLeft: `${level === 0 ? 0.25 : level * 1.5 + 0.5}rem` }}
         >
           {/* Expand/Collapse Button */}
           {(() => {
@@ -476,31 +475,34 @@ export default function TreeNode({
                   {issuesBySeverity.error.length > 0 && (
                     <Badge
                       variant="destructive"
-                      className="h-6 px-2 text-xs cursor-pointer transition-all duration-150 hover:scale-110 hover:shadow-md"
+                      className="h-6 px-2 text-xs cursor-pointer transition-all duration-150 hover:scale-110 hover:shadow-md flex items-center gap-1.5"
                       onClick={(e) => handleSeverityClick('error', e)}
                       title={`${issuesBySeverity.error.length} error${issuesBySeverity.error.length > 1 ? 's' : ''}`}
                     >
-                      {getSeverityIcon('error')} {issuesBySeverity.error.length}
+                      <span>{getSeverityIcon('error')}</span>
+                      <span>{issuesBySeverity.error.length}</span>
                     </Badge>
                   )}
                   {issuesBySeverity.warning.length > 0 && (
                     <Badge
                       variant="secondary"
-                      className="h-6 px-2 text-xs cursor-pointer transition-all duration-150 hover:scale-110 hover:shadow-md bg-orange-100 text-orange-700 hover:bg-orange-200"
+                      className="h-6 px-2 text-xs cursor-pointer transition-all duration-150 hover:scale-110 hover:shadow-md bg-orange-100 text-orange-700 hover:bg-orange-200 flex items-center gap-1.5"
                       onClick={(e) => handleSeverityClick('warning', e)}
                       title={`${issuesBySeverity.warning.length} warning${issuesBySeverity.warning.length > 1 ? 's' : ''}`}
                     >
-                      {getSeverityIcon('warning')} {issuesBySeverity.warning.length}
+                      <span>{getSeverityIcon('warning')}</span>
+                      <span>{issuesBySeverity.warning.length}</span>
                     </Badge>
                   )}
                   {issuesBySeverity.info.length > 0 && (
                     <Badge
                       variant="secondary"
-                      className="h-6 px-2 text-xs cursor-pointer transition-all duration-150 hover:scale-110 hover:shadow-md bg-blue-100 text-blue-700 hover:bg-blue-200"
+                      className="h-6 px-2 text-xs cursor-pointer transition-all duration-150 hover:scale-110 hover:shadow-md bg-blue-100 text-blue-700 hover:bg-blue-200 flex items-center gap-1.5"
                       onClick={(e) => handleSeverityClick('information', e)}
                       title={`${issuesBySeverity.info.length} info message${issuesBySeverity.info.length > 1 ? 's' : ''}`}
                     >
-                      {getSeverityIcon('information')} {issuesBySeverity.info.length}
+                      <span>{getSeverityIcon('information')}</span>
+                      <span>{issuesBySeverity.info.length}</span>
                     </Badge>
                   )}
                 </>
