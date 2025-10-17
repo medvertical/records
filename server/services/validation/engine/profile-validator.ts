@@ -33,6 +33,10 @@ import {
 import { addR6WarningIfNeeded } from '../utils/r6-support-warnings';
 import { getProfileResolver } from '../utils/profile-resolver';
 import { GermanProfileDetector } from '../utils/german-profile-detector';
+import {
+  detectInternationalProfile,
+  getRecommendedPackage as getInternationalPackage
+} from '../utils/international-profile-detector';
 import { getProfileResolutionTimeout } from '../../../config/validation-timeouts'; // CRITICAL FIX: Import centralized timeout
 
 // ============================================================================
@@ -306,15 +310,40 @@ export class ProfileValidator {
       return profileIssues;
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`[ProfileValidator] HAPI validation failed for profile ${profileUrl}:`, error);
       
-      // Return error as validation issue
+      // Detect profile loading errors (malformed XML, network issues, etc.)
+      const isProfileLoadError = 
+        errorMessage.includes('FHIRFormatError') ||
+        errorMessage.includes('processing instruction can not have PITarget') ||
+        errorMessage.includes('loadProfile') ||
+        errorMessage.includes('Unable to find/resolve/read') ||
+        errorMessage.includes('profile-load-skipped');
+      
+      if (isProfileLoadError) {
+        console.warn(`[ProfileValidator] ⚠️  Profile loading failed for ${profileUrl}, skipping profile validation`);
+        console.warn(`[ProfileValidator] Reason: Profile URL may return HTML instead of StructureDefinition XML`);
+        
+        // Return informational issue instead of error
+        return [{
+          id: `profile-skipped-${Date.now()}`,
+          aspect: 'profile',
+          severity: 'information',
+          code: 'profile-load-skipped',
+          message: `Profile validation skipped: Unable to load profile from ${profileUrl}. The profile URL may be unavailable or returning invalid data.`,
+          path: '',
+          timestamp: new Date(),
+        }];
+      }
+      
+      // For other errors, return as error
       return [{
         id: `hapi-profile-error-${Date.now()}`,
         aspect: 'profile',
         severity: 'error',
         code: 'hapi-profile-validation-error',
-        message: `HAPI profile validation failed: ${error instanceof Error ? error.message : String(error)}`,
+        message: `HAPI profile validation failed: ${errorMessage}`,
         path: '',
         timestamp: new Date(),
       }];
@@ -405,6 +434,21 @@ export class ProfileValidator {
       }
       
       return packages;
+    }
+
+    // Auto-detect international profiles (Australian, US Core, UK Core, etc.)
+    const intlProfile = detectInternationalProfile(profileUrl);
+    
+    if (intlProfile.isInternationalProfile && intlProfile.recommendedPackage) {
+      const intlPackage = getInternationalPackage(profileUrl);
+      if (intlPackage) {
+        console.log(
+          `[ProfileValidator] International ${intlProfile.family.toUpperCase()} profile detected ` +
+          `(${intlProfile.region}), adding package: ${intlPackage}`
+        );
+        packages.push(intlPackage);
+        return packages;
+      }
     }
 
     // Check if profile URL indicates a specific IG package

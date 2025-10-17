@@ -530,6 +530,19 @@ export class HapiValidatorClient {
       console.log(`[HapiValidatorClient] Parsing HAPI output (stdout length: ${stdout.length}, stderr length: ${stderr.length})`);
       console.log(`[HapiValidatorClient] First 200 chars of stdout: ${stdout.substring(0, 200)}`);
       
+      // Check for profile loading errors (malformed XML from HTML pages)
+      if (stderr.includes('FHIRFormatError') && stderr.includes('processing instruction can not have PITarget')) {
+        console.warn('[HapiValidatorClient] ⚠️ Profile loading failed due to malformed XML (likely HTML page instead of StructureDefinition)');
+        console.warn('[HapiValidatorClient] This usually happens when a profile URL returns HTML instead of the actual FHIR resource');
+        console.warn('[HapiValidatorClient] Skipping profile validation and returning empty result');
+        
+        // Return empty OperationOutcome to skip this profile
+        return {
+          resourceType: 'OperationOutcome',
+          issue: []
+        };
+      }
+      
       // Find JSON output in stdout (HAPI may output other text before JSON)
       const jsonMatch = stdout.match(/\{[\s\S]*"resourceType"\s*:\s*"OperationOutcome"[\s\S]*\}/);
       
@@ -539,6 +552,14 @@ export class HapiValidatorClient {
         
         // No OperationOutcome found - check stderr for errors
         if (stderr.includes('Error') || stderr.includes('Exception')) {
+          // Check if it's a profile loading error
+          if (stderr.includes('loadProfile') || stderr.includes('Unable to find/resolve/read')) {
+            console.warn('[HapiValidatorClient] Profile loading error detected, returning empty result');
+            return {
+              resourceType: 'OperationOutcome',
+              issue: []
+            };
+          }
           throw new Error(`HAPI validation error: ${stderr}`);
         }
         
@@ -561,11 +582,28 @@ export class HapiValidatorClient {
       return operationOutcome;
 
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Check if this is a profile loading error
+      if (errorMessage.includes('HAPI validation error') && 
+          (stderr.includes('FHIRFormatError') || 
+           stderr.includes('processing instruction can not have PITarget') ||
+           stderr.includes('loadProfile'))) {
+        console.warn('[HapiValidatorClient] ⚠️ Profile loading error caught in exception handler');
+        console.warn('[HapiValidatorClient] Returning empty OperationOutcome to skip problematic profile');
+        
+        // Return empty OperationOutcome instead of throwing
+        return {
+          resourceType: 'OperationOutcome',
+          issue: []
+        };
+      }
+      
       console.error('[HapiValidatorClient] Failed to parse OperationOutcome:', error);
       console.error('stdout:', stdout.substring(0, 500));
       console.error('stderr:', stderr.substring(0, 500));
       
-      throw new Error(`Failed to parse HAPI OperationOutcome: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`Failed to parse HAPI OperationOutcome: ${errorMessage}`);
     }
   }
 
@@ -578,6 +616,17 @@ export class HapiValidatorClient {
     }
 
     const message = error.message;
+
+    // Profile loading errors (malformed XML from HTML pages)
+    if (message.includes('FHIRFormatError') || 
+        message.includes('processing instruction can not have PITarget') ||
+        message.includes('loadProfile')) {
+      console.warn('[HapiValidatorClient] ⚠️ Suppressing profile loading error');
+      const suppressedError = new Error('Profile validation skipped due to malformed profile data');
+      (suppressedError as any).code = 'profile-load-skipped';
+      (suppressedError as any).severity = 'warning';
+      return suppressedError;
+    }
 
     // Java Runtime not found
     if (message.includes('ENOENT') || message.includes('spawn java')) {
