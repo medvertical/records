@@ -374,12 +374,9 @@ export default function ResourceViewer({
     }
   };
 
-  // Auto-validate on mount if resource data is available
-  useEffect(() => {
-    if (resourceData && !validationResult && !isValidating) {
-      validateResource();
-    }
-  }, [resourceData]);
+  // Note: Automatic validation on mount is disabled to allow immediate resource display.
+  // Validation is only performed when explicitly requested via the Revalidate button.
+  // The resource already has validation data from the database (_validationSummary).
 
   // Get validation badge
   const getValidationBadge = () => {

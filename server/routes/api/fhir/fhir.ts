@@ -1528,7 +1528,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       }
 
       // If no resourceType provided, try common resource types
-      const commonTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'DiagnosticReport', 'Medication', 'MedicationRequest', 'Procedure', 'AllergyIntolerance', 'Immunization', 'DocumentReference', 'Organization', 'Practitioner'];
+      const commonTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'DiagnosticReport', 'Medication', 'MedicationRequest', 'Procedure', 'AllergyIntolerance', 'Immunization', 'DocumentReference', 'Organization', 'Practitioner', 'AuditEvent'];
       
       for (const type of commonTypes) {
         try {

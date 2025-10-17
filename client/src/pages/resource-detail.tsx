@@ -53,8 +53,9 @@ export default function ResourceDetail() {
   }, []);
   
   // Parse query parameters
-  const searchParams = new URLSearchParams(location.split('?')[1] || '');
+  const searchParams = new URLSearchParams(window.location.search);
   const highlightSignature = searchParams.get('highlightSignature') || undefined;
+  const resourceType = searchParams.get('type') || undefined;
   
   // Use validation settings polling to detect changes and refresh resource detail
   const { lastChange } = useValidationSettingsPolling({
@@ -283,11 +284,14 @@ export default function ResourceDetail() {
   }, []);
   
   const { data: resource, isLoading, error } = useQuery<FhirResourceWithValidation>({
-    queryKey: ["/api/fhir/resources", id],
+    queryKey: ["/api/fhir/resources", id, resourceType],
     queryFn: async ({ queryKey }) => {
-      const [baseUrl, resourceId] = queryKey;
-      console.log('Fetching resource with ID:', resourceId);
-      const response = await fetch(`${baseUrl}/${resourceId}`);
+      const [baseUrl, resourceId, type] = queryKey;
+      console.log('Fetching resource with ID:', resourceId, 'Type:', type);
+      const url = type 
+        ? `${baseUrl}/${resourceId}?resourceType=${type}`
+        : `${baseUrl}/${resourceId}`;
+      const response = await fetch(url);
       if (!response.ok) {
         console.error('Resource fetch failed:', response.status, response.statusText);
         throw new Error(`Failed to fetch resource: ${response.status}`);

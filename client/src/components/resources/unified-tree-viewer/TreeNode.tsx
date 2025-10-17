@@ -42,13 +42,18 @@ export default function TreeNode({
   // Generate path string for this node
   const pathString = path.length === 0 ? nodeKey : `${path.join('.')}.${nodeKey}`;
   
-  // Check if this node is expanded from shared state
-  const isExpanded = expandedPaths?.has(pathString) ?? (level < 2);
-  
   const fullPath = [...path, nodeKey];
   const isRequired = resourceType ? isFieldRequired(resourceType, nodeKey) : false;
   const valueType = getTypeName(value);
   const isComplex = valueType === 'object' || valueType === 'array';
+  
+  // Check if this node is expanded from shared state
+  const isExpanded = expandedPaths?.has(pathString) ?? (level < 2);
+  
+  // Debug logging for arrays
+  if (valueType === 'array' || (nodeKey.startsWith('[') && nodeKey.endsWith(']'))) {
+    console.log('[TreeNode]', pathString, '- isExpanded:', isExpanded, 'in expandedPaths:', expandedPaths?.has(pathString), 'type:', valueType);
+  }
 
   // Handle expand/collapse toggle
   const handleToggleExpanded = useCallback(() => {

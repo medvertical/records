@@ -43,6 +43,7 @@ export default function UnifiedTreeViewer({
     const newExpandedPaths = new Set<string>();
     
     if (expandAll) {
+      console.log('[UnifiedTreeViewer] Expand All triggered');
       // When expandAll is true, expand all complex nodes
       const expandAllPaths = (obj: any, path: string[] = []) => {
         Object.entries(obj).forEach(([key, value]) => {
@@ -53,13 +54,20 @@ export default function UnifiedTreeViewer({
           
           // Add complex types to expanded paths
           if ((valueType === 'object' && value !== null && !Array.isArray(value)) || Array.isArray(value)) {
+            console.log('[UnifiedTreeViewer] Adding path:', currentPath, 'isArray:', Array.isArray(value));
             newExpandedPaths.add(currentPath);
             
             // Recursively expand nested objects/arrays
-            if (valueType === 'object' && value !== null) {
+            if (valueType === 'object' && value !== null && !Array.isArray(value)) {
               expandAllPaths(value, [...path, key]);
             } else if (Array.isArray(value)) {
+              console.log('[UnifiedTreeViewer] Processing array:', currentPath, 'length:', value.length);
               value.forEach((item, index) => {
+                const arrayElementPath = currentPath + `.[${index}]`;
+                console.log('[UnifiedTreeViewer] Array item path:', arrayElementPath, 'type:', typeof item);
+                // Add ALL array element paths, not just objects
+                newExpandedPaths.add(arrayElementPath);
+                // Recurse into objects and arrays
                 if (typeof item === 'object' && item !== null) {
                   expandAllPaths(item, [...path, key, `[${index}]`]);
                 }
@@ -70,6 +78,9 @@ export default function UnifiedTreeViewer({
       };
       
       expandAllPaths(resourceData);
+      console.log('[UnifiedTreeViewer] Total expanded paths:', newExpandedPaths.size, Array.from(newExpandedPaths));
+    } else {
+      console.log('[UnifiedTreeViewer] Collapse All triggered');
     }
     
     // Update expanded paths when button is clicked
