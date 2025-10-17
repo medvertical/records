@@ -160,7 +160,7 @@ export class ValidationEngine extends EventEmitter {
       'profile': 'profileValidation',
       'terminology': 'terminologyValidation',
       'reference': 'referenceValidation',
-      'businessRules': 'businessRules',
+      'businessRule': 'businessRules',
       'metadata': 'metadataValidation',
     };
 
@@ -431,7 +431,7 @@ export class ValidationEngine extends EventEmitter {
       enabledAspects.add('reference');
     }
     if (settings.aspects?.businessRules?.enabled) {
-      enabledAspects.add('businessRules');
+      enabledAspects.add('businessRule');
     }
     if (settings.aspects?.metadata?.enabled) {
       enabledAspects.add('metadata');
@@ -514,7 +514,7 @@ export class ValidationEngine extends EventEmitter {
               return await this.terminologyValidator.validate(request.resource, request.resourceType, settings, this.fhirVersion);
             case 'reference':
               return await this.referenceValidator.validate(request.resource, request.resourceType, this.fhirClient, this.fhirVersion);
-            case 'businessRules':
+            case 'businessRule':
               return await this.businessRuleValidator.validate(request.resource, request.resourceType, settings, this.fhirVersion);
             case 'metadata':
               return await this.metadataValidator.validate(request.resource, request.resourceType, this.fhirVersion);

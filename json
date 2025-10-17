@@ -29,14 +29,6 @@
           </td>
         </tr>
         <tr>
-          <td>error</td>
-          <td>Patient.identifier[0].system</td>
-          <td>invalid</td>
-          <td>Beispiel-URLs sind in diesem Zusammenhang nicht zulässig (http://hospital.example.org/patients)</td>
-          <td/>
-          <td>InstanceValidator</td>
-        </tr>
-        <tr>
           <td>warning</td>
           <td>Patient</td>
           <td>invariant</td>
@@ -48,28 +40,8 @@
     </div>
   </text>
   <extension url="http://hl7.org/fhir/StructureDefinition/operationoutcome-file">
-    <valueString value="/var/folders/dl/x7qls_c92652b6t6z9tzy0bc0000gn/T/fhir-resource-1760654322440-oznh02jtb.json"/>
+    <valueString value="/var/folders/dl/x7qls_c92652b6t6z9tzy0bc0000gn/T/hapi-warmup-hapi-1760685818896-lr9u6g1zg.json"/>
   </extension>
-  <issue>
-    <extension url="http://hl7.org/fhir/StructureDefinition/operationoutcome-issue-line">
-      <valueInteger value="11"/>
-    </extension>
-    <extension url="http://hl7.org/fhir/StructureDefinition/operationoutcome-issue-col">
-      <valueInteger value="55"/>
-    </extension>
-    <extension url="http://hl7.org/fhir/StructureDefinition/operationoutcome-issue-source">
-      <valueString value="InstanceValidator"/>
-    </extension>
-    <extension url="http://hl7.org/fhir/StructureDefinition/operationoutcome-message-id">
-      <valueCode value="TYPE_SPECIFIC_CHECKS_DT_URL_EXAMPLE"/>
-    </extension>
-    <severity value="error"/>
-    <code value="invalid"/>
-    <details>
-      <text value="Beispiel-URLs sind in diesem Zusammenhang nicht zulässig (http://hospital.example.org/patients)"/>
-    </details>
-    <expression value="Patient.identifier[0].system"/>
-  </issue>
   <issue>
     <extension url="http://hl7.org/fhir/StructureDefinition/operationoutcome-issue-line">
       <valueInteger value="1"/>

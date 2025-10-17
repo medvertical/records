@@ -314,7 +314,7 @@ export default function ResourceList({
             <TooltipTrigger>
               <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50">
                 <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                {progressValue > 0 ? `${Math.round(progressValue)}%` : 'Validating...'}
+                Validating...
               </Badge>
             </TooltipTrigger>
             <TooltipContent>
@@ -333,13 +333,12 @@ export default function ResourceList({
               </div>
             </TooltipContent>
           </Tooltip>
-          {progressValue > 0 && (
-            <CircularProgress 
-              value={progressValue} 
-              size="sm"
-              animate={false}
-            />
-          )}
+          <CircularProgress 
+            value={0} 
+            size="sm"
+            animate={false}
+            showValue={false}
+          />
         </div>
       );
     }

@@ -24,3 +24,7 @@ server/lib/*.jar
 # FHIR package cache (downloaded by HAPI validator)
 server/cache/fhir-packages/*
 !server/cache/fhir-packages/.gitkeep
+
+# Temporary FHIR validation output files
+json
+*.xml.tmp
