@@ -165,35 +165,31 @@ export default function ResourceList({
   };
 
   const renderResourceCardSkeleton = (index: number) => (
-    <div key={`skeleton-${index}`} className="mb-4 last:mb-0">
-      <Card className="border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4 flex-1 min-w-0">
-              <div className="flex-shrink-0">
-                <Skeleton className="h-3 w-3 rounded-full" />
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center space-x-3 mb-1">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-5 w-16 rounded-full" />
-                </div>
-                <Skeleton className="h-4 w-48 mb-1" />
-                <Skeleton className="h-3 w-24" />
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-4 ml-6">
-              <div className="flex items-center space-x-2">
-                <Skeleton className="h-6 w-16 rounded-full" />
-                <Skeleton className="h-8 w-8 rounded-full" />
-              </div>
-              <Skeleton className="h-4 w-4" />
-            </div>
+    <div key={`skeleton-${index}`} className="p-4 border-b border-gray-200 dark:border-gray-700 last:border-b-0">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-4 flex-1 min-w-0">
+          <div className="flex-shrink-0">
+            <Skeleton className="h-3 w-3 rounded-full" />
           </div>
-        </CardContent>
-      </Card>
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center space-x-3 mb-1">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+            <Skeleton className="h-4 w-48 mb-1" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+        </div>
+        
+        <div className="flex items-center space-x-4 ml-6">
+          <div className="flex items-center space-x-2">
+            <Skeleton className="h-6 w-16 rounded-full" />
+            <Skeleton className="h-8 w-8 rounded-full" />
+          </div>
+          <Skeleton className="h-4 w-4" />
+        </div>
+      </div>
     </div>
   );
 
@@ -627,144 +623,143 @@ export default function ResourceList({
       </div>
 
       {/* Resource List */}
-      <div className="resource-cards-container">
+      <Card className="overflow-hidden">
         {resources.length > 0 ? (
-          resources.map((resource, index) => {
-            const validationStatus = getValidationStatus(resource);
-            const resourceId = resource._dbId || resource.id;
-            const isValidating = validatingResourceIds.has(resourceId);
-            const resourceKey = `${resource.resourceType}/${resource.id || resource.resourceId}`;
-            const isSelected = selectedIds.has(resourceKey);
-            const isHighlighted = highlightedResourceId === resourceKey;
-            
-            const cardContent = (
-              <Card className={cn(
-                selectionMode ? "" : "hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer",
-                validationStatus === 'not-validated' && "border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50",
-                isSelected && "ring-2 ring-blue-500 bg-blue-50/50",
-                isHighlighted && "ring-2 ring-orange-500 bg-orange-50/50 animate-pulse"
-              )}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4 flex-1 min-w-0">
-                    {selectionMode && (
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={(checked) => {
-                          if (onSelectionChange) {
-                            onSelectionChange(resourceKey, checked as boolean);
-                          }
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    )}
-                    <div className={cn(
-                      "rounded-full flex-shrink-0",
-                      validationStatus === 'valid' ? "w-3 h-3 bg-fhir-success" :
-                      validationStatus === 'error' ? "w-3 h-3 bg-fhir-error" :
-                      validationStatus === 'warning' ? "w-3 h-3 bg-fhir-warning" :
-                      "w-4 h-4 bg-gray-400 border-2 border-gray-300"
-                    )} />
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-3 mb-1">
-                        <h3 className="text-sm font-semibold text-gray-900 truncate">
-                          {resource.resourceType}/{getShortId(resource.id)}
-                        </h3>
-                        <div className="flex items-center space-x-2">
-                          <Badge variant="outline" className="text-xs">
-                            {resource.resourceType}
-                          </Badge>
-                          {validationStatus === 'not-validated' && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <AlertCircle className="h-3 w-3 text-gray-400" />
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p>This resource has not been validated</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-600 truncate">
-                        {getResourceDisplayName(resource)}
-                      </p>
-                      <p className="text-xs text-gray-500 truncate mt-1">
-                        {getResourceSubtext(resource)}
-                      </p>
-                      {/* Display profile badges */}
-                      {(resource.meta?.profile || resource.data?.meta?.profile) && (
-                        <div className="mt-2">
-                          <ProfileBadge 
-                            profiles={resource.meta?.profile || resource.data?.meta?.profile || []}
-                            size="sm"
-                            variant="outline"
-                            maxDisplay={2}
-                          />
-                        </div>
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            {resources.map((resource, index) => {
+              const validationStatus = getValidationStatus(resource);
+              const resourceId = resource._dbId || resource.id;
+              const isValidating = validatingResourceIds.has(resourceId);
+              const resourceKey = `${resource.resourceType}/${resource.id || resource.resourceId}`;
+              const isSelected = selectedIds.has(resourceKey);
+              const isHighlighted = highlightedResourceId === resourceKey;
+              
+              const itemContent = (
+                <div className={cn(
+                  "p-4 transition-colors",
+                  !selectionMode && "hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer",
+                  validationStatus === 'not-validated' && "bg-gray-50/50 dark:bg-gray-800/50",
+                  isSelected && "bg-blue-50/50 dark:bg-blue-900/20 ring-2 ring-inset ring-blue-500",
+                  isHighlighted && "bg-orange-50/50 dark:bg-orange-900/20 ring-2 ring-inset ring-orange-500 animate-pulse"
+                )}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4 flex-1 min-w-0">
+                      {selectionMode && (
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={(checked) => {
+                            if (onSelectionChange) {
+                              onSelectionChange(resourceKey, checked as boolean);
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
                       )}
+                      <div className={cn(
+                        "rounded-full flex-shrink-0",
+                        validationStatus === 'valid' ? "w-3 h-3 bg-fhir-success" :
+                        validationStatus === 'error' ? "w-3 h-3 bg-fhir-error" :
+                        validationStatus === 'warning' ? "w-3 h-3 bg-fhir-warning" :
+                        "w-4 h-4 bg-gray-400 border-2 border-gray-300"
+                      )} />
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-3 mb-1">
+                          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                            {resource.resourceType}/{getShortId(resource.id)}
+                          </h3>
+                          <div className="flex items-center space-x-2">
+                            <Badge variant="outline" className="text-xs">
+                              {resource.resourceType}
+                            </Badge>
+                            {validationStatus === 'not-validated' && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <AlertCircle className="h-3 w-3 text-gray-400" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>This resource has not been validated</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
+                          {getResourceDisplayName(resource)}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-500 truncate mt-1">
+                          {getResourceSubtext(resource)}
+                        </p>
+                        {/* Display profile badges */}
+                        {(resource.meta?.profile || resource.data?.meta?.profile) && (
+                          <div className="mt-2">
+                            <ProfileBadge 
+                              profiles={resource.meta?.profile || resource.data?.meta?.profile || []}
+                              size="sm"
+                              variant="outline"
+                              maxDisplay={2}
+                            />
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center space-x-4 ml-6">
-                    {renderValidationBadge(resource)}
-                    {!selectionMode && <ChevronRight className="h-4 w-4 text-gray-400" />}
+                    <div className="flex items-center space-x-4 ml-6">
+                      {renderValidationBadge(resource)}
+                      {!selectionMode && <ChevronRight className="h-4 w-4 text-gray-400" />}
+                    </div>
                   </div>
                 </div>
-              </CardContent>
-              </Card>
-            );
-            
-            return (
-              <div key={resource.id || `${resource.resourceType}-${index}`} className="mb-4 last:mb-0">
-                {selectionMode ? (
-                  cardContent
-                ) : (
-                  <Link href={`/resources/${resource.resourceId || resource.id}?type=${resource.resourceType}`}>
-                    {cardContent}
-                  </Link>
-                )}
-              </div>
-            );
-          })
-        ) : (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <div className="text-gray-400 mb-4">
-                <XCircle className="h-12 w-12 mx-auto" />
-              </div>
-              {noResourceTypeMessage ? (
-                <>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Select a Resource Type</h3>
-                  <p className="text-gray-600 mb-4">
-                    {noResourceTypeMessage}
-                  </p>
-                  {availableResourceTypes.length > 0 && (
-                    <div className="mt-6">
-                      <p className="text-sm text-gray-500 mb-3">Available resource types:</p>
-                      <div className="flex flex-wrap gap-2 justify-center">
-                        {availableResourceTypes.map((type) => (
-                          <Badge key={type} variant="outline" className="text-xs">
-                            {type}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
+              );
+              
+              return (
+                <div key={resource.id || `${resource.resourceType}-${index}`}>
+                  {selectionMode ? (
+                    itemContent
+                  ) : (
+                    <Link href={`/resources/${resource.resourceId || resource.id}?type=${resource.resourceType}`}>
+                      {itemContent}
+                    </Link>
                   )}
-                </>
-              ) : (
-                <>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Resources Found</h3>
-                  <p className="text-gray-600">
-                    No resources match your current search criteria. Try adjusting your filters.
-                  </p>
-                </>
-              )}
-            </CardContent>
-          </Card>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <CardContent className="p-8 text-center">
+            <div className="text-gray-400 mb-4">
+              <XCircle className="h-12 w-12 mx-auto" />
+            </div>
+            {noResourceTypeMessage ? (
+              <>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Select a Resource Type</h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-4">
+                  {noResourceTypeMessage}
+                </p>
+                {availableResourceTypes.length > 0 && (
+                  <div className="mt-6">
+                    <p className="text-sm text-gray-500 mb-3">Available resource types:</p>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {availableResourceTypes.map((type) => (
+                        <Badge key={type} variant="outline" className="text-xs">
+                          {type}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No Resources Found</h3>
+                <p className="text-gray-600 dark:text-gray-400">
+                  No resources match your current search criteria. Try adjusting your filters.
+                </p>
+              </>
+            )}
+          </CardContent>
         )}
-      </div>
+      </Card>
 
       {/* Pagination Footer */}
       {totalPages > 1 && (
