@@ -7,12 +7,9 @@
 // Main components
 export { default as ResourceViewer } from './resource-viewer';
 export { default as UnifiedTreeViewer } from './UnifiedTreeViewer';
-export { ResourceListView } from './ResourceListView';
-export { VirtualizedResourceList } from './VirtualizedResourceList';
 export { ResourceEditor } from './ResourceEditor';
 export { ResourceDetailHeader } from './ResourceDetailHeader';
 export { ResourceDetailActions } from './ResourceDetailActions';
-export { ResourceDetailSplitPane } from './ResourceDetailSplitPane';
 
 // State components
 export {
@@ -32,12 +29,6 @@ export type {
 
 // Validation components
 export { ValidationSummaryBadge } from './validation-summary-badge';
-export { OptimizedValidationResults } from './optimized-validation-results';
-export { 
-  ValidationIssueIndicator, 
-  ValidationIssueDetails, 
-  ValidationIssueList 
-} from './validation-issue-components';
 
 // Utility functions
 export { 
