@@ -714,6 +714,20 @@ export default function ResourceBrowser() {
       r.resourceId === currentMessage.resourceId
     ) : null;
 
+  // Debug: Log highlighting info when it changes
+  useEffect(() => {
+    if (currentMessage && isMessagesVisible) {
+      console.log('[ResourceBrowser] Highlighting resource:', {
+        resourceType: currentMessage.resourceType,
+        resourceId: currentMessage.resourceId,
+        highlightedId: `${currentMessage.resourceType}/${currentMessage.resourceId}`,
+        isMessagesVisible,
+        currentMessageIndex,
+        totalMessages: allMessages.length
+      });
+    }
+  }, [currentMessage, isMessagesVisible, currentMessageIndex, allMessages.length]);
+
   // Function to simulate validation progress updates
   const simulateValidationProgress = useCallback((resourceIds: number[], resources: any[]) => {
     const aspects = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'];
@@ -1289,11 +1303,18 @@ export default function ResourceBrowser() {
 
   // Handle filtering by severity
   const handleFilterBySeverity = useCallback((severity: 'error' | 'warning' | 'information') => {
+    // Toggle behavior: if already selected, remove it; otherwise add it
+    const currentSeverities = validationFilters.severities || [];
+    const newSeverities = currentSeverities.includes(severity)
+      ? currentSeverities.filter(s => s !== severity)
+      : [severity]; // Replace with single severity for exclusive selection
+    
     const newFilters: ValidationFilters = {
       ...validationFilters,
-      issueFilter: {
-        severity: severity
-      }
+      severities: newSeverities,
+      hasIssuesOnly: newSeverities.length > 0, // Show only resources with issues when a severity is selected
+      // Clear issueFilter as we're using severities array instead
+      issueFilter: undefined
     };
     handleFilterChange(newFilters);
   }, [validationFilters, handleFilterChange]);
@@ -1307,11 +1328,12 @@ export default function ResourceBrowser() {
       (validationFilters.issueFilter && Object.keys(validationFilters.issueFilter).length > 0)
     );
     if (!isMessagesVisible && hasValidationFilters) {
+      // Only clear issueFilter, keep severities and aspects for persistent filtering
       handleFilterChange({
         ...validationFilters,
         aspects: [],
-        severities: [],
-        hasIssuesOnly: false,
+        // severities: [], // KEEP severities for persistent filtering
+        hasIssuesOnly: validationFilters.severities.length > 0, // Keep hasIssuesOnly if severities are active
         issueFilter: undefined
         // fhirSearchParams preserved via spread
       });
@@ -1634,12 +1656,7 @@ export default function ResourceBrowser() {
             selectedIds={selectedResources}
             onSelectionChange={handleSelectionChange}
             highlightedResourceId={
-              currentMessage && (
-                validationFilters.severities.length > 0 || 
-                validationFilters.aspects.length > 0 || 
-                validationFilters.hasIssuesOnly ||
-                (validationFilters.issueFilter && Object.keys(validationFilters.issueFilter).length > 0)
-              )
+              currentMessage && isMessagesVisible
                 ? `${currentMessage.resourceType}/${currentMessage.resourceId}` 
                 : undefined
             }

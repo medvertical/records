@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -115,6 +116,9 @@ export default function ResourceList({
     refetchInterval: false,
   });
 
+  // Create a ref map to track resource elements for auto-scroll
+  const resourceRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
   // Ensure page is a valid number and at least 0
   const currentPage = Math.max(0, isNaN(page) ? 0 : page);
   const validTotal = Math.max(0, isNaN(total) ? 0 : total);
@@ -125,6 +129,27 @@ export default function ResourceList({
 
   // Get current validation settings for filtering
   const currentSettings = validationSettingsData;
+
+  // Auto-scroll to highlighted resource
+  useEffect(() => {
+    if (highlightedResourceId) {
+      console.log('[ResourceList] Highlighting resource:', {
+        highlightedResourceId,
+        availableKeys: Array.from(resourceRefs.current.keys()),
+        hasMatch: resourceRefs.current.has(highlightedResourceId)
+      });
+
+      if (resourceRefs.current.has(highlightedResourceId)) {
+        const element = resourceRefs.current.get(highlightedResourceId);
+        if (element) {
+          // Small delay to ensure the element is rendered and highlighted
+          setTimeout(() => {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 100);
+        }
+      }
+    }
+  }, [highlightedResourceId]);
 
   const getResourceDisplayName = (resource: any) => {
     switch (resource.resourceType) {
@@ -713,7 +738,16 @@ export default function ResourceList({
               );
               
               return (
-                <div key={resource.id || `${resource.resourceType}-${index}`}>
+                <div 
+                  key={resource.id || `${resource.resourceType}-${index}`}
+                  ref={(el) => {
+                    if (el) {
+                      resourceRefs.current.set(resourceKey, el);
+                    } else {
+                      resourceRefs.current.delete(resourceKey);
+                    }
+                  }}
+                >
                   {selectionMode ? (
                     itemContent
                   ) : (

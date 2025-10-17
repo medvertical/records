@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, XCircle, AlertTriangle, AlertCircle } from 'lucide-react';
+import { ChevronUp, ChevronDown, XCircle, AlertTriangle, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ValidationMessage } from './validation-messages-card';
 
@@ -200,7 +200,7 @@ export function ValidationMessageNavigator({
             disabled={currentIndex === 0}
             className="h-6 w-6 p-0"
           >
-            <ChevronLeft className="h-3 w-3" />
+            <ChevronUp className="h-3 w-3" />
           </Button>
           <Button
             variant="ghost"
@@ -212,7 +212,7 @@ export function ValidationMessageNavigator({
             disabled={currentIndex === totalMessages - 1}
             className="h-6 w-6 p-0"
           >
-            <ChevronRight className="h-3 w-3" />
+            <ChevronDown className="h-3 w-3" />
           </Button>
         </div>
       </div>
@@ -300,12 +300,14 @@ export function SeverityNavigator({
   };
 
   // Auto-filter when severity navigator becomes active
-  useEffect(() => {
-    if (isMessagesVisible && onFilterBySeverity && totalMessages > 0) {
-      // Filter by severity type only
-      onFilterBySeverity(severity);
-    }
-  }, [isMessagesVisible, onFilterBySeverity, totalMessages, severity]);
+  // DISABLED: This causes unintended filtering when clicking badges
+  // The filter should only be applied when the user explicitly clicks the badge
+  // useEffect(() => {
+  //   if (isMessagesVisible && onFilterBySeverity && totalMessages > 0) {
+  //     // Filter by severity type only
+  //     onFilterBySeverity(severity);
+  //   }
+  // }, [isMessagesVisible, onFilterBySeverity, totalMessages, severity]);
 
   // Don't render if no messages of this severity
   if (totalMessages === 0) {
@@ -342,12 +344,12 @@ export function SeverityNavigator({
     );
   }
 
-  // Active state: show current index and navigation arrows
+  // Active state: show current index and navigation arrows with blue outline and white bg
   return (
     <div 
       className={cn(
         "flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors",
-        "hover:bg-muted/50 active:bg-muted bg-primary/10 border-primary/20",
+        "hover:bg-muted/50 active:bg-muted bg-white dark:bg-gray-900 ring-2 ring-inset ring-blue-500 border-blue-500",
         className
       )}
       onClick={handleClick}
@@ -381,7 +383,7 @@ export function SeverityNavigator({
           disabled={currentIndex === 0}
           className="h-6 w-6 p-0"
         >
-          <ChevronLeft className="h-3 w-3" />
+          <ChevronUp className="h-3 w-3" />
         </Button>
         <Button
           variant="ghost"
@@ -393,7 +395,7 @@ export function SeverityNavigator({
           disabled={currentIndex === totalMessages - 1}
           className="h-6 w-6 p-0"
         >
-          <ChevronRight className="h-3 w-3" />
+          <ChevronDown className="h-3 w-3" />
         </Button>
       </div>
 
