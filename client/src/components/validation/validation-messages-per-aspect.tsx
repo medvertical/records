@@ -5,17 +5,17 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle, AlertCircle } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { SeverityIcon, getSeverityVariant } from '@/components/ui/severity-icon';
 import { CircularProgress } from '@/components/ui/circular-progress';
-import type { SeverityLevel } from '@/components/ui/severity-icon';
+import { ValidationMessageItem } from './ValidationMessageItem';
+import type { ValidationMessage as ValidationMessageType } from './ValidationMessageItem';
 
 interface ValidationMessage {
   severity: string;
-  code: string;
+  code?: string;
   canonicalPath: string;
   text: string;
   signature: string;
-  timestamp: string;
+  timestamp?: string;
 }
 
 interface AspectMessages {
@@ -238,52 +238,13 @@ export function ValidationMessagesPerAspect({
                           highlightedSignatures.includes(message.signature);
                         
                         return (
-                          <Alert
+                          <ValidationMessageItem
                             key={msgIndex}
-                            variant={getSeverityVariant(message.severity as SeverityLevel)}
-                            className={`text-left transition-all duration-300 ${isHighlighted ? 'ring-4 ring-yellow-400 shadow-lg' : ''}`}
-                            data-signature={message.signature}
-                          >
-                            <div className="flex items-start gap-2 text-left">
-                              <SeverityIcon severity={message.severity as SeverityLevel} />
-                              <div className="flex-1 space-y-1 text-left">
-                                <div className="flex items-center justify-start gap-2 text-left">
-                                  {message.code && (
-                                    <code className="text-xs bg-muted px-2 py-0.5 rounded">
-                                      {message.code}
-                                    </code>
-                                  )}
-                                  {isHighlighted && (
-                                    <Badge variant="default" className="text-xs">
-                                      Highlighted
-                                    </Badge>
-                                  )}
-                                </div>
-                                <AlertDescription className="text-sm text-left">
-                                  {message.text}
-                                </AlertDescription>
-                                <div className="text-xs text-muted-foreground space-y-1 text-left">
-                                  <div className="text-left">
-                                    Path: 
-                                    {onPathClick ? (
-                                      <button
-                                        onClick={() => onPathClick(message.canonicalPath)}
-                                        className="bg-muted px-1 py-0.5 rounded hover:bg-muted/80 cursor-pointer transition-colors ml-1"
-                                        title="Click to highlight in tree viewer"
-                                      >
-                                        {message.canonicalPath}
-                                      </button>
-                                    ) : (
-                                      <code className="bg-muted px-1 py-0.5 rounded ml-1">{message.canonicalPath}</code>
-                                    )}
-                                  </div>
-                                  {message.timestamp && (
-                                    <div className="text-left">Validated: {new Date(message.timestamp).toLocaleString()}</div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </Alert>
+                            message={message}
+                            isHighlighted={isHighlighted}
+                            onPathClick={onPathClick}
+                            showResourceInfo={false}
+                          />
                         );
                       })}
                     </div>

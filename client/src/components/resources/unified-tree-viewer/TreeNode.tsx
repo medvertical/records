@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronRight, Trash2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +41,7 @@ export default function TreeNode({
 }: TreeNodeProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isHighlighted, setIsHighlighted] = useState(false);
+  const nodeRef = useRef<HTMLDivElement>(null);
   
   // Generate path string for this node
   const pathString = path.length === 0 ? nodeKey : `${path.join('.')}.${nodeKey}`;
@@ -64,17 +65,28 @@ export default function TreeNode({
   //   console.log('[TreeNode]', pathString, '- isExpanded:', isExpanded, 'in expandedPaths:', expandedPaths?.has(pathString), 'type:', valueType);
   // }
 
-  // Handle highlighting effect
+  // Handle highlighting effect and scroll into view
   useEffect(() => {
-    if (highlightedPath && highlightedPath === pathString) {
-      console.log('[TreeNode] Highlighting:', pathString);
+    const isMatch = highlightedPath && highlightedPath.toLowerCase() === pathString.toLowerCase();
+    
+    if (isMatch && !isHighlighted) {
+      console.log('[TreeNode] Highlighting and scrolling to:', pathString);
       setIsHighlighted(true);
-      const timer = setTimeout(() => {
-        setIsHighlighted(false);
-      }, 3500);
-      return () => clearTimeout(timer);
+      
+      // Scroll into view after a brief delay to ensure rendering is complete
+      setTimeout(() => {
+        nodeRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center',
+          inline: 'nearest'
+        });
+      }, 100);
+    } else if (!isMatch && isHighlighted) {
+      // Clear highlight when path no longer matches (parent cleared highlightedPath)
+      console.log('[TreeNode] Clearing highlight for:', pathString);
+      setIsHighlighted(false);
     }
-  }, [highlightedPath, pathString]);
+  }, [highlightedPath, pathString, isHighlighted]);
 
   // Handle expand/collapse toggle
   const handleToggleExpanded = useCallback(() => {
@@ -264,6 +276,7 @@ export default function TreeNode({
 
   return (
     <div 
+      ref={nodeRef}
       id={`node-${pathString.replace(/\./g, '-').replace(/\[|\]/g, '_')}`}
       className={cn(
         'relative transition-all duration-300',
@@ -273,7 +286,7 @@ export default function TreeNode({
     >
       <div className={cn(
         "flex items-center gap-2 py-1 px-2 rounded group transition-all duration-300",
-        isHighlighted ? 'bg-yellow-200 shadow-lg ring-2 ring-yellow-400' : 'hover:bg-gray-50'
+        isHighlighted ? 'bg-yellow-100' : 'hover:bg-gray-50'
       )}>
         {/* Key column: 280px fixed width with indentation */}
         <div 
