@@ -19,7 +19,8 @@ import {
   AlertCircle,
   Eye,
   Loader2,
-  Filter
+  Filter,
+  Info
 } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
@@ -394,38 +395,55 @@ export default function ResourceList({
       case 'error':
         return (
           <div className="flex items-center gap-2">
-            <div className="flex flex-col items-end space-y-1">
-              <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
+              {/* Error column */}
+              <div className="flex flex-col items-center min-w-[3rem]">
                 <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50">
                   <XCircle className="h-3 w-3 mr-1" />
-                  {filteredSummary?.errorCount || 0} Error{(filteredSummary?.errorCount || 0) !== 1 ? 's' : ''}
+                  {filteredSummary?.errorCount || 0}
                 </Badge>
-                {/* Retry indicator */}
-                {resource.retryInfo && (
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <Badge variant="outline" className="text-xs bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700">
-                        🔄 {resource.retryInfo.attemptCount}/{resource.retryInfo.maxAttempts}
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <div className="space-y-1">
-                        <p className="font-medium">Retry Information</p>
-                        <p className="text-sm">Attempts: {resource.retryInfo.attemptCount}/{resource.retryInfo.maxAttempts}</p>
-                        <p className="text-sm">Duration: {resource.retryInfo.totalRetryDurationMs}ms</p>
-                        <p className="text-sm">Status: {resource.retryInfo.canRetry ? 'Can retry' : 'Max retries reached'}</p>
-                        {resource.retryInfo.retryReason && (
-                          <p className="text-xs text-gray-500">Reason: {resource.retryInfo.retryReason}</p>
-                        )}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
+              </div>
+              
+              {/* Warning column */}
+              <div className="flex flex-col items-center min-w-[3rem]">
+                {filteredSummary?.hasWarnings && (
+                  <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    {filteredSummary.warningCount}
+                  </Badge>
                 )}
               </div>
-              {filteredSummary?.hasWarnings && (
-                <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
-                  {filteredSummary.warningCount} Warning{filteredSummary.warningCount !== 1 ? 's' : ''}
-                </Badge>
+              
+              {/* Info column */}
+              <div className="flex flex-col items-center min-w-[3rem]">
+                {(filteredSummary?.informationCount || 0) > 0 && (
+                  <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50 text-xs">
+                    <Info className="h-3 w-3 mr-1" />
+                    {filteredSummary.informationCount}
+                  </Badge>
+                )}
+              </div>
+              
+              {/* Retry indicator */}
+              {resource.retryInfo && (
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Badge variant="outline" className="text-xs bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700">
+                      🔄 {resource.retryInfo.attemptCount}/{resource.retryInfo.maxAttempts}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="space-y-1">
+                      <p className="font-medium">Retry Information</p>
+                      <p className="text-sm">Attempts: {resource.retryInfo.attemptCount}/{resource.retryInfo.maxAttempts}</p>
+                      <p className="text-sm">Duration: {resource.retryInfo.totalRetryDurationMs}ms</p>
+                      <p className="text-sm">Status: {resource.retryInfo.canRetry ? 'Can retry' : 'Max retries reached'}</p>
+                      {resource.retryInfo.retryReason && (
+                        <p className="text-xs text-gray-500">Reason: {resource.retryInfo.retryReason}</p>
+                      )}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
               )}
             </div>
             {(filteredSummary?.lastValidated || validationScore > 0) && (
@@ -471,10 +489,29 @@ export default function ResourceList({
       case 'warning':
         return (
           <div className="flex items-center gap-2">
-            <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50">
-              <AlertTriangle className="h-3 w-3 mr-1" />
-              {filteredSummary?.warningCount || 0} Warning{(filteredSummary?.warningCount || 0) !== 1 ? 's' : ''}
-            </Badge>
+            <div className="flex items-center gap-2">
+              {/* Error column - empty placeholder for alignment */}
+              <div className="flex flex-col items-center min-w-[3rem]">
+              </div>
+              
+              {/* Warning column */}
+              <div className="flex flex-col items-center min-w-[3rem]">
+                <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50">
+                  <AlertTriangle className="h-3 w-3 mr-1" />
+                  {filteredSummary?.warningCount || 0}
+                </Badge>
+              </div>
+              
+              {/* Info column */}
+              <div className="flex flex-col items-center min-w-[3rem]">
+                {(filteredSummary?.informationCount || 0) > 0 && (
+                  <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50 text-xs">
+                    <Info className="h-3 w-3 mr-1" />
+                    {filteredSummary.informationCount}
+                  </Badge>
+                )}
+              </div>
+            </div>
             {(filteredSummary?.lastValidated || validationScore > 0) && (
               <Tooltip>
                 <TooltipTrigger asChild>

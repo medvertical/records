@@ -45,6 +45,7 @@ export default function ObjectContainer({
   onIssueClick,
   onValueChange,
   onDeleteNode,
+  highlightedPath,
 }: ObjectContainerProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newPropertyName, setNewPropertyName] = useState('');
@@ -83,29 +84,69 @@ export default function ObjectContainer({
 
   // Filter out internal fields
   const keys = Object.keys(value || {}).filter(key => !key.startsWith('_'));
+  
+  // Find ghost keys from validation issues that don't exist in the actual data (only in view mode)
+  const ghostKeys: string[] = [];
+  if (!isEditMode && validationIssues) {
+    const currentPathString = path.join('.');
+    
+    validationIssues.forEach(issue => {
+      const issuePath = issue.path?.toLowerCase() || '';
+      const currentPath = currentPathString.toLowerCase();
+      
+      // Check if this issue is a direct child of the current path
+      if (issuePath.startsWith(currentPath + '.') || (currentPath === '' && issuePath.indexOf('.') > 0)) {
+        // Extract the immediate child key
+        const remainingPath = currentPath ? issuePath.substring(currentPath.length + 1) : issuePath;
+        const firstSegment = remainingPath.split('.')[0];
+        
+        // Check if this key doesn't exist in actual data (case insensitive)
+        const keyExistsInData = keys.some(k => k.toLowerCase() === firstSegment.toLowerCase());
+        const alreadyInGhostList = ghostKeys.some(k => k.toLowerCase() === firstSegment.toLowerCase());
+        
+        if (!keyExistsInData && !alreadyInGhostList) {
+          // Find the original casing from the issue path
+          const pathParts = issue.path?.split('.') || [];
+          const pathDepth = currentPath ? currentPath.split('.').length : 0;
+          const originalKey = pathParts[pathDepth] || firstSegment;
+          ghostKeys.push(originalKey);
+        }
+      }
+    });
+  }
+  
+  // Combine real keys with ghost keys
+  const allKeys = [...keys, ...ghostKeys];
 
   return (
     <div>
-      {keys.map((key) => (
-        <TreeNode
-          key={key}
-          nodeKey={key}
-          value={value[key]}
-          path={path}
-          level={level}
-          resourceType={resourceType}
-          isEditMode={isEditMode}
-          expandAll={expandAll}
-          expandedPaths={expandedPaths}
-          onExpandedPathsChange={onExpandedPathsChange}
-          validationIssues={validationIssues}
-          onCategoryChange={onCategoryChange}
-          onSeverityChange={onSeverityChange}
-          onIssueClick={onIssueClick}
-          onValueChange={onValueChange}
-          onDeleteNode={onDeleteNode}
-        />
-      ))}
+      {allKeys.map((key) => {
+        const isGhost = ghostKeys.includes(key);
+        const nodeValue = isGhost ? null : value[key];
+        
+        return (
+          <TreeNode
+            key={key}
+            nodeKey={key}
+            value={nodeValue}
+            path={path}
+            level={level}
+            resourceType={resourceType}
+            isEditMode={isEditMode}
+            expandAll={expandAll}
+            expandedPaths={expandedPaths}
+            onExpandedPathsChange={onExpandedPathsChange}
+            validationIssues={validationIssues}
+            onCategoryChange={onCategoryChange}
+            onSeverityChange={onSeverityChange}
+            onIssueClick={onIssueClick}
+            onValueChange={onValueChange}
+            onDeleteNode={onDeleteNode}
+            highlightedPath={highlightedPath}
+            isGhost={isGhost}
+          />
+        );
+      })}
 
       {/* Add Property Button (edit mode only) */}
       {isEditMode && (

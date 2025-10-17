@@ -40,6 +40,7 @@ export default function ArrayContainer({
   onIssueClick,
   onValueChange,
   onDeleteNode,
+  highlightedPath,
 }: ArrayContainerProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newItemType, setNewItemType] = useState<string>('string');
@@ -72,6 +73,7 @@ export default function ArrayContainer({
           onIssueClick={onIssueClick}
           onValueChange={onValueChange}
           onDeleteNode={onDeleteNode}
+          highlightedPath={highlightedPath}
         />
       ))}
 

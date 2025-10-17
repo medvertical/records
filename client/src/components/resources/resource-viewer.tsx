@@ -65,6 +65,8 @@ interface ResourceViewerProps {
   expandedPaths: Set<string>;
   onExpandedPathsChange: (expandedPaths: Set<string>) => void;
   highlightPath?: string;
+  onSeverityClick?: (severity: string, path: string) => void;
+  validationIssues?: ValidationIssue[];
 }
 
 // ============================================================================
@@ -149,6 +151,8 @@ export default function ResourceViewer({
   expandedPaths,
   onExpandedPathsChange,
   highlightPath,
+  onSeverityClick,
+  validationIssues: externalValidationIssues,
 }: ResourceViewerProps) {
   // Use data if provided, otherwise use resource.data or resource
   // Handle different resource structures: {data: {...}} or direct resource object
@@ -241,6 +245,11 @@ export default function ResourceViewer({
   const handleSeverityChange = (severity: string, path?: string) => {
     setSelectedSeverity(severity);
     setSelectedPath(path);
+    // If both severity and path are provided, call the callback for tree → messages navigation
+    if (severity && path && onSeverityClick) {
+      console.log('[ResourceViewer] Severity clicked with path:', { severity, path });
+      onSeverityClick(severity, path);
+    }
   };
 
   // Handler for clearing all filters
@@ -417,9 +426,17 @@ export default function ResourceViewer({
     return null;
   };
 
-  const validationIssues = Array.isArray(validationResult?.issues)
-    ? (validationResult?.issues as ValidationIssue[])
-    : [];
+  // Use external validation issues if provided, otherwise use validation result
+  const validationIssues = externalValidationIssues && externalValidationIssues.length > 0
+    ? externalValidationIssues
+    : (Array.isArray(validationResult?.issues)
+      ? (validationResult?.issues as ValidationIssue[])
+      : []);
+  
+  console.log('[ResourceViewer] Using', validationIssues.length, 'validation issues for tree');
+  if (validationIssues.length > 0) {
+    console.log('[ResourceViewer] First 3 issue paths:', validationIssues.slice(0, 3).map(i => i.path));
+  }
 
   return (
     <Card>
@@ -472,6 +489,7 @@ export default function ResourceViewer({
                 expandAllTrigger={expandAllTriggeredRef.current}
                 expandedPaths={expandedPaths}
                 onExpandedPathsChange={onExpandedPathsChange}
+                highlightedPath={highlightPath}
               />
             </TabsContent>
           )}

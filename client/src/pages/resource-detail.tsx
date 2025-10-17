@@ -34,6 +34,8 @@ export default function ResourceDetail() {
   
   // Path highlighting state
   const [highlightedPath, setHighlightedPath] = useState<string | undefined>(undefined);
+  // Message highlighting state for tree → messages navigation
+  const [highlightedMessageSignatures, setHighlightedMessageSignatures] = useState<string[]>([]);
   
   // Per-resource expanded paths state - keyed by resourceId
   const [expandedPathsMap, setExpandedPathsMap] = useState<Map<string, Set<string>>>(new Map());
@@ -276,13 +278,6 @@ export default function ResourceDetail() {
     setHasChanges(true);
   }, []);
 
-  // Handle path clicks from validation messages
-  const handlePathClick = useCallback((path: string) => {
-    setHighlightedPath(path);
-    // Clear the highlight after a short delay to allow for re-highlighting
-    setTimeout(() => setHighlightedPath(undefined), 100);
-  }, []);
-  
   const { data: resource, isLoading, error } = useQuery<FhirResourceWithValidation>({
     queryKey: ["/api/fhir/resources", id, resourceType],
     queryFn: async ({ queryKey }) => {
@@ -303,6 +298,48 @@ export default function ResourceDetail() {
     enabled: !!id,
     retry: 1,
   });
+  
+  // Fetch validation messages to pass to ResourceViewer for tree badges
+  const { data: validationMessages } = useQuery({
+    queryKey: ['/api/validation/resources', resource?.resourceType, resource?.resourceId, 'messages', activeServer?.id],
+    queryFn: async () => {
+      if (!resource) return null;
+      const response = await fetch(
+        `/api/validation/resources/${resource.resourceType}/${resource.resourceId}/messages?serverId=${activeServer?.id || 1}`
+      );
+      if (!response.ok) return null;
+      return response.json();
+    },
+    enabled: !!resource?.resourceType && !!resource?.resourceId,
+    refetchInterval: 30000,
+  });
+
+  // Handle path clicks from validation messages
+  const handlePathClick = useCallback((path: string) => {
+    console.log('[ResourceDetail] Path clicked:', path);
+    // Remove resource type prefix if present (e.g., "Observation.status" -> "status")
+    const parts = path.split('.');
+    const treePath = parts.length > 0 && /^[A-Z]/.test(parts[0]) ? parts.slice(1).join('.') : path;
+    console.log('[ResourceDetail] Converted to tree path:', treePath);
+    setHighlightedPath(treePath);
+    // Clear the highlight after enough time to see it
+    setTimeout(() => {
+      console.log('[ResourceDetail] Clearing highlighted path');
+      setHighlightedPath(undefined);
+    }, 3500);
+  }, []);
+  
+  // Handle severity clicks from tree nodes
+  const handleSeverityClick = useCallback((severity: string, path: string) => {
+    console.log('[ResourceDetail] Severity clicked:', { severity, path });
+    // This will be used to highlight messages based on path and severity
+    // We'll pass this through ResourceViewer to the tree
+    // For now, we'll trigger a custom event that ValidationMessagesPerAspect can listen to
+    const event = new CustomEvent('highlight-messages', {
+      detail: { severity, path }
+    });
+    window.dispatchEvent(event);
+  }, []);
 
   if (isLoading) {
     return (
@@ -357,6 +394,40 @@ export default function ResourceDetail() {
     (validationSummary.informationCount || 0)
   ) : 0;
 
+  // Convert validation messages to the format ResourceViewer expects
+  const validationIssues = validationMessages?.aspects?.flatMap((aspect: any) =>
+    aspect.messages.map((msg: any) => {
+      // Strip resource type prefix from path (e.g., "Observation.meta.profile" -> "meta.profile")
+      const pathParts = msg.canonicalPath.split('.');
+      const pathWithoutResourceType = pathParts.length > 0 && /^[A-Z]/.test(pathParts[0]) 
+        ? pathParts.slice(1).join('.') 
+        : msg.canonicalPath;
+      
+      return {
+        id: msg.signature,
+        code: msg.code,
+        message: msg.text,
+        severity: msg.severity,
+        category: aspect.aspect,
+        path: pathWithoutResourceType,
+        location: [pathWithoutResourceType],
+      };
+    })
+  ) || [];
+  
+  console.log('[ResourceDetail] Passing', validationIssues.length, 'validation issues to ResourceViewer');
+  if (validationIssues.length > 0) {
+    const severityCounts = validationIssues.reduce((acc: any, issue: any) => {
+      acc[issue.severity] = (acc[issue.severity] || 0) + 1;
+      return acc;
+    }, {});
+    console.log('[ResourceDetail] Severity breakdown:', severityCounts);
+    console.log('[ResourceDetail] Paths after stripping resource type:', validationIssues.slice(0, 5).map((i: any) => ({
+      path: i.path,
+      severity: i.severity
+    })));
+  }
+
   return (
     <div className="p-6">
       <div className="space-y-6">
@@ -395,13 +466,19 @@ export default function ResourceDetail() {
                         ) : (
                           <Badge className="bg-red-50 text-red-600 border-red-200">
                             <XCircle className="h-3 w-3 mr-1" />
-                            {validationSummary.errorCount} Error{validationSummary.errorCount !== 1 ? 's' : ''}
+                            {validationSummary.errorCount}
                           </Badge>
                         )}
                         {validationSummary.warningCount > 0 && (
                           <Badge className="bg-orange-50 text-orange-600 border-orange-200">
                             <AlertTriangle className="h-3 w-3 mr-1" />
-                            {validationSummary.warningCount} Warning{validationSummary.warningCount !== 1 ? 's' : ''}
+                            {validationSummary.warningCount}
+                          </Badge>
+                        )}
+                        {validationSummary.informationCount > 0 && (
+                          <Badge className="bg-blue-50 text-blue-600 border-blue-200">
+                            <Info className="h-3 w-3 mr-1" />
+                            {validationSummary.informationCount}
                           </Badge>
                         )}
                       </>
@@ -466,6 +543,8 @@ export default function ResourceDetail() {
               expandedPaths={getExpandedPaths(resource.resourceId)}
               onExpandedPathsChange={(paths) => setExpandedPaths(resource.resourceId, paths)}
               highlightPath={highlightedPath}
+              onSeverityClick={handleSeverityClick}
+              validationIssues={validationIssues}
             />
           </div>
           

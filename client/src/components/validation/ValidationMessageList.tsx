@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { AlertCircle, AlertTriangle, Info, ChevronDown, ChevronRight, Copy, ExternalLink } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,8 @@ export interface ValidationMessageListProps {
   className?: string;
   // Filter messages by severity - if provided, only show messages matching these severities
   severityFilter?: ValidationSeverity[];
+  // Highlighted message IDs for navigation feedback
+  highlightedMessageIds?: string[];
 }
 
 // ============================================================================
@@ -77,15 +79,29 @@ function MessageItem({
   onMessageClick,
   onSignatureClick,
   onPathClick,
+  isHighlighted = false,
 }: { 
   message: ValidationMessage;
   onMessageClick?: (message: ValidationMessage) => void;
   onSignatureClick?: (signature: string) => void;
   onPathClick?: (path: string) => void;
+  isHighlighted?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showHighlight, setShowHighlight] = useState(isHighlighted);
   const config = SEVERITY_CONFIG[message.severity];
   const Icon = config.icon;
+  
+  // Handle highlighting with auto-fade
+  useEffect(() => {
+    if (isHighlighted) {
+      setShowHighlight(true);
+      const timer = setTimeout(() => {
+        setShowHighlight(false);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [isHighlighted]);
 
   const handleCopySignature = async () => {
     await navigator.clipboard.writeText(message.signature);
@@ -97,10 +113,12 @@ function MessageItem({
 
   return (
     <div 
+      id={`message-${message.signature}`}
       className={cn(
-        'border rounded-lg overflow-hidden transition-all',
+        'border rounded-lg overflow-hidden transition-all duration-300',
         config.borderColor,
-        config.bgColor
+        config.bgColor,
+        showHighlight && 'ring-4 ring-yellow-400 shadow-lg'
       )}
     >
       {/* Message Header */}
@@ -208,12 +226,14 @@ function MessageItem({
 
             {/* Path */}
             <button
-              className="text-sm text-gray-600 hover:text-gray-900 hover:underline font-mono break-all text-left mt-2"
+              className="text-sm text-gray-600 hover:text-blue-600 hover:underline font-mono break-all text-left mt-2 flex items-center gap-1 group"
               onClick={(e) => {
                 e.stopPropagation();
                 onPathClick?.(message.canonicalPath);
               }}
+              title="Click to navigate to this path in the tree"
             >
+              <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
               {message.canonicalPath}
             </button>
           </div>
@@ -361,6 +381,7 @@ export function ValidationMessageList({
   emptyMessage = 'No validation issues found for this aspect.',
   className,
   severityFilter,
+  highlightedMessageIds = [],
 }: ValidationMessageListProps) {
   // Filter messages by severity if filter is provided
   const filteredMessages = useMemo(() => {
@@ -432,6 +453,7 @@ export function ValidationMessageList({
               onMessageClick={onMessageClick}
               onSignatureClick={onSignatureClick}
               onPathClick={onPathClick}
+              isHighlighted={highlightedMessageIds.includes(message.signature)}
             />
           ))}
         </div>
@@ -447,6 +469,7 @@ export function ValidationMessageList({
               onMessageClick={onMessageClick}
               onSignatureClick={onSignatureClick}
               onPathClick={onPathClick}
+              isHighlighted={highlightedMessageIds.includes(message.signature)}
             />
           ))}
         </div>
@@ -462,6 +485,7 @@ export function ValidationMessageList({
               onMessageClick={onMessageClick}
               onSignatureClick={onSignatureClick}
               onPathClick={onPathClick}
+              isHighlighted={highlightedMessageIds.includes(message.signature)}
             />
           ))}
         </div>

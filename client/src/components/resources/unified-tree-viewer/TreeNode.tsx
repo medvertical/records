@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Trash2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,8 +36,11 @@ export default function TreeNode({
   onIssueClick,
   onValueChange,
   onDeleteNode,
+  highlightedPath,
+  isGhost = false,
 }: TreeNodeProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isHighlighted, setIsHighlighted] = useState(false);
   
   // Generate path string for this node
   const pathString = path.length === 0 ? nodeKey : `${path.join('.')}.${nodeKey}`;
@@ -45,15 +48,33 @@ export default function TreeNode({
   const fullPath = [...path, nodeKey];
   const isRequired = resourceType ? isFieldRequired(resourceType, nodeKey) : false;
   const valueType = getTypeName(value);
-  const isComplex = valueType === 'object' || valueType === 'array';
+  // Ghost nodes with nested validation issues should be treated as complex (expandable)
+  const hasNestedIssues = isGhost && validationIssues.some(issue => {
+    const issuePath = issue.path?.toLowerCase() || '';
+    const currentPath = pathString.toLowerCase();
+    return issuePath.startsWith(currentPath + '.') && issuePath !== currentPath;
+  });
+  const isComplex = valueType === 'object' || valueType === 'array' || hasNestedIssues;
   
   // Check if this node is expanded from shared state
   const isExpanded = expandedPaths?.has(pathString) ?? (level < 2);
   
-  // Debug logging for arrays
-  if (valueType === 'array' || (nodeKey.startsWith('[') && nodeKey.endsWith(']'))) {
-    console.log('[TreeNode]', pathString, '- isExpanded:', isExpanded, 'in expandedPaths:', expandedPaths?.has(pathString), 'type:', valueType);
-  }
+  // Debug logging for arrays (commented out to reduce noise)
+  // if (valueType === 'array' || (nodeKey.startsWith('[') && nodeKey.endsWith(']'))) {
+  //   console.log('[TreeNode]', pathString, '- isExpanded:', isExpanded, 'in expandedPaths:', expandedPaths?.has(pathString), 'type:', valueType);
+  // }
+
+  // Handle highlighting effect
+  useEffect(() => {
+    if (highlightedPath && highlightedPath === pathString) {
+      console.log('[TreeNode] Highlighting:', pathString);
+      setIsHighlighted(true);
+      const timer = setTimeout(() => {
+        setIsHighlighted(false);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedPath, pathString]);
 
   // Handle expand/collapse toggle
   const handleToggleExpanded = useCallback(() => {
@@ -66,13 +87,27 @@ export default function TreeNode({
       newExpandedPaths.add(pathString);
     }
     onExpandedPathsChange(newExpandedPaths);
-  }, [pathString, onExpandedPathsChange]);
+  }, [pathString, expandedPaths, onExpandedPathsChange]);
 
 
-  // Get validation issues for this path (view mode)
-  const pathIssues = validationIssues.filter(issue => 
-    issue.path === pathString || issue.location?.join('.') === pathString
-  );
+  // Get validation issues for this path (view mode) - case insensitive matching
+  const directPathIssues = validationIssues.filter(issue => {
+    const issuePath = issue.path?.toLowerCase() || '';
+    const locationPath = issue.location?.join('.').toLowerCase() || '';
+    const currentPath = pathString.toLowerCase();
+    return issuePath === currentPath || locationPath === currentPath;
+  });
+  
+  // If node is collapsed and complex, get all child issues for aggregation
+  const childPathIssues = (!isExpanded && isComplex) ? validationIssues.filter(issue => {
+    const issuePath = issue.path?.toLowerCase() || '';
+    const currentPath = pathString.toLowerCase();
+    // Check if issue path starts with current path (is a child)
+    return issuePath.startsWith(currentPath + '.') && issuePath !== currentPath;
+  }) : [];
+  
+  // Use direct issues when expanded, or aggregated (direct + children) when collapsed
+  const pathIssues = isExpanded ? directPathIssues : [...directPathIssues, ...childPathIssues];
   const hasIssues = pathIssues.length > 0;
   
   // Get highest severity color
@@ -108,12 +143,21 @@ export default function TreeNode({
   }, [isRequired, nodeKey, fullPath, onDeleteNode]);
 
   // Handle severity/category clicks (view mode)
-  const handleSeverityClick = (severity: string) => {
+  const handleSeverityClick = (severity: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     onSeverityChange?.(severity, pathString);
   };
   
-  const handleCategoryClick = (category: string) => {
+  const handleCategoryClick = (category: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     onCategoryChange?.(category);
+  };
+  
+  // Group issues by severity
+  const issuesBySeverity = {
+    error: pathIssues.filter(issue => issue.severity === 'error'),
+    warning: pathIssues.filter(issue => issue.severity === 'warning'),
+    info: pathIssues.filter(issue => issue.severity === 'info' || issue.severity === 'information'),
   };
 
   // Render value for view mode
@@ -142,7 +186,13 @@ export default function TreeNode({
   const renderViewValueWithHeight = (val: any): React.ReactNode => {
     return (
       <div className="flex items-center h-8">
-        {renderViewValue(val)}
+        {isGhost ? (
+          <span className="text-gray-400 italic font-mono text-xs">
+            (missing field with validation issues)
+          </span>
+        ) : (
+          renderViewValue(val)
+        )}
       </div>
     );
   };
@@ -213,11 +263,18 @@ export default function TreeNode({
   };
 
   return (
-    <div className={cn(
-      'relative transition-all duration-200',
-      !isEditMode && hasIssues && `border-l-2 ${severityColor}`
-    )}>
-      <div className="flex items-center gap-2 py-1 px-2 rounded hover:bg-gray-50 group">
+    <div 
+      id={`node-${pathString.replace(/\./g, '-').replace(/\[|\]/g, '_')}`}
+      className={cn(
+        'relative transition-all duration-300',
+        !isEditMode && hasIssues && `border-l-2 ${severityColor}`,
+        isHighlighted && 'animate-in fade-in duration-300'
+      )}
+    >
+      <div className={cn(
+        "flex items-center gap-2 py-1 px-2 rounded group transition-all duration-300",
+        isHighlighted ? 'bg-yellow-200 shadow-lg ring-2 ring-yellow-400' : 'hover:bg-gray-50'
+      )}>
         {/* Key column: 280px fixed width with indentation */}
         <div 
           className="flex items-center gap-1 flex-shrink-0 transition-all duration-200"
@@ -244,7 +301,10 @@ export default function TreeNode({
             <div className="w-5 flex-shrink-0" />
           )}
 
-          <span className="text-sm font-medium text-gray-700 truncate font-mono transition-all duration-200">
+          <span className={cn(
+            "text-sm font-medium truncate font-mono transition-all duration-200",
+            isGhost ? "text-gray-400 italic" : "text-gray-700"
+          )}>
             {nodeKey}
             {isEditMode && isRequired && (
               <span className="text-red-500 ml-1 transition-opacity duration-200">*</span>
@@ -267,26 +327,42 @@ export default function TreeNode({
         {/* Right column: badges OR delete button with smooth transition */}
         <div className="flex items-center gap-1 flex-shrink-0">
           {!isEditMode ? (
-            // View mode: validation badges
-            <div className="animate-in fade-in duration-200">
-              {hasIssues && pathIssues.map((issue, index) => (
-                <div key={issue.id || index} className="flex items-center gap-1">
-                  <Badge
-                    variant={issue.severity === 'error' ? 'destructive' : 'secondary'}
-                    className="h-5 text-xs cursor-pointer transition-all duration-150 hover:scale-105"
-                    onClick={() => handleSeverityClick(issue.severity || 'information')}
-                  >
-                    {getSeverityIcon(issue.severity || 'information')}
-                  </Badge>
-                  <Badge
-                    variant="outline"
-                    className="h-5 text-xs cursor-pointer transition-all duration-150 hover:scale-105"
-                    onClick={() => handleCategoryClick(issue.category || 'general')}
-                  >
-                    {getCategoryIcon(issue.category || 'general')}
-                  </Badge>
-                </div>
-              ))}
+            // View mode: validation badges grouped by severity
+            <div className="flex items-center gap-1 animate-in fade-in duration-200">
+              {hasIssues && (
+                <>
+                  {issuesBySeverity.error.length > 0 && (
+                    <Badge
+                      variant="destructive"
+                      className="h-6 px-2 text-xs cursor-pointer transition-all duration-150 hover:scale-110 hover:shadow-md"
+                      onClick={(e) => handleSeverityClick('error', e)}
+                      title={`${issuesBySeverity.error.length} error${issuesBySeverity.error.length > 1 ? 's' : ''}`}
+                    >
+                      {getSeverityIcon('error')} {issuesBySeverity.error.length}
+                    </Badge>
+                  )}
+                  {issuesBySeverity.warning.length > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="h-6 px-2 text-xs cursor-pointer transition-all duration-150 hover:scale-110 hover:shadow-md bg-orange-100 text-orange-700 hover:bg-orange-200"
+                      onClick={(e) => handleSeverityClick('warning', e)}
+                      title={`${issuesBySeverity.warning.length} warning${issuesBySeverity.warning.length > 1 ? 's' : ''}`}
+                    >
+                      {getSeverityIcon('warning')} {issuesBySeverity.warning.length}
+                    </Badge>
+                  )}
+                  {issuesBySeverity.info.length > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="h-6 px-2 text-xs cursor-pointer transition-all duration-150 hover:scale-110 hover:shadow-md bg-blue-100 text-blue-700 hover:bg-blue-200"
+                      onClick={(e) => handleSeverityClick('information', e)}
+                      title={`${issuesBySeverity.info.length} info message${issuesBySeverity.info.length > 1 ? 's' : ''}`}
+                    >
+                      {getSeverityIcon('information')} {issuesBySeverity.info.length}
+                    </Badge>
+                  )}
+                </>
+              )}
             </div>
           ) : (
             // Edit mode: delete button (only for optional fields)
@@ -346,11 +422,12 @@ export default function TreeNode({
                 onIssueClick={onIssueClick}
                 onValueChange={onValueChange}
                 onDeleteNode={onDeleteNode}
+                highlightedPath={highlightedPath}
               />
             )}
-            {valueType === 'object' && (
+            {(valueType === 'object' || (isGhost && isExpanded)) && (
               <ObjectContainer
-                value={value}
+                value={value || {}}
                 path={fullPath}
                 level={level + 1}
                 resourceType={resourceType}
@@ -364,6 +441,7 @@ export default function TreeNode({
                 onIssueClick={onIssueClick}
                 onValueChange={onValueChange}
                 onDeleteNode={onDeleteNode}
+                highlightedPath={highlightedPath}
               />
             )}
           </div>

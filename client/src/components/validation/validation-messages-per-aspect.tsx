@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -57,6 +58,8 @@ export function ValidationMessagesPerAspect({
   validationScore = 0,
   onPathClick,
 }: ValidationMessagesPerAspectProps) {
+  const [highlightedSignatures, setHighlightedSignatures] = useState<string[]>([]);
+  
   const { data, isLoading, error } = useQuery<ResourceMessagesResponse>({
     queryKey: ['/api/validation/resources', resourceType, resourceId, 'messages', serverId],
     queryFn: async () => {
@@ -70,6 +73,74 @@ export function ValidationMessagesPerAspect({
     },
     refetchInterval: 30000, // Poll every 30 seconds
   });
+  
+  // Listen for highlight-messages events from tree badge clicks
+  useEffect(() => {
+    const handleHighlightMessages = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { severity, path } = customEvent.detail;
+      console.log('[ValidationMessagesPerAspect] Highlighting messages:', { severity, path });
+      
+      if (!data) return;
+      
+      // Find all messages matching the path and severity
+      const matchingSignatures: string[] = [];
+      data.aspects.forEach(aspect => {
+        aspect.messages.forEach(message => {
+          // Match by path - case insensitive
+          const messagePath = message.canonicalPath.toLowerCase();
+          const searchPath = path.toLowerCase();
+          
+          // Try different path variations
+          const pathMatches = messagePath === searchPath || 
+            messagePath.endsWith('.' + searchPath) ||
+            searchPath.endsWith('.' + messagePath);
+          
+          // Match severity - case insensitive
+          const messageSeverity = message.severity.toLowerCase();
+          const searchSeverity = severity.toLowerCase();
+          const severityMatches = messageSeverity === searchSeverity || 
+            (searchSeverity === 'information' && messageSeverity === 'information') ||
+            (searchSeverity === 'info' && messageSeverity === 'information') ||
+            (searchSeverity === 'information' && messageSeverity === 'info');
+          
+          if (pathMatches && severityMatches) {
+            console.log('[ValidationMessagesPerAspect] Match found:', { 
+              message: message.text.substring(0, 50),
+              signature: message.signature,
+              messagePath: message.canonicalPath,
+              searchPath: path,
+              messageSeverity: message.severity,
+              searchSeverity: severity
+            });
+            matchingSignatures.push(message.signature);
+          }
+        });
+      });
+      
+      if (matchingSignatures.length > 0) {
+        setHighlightedSignatures(matchingSignatures);
+        
+        // Scroll to first message
+        setTimeout(() => {
+          const firstElement = document.querySelector(`[data-signature="${matchingSignatures[0]}"]`);
+          if (firstElement) {
+            firstElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+        
+        // Clear highlights after 3.5s
+        setTimeout(() => {
+          setHighlightedSignatures([]);
+        }, 3500);
+      }
+    };
+    
+    window.addEventListener('highlight-messages', handleHighlightMessages);
+    return () => {
+      window.removeEventListener('highlight-messages', handleHighlightMessages);
+    };
+  }, [data, resourceType]);
 
   if (isLoading) {
     return (
@@ -163,21 +234,20 @@ export function ValidationMessagesPerAspect({
                   <AccordionContent className="text-left">
                     <div className="space-y-3 pt-2 text-left">
                       {aspectData.messages.map((message, msgIndex) => {
-                        const isHighlighted = highlightSignature && message.signature === highlightSignature;
+                        const isHighlighted = (highlightSignature && message.signature === highlightSignature) ||
+                          highlightedSignatures.includes(message.signature);
                         
                         return (
                           <Alert
                             key={msgIndex}
                             variant={getSeverityVariant(message.severity as SeverityLevel)}
-                            className={`text-left ${isHighlighted ? 'ring-2 ring-primary ring-offset-2 animate-pulse' : ''}`}
+                            className={`text-left transition-all duration-300 ${isHighlighted ? 'ring-4 ring-yellow-400 shadow-lg' : ''}`}
+                            data-signature={message.signature}
                           >
                             <div className="flex items-start gap-2 text-left">
                               <SeverityIcon severity={message.severity as SeverityLevel} />
                               <div className="flex-1 space-y-1 text-left">
                                 <div className="flex items-center justify-start gap-2 text-left">
-                                  <Badge variant={getSeverityVariant(message.severity as SeverityLevel)} className="text-xs">
-                                    {message.severity}
-                                  </Badge>
                                   {message.code && (
                                     <code className="text-xs bg-muted px-2 py-0.5 rounded">
                                       {message.code}

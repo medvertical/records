@@ -29,6 +29,8 @@ export interface UnifiedTreeViewerProps {
   // State management
   expandedPaths?: Set<string>;
   onExpandedPathsChange?: (expandedPaths: Set<string>) => void;
+  // Highlighting
+  highlightedPath?: string;
 }
 
 export interface TreeNodeProps {
@@ -51,6 +53,10 @@ export interface TreeNodeProps {
   // Edit mode props
   onValueChange?: (path: string[], newValue: any) => void;
   onDeleteNode?: (path: string[]) => void;
+  // Highlighting
+  highlightedPath?: string;
+  // Ghost node (validation path that doesn't exist in data)
+  isGhost?: boolean;
 }
 
 export interface ContainerProps {
@@ -66,6 +72,7 @@ export interface ContainerProps {
   onIssueClick?: (issueId: string) => void;
   onValueChange?: (path: string[], newValue: any) => void;
   onDeleteNode?: (path: string[]) => void;
+  highlightedPath?: string;
 }
 
 export interface ArrayContainerProps extends ContainerProps {

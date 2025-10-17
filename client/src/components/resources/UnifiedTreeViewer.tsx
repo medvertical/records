@@ -21,6 +21,7 @@ export default function UnifiedTreeViewer({
   expandAllTrigger = 0,
   expandedPaths: externalExpandedPaths,
   onExpandedPathsChange: externalOnExpandedPathsChange,
+  highlightedPath,
 }: UnifiedTreeViewerProps) {
   // Internal state for expanded paths (fallback if not provided externally)
   const [internalExpandedPaths, setInternalExpandedPaths] = useState<Set<string>>(new Set());
@@ -142,17 +143,9 @@ export default function UnifiedTreeViewer({
           onIssueClick={onIssueClick}
           onValueChange={handleValueChange}
           onDeleteNode={handleDeleteNode}
+          highlightedPath={highlightedPath}
         />
       ))}
-      
-      {/* Summary for view mode */}
-      {!isEditMode && validationResults.length > 0 && (
-        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-          <div className="text-sm text-gray-600">
-            <strong>{validationResults.length}</strong> validation issue{validationResults.length !== 1 ? 's' : ''} found
-          </div>
-        </div>
-      )}
     </div>
   );
 }

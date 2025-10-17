@@ -63,6 +63,8 @@ export function ResourceDetailSplitPane({
 }: ResourceDetailSplitPaneProps) {
   const [selectedPath, setSelectedPath] = useState<string | undefined>(highlightedPath);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  const [highlightedMessageIds, setHighlightedMessageIds] = useState<string[]>([]);
+  const [highlightedTreePath, setHighlightedTreePath] = useState<string | undefined>();
 
   // Convert validation messages to legacy format for tree viewer
   const validationIssues = useMemo(() => {
@@ -77,23 +79,36 @@ export function ResourceDetailSplitPane({
     }));
   }, [messages, aspect]);
 
-  // Handle tree node click - find and scroll to corresponding message
-  const handleTreeNodeClick = useCallback((path: string) => {
+  // Handle tree node click - find and scroll to corresponding messages
+  const handleTreeNodeClick = useCallback((severity: string, path: string) => {
     setSelectedPath(path);
     
-    // Find message with matching path
-    const matchingMessage = messages.find(msg => {
+    // Find all messages with matching path and severity
+    const matchingMessages = messages.filter(msg => {
       const treePath = mapCanonicalPathToTreePath(msg.canonicalPath);
-      return treePath === path || msg.canonicalPath === path;
+      const pathMatches = treePath === path || msg.canonicalPath === path;
+      const severityMatches = msg.severity === severity || 
+        (severity === 'information' && msg.severity === 'information');
+      return pathMatches && severityMatches;
     });
 
-    if (matchingMessage) {
-      // Scroll to message
-      const messageElement = document.getElementById(`message-${matchingMessage.signature}`);
-      messageElement?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (matchingMessages.length > 0) {
+      // Set highlighted messages
+      const messageSignatures = matchingMessages.map(msg => msg.signature);
+      setHighlightedMessageIds(messageSignatures);
       
-      // Trigger message click callback
-      onMessageClick?.(matchingMessage);
+      // Scroll to first message
+      const firstMessage = matchingMessages[0];
+      const messageElement = document.getElementById(`message-${firstMessage.signature}`);
+      messageElement?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      
+      // Clear highlight after 3.5 seconds
+      setTimeout(() => {
+        setHighlightedMessageIds([]);
+      }, 3500);
+      
+      // Trigger message click callback for first message
+      onMessageClick?.(firstMessage);
     }
   }, [messages, onMessageClick]);
 
@@ -121,12 +136,51 @@ export function ResourceDetailSplitPane({
     onMessageClick?.(message);
   }, [expandedPaths, onMessageClick]);
 
-  // Handle path click - highlight in tree and messages
+  // Handle path click - highlight in tree and expand to path
   const handlePathClickInternal = useCallback((path: string) => {
     const treePath = mapCanonicalPathToTreePath(path);
     setSelectedPath(treePath);
+    
+    console.log('[ResourceDetailSplitPane] Path click:', { 
+      originalPath: path, 
+      treePath,
+      expandedPaths: Array.from(expandedPaths)
+    });
+    
+    // Highlight tree node
+    setHighlightedTreePath(treePath);
+    
+    // Expand all parent paths, handling array indices
+    const parts = treePath.split(/\.(?![^\[]*\])/); // Split by . but not inside []
+    const pathsToExpand = new Set(expandedPaths);
+    let currentPath = '';
+    for (const part of parts) {
+      currentPath = currentPath ? `${currentPath}.${part}` : part;
+      pathsToExpand.add(currentPath);
+      console.log('[ResourceDetailSplitPane] Adding to expand:', currentPath);
+    }
+    setExpandedPaths(pathsToExpand);
+    
+    // Scroll to tree node after a short delay to allow expansion
+    setTimeout(() => {
+      const nodeId = `node-${treePath.replace(/\./g, '-').replace(/\[|\]/g, '_')}`;
+      console.log('[ResourceDetailSplitPane] Looking for node ID:', nodeId);
+      const nodeElement = document.getElementById(nodeId);
+      if (nodeElement) {
+        console.log('[ResourceDetailSplitPane] Found node, scrolling');
+        nodeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        console.warn('[ResourceDetailSplitPane] Node not found:', nodeId);
+      }
+    }, 300);
+    
+    // Clear highlight after 3.5 seconds (longer to see it)
+    setTimeout(() => {
+      setHighlightedTreePath(undefined);
+    }, 3500);
+    
     onPathClick?.(path);
-  }, [onPathClick]);
+  }, [expandedPaths, onPathClick]);
 
   return (
     <div className={cn('h-full border rounded-lg overflow-hidden bg-white', className)}>
@@ -152,10 +206,13 @@ export function ResourceDetailSplitPane({
               resourceType={resource?.resourceType}
               isEditMode={false}
               validationResults={validationIssues}
-              onSeverityChange={(_severity, path) => {
-                if (path) handleTreeNodeClick(path);
+              onSeverityChange={(severity, path) => {
+                if (path && severity) handleTreeNodeClick(severity, path);
               }}
               expandAll={false}
+              expandedPaths={expandedPaths}
+              onExpandedPathsChange={setExpandedPaths}
+              highlightedPath={highlightedTreePath}
             />
           </div>
         </Panel>
@@ -190,6 +247,8 @@ export function ResourceDetailSplitPane({
               onMessageClick={handleMessageClickInternal}
               onSignatureClick={onSignatureClick}
               onPathClick={handlePathClickInternal}
+              highlightedMessageIds={highlightedMessageIds}
+              severityFilter={['error', 'warning', 'information']}
             />
           </div>
         </Panel>

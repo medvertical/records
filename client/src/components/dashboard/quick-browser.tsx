@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Search, ExternalLink, ChevronRight, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import { Search, ExternalLink, ChevronRight, CheckCircle, XCircle, AlertTriangle, Info } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 
@@ -62,19 +62,85 @@ export default function QuickBrowser({ resourceCounts }: QuickBrowserProps) {
     
     if (validationSummary.hasErrors) {
       return (
-        <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50 text-xs">
-          <XCircle className="h-3 w-3 mr-1" />
-          {validationSummary.errorCount} Error{validationSummary.errorCount !== 1 ? 's' : ''}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {/* Error column */}
+          <div className="flex flex-col items-center min-w-[3rem]">
+            <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50 text-xs">
+              <XCircle className="h-3 w-3 mr-1" />
+              {validationSummary.errorCount}
+            </Badge>
+          </div>
+          
+          {/* Warning column */}
+          <div className="flex flex-col items-center min-w-[3rem]">
+            {validationSummary.hasWarnings && (
+              <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
+                <AlertTriangle className="h-3 w-3 mr-1" />
+                {validationSummary.warningCount}
+              </Badge>
+            )}
+          </div>
+          
+          {/* Info column */}
+          <div className="flex flex-col items-center min-w-[3rem]">
+            {validationSummary.informationCount > 0 && (
+              <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50 text-xs">
+                <Info className="h-3 w-3 mr-1" />
+                {validationSummary.informationCount}
+              </Badge>
+            )}
+          </div>
+        </div>
       );
     }
     
     if (validationSummary.hasWarnings) {
       return (
-        <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
-          <AlertTriangle className="h-3 w-3 mr-1" />
-          {validationSummary.warningCount} Warning{validationSummary.warningCount !== 1 ? 's' : ''}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {/* Error column - empty placeholder for alignment */}
+          <div className="flex flex-col items-center min-w-[3rem]">
+          </div>
+          
+          {/* Warning column */}
+          <div className="flex flex-col items-center min-w-[3rem]">
+            <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              {validationSummary.warningCount}
+            </Badge>
+          </div>
+          
+          {/* Info column */}
+          <div className="flex flex-col items-center min-w-[3rem]">
+            {validationSummary.informationCount > 0 && (
+              <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50 text-xs">
+                <Info className="h-3 w-3 mr-1" />
+                {validationSummary.informationCount}
+              </Badge>
+            )}
+          </div>
+        </div>
+      );
+    }
+    
+    if (validationSummary.informationCount > 0) {
+      return (
+        <div className="flex items-center gap-2">
+          {/* Error column - empty placeholder for alignment */}
+          <div className="flex flex-col items-center min-w-[3rem]">
+          </div>
+          
+          {/* Warning column - empty placeholder for alignment */}
+          <div className="flex flex-col items-center min-w-[3rem]">
+          </div>
+          
+          {/* Info column */}
+          <div className="flex flex-col items-center min-w-[3rem]">
+            <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50 text-xs">
+              <Info className="h-3 w-3 mr-1" />
+              {validationSummary.informationCount}
+            </Badge>
+          </div>
+        </div>
       );
     }
     
