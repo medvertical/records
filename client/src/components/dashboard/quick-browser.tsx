@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search, ExternalLink, ChevronRight, CheckCircle, XCircle, AlertTriangle, Info } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { getShortId } from "@/lib/resource-utils";
 
 interface QuickBrowserProps {
   resourceCounts?: Record<string, number>;
@@ -238,7 +239,7 @@ export default function QuickBrowser({ resourceCounts }: QuickBrowserProps) {
                     <div className="w-2 h-2 bg-fhir-success rounded-full" />
                     <div>
                       <p className="text-sm font-medium text-gray-900">
-                        {resource.resourceType}/{resource.id}
+                        {resource.resourceType}/{getShortId(resource.id)}
                       </p>
                       <p className="text-xs text-gray-500">
                         {resource.resourceType === 'Patient' && resource.name?.[0] 

@@ -33,6 +33,7 @@ import type { ValidationProgress, EnhancedValidationSummary } from '@shared/type
 import { getFilteredValidationSummary } from '@/lib/validation-filtering-utils';
 import { getShortId, getShortReference } from "@/lib/resource-utils";
 import ProfileBadge from "@/components/resources/ProfileBadge";
+import { getResourceTypeIcon } from "@/lib/resource-type-icons";
 
 // Extended types for this component
 interface ExtendedValidationProgress extends ValidationProgress {
@@ -694,9 +695,21 @@ export default function ResourceList({
                             {resource.resourceType}/{getShortId(resource.id)}
                           </h3>
                           <div className="flex items-center space-x-2">
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant="outline" className="text-xs inline-flex items-center gap-1">
+                              {(() => {
+                                const Icon = getResourceTypeIcon(resource.resourceType);
+                                return <Icon className="h-3 w-3" />;
+                              })()}
                               {resource.resourceType}
                             </Badge>
+                            {/* Display profile badges */}
+                            {(resource.meta?.profile || resource.data?.meta?.profile) && (
+                              <ProfileBadge 
+                                profiles={resource.meta?.profile || resource.data?.meta?.profile || []}
+                                size="sm"
+                                maxDisplay={2}
+                              />
+                            )}
                             {validationStatus === 'not-validated' && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -709,23 +722,14 @@ export default function ResourceList({
                             )}
                           </div>
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                          {getResourceDisplayName(resource)}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
+                            {getResourceDisplayName(resource)}
+                          </p>
+                        </div>
                         <p className="text-xs text-gray-500 dark:text-gray-500 truncate mt-1">
                           {getResourceSubtext(resource)}
                         </p>
-                        {/* Display profile badges */}
-                        {(resource.meta?.profile || resource.data?.meta?.profile) && (
-                          <div className="mt-2">
-                            <ProfileBadge 
-                              profiles={resource.meta?.profile || resource.data?.meta?.profile || []}
-                              size="sm"
-                              variant="outline"
-                              maxDisplay={2}
-                            />
-                          </div>
-                        )}
                       </div>
                     </div>
 

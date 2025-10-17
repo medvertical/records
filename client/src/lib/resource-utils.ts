@@ -3,15 +3,25 @@
  */
 
 /**
- * Extracts the first 8 characters from a resource ID for display purposes
- * @param id - The full resource ID (e.g., "4f8ccf9d-db5b-4649-900a-873edaa12a11")
- * @returns The shortened ID (e.g., "4f8ccf9d")
+ * Extracts a short identifier for display purposes
+ * - For UUIDs: returns only the first segment (before first hyphen)
+ * - For non-UUIDs: returns the full ID
+ * @param id - The full resource ID (e.g., "4f8ccf9d-db5b-4649-900a-873edaa12a11" or "test-mii-invalid")
+ * @returns The shortened ID (e.g., "4f8ccf9d") or full ID for non-UUIDs (e.g., "test-mii-invalid")
  */
 export function getShortId(id: string | null | undefined): string {
   if (!id) return '';
   
-  // Return first 8 characters, or the full string if it's shorter than 8 characters
-  return id.length >= 8 ? id.substring(0, 8) : id;
+  // Check if it's a UUID (8-4-4-4-12 format)
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  
+  if (uuidPattern.test(id)) {
+    // For UUIDs, return only the first segment (before first hyphen)
+    return id.split('-')[0];
+  }
+  
+  // For non-UUIDs, return the full ID
+  return id;
 }
 
 /**

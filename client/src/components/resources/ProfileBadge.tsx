@@ -1,68 +1,39 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { FileText } from 'lucide-react';
+import { FileText, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getProfileName } from '@/lib/profile-name-resolver';
 
 export interface ProfileBadgeProps {
-  profiles: string[];
+  profiles: string | string[]; // Single URL or array of URLs
   maxDisplay?: number; // Max number of profiles to show before "+N more"
   size?: 'sm' | 'md';
-  variant?: 'default' | 'outline';
   className?: string;
 }
 
 /**
- * Extracts the last segment of a profile URL for display
- * e.g., "http://hl7.org/fhir/us/core/StructureDefinition/us-core-patient" -> "us-core-patient"
- */
-function extractProfileName(profileUrl: string): string {
-  try {
-    // Remove trailing slash if present
-    const cleanUrl = profileUrl.replace(/\/$/, '');
-    // Get the last segment after the final slash
-    const lastSegment = cleanUrl.split('/').pop() || '';
-    
-    // If it's a StructureDefinition URL, remove the "StructureDefinition/" part
-    if (lastSegment.includes('StructureDefinition')) {
-      const parts = cleanUrl.split('/');
-      const structureDefIndex = parts.indexOf('StructureDefinition');
-      if (structureDefIndex !== -1 && structureDefIndex < parts.length - 1) {
-        return parts[structureDefIndex + 1];
-      }
-    }
-    
-    return lastSegment || profileUrl;
-  } catch (error) {
-    // Fallback to original URL if parsing fails
-    return profileUrl;
-  }
-}
-
-/**
- * ProfileBadge component for displaying FHIR profile information
+ * Unified ProfileBadge component for displaying FHIR profiles
  * 
  * Features:
- * - Extracts readable profile names from URLs
- * - Shows tooltip with full URL on hover
- * - Supports truncation with "+N more" for long lists
- * - Different sizes for different contexts
- * - Handles empty/null/undefined profile arrays gracefully
+ * - Supports single profile URL or array of profile URLs
+ * - Fetches human-readable profile names using profile resolver
+ * - Two size variants: sm (validation messages) and md (resource headers)
+ * - Enhanced tooltips with profile name, URL, and description
+ * - Clickable links to profile documentation
+ * - Purple styling to indicate FHIR profiles
  */
 export function ProfileBadge({ 
   profiles, 
   maxDisplay = 3, 
-  size = 'sm', 
-  variant = 'outline',
+  size = 'sm',
   className 
 }: ProfileBadgeProps) {
-  // Handle empty or invalid profiles
-  if (!profiles || !Array.isArray(profiles) || profiles.length === 0) {
-    return null;
-  }
-
+  // Normalize input to always be an array
+  const profileArray = Array.isArray(profiles) ? profiles : [profiles];
+  
   // Filter out empty/null/undefined profile URLs
-  const validProfiles = profiles.filter(profile => 
+  const validProfiles = profileArray.filter(profile => 
     profile && typeof profile === 'string' && profile.trim().length > 0
   );
 
@@ -78,64 +49,51 @@ export function ProfileBadge({
   const getSizeClasses = () => {
     switch (size) {
       case 'sm':
-        return 'text-xs px-2 py-0.5';
+        return {
+          text: 'text-xs',
+          padding: 'px-2 py-0.5',
+          iconSize: 'h-3 w-3',
+          gap: 'gap-1',
+        };
       case 'md':
-        return 'text-sm px-2.5 py-1';
+        return {
+          text: 'text-sm',
+          padding: 'px-2.5 py-1',
+          iconSize: 'h-4 w-4',
+          gap: 'gap-1.5',
+        };
       default:
-        return 'text-xs px-2 py-0.5';
+        return {
+          text: 'text-xs',
+          padding: 'px-2 py-0.5',
+          iconSize: 'h-3 w-3',
+          gap: 'gap-1',
+        };
     }
   };
 
-  const getVariantClasses = () => {
-    switch (variant) {
-      case 'default':
-        return 'bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-200';
-      case 'outline':
-        return 'border-purple-300 text-purple-700 hover:bg-purple-50';
-      default:
-        return 'border-purple-300 text-purple-700 hover:bg-purple-50';
-    }
-  };
+  const sizeClasses = getSizeClasses();
 
   return (
     <div className={cn('flex items-center gap-1 flex-wrap', className)}>
-      {profilesToShow.map((profileUrl, index) => {
-        const profileName = extractProfileName(profileUrl);
-        
-        return (
-          <Tooltip key={index}>
-            <TooltipTrigger asChild>
-              <Badge
-                variant={variant}
-                className={cn(
-                  'flex items-center gap-1 font-mono',
-                  getSizeClasses(),
-                  getVariantClasses()
-                )}
-              >
-                <FileText className="h-3 w-3" />
-                <span>{profileName}</span>
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              <div className="max-w-xs">
-                <p className="font-medium">FHIR Profile</p>
-                <p className="text-sm break-all">{profileUrl}</p>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        );
-      })}
+      {profilesToShow.map((profileUrl, index) => (
+        <SingleProfileBadge
+          key={index}
+          profileUrl={profileUrl}
+          size={size}
+          sizeClasses={sizeClasses}
+        />
+      ))}
       
       {needsTruncation && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Badge
-              variant={variant}
               className={cn(
-                'flex items-center gap-1 font-mono',
-                getSizeClasses(),
-                getVariantClasses(),
+                'flex items-center font-mono bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 transition-colors',
+                sizeClasses.text,
+                sizeClasses.padding,
+                sizeClasses.gap,
                 'opacity-75'
               )}
             >
@@ -144,18 +102,140 @@ export function ProfileBadge({
           </TooltipTrigger>
           <TooltipContent>
             <div className="max-w-xs">
-              <p className="font-medium">Additional Profiles</p>
+              <p className="font-medium mb-1">Additional Profiles</p>
               <div className="space-y-1">
                 {validProfiles.slice(maxDisplay).map((profileUrl, index) => (
-                  <p key={index} className="text-xs break-all">
-                    {extractProfileName(profileUrl)}
-                  </p>
+                  <RemainingProfileItem key={index} profileUrl={profileUrl} />
                 ))}
               </div>
             </div>
           </TooltipContent>
         </Tooltip>
       )}
+    </div>
+  );
+}
+
+/**
+ * Single profile badge with async name resolution
+ */
+function SingleProfileBadge({ 
+  profileUrl, 
+  size,
+  sizeClasses 
+}: { 
+  profileUrl: string; 
+  size: 'sm' | 'md';
+  sizeClasses: any;
+}) {
+  const [profileName, setProfileName] = useState<string>('');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchName() {
+      try {
+        const name = await getProfileName(profileUrl);
+        if (isMounted) {
+          setProfileName(name);
+        }
+      } catch (error) {
+        console.error('Failed to get profile name:', error);
+        // Fallback to last segment of URL
+        const parts = profileUrl.split('/');
+        const lastPart = parts[parts.length - 1];
+        const fallbackName = lastPart.split('|')[0];
+        if (isMounted) {
+          setProfileName(fallbackName);
+        }
+      }
+    }
+
+    fetchName();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [profileUrl]);
+
+  const displayName = profileName || 'Profile';
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            window.open(profileUrl, '_blank', 'noopener,noreferrer');
+          }}
+          role="link"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.stopPropagation();
+              e.preventDefault();
+              window.open(profileUrl, '_blank', 'noopener,noreferrer');
+            }
+          }}
+          className={cn(
+            'inline-flex items-center font-medium bg-purple-50 text-purple-700 border border-purple-200 rounded-md hover:bg-purple-100 transition-colors cursor-pointer',
+            sizeClasses.text,
+            sizeClasses.padding,
+            sizeClasses.gap
+          )}
+        >
+          <FileText className={cn(sizeClasses.iconSize, 'flex-shrink-0')} />
+          <span>{displayName}</span>
+          <ExternalLink className={cn(sizeClasses.iconSize, 'flex-shrink-0')} />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-md">
+        <div className="space-y-1">
+          <p className="font-medium">{profileName || 'FHIR Profile'}</p>
+          <p className="text-xs break-all text-muted-foreground">{profileUrl}</p>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/**
+ * Remaining profile item for "+N more" tooltip
+ */
+function RemainingProfileItem({ profileUrl }: { profileUrl: string }) {
+  const [profileName, setProfileName] = useState<string>('');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchName() {
+      try {
+        const name = await getProfileName(profileUrl);
+        if (isMounted) {
+          setProfileName(name);
+        }
+      } catch (error) {
+        const parts = profileUrl.split('/');
+        const lastPart = parts[parts.length - 1];
+        const fallbackName = lastPart.split('|')[0];
+        if (isMounted) {
+          setProfileName(fallbackName);
+        }
+      }
+    }
+
+    fetchName();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [profileUrl]);
+
+  return (
+    <div className="text-xs">
+      <p className="font-medium">{profileName || 'Profile'}</p>
+      <p className="text-muted-foreground break-all">{profileUrl}</p>
     </div>
   );
 }

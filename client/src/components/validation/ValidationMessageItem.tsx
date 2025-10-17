@@ -3,6 +3,23 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { SeverityIcon, getSeverityVariant } from '@/components/ui/severity-icon';
 import type { SeverityLevel } from '@/components/ui/severity-icon';
+import { getShortId } from '@/lib/resource-utils';
+import { ProfileBadge } from '@/components/resources/ProfileBadge';
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Extract profile URL from validation message text
+ * Looks for URLs matching the pattern: http(s)://...StructureDefinition/...
+ */
+function extractProfileUrl(messageText: string): string | null {
+  // Match URLs containing StructureDefinition (FHIR profile URLs)
+  const profileUrlPattern = /(https?:\/\/[^\s]+StructureDefinition\/[^\s\)'"]+(?:\|[^\s\)'"]+)?)/i;
+  const match = messageText.match(profileUrlPattern);
+  return match ? match[1] : null;
+}
 
 // ============================================================================
 // Types
@@ -36,6 +53,9 @@ export function ValidationMessageItem({
   onPathClick,
   showResourceInfo = false,
 }: ValidationMessageItemProps) {
+  // Extract profile URL from message text if present
+  const profileUrl = extractProfileUrl(message.text);
+  
   return (
     <Alert
       variant={getSeverityVariant(message.severity as SeverityLevel)}
@@ -77,6 +97,14 @@ export function ValidationMessageItem({
           
           {/* Metadata */}
           <div className="text-xs text-muted-foreground space-y-1 text-left">
+            {/* Profile URL - shown if this is a profile violation */}
+            {profileUrl && (
+              <div className="text-left flex items-center gap-1">
+                <span>Profile:</span>
+                <ProfileBadge profiles={profileUrl} size="sm" />
+              </div>
+            )}
+            
             {/* Path */}
             <div className="text-left">
               Path: 
@@ -101,7 +129,7 @@ export function ValidationMessageItem({
             {/* Resource Info - only shown in resource browser context */}
             {showResourceInfo && message.resourceType && message.resourceId && (
               <div className="text-left">
-                Resource: <code className="bg-muted px-1 py-0.5 rounded">{message.resourceType}/{message.resourceId}</code>
+                Resource: <code className="bg-muted px-1 py-0.5 rounded">{message.resourceType}/{getShortId(message.resourceId)}</code>
               </div>
             )}
           </div>

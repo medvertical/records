@@ -17,6 +17,13 @@ import { CheckCircle, XCircle, ArrowLeft, AlertCircle, AlertTriangle, Info, Sett
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import ProfileBadge from "@/components/resources/ProfileBadge";
+import { getShortId } from "@/lib/resource-utils";
+
+// Helper function to check if a string is a UUID
+const isUUID = (str: string): boolean => {
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidPattern.test(str);
+};
 
 export default function ResourceDetail() {
   const { id } = useParams<{ id: string }>();
@@ -47,6 +54,11 @@ export default function ResourceDetail() {
   
   // Set expanded paths for current resource
   const setExpandedPaths = useCallback((resourceId: string, expandedPaths: Set<string>) => {
+    console.log('[ResourceDetail] setExpandedPaths called:', {
+      resourceId,
+      pathCount: expandedPaths.size,
+      paths: Array.from(expandedPaths)
+    });
     setExpandedPathsMap(prev => {
       const newMap = new Map(prev);
       newMap.set(resourceId, expandedPaths);
@@ -486,10 +498,21 @@ export default function ResourceDetail() {
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  {resource.resourceType}/{resource.resourceId.substring(0, 8)}
-                </h1>
-                <div className="flex items-center space-x-4 mt-2">
+                <div className="flex items-center gap-2 mb-2">
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {isUUID(resource.resourceId) 
+                      ? `${resource.resourceType}/${getShortId(resource.resourceId)}` 
+                      : `${resource.resourceType}/${resource.resourceId}`}
+                  </h1>
+                  {/* Display declared profiles */}
+                  {(resource.data?.meta?.profile || resource.meta?.profile) && (
+                    <ProfileBadge 
+                      profiles={resource.data?.meta?.profile || resource.meta?.profile || []}
+                      size="md"
+                    />
+                  )}
+                </div>
+                <div className="flex items-center space-x-4">
                   <div className="flex items-center space-x-2">
                     {/* Show revalidating badge when validation is in progress */}
                     {(isRevalidating || (resource as any)._isRevalidating) && (
@@ -537,17 +560,6 @@ export default function ResourceDetail() {
                     </span>
                   )}
                 </div>
-                {/* Display declared profiles */}
-                {(resource.data?.meta?.profile || resource.meta?.profile) && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-sm text-gray-500">Profiles:</span>
-                    <ProfileBadge 
-                      profiles={resource.data?.meta?.profile || resource.meta?.profile || []}
-                      size="md"
-                      variant="outline"
-                    />
-                  </div>
-                )}
               </div>
             </div>
             <div className="flex items-center space-x-4">

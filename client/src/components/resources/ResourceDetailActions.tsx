@@ -48,7 +48,7 @@ export function ResourceDetailActions({
           // View mode: Show Edit and Revalidate buttons
           <>
             <Button
-              variant="default"
+              variant="outline"
               size="sm"
               onClick={onEdit}
               disabled={!activeServer}

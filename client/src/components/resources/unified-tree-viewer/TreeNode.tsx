@@ -120,12 +120,24 @@ export default function TreeNode({
 
   // Handle expand/collapse toggle
   const handleToggleExpanded = useCallback(() => {
-    if (!onExpandedPathsChange || !expandedPaths) return;
+    console.log('[TreeNode] Toggle clicked:', {
+      pathString,
+      hasExpandedPaths: !!expandedPaths,
+      hasOnExpandedPathsChange: !!onExpandedPathsChange,
+      currentlyExpanded: expandedPaths?.has(pathString)
+    });
+    
+    if (!onExpandedPathsChange || !expandedPaths) {
+      console.log('[TreeNode] Cannot toggle - missing props');
+      return;
+    }
     
     const newExpandedPaths = new Set(expandedPaths);
     if (expandedPaths.has(pathString)) {
+      console.log('[TreeNode] Collapsing:', pathString);
       newExpandedPaths.delete(pathString);
     } else {
+      console.log('[TreeNode] Expanding:', pathString);
       newExpandedPaths.add(pathString);
     }
     onExpandedPathsChange(newExpandedPaths);

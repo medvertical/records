@@ -53,11 +53,15 @@ export default function UnifiedTreeViewer({
       newExpandedPaths.add(rootResourceType);
       
       // When expandAll is true, expand all complex nodes
+      // Note: We need to include the root resource type in all paths to match TreeNode's pathString format
       const expandAllPaths = (obj: any, path: string[] = []) => {
         Object.entries(obj).forEach(([key, value]) => {
           if (key.startsWith('_') || key === 'resourceId') return; // Skip internal fields
           
-          const currentPath = path.length === 0 ? key : `${path.join('.')}.${key}`;
+          // Build path with resource type prefix
+          const currentPath = path.length === 0 
+            ? `${rootResourceType}.${key}` 
+            : `${path.join('.')}.${key}`;
           const valueType = typeof value;
           
           // Add complex types to expanded paths
@@ -67,7 +71,7 @@ export default function UnifiedTreeViewer({
             
             // Recursively expand nested objects/arrays
             if (valueType === 'object' && value !== null && !Array.isArray(value)) {
-              expandAllPaths(value, [...path, key]);
+              expandAllPaths(value, path.length === 0 ? [rootResourceType, key] : [...path, key]);
             } else if (Array.isArray(value)) {
               console.log('[UnifiedTreeViewer] Processing array:', currentPath, 'length:', value.length);
               value.forEach((item, index) => {
@@ -77,7 +81,7 @@ export default function UnifiedTreeViewer({
                 newExpandedPaths.add(arrayElementPath);
                 // Recurse into objects and arrays
                 if (typeof item === 'object' && item !== null) {
-                  expandAllPaths(item, [...path, key, `[${index}]`]);
+                  expandAllPaths(item, path.length === 0 ? [rootResourceType, key, `[${index}]`] : [...path, key, `[${index}]`]);
                 }
               });
             }
