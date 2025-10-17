@@ -279,13 +279,13 @@ export default function TreeNode({
       ref={nodeRef}
       id={`node-${pathString.replace(/\./g, '-').replace(/\[|\]/g, '_')}`}
       className={cn(
-        'relative transition-all duration-300',
-        !isEditMode && hasIssues && `border-l-2 ${severityColor}`,
+        'relative transition-all duration-300 mb-1 rounded-md',
+        !isEditMode && hasIssues && `border-l-4 ${severityColor}`,
         isHighlighted && 'animate-in fade-in duration-300'
       )}
     >
       <div className={cn(
-        "flex items-center gap-2 py-1 px-2 rounded group transition-all duration-300",
+        "flex items-center gap-2 py-1.5 px-2 group transition-all duration-300",
         isHighlighted ? 'bg-yellow-100' : 'hover:bg-gray-50'
       )}>
         {/* Key column: 280px fixed width with indentation */}
