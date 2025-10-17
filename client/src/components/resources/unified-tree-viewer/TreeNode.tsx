@@ -67,10 +67,22 @@ export default function TreeNode({
 
   // Handle highlighting effect and scroll into view
   useEffect(() => {
-    const isMatch = highlightedPath && highlightedPath.toLowerCase() === pathString.toLowerCase();
+    // Normalize paths by removing array indices for comparison
+    // e.g., "identifier.[0].assigner" becomes "identifier.assigner"
+    const normalizePathForComparison = (path: string) => {
+      return path.toLowerCase().replace(/\.\[\d+\]/g, '');
+    };
+    
+    const normalizedHighlightPath = highlightedPath ? normalizePathForComparison(highlightedPath) : '';
+    const normalizedPathString = normalizePathForComparison(pathString);
+    
+    // Also check exact match (case-insensitive) as fallback
+    const isExactMatch = highlightedPath && highlightedPath.toLowerCase() === pathString.toLowerCase();
+    const isNormalizedMatch = highlightedPath && normalizedHighlightPath === normalizedPathString;
+    const isMatch = isExactMatch || isNormalizedMatch;
     
     if (isMatch && !isHighlighted) {
-      console.log('[TreeNode] Highlighting and scrolling to:', pathString);
+      console.log('[TreeNode] Highlighting and scrolling to:', pathString, '(matched with:', highlightedPath, ')');
       setIsHighlighted(true);
       
       // Scroll into view after a brief delay to ensure rendering is complete
@@ -103,19 +115,68 @@ export default function TreeNode({
 
 
   // Get validation issues for this path (view mode) - case insensitive matching
+  // Normalize paths by removing array indices for comparison
+  const normalizePathForMatching = (path: string) => {
+    return path.toLowerCase().replace(/\.\[\d+\]/g, '');
+  };
+  
   const directPathIssues = validationIssues.filter(issue => {
     const issuePath = issue.path?.toLowerCase() || '';
     const locationPath = issue.location?.join('.').toLowerCase() || '';
     const currentPath = pathString.toLowerCase();
-    return issuePath === currentPath || locationPath === currentPath;
+    
+    // Check exact match first (highest priority)
+    const exactMatch = issuePath === currentPath || locationPath === currentPath;
+    if (exactMatch) return true;
+    
+    // For array element nodes like [0], only match if validation path is MORE SPECIFIC
+    // This prevents showing parent-level issues on array element nodes
+    const isArrayElement = /^\[\d+\]$/.test(nodeKey);
+    if (isArrayElement) {
+      // For array elements, only show issues that go deeper than just the element itself
+      const normalizedIssuePath = normalizePathForMatching(issuePath);
+      const normalizedLocationPath = normalizePathForMatching(locationPath);
+      const normalizedCurrentPath = normalizePathForMatching(currentPath);
+      
+      // Check if issue path is more specific (has more parts after normalization)
+      const issueDepth = normalizedIssuePath.split('.').length;
+      const locationDepth = normalizedLocationPath.split('.').length;
+      const currentDepth = normalizedCurrentPath.split('.').length;
+      
+      // Only match if issue goes deeper than current node
+      const issueMatches = normalizedIssuePath === normalizedCurrentPath && issueDepth > currentDepth;
+      const locationMatches = normalizedLocationPath === normalizedCurrentPath && locationDepth > currentDepth;
+      
+      return false; // Don't show badges on array element nodes themselves
+    }
+    
+    // For other nodes with array indices in the path, use normalized matching
+    if (/\[\d+\]/.test(pathString)) {
+      const normalizedIssuePath = normalizePathForMatching(issuePath);
+      const normalizedLocationPath = normalizePathForMatching(locationPath);
+      const normalizedCurrentPath = normalizePathForMatching(currentPath);
+      const normalizedMatch = normalizedIssuePath === normalizedCurrentPath || normalizedLocationPath === normalizedCurrentPath;
+      
+      return normalizedMatch;
+    }
+    
+    return false;
   });
   
   // If node is collapsed and complex, get all child issues for aggregation
   const childPathIssues = (!isExpanded && isComplex) ? validationIssues.filter(issue => {
     const issuePath = issue.path?.toLowerCase() || '';
     const currentPath = pathString.toLowerCase();
-    // Check if issue path starts with current path (is a child)
-    return issuePath.startsWith(currentPath + '.') && issuePath !== currentPath;
+    
+    // Check exact match first
+    const exactChildMatch = issuePath.startsWith(currentPath + '.') && issuePath !== currentPath;
+    
+    // Also check normalized match (without array indices)
+    const normalizedIssuePath = normalizePathForMatching(issuePath);
+    const normalizedCurrentPath = normalizePathForMatching(currentPath);
+    const normalizedChildMatch = normalizedIssuePath.startsWith(normalizedCurrentPath + '.') && normalizedIssuePath !== normalizedCurrentPath;
+    
+    return exactChildMatch || normalizedChildMatch;
   }) : [];
   
   // Use direct issues when expanded, or aggregated (direct + children) when collapsed

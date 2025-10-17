@@ -317,9 +317,12 @@ export default function ResourceDetail() {
   // Handle path clicks from validation messages
   const handlePathClick = useCallback((path: string) => {
     console.log('[ResourceDetail] Path clicked:', path);
-    // Remove resource type prefix if present (e.g., "Observation.status" -> "status")
+    // Remove resource type prefix if present (e.g., "patient.status" -> "status" or "Patient.status" -> "status")
     const parts = path.split('.');
-    const treePath = parts.length > 0 && /^[A-Z]/.test(parts[0]) ? parts.slice(1).join('.') : path;
+    // Check if first part is a resource type (starts with letter, case-insensitive)
+    const treePath = parts.length > 0 && /^[a-zA-Z]/.test(parts[0]) && resource?.resourceType?.toLowerCase() === parts[0].toLowerCase()
+      ? parts.slice(1).join('.')
+      : path;
     console.log('[ResourceDetail] Converted to tree path:', treePath);
     setHighlightedPath(treePath);
     // Clear the highlight after enough time to see it
@@ -327,7 +330,7 @@ export default function ResourceDetail() {
       console.log('[ResourceDetail] Clearing highlighted path');
       setHighlightedPath(undefined);
     }, 3500);
-  }, []);
+  }, [resource?.resourceType]);
   
   // Handle severity clicks from tree nodes
   const handleSeverityClick = useCallback((severity: string, path: string) => {
@@ -397,9 +400,12 @@ export default function ResourceDetail() {
   // Convert validation messages to the format ResourceViewer expects
   const validationIssues = validationMessages?.aspects?.flatMap((aspect: any) =>
     aspect.messages.map((msg: any) => {
-      // Strip resource type prefix from path (e.g., "Observation.meta.profile" -> "meta.profile")
+      // Strip resource type prefix from path (e.g., "patient.meta.profile" -> "meta.profile" or "Patient.meta.profile" -> "meta.profile")
       const pathParts = msg.canonicalPath.split('.');
-      const pathWithoutResourceType = pathParts.length > 0 && /^[A-Z]/.test(pathParts[0]) 
+      // Check if first part is a resource type (case-insensitive match)
+      const pathWithoutResourceType = pathParts.length > 0 && 
+        /^[a-zA-Z]/.test(pathParts[0]) && 
+        resource?.resourceType?.toLowerCase() === pathParts[0].toLowerCase()
         ? pathParts.slice(1).join('.') 
         : msg.canonicalPath;
       
