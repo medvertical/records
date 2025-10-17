@@ -23,6 +23,9 @@ export default function UnifiedTreeViewer({
   onExpandedPathsChange: externalOnExpandedPathsChange,
   highlightedPath,
 }: UnifiedTreeViewerProps) {
+  // Get the resource type for the root node (must be declared before any hooks that use it)
+  const rootResourceType = resourceType || resourceData?.resourceType || 'Resource';
+  
   // Internal state for expanded paths (fallback if not provided externally)
   const [internalExpandedPaths, setInternalExpandedPaths] = useState<Set<string>>(new Set());
   
@@ -45,6 +48,10 @@ export default function UnifiedTreeViewer({
     
     if (expandAll) {
       console.log('[UnifiedTreeViewer] Expand All triggered');
+      
+      // Always expand the root node
+      newExpandedPaths.add(rootResourceType);
+      
       // When expandAll is true, expand all complex nodes
       const expandAllPaths = (obj: any, path: string[] = []) => {
         Object.entries(obj).forEach(([key, value]) => {
@@ -82,12 +89,14 @@ export default function UnifiedTreeViewer({
       console.log('[UnifiedTreeViewer] Total expanded paths:', newExpandedPaths.size, Array.from(newExpandedPaths));
     } else {
       console.log('[UnifiedTreeViewer] Collapse All triggered');
+      // Keep root node expanded even when collapsing all
+      newExpandedPaths.add(rootResourceType);
     }
     
     // Update expanded paths when button is clicked
     onExpandedPathsChange(newExpandedPaths);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expandAll, expandAllTrigger]);
+  }, [expandAll, expandAllTrigger, rootResourceType]);
 
   const handleValueChange = useCallback((path: string[], newValue: any) => {
     if (!onResourceChange) return;
@@ -118,34 +127,37 @@ export default function UnifiedTreeViewer({
     );
   }
 
-  // Filter out internal fields at root level
-  const rootKeys = Object.keys(resourceData).filter(
-    key => !key.startsWith('_') && key !== 'resourceId'
-  );
+  // Ensure root node is always expanded
+  useEffect(() => {
+    if (!expandedPaths.has(rootResourceType)) {
+      const newExpandedPaths = new Set(expandedPaths);
+      newExpandedPaths.add(rootResourceType);
+      onExpandedPathsChange(newExpandedPaths);
+    }
+  }, [rootResourceType, expandedPaths, onExpandedPathsChange]);
 
   return (
     <div className="space-y-1 font-mono text-sm">
-      {rootKeys.map((key) => (
-        <TreeNode
-          key={key}
-          nodeKey={key}
-          value={resourceData[key]}
-          path={[]}
-          level={0}
-          resourceType={resourceType || resourceData.resourceType}
-          isEditMode={isEditMode}
-          expandAll={expandAll}
-          expandedPaths={expandedPaths}
-          onExpandedPathsChange={onExpandedPathsChange}
-          validationIssues={validationResults}
-          onCategoryChange={onCategoryChange}
-          onSeverityChange={onSeverityChange}
-          onIssueClick={onIssueClick}
-          onValueChange={handleValueChange}
-          onDeleteNode={handleDeleteNode}
-          highlightedPath={highlightedPath}
-        />
-      ))}
+      {/* Root node representing the resource itself */}
+      <TreeNode
+        key={rootResourceType}
+        nodeKey={rootResourceType}
+        value={resourceData}
+        path={[]}
+        level={0}
+        resourceType={rootResourceType}
+        isEditMode={isEditMode}
+        expandAll={expandAll}
+        expandedPaths={expandedPaths}
+        onExpandedPathsChange={onExpandedPathsChange}
+        validationIssues={validationResults}
+        onCategoryChange={onCategoryChange}
+        onSeverityChange={onSeverityChange}
+        onIssueClick={onIssueClick}
+        onValueChange={handleValueChange}
+        onDeleteNode={handleDeleteNode}
+        highlightedPath={highlightedPath}
+      />
     </div>
   );
 }

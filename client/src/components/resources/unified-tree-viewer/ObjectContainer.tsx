@@ -83,7 +83,7 @@ export default function ObjectContainer({
   }, [value, path, onValueChange, newPropertyName, newPropertyType]);
 
   // Filter out internal fields
-  const keys = Object.keys(value || {}).filter(key => !key.startsWith('_'));
+  const keys = Object.keys(value || {}).filter(key => !key.startsWith('_') && key !== 'resourceId');
   
   // Find ghost keys from validation issues that don't exist in the actual data (only in view mode)
   const ghostKeys: string[] = [];

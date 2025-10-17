@@ -73,13 +73,31 @@ export default function TreeNode({
       return path.toLowerCase().replace(/\.\[\d+\]/g, '');
     };
     
+    // Strip resource type prefix from tree path for comparison
+    // Tree paths now start with resource type (e.g., "Patient.meta.lastUpdated")
+    // but validation paths don't (e.g., "meta.lastupdated")
+    const stripResourceTypePrefix = (treePath: string) => {
+      // If we have a resource type and the path starts with it, strip it
+      if (resourceType && treePath.toLowerCase().startsWith(resourceType.toLowerCase() + '.')) {
+        return treePath.substring(resourceType.length + 1); // +1 for the dot
+      }
+      return treePath;
+    };
+    
+    const pathForComparison = stripResourceTypePrefix(pathString);
+    
     const normalizedHighlightPath = highlightedPath ? normalizePathForComparison(highlightedPath) : '';
-    const normalizedPathString = normalizePathForComparison(pathString);
+    const normalizedPathString = normalizePathForComparison(pathForComparison);
+    
+    // Special case: Root node should match when highlightedPath is empty or equals resource type
+    const isRootNode = path.length === 0 && resourceType && nodeKey.toLowerCase() === resourceType.toLowerCase();
+    const isRootMatch = isRootNode && highlightedPath !== undefined && 
+                       (highlightedPath === '' || highlightedPath.toLowerCase() === resourceType.toLowerCase());
     
     // Also check exact match (case-insensitive) as fallback
-    const isExactMatch = highlightedPath && highlightedPath.toLowerCase() === pathString.toLowerCase();
+    const isExactMatch = highlightedPath && highlightedPath.toLowerCase() === pathForComparison.toLowerCase();
     const isNormalizedMatch = highlightedPath && normalizedHighlightPath === normalizedPathString;
-    const isMatch = isExactMatch || isNormalizedMatch;
+    const isMatch = isRootMatch || isExactMatch || isNormalizedMatch;
     
     if (isMatch && !isHighlighted) {
       console.log('[TreeNode] Highlighting and scrolling to:', pathString, '(matched with:', highlightedPath, ')');
@@ -98,7 +116,7 @@ export default function TreeNode({
       console.log('[TreeNode] Clearing highlight for:', pathString);
       setIsHighlighted(false);
     }
-  }, [highlightedPath, pathString, isHighlighted]);
+  }, [highlightedPath, pathString, isHighlighted, resourceType, path.length, nodeKey]);
 
   // Handle expand/collapse toggle
   const handleToggleExpanded = useCallback(() => {
@@ -120,13 +138,38 @@ export default function TreeNode({
     return path.toLowerCase().replace(/\.\[\d+\]/g, '');
   };
   
+  // Strip resource type prefix from tree path for comparison with validation paths
+  const stripResourceTypePrefixForValidation = (treePath: string) => {
+    if (resourceType && treePath.toLowerCase().startsWith(resourceType.toLowerCase() + '.')) {
+      return treePath.substring(resourceType.length + 1);
+    }
+    return treePath;
+  };
+  
   const directPathIssues = validationIssues.filter(issue => {
     const issuePath = issue.path?.toLowerCase() || '';
     const locationPath = issue.location?.join('.').toLowerCase() || '';
     const currentPath = pathString.toLowerCase();
+    const currentPathWithoutResourceType = stripResourceTypePrefixForValidation(currentPath).toLowerCase();
     
-    // Check exact match first (highest priority)
-    const exactMatch = issuePath === currentPath || locationPath === currentPath;
+    // Special case: Root node (when pathString is just the resource type, like "Patient")
+    // Should match validation paths that are empty strings (resource-level validation)
+    // because resource-detail.tsx strips "patient" from path, leaving empty string
+    const isRootNode = path.length === 0 && resourceType && nodeKey.toLowerCase() === resourceType.toLowerCase();
+    if (isRootNode) {
+      // Root node should match empty validation paths (resource-level validation)
+      const rootMatch = issuePath === '' || 
+                       locationPath === '' ||
+                       issuePath === currentPath || 
+                       locationPath === currentPath ||
+                       issuePath === resourceType.toLowerCase() ||
+                       locationPath === resourceType.toLowerCase();
+      if (rootMatch) return true;
+    }
+    
+    // Check exact match first (highest priority) - try both with and without resource type prefix
+    const exactMatch = issuePath === currentPath || locationPath === currentPath ||
+                       issuePath === currentPathWithoutResourceType || locationPath === currentPathWithoutResourceType;
     if (exactMatch) return true;
     
     // For array element nodes like [0], only match if validation path is MORE SPECIFIC
@@ -155,26 +198,38 @@ export default function TreeNode({
       const normalizedIssuePath = normalizePathForMatching(issuePath);
       const normalizedLocationPath = normalizePathForMatching(locationPath);
       const normalizedCurrentPath = normalizePathForMatching(currentPath);
-      const normalizedMatch = normalizedIssuePath === normalizedCurrentPath || normalizedLocationPath === normalizedCurrentPath;
+      const normalizedCurrentPathWithoutResourceType = normalizePathForMatching(currentPathWithoutResourceType);
+      
+      const normalizedMatch = normalizedIssuePath === normalizedCurrentPath || 
+                             normalizedLocationPath === normalizedCurrentPath ||
+                             normalizedIssuePath === normalizedCurrentPathWithoutResourceType ||
+                             normalizedLocationPath === normalizedCurrentPathWithoutResourceType;
       
       return normalizedMatch;
     }
     
-    return false;
+    // For simple paths without array indices (including resource-level paths like "Patient")
+    // Check if issue path matches directly (already handled by exactMatch above)
+    // or if issue path starts with current path (child issue)
+    return false; // Already handled by exactMatch, no need for fuzzy matching
   });
   
   // If node is collapsed and complex, get all child issues for aggregation
   const childPathIssues = (!isExpanded && isComplex) ? validationIssues.filter(issue => {
     const issuePath = issue.path?.toLowerCase() || '';
     const currentPath = pathString.toLowerCase();
+    const currentPathWithoutResourceType = stripResourceTypePrefixForValidation(currentPath).toLowerCase();
     
-    // Check exact match first
-    const exactChildMatch = issuePath.startsWith(currentPath + '.') && issuePath !== currentPath;
+    // Check exact match first (with and without resource type prefix)
+    const exactChildMatch = (issuePath.startsWith(currentPath + '.') && issuePath !== currentPath) ||
+                           (issuePath.startsWith(currentPathWithoutResourceType + '.') && issuePath !== currentPathWithoutResourceType);
     
     // Also check normalized match (without array indices)
     const normalizedIssuePath = normalizePathForMatching(issuePath);
     const normalizedCurrentPath = normalizePathForMatching(currentPath);
-    const normalizedChildMatch = normalizedIssuePath.startsWith(normalizedCurrentPath + '.') && normalizedIssuePath !== normalizedCurrentPath;
+    const normalizedCurrentPathWithoutResourceType = normalizePathForMatching(currentPathWithoutResourceType);
+    const normalizedChildMatch = (normalizedIssuePath.startsWith(normalizedCurrentPath + '.') && normalizedIssuePath !== normalizedCurrentPath) ||
+                                 (normalizedIssuePath.startsWith(normalizedCurrentPathWithoutResourceType + '.') && normalizedIssuePath !== normalizedCurrentPathWithoutResourceType);
     
     return exactChildMatch || normalizedChildMatch;
   }) : [];
@@ -355,25 +410,38 @@ export default function TreeNode({
           style={{ width: '280px', paddingLeft: `${level * 1.5 + 0.5}rem` }}
         >
           {/* Expand/Collapse Button */}
-          {isComplex ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                handleToggleExpanded();
-              }}
-              className="flex-shrink-0 p-0.5 hover:bg-gray-200 rounded transition-colors duration-150"
-            >
-              {isExpanded ? (
-                <ChevronDown className="h-4 w-4 text-gray-600 transition-transform duration-150" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-gray-600 transition-transform duration-150" />
-              )}
-            </button>
-          ) : (
-            <div className="w-5 flex-shrink-0" />
-          )}
+          {(() => {
+            // Check if this is the root node
+            const isRootNode = path.length === 0 && resourceType && nodeKey.toLowerCase() === resourceType.toLowerCase();
+            
+            // Root node shouldn't have expand/collapse button (always expanded)
+            if (isRootNode) {
+              return <div className="w-5 flex-shrink-0" />;
+            }
+            
+            // Regular nodes
+            if (isComplex) {
+              return (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    handleToggleExpanded();
+                  }}
+                  className="flex-shrink-0 p-0.5 hover:bg-gray-200 rounded transition-colors duration-150"
+                >
+                  {isExpanded ? (
+                    <ChevronDown className="h-4 w-4 text-gray-600 transition-transform duration-150" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-gray-600 transition-transform duration-150" />
+                  )}
+                </button>
+              );
+            } else {
+              return <div className="w-5 flex-shrink-0" />;
+            }
+          })()}
 
           <span className={cn(
             "text-sm font-medium truncate font-mono transition-all duration-200",
