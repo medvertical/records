@@ -86,7 +86,7 @@ export interface ValidationSettings {
     profile: ValidationAspectConfig;
     terminology: ValidationAspectConfig;
     reference: ValidationAspectConfig;
-    businessRules: ValidationAspectConfig; // Note: businessRules (not businessRule) to match main PRD
+    businessRule: ValidationAspectConfig; // Singular to match database schema
     metadata: ValidationAspectConfig;
   };
   
@@ -375,7 +375,7 @@ export const VALIDATION_CONFIGS = {
       profile: { enabled: true, severity: 'error' as const },
       terminology: { enabled: true, severity: 'error' as const },
       reference: { enabled: true, severity: 'error' as const },
-      businessRules: { enabled: true, severity: 'error' as const },
+      businessRule: { enabled: true, severity: 'error' as const },
       metadata: { enabled: true, severity: 'error' as const }
     },
     performance: {
@@ -391,7 +391,7 @@ export const VALIDATION_CONFIGS = {
       profile: { enabled: true, severity: 'warning' as const },
       terminology: { enabled: true, severity: 'warning' as const },
       reference: { enabled: true, severity: 'error' as const },
-      businessRules: { enabled: true, severity: 'warning' as const },
+      businessRule: { enabled: true, severity: 'warning' as const },
       metadata: { enabled: true, severity: 'error' as const }
     },
     performance: {
@@ -407,7 +407,7 @@ export const VALIDATION_CONFIGS = {
       profile: { enabled: false, severity: 'warning' as const },
       terminology: { enabled: false, severity: 'warning' as const },
       reference: { enabled: true, severity: 'error' as const },
-      businessRules: { enabled: false, severity: 'warning' as const },
+      businessRule: { enabled: false, severity: 'warning' as const },
       metadata: { enabled: false, severity: 'info' as const }
     },
     performance: {
@@ -516,7 +516,7 @@ export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
     profile: { enabled: true, severity: 'warning' },
     terminology: { enabled: true, severity: 'warning' },
     reference: { enabled: true, severity: 'error' },
-    businessRules: { enabled: true, severity: 'error' },
+    businessRule: { enabled: true, severity: 'error' },
     metadata: { enabled: true, severity: 'error' }
   },
   performance: {
@@ -550,7 +550,7 @@ export const DEFAULT_VALIDATION_SETTINGS_R5: ValidationSettings = {
     profile: { enabled: true, severity: 'warning' },
     terminology: { enabled: true, severity: 'warning' },
     reference: { enabled: true, severity: 'error' },
-    businessRules: { enabled: true, severity: 'error' },
+    businessRule: { enabled: true, severity: 'error' },
     metadata: { enabled: true, severity: 'error' }
   },
   performance: {
@@ -947,7 +947,7 @@ export const VALIDATION_ASPECTS: ValidationAspect[] = [
   'profile', 
   'terminology',
   'reference',
-  'businessRules',
+  'businessRule',
   'metadata'
 ];
 
@@ -956,7 +956,7 @@ export const VALIDATION_ASPECT_LABELS: Record<ValidationAspect, string> = {
   profile: 'Profile',
   terminology: 'Terminology',
   reference: 'Reference',
-  businessRules: 'Business Rules',
+  businessRule: 'Business Rules',
   metadata: 'Metadata'
 };
 
@@ -965,7 +965,7 @@ export const VALIDATION_ASPECT_DESCRIPTIONS: Record<ValidationAspect, string> = 
   profile: 'Validates against FHIR profiles and constraints',
   terminology: 'Validates terminology bindings and code systems',
   reference: 'Validates resource references and integrity',
-  businessRules: 'Validates business logic and clinical rules',
+  businessRule: 'Validates business logic and clinical rules',
   metadata: 'Validates resource metadata and provenance'
 };
 
@@ -1076,5 +1076,5 @@ export function isDefaultSettings(settings: ValidationSettings, version: FHIRVer
 // Type Exports
 // ============================================================================
 
-export type ValidationAspect = 'structural' | 'profile' | 'terminology' | 'reference' | 'businessRules' | 'metadata';
+export type ValidationAspect = 'structural' | 'profile' | 'terminology' | 'reference' | 'businessRule' | 'metadata';
 export type ValidationSeverity = 'error' | 'warning' | 'info';

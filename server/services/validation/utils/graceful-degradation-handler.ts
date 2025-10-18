@@ -39,7 +39,7 @@ export interface DegradationStrategy {
     profileValidation: boolean;
     terminologyValidation: boolean;
     referenceValidation: boolean;
-    businessRules: boolean;
+    businessRule: boolean;
     metadataValidation: boolean;
     profileDownloads: boolean;
     packageDownloads: boolean;
@@ -103,7 +103,7 @@ export const DEGRADATION_STRATEGIES: Record<string, DegradationStrategy> = {
       profileValidation: true,
       terminologyValidation: true,
       referenceValidation: true,
-      businessRules: true,
+      businessRule: true,
       metadataValidation: true,
       profileDownloads: true,
       packageDownloads: true,
@@ -124,7 +124,7 @@ export const DEGRADATION_STRATEGIES: Record<string, DegradationStrategy> = {
       profileValidation: true, // Use cached profiles
       terminologyValidation: true, // Use cached terminology
       referenceValidation: false, // Requires external calls
-      businessRules: true,
+      businessRule: true,
       metadataValidation: true,
       profileDownloads: false, // Downloads disabled
       packageDownloads: false,
@@ -150,7 +150,7 @@ export const DEGRADATION_STRATEGIES: Record<string, DegradationStrategy> = {
       profileValidation: true, // Cached profiles only
       terminologyValidation: true, // Cached terminology only
       referenceValidation: false, // Requires network
-      businessRules: true, // Local execution
+      businessRule: true, // Local execution
       metadataValidation: true, // Local checking
       profileDownloads: false,
       packageDownloads: false,

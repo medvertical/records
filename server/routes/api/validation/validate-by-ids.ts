@@ -98,9 +98,7 @@ router.post('/validate-by-ids', async (req: Request, res: Response) => {
     const settingsOverride = currentSettings ? {
       ...currentSettings,
       aspects: {
-        ...currentSettings.aspects,
-        // Map businessRules (plural) to businessRule (singular) for backward compatibility
-        businessRule: currentSettings.aspects?.businessRules || currentSettings.aspects?.businessRule
+        ...currentSettings.aspects
       }
     } : undefined;
     

@@ -26,7 +26,7 @@ export interface ValidationTimeouts {
     profile: number;
     terminology: number;
     reference: number;
-    businessRules: number;
+    businessRule: number;
     metadata: number;
   };
   
@@ -62,7 +62,7 @@ const DEFAULT_TIMEOUTS: ValidationTimeouts = {
     profile: 180000,     // 180s (3 min) - profile resolution + HAPI validation (increased for first-time downloads)
     terminology: 30000,  // 30s - code validation against value sets
     reference: 15000,    // 15s - reference resolution
-    businessRules: 15000, // 15s - custom business logic
+    businessRule: 15000, // 15s - custom business logic
     metadata: 5000,      // 5s - metadata validation
   },
   
@@ -96,7 +96,7 @@ function loadTimeoutsFromEnv(): ValidationTimeouts {
       profile: getEnvNumber('VALIDATION_TIMEOUT_PROFILE', DEFAULT_TIMEOUTS.validationEngine.profile),
       terminology: getEnvNumber('VALIDATION_TIMEOUT_TERMINOLOGY', DEFAULT_TIMEOUTS.validationEngine.terminology),
       reference: getEnvNumber('VALIDATION_TIMEOUT_REFERENCE', DEFAULT_TIMEOUTS.validationEngine.reference),
-      businessRules: getEnvNumber('VALIDATION_TIMEOUT_BUSINESS_RULES', DEFAULT_TIMEOUTS.validationEngine.businessRules),
+      businessRule: getEnvNumber('VALIDATION_TIMEOUT_BUSINESS_RULES', DEFAULT_TIMEOUTS.validationEngine.businessRule),
       metadata: getEnvNumber('VALIDATION_TIMEOUT_METADATA', DEFAULT_TIMEOUTS.validationEngine.metadata),
     },
     
@@ -188,7 +188,7 @@ export function logTimeoutConfiguration(): void {
   console.log(`     - Profile: ${timeouts.validationEngine.profile}ms`);
   console.log(`     - Terminology: ${timeouts.validationEngine.terminology}ms`);
   console.log(`     - Reference: ${timeouts.validationEngine.reference}ms`);
-  console.log(`     - Business Rules: ${timeouts.validationEngine.businessRules}ms`);
+  console.log(`     - Business Rules: ${timeouts.validationEngine.businessRule}ms`);
   console.log(`     - Metadata: ${timeouts.validationEngine.metadata}ms`);
   console.log(`   HAPI Process: ${timeouts.hapiProcess}ms (${(timeouts.hapiProcess / 1000).toFixed(1)}s)`);
   console.log(`   Profile Resolution: ${timeouts.profileResolution}ms (${(timeouts.profileResolution / 1000).toFixed(1)}s)`);

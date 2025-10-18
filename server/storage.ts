@@ -628,7 +628,7 @@ export class DatabaseStorage implements IStorage {
       profile: { enabled: settings.aspects?.profile?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
       terminology: { enabled: settings.aspects?.terminology?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
       reference: { enabled: settings.aspects?.reference?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      businessRule: { enabled: settings.aspects?.businessRules?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      businessRule: { enabled: settings.aspects?.businessRule?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
       metadata: { enabled: settings.aspects?.metadata?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 }
     };
 

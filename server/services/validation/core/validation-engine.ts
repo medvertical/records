@@ -160,7 +160,7 @@ export class ValidationEngine extends EventEmitter {
       'profile': 'profileValidation',
       'terminology': 'terminologyValidation',
       'reference': 'referenceValidation',
-      'businessRule': 'businessRules',
+      'businessRule': 'businessRule',
       'metadata': 'metadataValidation',
     };
 
@@ -430,7 +430,7 @@ export class ValidationEngine extends EventEmitter {
     if (settings.aspects?.reference?.enabled) {
       enabledAspects.add('reference');
     }
-    if (settings.aspects?.businessRules?.enabled) {
+    if (settings.aspects?.businessRule?.enabled) {
       enabledAspects.add('businessRule');
     }
     if (settings.aspects?.metadata?.enabled) {
@@ -580,7 +580,7 @@ export class ValidationEngine extends EventEmitter {
       profile: 'profile',
       terminology: 'terminology',
       reference: 'reference',
-      businessRules: 'businessRules',
+      businessRule: 'businessRule',
       metadata: 'metadata',
     };
 

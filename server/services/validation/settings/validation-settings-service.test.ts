@@ -17,7 +17,7 @@ const DEFAULT_TEST_SETTINGS: ValidationSettings = {
     profile: { enabled: true, severity: 'warning' },
     terminology: { enabled: true, severity: 'warning' },
     reference: { enabled: true, severity: 'error' },
-    businessRules: { enabled: true, severity: 'error' },
+    businessRule: { enabled: true, severity: 'error' },
     metadata: { enabled: true, severity: 'error' }
   },
   performance: {

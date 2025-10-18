@@ -163,7 +163,7 @@ export class ValidationResourcePersistence {
             profile: { enabled: settingsUsed.aspects?.profile?.enabled ?? true },
             terminology: { enabled: settingsUsed.aspects?.terminology?.enabled ?? true },
             reference: { enabled: settingsUsed.aspects?.reference?.enabled ?? true },
-            businessRule: { enabled: (settingsUsed.aspects as any)?.businessRule?.enabled ?? (settingsUsed.aspects as any)?.businessRules?.enabled ?? true },
+            businessRule: { enabled: settingsUsed.aspects?.businessRule?.enabled ?? true },
             metadata: { enabled: settingsUsed.aspects?.metadata?.enabled ?? true },
           },
         } as any;
@@ -177,7 +177,7 @@ export class ValidationResourcePersistence {
             profile: { enabled: currentSettings?.aspects?.profile?.enabled ?? true },
             terminology: { enabled: currentSettings?.aspects?.terminology?.enabled ?? true },
             reference: { enabled: currentSettings?.aspects?.reference?.enabled ?? true },
-            businessRule: { enabled: (currentSettings?.aspects as any)?.businessRule?.enabled ?? (currentSettings?.aspects as any)?.businessRules?.enabled ?? true },
+            businessRule: { enabled: currentSettings?.aspects?.businessRule?.enabled ?? true },
             metadata: { enabled: currentSettings?.aspects?.metadata?.enabled ?? true },
           },
         } as any;
