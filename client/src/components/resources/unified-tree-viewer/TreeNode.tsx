@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { ChevronDown, ChevronRight, Trash2, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Trash2, AlertCircle, Puzzle, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -38,6 +38,9 @@ export default function TreeNode({
   onDeleteNode,
   highlightedPath,
   isGhost = false,
+  isExtension = false,
+  extensionInfo,
+  sliceName,
 }: TreeNodeProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isHighlighted, setIsHighlighted] = useState(false);
@@ -302,6 +305,36 @@ export default function TreeNode({
 
   // Render value for view mode
   const renderViewValue = (val: any): React.ReactNode => {
+    // Special rendering for extensions
+    if (isExtension && extensionInfo) {
+      return (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-500 font-mono">{extensionInfo.url}</span>
+          {extensionInfo.value !== undefined && extensionInfo.value !== null && (
+            <>
+              <span className="text-gray-400">→</span>
+              <span className={cn(
+                "text-sm font-mono",
+                typeof extensionInfo.value === 'string' ? "text-gray-700" : 
+                typeof extensionInfo.value === 'number' ? "text-green-600" :
+                typeof extensionInfo.value === 'boolean' ? "text-blue-600" :
+                "text-gray-700"
+              )}>
+                {typeof extensionInfo.value === 'object' 
+                  ? `{${extensionInfo.valueType}}` 
+                  : String(extensionInfo.value)}
+              </span>
+            </>
+          )}
+          {extensionInfo.isModifier && (
+            <Badge className="text-xs px-1.5 py-0.5 h-4 bg-orange-200 text-orange-900 rounded-sm border-0">
+              modifier
+            </Badge>
+          )}
+        </div>
+      );
+    }
+
     if (val === null) return <span className="text-gray-500 italic font-mono">null</span>;
     if (val === undefined) return <span className="text-gray-500 italic font-mono">undefined</span>;
     if (typeof val === 'boolean') return <span className="text-blue-600 font-mono">{val.toString()}</span>;
@@ -412,7 +445,9 @@ export default function TreeNode({
         className={cn(
           "flex items-center gap-2 py-1.5 px-2 group transition-all duration-300 rounded-md",
           !isEditMode && hasIssues && `border-l-4 ${severityColor}`,
-          isHighlighted ? 'bg-yellow-100 animate-in fade-in duration-300' : 'hover:bg-gray-50'
+          isHighlighted ? 'bg-yellow-100 animate-in fade-in duration-300' : 
+          isExtension ? 'hover:bg-gray-100' :
+          'hover:bg-gray-50'
         )}
       >
         {/* Key column: 280px fixed width with indentation */}
@@ -454,20 +489,34 @@ export default function TreeNode({
             }
           })()}
 
-          <span className={cn(
-            "text-sm font-medium truncate font-mono transition-all duration-200",
-            isGhost ? "text-gray-400 italic" : "text-gray-700"
-          )}>
-            {nodeKey}
-            {isEditMode && isRequired && (
-              <span className="text-red-500 ml-1 transition-opacity duration-200">*</span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            {isExtension && extensionInfo && (
+              <Puzzle className="h-3.5 w-3.5 text-gray-600 flex-shrink-0" title="FHIR Extension" />
             )}
-          </span>
-          {isEditMode && (
-            <span className="text-xs text-gray-400 flex-shrink-0 transition-opacity duration-200 animate-in fade-in">
-              ({valueType})
+            <span className={cn(
+              "text-sm font-medium truncate font-mono transition-all duration-200",
+              isGhost ? "text-gray-400 italic" : isExtension ? "text-gray-700 font-semibold" : "text-gray-700"
+            )}>
+              {isExtension && extensionInfo ? extensionInfo.displayName : nodeKey}
+              {isEditMode && isRequired && (
+                <span className="text-red-500 ml-1 transition-opacity duration-200">*</span>
+              )}
             </span>
-          )}
+            {sliceName && (
+              <Badge 
+                className="text-xs px-1.5 py-0.5 h-5 bg-gray-200 text-gray-700 rounded-sm flex-shrink-0 flex items-center gap-1 border-0"
+                title={`Slice: ${sliceName}`}
+              >
+                <Tag className="h-2.5 w-2.5" />
+                <span>{sliceName}</span>
+              </Badge>
+            )}
+            {isEditMode && !isExtension && (
+              <span className="text-xs text-gray-400 flex-shrink-0 transition-opacity duration-200 animate-in fade-in">
+                ({valueType})
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Value column: flex-1 with smooth transition */}
@@ -579,6 +628,7 @@ export default function TreeNode({
                 onValueChange={onValueChange}
                 onDeleteNode={onDeleteNode}
                 highlightedPath={highlightedPath}
+                parentKey={nodeKey}
               />
             )}
             {(valueType === 'object' || (isGhost && isExpanded)) && (
@@ -598,6 +648,7 @@ export default function TreeNode({
                 onValueChange={onValueChange}
                 onDeleteNode={onDeleteNode}
                 highlightedPath={highlightedPath}
+                parentKey={nodeKey}
               />
             )}
           </div>

@@ -25,6 +25,7 @@ import {
 import { cn } from '@/lib/utils';
 import TreeNode from './TreeNode';
 import { ObjectContainerProps } from './types';
+import { isExtensionField } from './fhir-helpers';
 
 // ============================================================================
 // Object Container Component
@@ -46,6 +47,7 @@ export default function ObjectContainer({
   onValueChange,
   onDeleteNode,
   highlightedPath,
+  parentKey,
 }: ObjectContainerProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newPropertyName, setNewPropertyName] = useState('');
@@ -123,6 +125,9 @@ export default function ObjectContainer({
       {allKeys.map((key) => {
         const isGhost = ghostKeys.includes(key);
         const nodeValue = isGhost ? null : value[key];
+        
+        // Check if this is an extension field
+        const isExtensionFieldKey = !isGhost && isExtensionField(key, nodeValue);
         
         return (
           <TreeNode

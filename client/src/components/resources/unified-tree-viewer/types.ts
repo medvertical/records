@@ -12,6 +12,19 @@ export interface ValidationIssue {
   location?: string[];
 }
 
+export interface ExtensionInfo {
+  url: string;
+  valueType: string;
+  value: any;
+  displayName: string;
+  isModifier: boolean;
+}
+
+export interface SliceInfo {
+  name: string;
+  discriminator: string;
+}
+
 export interface UnifiedTreeViewerProps {
   resourceData: any;
   resourceType?: string;
@@ -57,6 +70,10 @@ export interface TreeNodeProps {
   highlightedPath?: string;
   // Ghost node (validation path that doesn't exist in data)
   isGhost?: boolean;
+  // FHIR-specific rendering
+  isExtension?: boolean;
+  extensionInfo?: ExtensionInfo;
+  sliceName?: string;
 }
 
 export interface ContainerProps {
@@ -73,6 +90,8 @@ export interface ContainerProps {
   onValueChange?: (path: string[], newValue: any) => void;
   onDeleteNode?: (path: string[]) => void;
   highlightedPath?: string;
+  // FHIR-specific
+  parentKey?: string;
 }
 
 export interface ArrayContainerProps extends ContainerProps {

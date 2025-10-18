@@ -20,6 +20,7 @@ import {
 import { getDefaultValueForType } from '@/utils/fhir-validation';
 import TreeNode from './TreeNode';
 import { ArrayContainerProps } from './types';
+import { extractExtensionInfo, detectSliceName, isExtensionObject } from './fhir-helpers';
 
 // ============================================================================
 // Array Container Component
@@ -41,6 +42,7 @@ export default function ArrayContainer({
   onValueChange,
   onDeleteNode,
   highlightedPath,
+  parentKey,
 }: ArrayContainerProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newItemType, setNewItemType] = useState<string>('string');
@@ -53,29 +55,48 @@ export default function ArrayContainer({
     setShowAddDialog(false);
   }, [value, path, onValueChange, newItemType]);
 
+  // Check if this array contains extensions
+  const arrayKey = path[path.length - 1];
+  const isExtensionArray = arrayKey === 'extension' || arrayKey === 'modifierExtension';
+  const isModifierExtension = arrayKey === 'modifierExtension';
+
   return (
     <div>
-      {value.map((item, index) => (
-        <TreeNode
-          key={index}
-          nodeKey={`[${index}]`}
-          value={item}
-          path={path}
-          level={level}
-          resourceType={resourceType}
-          isEditMode={isEditMode}
-          expandAll={expandAll}
-          expandedPaths={expandedPaths}
-          onExpandedPathsChange={onExpandedPathsChange}
-          validationIssues={validationIssues}
-          onCategoryChange={onCategoryChange}
-          onSeverityChange={onSeverityChange}
-          onIssueClick={onIssueClick}
-          onValueChange={onValueChange}
-          onDeleteNode={onDeleteNode}
-          highlightedPath={highlightedPath}
-        />
-      ))}
+      {value.map((item, index) => {
+        // Check if this is an extension object
+        const isExtension = isExtensionArray && isExtensionObject(item);
+        const extensionInfo = isExtension ? extractExtensionInfo(item, isModifierExtension) : undefined;
+        
+        // Try to detect slice name for non-extension arrays
+        const sliceName = !isExtension && parentKey 
+          ? detectSliceName(item, parentKey, index)
+          : null;
+
+        return (
+          <TreeNode
+            key={index}
+            nodeKey={`[${index}]`}
+            value={item}
+            path={path}
+            level={level}
+            resourceType={resourceType}
+            isEditMode={isEditMode}
+            expandAll={expandAll}
+            expandedPaths={expandedPaths}
+            onExpandedPathsChange={onExpandedPathsChange}
+            validationIssues={validationIssues}
+            onCategoryChange={onCategoryChange}
+            onSeverityChange={onSeverityChange}
+            onIssueClick={onIssueClick}
+            onValueChange={onValueChange}
+            onDeleteNode={onDeleteNode}
+            highlightedPath={highlightedPath}
+            isExtension={isExtension}
+            extensionInfo={extensionInfo || undefined}
+            sliceName={sliceName || undefined}
+          />
+        );
+      })}
 
       {/* Add Item Button (edit mode only) */}
       {isEditMode && (
