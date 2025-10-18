@@ -79,9 +79,11 @@ router.post('/validate-by-ids', async (req: Request, res: Response) => {
     // 3. Perform validation using ConsolidatedValidationService
     const { getConsolidatedValidationService } = await import('../../../services/validation');
     const { getValidationSettingsService } = await import('../../../services/validation/settings/validation-settings-service');
+    const { getIndividualResourceProgressService, ResourceValidationStatus } = await import('../../../services/validation/features/individual-resource-progress-service');
     
     const validationService = getConsolidatedValidationService();
     const settingsService = getValidationSettingsService();
+    const progressService = getIndividualResourceProgressService();
     
     if (!validationService) {
       logger.error('[Validate By IDs] Validation service not available');
@@ -104,13 +106,51 @@ router.post('/validate-by-ids', async (req: Request, res: Response) => {
     
     logger.info('[Validate By IDs] Settings override:', JSON.stringify(settingsOverride, null, 2));
     
+    // Clean up any stale progress entries older than 1 hour
+    progressService.clearOldProgress(60 * 60 * 1000); // 1 hour
+    
+    // Additionally, cancel any stuck active progress entries (started but not updated in 5 minutes)
+    const activeProgress = progressService.getActiveProgress();
+    const now = Date.now();
+    const stuckThreshold = 5 * 60 * 1000; // 5 minutes
+    
+    activeProgress.forEach((progress) => {
+      const timeSinceStart = now - progress.startTime.getTime();
+      if (timeSinceStart > stuckThreshold) {
+        logger.warn(`[Validate By IDs] Cancelling stuck progress for ${progress.resourceId} (${timeSinceStart}ms old)`);
+        progressService.cancelResourceProgress(progress.resourceId);
+      }
+    });
+    
     const detailedResults = [];
     let validatedCount = 0;
     
-    for (const resource of dbResources) {
+    // Performance tracking
+    const batchStartTime = Date.now();
+    const concurrencyLimit = 5; // Validate 5 resources in parallel
+    
+    logger.info(`[Validate By IDs] Starting parallel validation with concurrency limit: ${concurrencyLimit}`);
+    
+    // Validate resource function with progress tracking
+    const validateResource = async (resource: typeof dbResources[0]) => {
+      const resourceIdentifier = `${resource.resourceType}/${resource.resourceId}`;
+      const startTime = Date.now();
+      
       try {
+        // Start progress tracking
+        progressService.startResourceProgress(
+          resourceIdentifier,
+          resource.resourceType,
+          {
+            requestedBy: 'batch-validation',
+            requestId: `validate-by-ids-${Date.now()}`,
+          }
+        );
+        
+        logger.debug(`[Validate By IDs] Starting validation for ${resourceIdentifier}`);
+        
         // Validate resource using consolidated validation service with settings override
-        await validationService.validateResource(
+        const result = await validationService.validateResource(
           resource.data,
           false, // skipUnchanged
           true,  // forceRevalidation
@@ -120,26 +160,100 @@ router.post('/validate-by-ids', async (req: Request, res: Response) => {
           }
         );
         
-        validatedCount++;
-        detailedResults.push({
+        const duration = Date.now() - startTime;
+        
+        // Complete progress tracking with success
+        progressService.completeResourceProgress(
+          resourceIdentifier,
+          ResourceValidationStatus.COMPLETED,
+          {
+            errorCount: result.detailedResult?.summary?.errorCount || 0,
+            warningCount: result.detailedResult?.summary?.warningCount || 0,
+            infoCount: result.detailedResult?.summary?.informationCount || 0,
+            performance: {
+              totalTimeMs: result.detailedResult?.performance?.totalDurationMs || duration,
+              aspectTimes: result.detailedResult?.performance?.durationByAspect || {},
+              averageTimePerAspect: 0
+            }
+          }
+        );
+        
+        // Log detailed performance breakdown
+        const aspectTimes = result.detailedResult?.performance?.durationByAspect || {};
+        const aspectBreakdown = Object.entries(aspectTimes)
+          .map(([aspect, time]) => `${aspect}:${time}ms`)
+          .join(', ');
+        
+        logger.info(`[Validate By IDs] ✓ Validated ${resourceIdentifier} in ${duration}ms [${aspectBreakdown}]`);
+        
+        return {
           resourceId: resource.resourceId,
           resourceType: resource.resourceType,
           dbId: resource.id,
           success: true,
-        });
-        
-        logger.debug(`[Validate By IDs] Successfully validated ${resource.resourceType}/${resource.resourceId}`);
+          duration,
+          aspectTimes,
+        };
       } catch (error) {
-        logger.error(`[Validate By IDs] Validation failed for resource ${resource.resourceType}/${resource.resourceId}:`, error);
-        detailedResults.push({
+        const duration = Date.now() - startTime;
+        
+        // Complete progress tracking with failure
+        progressService.completeResourceProgress(
+          resourceIdentifier,
+          ResourceValidationStatus.FAILED,
+          {
+            errorCount: 1,
+            warningCount: 0,
+            infoCount: 0,
+            lastError: error instanceof Error ? error.message : 'Unknown error',
+            performance: {
+              totalTimeMs: duration,
+              aspectTimes: {},
+              averageTimePerAspect: 0
+            }
+          }
+        );
+        
+        logger.error(`[Validate By IDs] ✗ Validation failed for ${resourceIdentifier} after ${duration}ms:`, error);
+        
+        return {
           resourceId: resource.resourceId,
           resourceType: resource.resourceType,
           dbId: resource.id,
           success: false,
           error: error instanceof Error ? error.message : 'Unknown error',
-        });
+          duration,
+        };
       }
-    }
+    };
+    
+    // Process resources in parallel with concurrency limit
+    const processInChunks = async (items: typeof dbResources, limit: number) => {
+      const results = [];
+      for (let i = 0; i < items.length; i += limit) {
+        const chunk = items.slice(i, i + limit);
+        logger.info(`[Validate By IDs] Processing chunk ${Math.floor(i / limit) + 1}/${Math.ceil(items.length / limit)} (${chunk.length} resources)`);
+        
+        const chunkStartTime = Date.now();
+        const chunkResults = await Promise.all(chunk.map(validateResource));
+        const chunkDuration = Date.now() - chunkStartTime;
+        
+        results.push(...chunkResults);
+        
+        logger.info(`[Validate By IDs] Chunk completed in ${chunkDuration}ms (avg: ${Math.round(chunkDuration / chunk.length)}ms per resource)`);
+      }
+      return results;
+    };
+    
+    const results = await processInChunks(dbResources, concurrencyLimit);
+    detailedResults.push(...results);
+    validatedCount = results.filter(r => r.success).length;
+    
+    const totalDuration = Date.now() - batchStartTime;
+    const avgDuration = Math.round(totalDuration / dbResources.length);
+    
+    logger.info(`[Validate By IDs] Batch completed: ${validatedCount}/${dbResources.length} successful in ${totalDuration}ms (avg: ${avgDuration}ms per resource)`);
+
 
     // 4. Return response
     logger.info(`[Validate By IDs] Completed: ${validatedCount}/${resources.length} resources validated successfully`);

@@ -1003,6 +1003,19 @@ export class ProfileResolver {
       const kind = profile.kind || 'resource';
       const status = profile.status || 'active';
       
+      // Prepare values with proper null handling for SQL
+      const dateValue = profile.date ? new Date(profile.date).toISOString() : new Date().toISOString();
+      const versionValue = result.version || 'latest';
+      const baseDefinitionValue = baseDefinition || null;
+      const purposeValue = profile.purpose || null;
+      const copyrightValue = profile.copyright || null;
+      
+      // Map source value to match CHECK constraint
+      let sourceValue = result.source;
+      if (sourceValue === 'local-cache') {
+        sourceValue = 'local';
+      }
+      
       // Insert or update profile in cache
       await db.execute(sql`
         INSERT INTO profiles_cache (
@@ -1014,7 +1027,7 @@ export class ProfileResolver {
           checksum_sha256
         ) VALUES (
           ${result.canonicalUrl},
-          ${result.version},
+          ${versionValue},
           ${profile.name || profileId},
           ${profile.title || profile.name || profileId},
           ${profileId},
@@ -1022,27 +1035,27 @@ export class ProfileResolver {
           ${resourceType},
           ${kind},
           ${profile.abstract || false},
-          ${baseDefinition},
+          ${baseDefinitionValue},
           ${profile.derivation || 'specialization'},
           ${profile.type || resourceType},
-          ${result.source},
+          ${sourceValue},
           ${profile.fhirVersion || 'R4'},
           ${JSON.stringify(profile)},
           ${JSON.stringify(profile.differential || {})},
           ${JSON.stringify(profile.snapshot || {})},
           ${status},
           ${profile.experimental || false},
-          ${profile.date ? new Date(profile.date) : new Date()},
+          ${dateValue},
           ${profile.publisher || 'Unknown'},
-          ${JSON.stringify(profile.contact || {})},
-          ${JSON.stringify(profile.useContext || {})},
-          ${JSON.stringify(profile.jurisdiction || {})},
-          ${profile.purpose || null},
-          ${profile.copyright || null},
-          ${JSON.stringify(profile.context || {})},
+          ${JSON.stringify(profile.contact || [])},
+          ${JSON.stringify(profile.useContext || [])},
+          ${JSON.stringify(profile.jurisdiction || [])},
+          ${purposeValue},
+          ${copyrightValue},
+          ${JSON.stringify(profile.context || [])},
           ${result.resolutionTime},
           ${result.dependencies.length > 0},
-          ${result.source},
+          ${sourceValue},
           ${contentHash}
         )
         ON CONFLICT (canonical_url, version) 
@@ -1056,7 +1069,7 @@ export class ProfileResolver {
 
       // Cache dependencies if they exist
       if (result.dependencies.length > 0) {
-        await this.cacheDependencies(result.canonicalUrl, result.version, result.dependencies);
+        await this.cacheDependencies(result.canonicalUrl, versionValue, result.dependencies);
       }
 
       // Log successful caching

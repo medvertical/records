@@ -1120,49 +1120,71 @@ export default function ResourceBrowser() {
       const batchSize = currentSettings?.performance?.batchSize || 50;
       const allResults = [];
       
+      // Create all batch requests
+      const batches = [];
       for (let i = 0; i < unvalidatedResources.length; i += batchSize) {
         const batch = unvalidatedResources.slice(i, i + batchSize);
-        const batchNumber = Math.floor(i/batchSize) + 1;
-        
-        console.log(`[Background Validation] Processing batch ${batchNumber} with ${batch.length} resources`);
-        
-        try {
-          const response = await fetch('/api/validation/validate-by-ids', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              // Send only the minimal required data to reduce payload size
-              resources: batch.map((resource: any) => ({
-                _dbId: resource._dbId || resource.id,
-                resourceType: resource.resourceType,
-                resourceId: resource.resourceId || resource.id
-              }))
-            })
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`[Background Validation] Batch ${batchNumber} failed: ${response.status} ${response.statusText}`, errorText);
-            // Continue with other batches even if one fails
-            continue;
-          }
-
-          const batchResult = await response.json();
-          allResults.push(...(batchResult.detailedResults || []));
-          console.log(`[Background Validation] Batch ${batchNumber} completed successfully`);
-        } catch (error) {
-          console.error(`[Background Validation] Batch ${batchNumber} error:`, error);
-          // Continue with other batches even if one fails
-          continue;
-        }
-
-        // Add a small delay between batches to reduce server load
-        if (i + batchSize < unvalidatedResources.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
+        batches.push({
+          batchNumber: Math.floor(i/batchSize) + 1,
+          resources: batch
+        });
       }
+      
+      console.log(`[Background Validation] Starting parallel validation of ${batches.length} batches (${unvalidatedResources.length} total resources)`);
+      const startTime = Date.now();
+      
+      // Process all batches in parallel
+      const batchResults = await Promise.allSettled(
+        batches.map(async ({ batchNumber, resources: batch }) => {
+          const batchStartTime = Date.now();
+          console.log(`[Background Validation] Processing batch ${batchNumber} with ${batch.length} resources`);
+          
+          try {
+            const response = await fetch('/api/validation/validate-by-ids', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                // Send only the minimal required data to reduce payload size
+                resources: batch.map((resource: any) => ({
+                  _dbId: resource._dbId || resource.id,
+                  resourceType: resource.resourceType,
+                  resourceId: resource.resourceId || resource.id
+                }))
+              })
+            });
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error(`[Background Validation] Batch ${batchNumber} failed: ${response.status} ${response.statusText}`, errorText);
+              throw new Error(errorText);
+            }
+
+            const batchResult = await response.json();
+            const duration = Date.now() - batchStartTime;
+            console.log(`[Background Validation] Batch ${batchNumber} completed successfully in ${duration}ms`);
+            return batchResult.detailedResults || [];
+          } catch (error) {
+            const duration = Date.now() - batchStartTime;
+            console.error(`[Background Validation] Batch ${batchNumber} error after ${duration}ms:`, error);
+            throw error;
+          }
+        })
+      );
+      
+      // Collect successful results
+      batchResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          allResults.push(...result.value);
+        } else {
+          console.error(`[Background Validation] Batch ${index + 1} failed:`, result.reason);
+        }
+      });
+      
+      const totalDuration = Date.now() - startTime;
+      const successCount = batchResults.filter(r => r.status === 'fulfilled').length;
+      console.log(`[Background Validation] All batches completed: ${successCount}/${batches.length} successful in ${totalDuration}ms (avg: ${Math.round(totalDuration / batches.length)}ms per batch)`);
 
       // Combine all batch results
       const result = {
@@ -1443,46 +1465,71 @@ export default function ResourceBrowser() {
       const batchSize = currentSettings?.performance?.batchSize || 50;
       const allResults = [];
       
+      // Create all batch requests
+      const batches = [];
       for (let i = 0; i < resourcesData.resources.length; i += batchSize) {
         const batch = resourcesData.resources.slice(i, i + batchSize);
-        const batchNumber = Math.floor(i/batchSize) + 1;
-        
-        console.log(`[Manual Revalidation] Processing batch ${batchNumber} with ${batch.length} resources`);
-        
-        try {
-          const response = await fetch('/api/validation/validate-by-ids', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              resources: batch.map((resource: any) => ({
-                _dbId: resource._dbId || resource.id,
-                resourceType: resource.resourceType,
-                resourceId: resource.resourceId || resource.id
-              }))
-            })
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`[Manual Revalidation] Batch ${batchNumber} failed:`, errorText);
-            continue;
-          }
-
-          const batchResult = await response.json();
-          allResults.push(...(batchResult.detailedResults || []));
-          console.log(`[Manual Revalidation] Batch ${batchNumber} completed successfully`);
-        } catch (error) {
-          console.error(`[Manual Revalidation] Batch ${batchNumber} error:`, error);
-          continue;
-        }
-
-        // Small delay between batches to reduce server load
-        if (i + batchSize < resourcesData.resources.length) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
+        batches.push({
+          batchNumber: Math.floor(i/batchSize) + 1,
+          resources: batch
+        });
       }
+      
+      console.log(`[Manual Revalidation] Starting parallel validation of ${batches.length} batches (${resourcesData.resources.length} total resources)`);
+      const startTime = Date.now();
+      
+      // Process all batches in parallel
+      const batchResults = await Promise.allSettled(
+        batches.map(async ({ batchNumber, resources: batch }) => {
+          const batchStartTime = Date.now();
+          console.log(`[Manual Revalidation] Processing batch ${batchNumber} with ${batch.length} resources`);
+          
+          try {
+            const response = await fetch('/api/validation/validate-by-ids', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                resources: batch.map((resource: any) => ({
+                  _dbId: resource._dbId || resource.id,
+                  resourceType: resource.resourceType,
+                  resourceId: resource.resourceId || resource.id
+                }))
+              })
+            });
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              console.error(`[Manual Revalidation] Batch ${batchNumber} failed:`, errorText);
+              throw new Error(errorText);
+            }
+
+            const batchResult = await response.json();
+            const duration = Date.now() - batchStartTime;
+            console.log(`[Manual Revalidation] Batch ${batchNumber} completed successfully in ${duration}ms`);
+            return batchResult.detailedResults || [];
+          } catch (error) {
+            const duration = Date.now() - batchStartTime;
+            console.error(`[Manual Revalidation] Batch ${batchNumber} error after ${duration}ms:`, error);
+            throw error;
+          }
+        })
+      );
+      
+      // Collect successful results
+      batchResults.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          allResults.push(...result.value);
+        } else {
+          console.error(`[Manual Revalidation] Batch ${index + 1} failed:`, result.reason);
+        }
+      });
+      
+      const totalDuration = Date.now() - startTime;
+      const successCount = batchResults.filter(r => r.status === 'fulfilled').length;
+      console.log(`[Manual Revalidation] All batches completed: ${successCount}/${batches.length} successful in ${totalDuration}ms (avg: ${Math.round(totalDuration / batches.length)}ms per batch)`);
+
 
       // Update activity context with completion
       resourceIds.forEach(id => {
