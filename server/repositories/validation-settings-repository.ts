@@ -80,7 +80,10 @@ export class ValidationSettingsRepository {
         .select({
           aspects: validationSettings.aspects,
           performance: validationSettings.performance,
-          resourceTypes: validationSettings.resourceTypes
+          resourceTypes: validationSettings.resourceTypes,
+          autoRevalidateAfterEdit: validationSettings.autoRevalidateAfterEdit,
+          autoRevalidateOnVersionChange: validationSettings.autoRevalidateOnVersionChange,
+          listViewPollingInterval: validationSettings.listViewPollingInterval
         })
         .from(validationSettings)
         .where(and(...conditions))
@@ -111,7 +114,9 @@ export class ValidationSettingsRepository {
           remote: 'https://tx.fhir.org/r4'
         },
         useFhirValidateOperation: false,
-        autoRevalidateAfterEdit: false,
+        autoRevalidateAfterEdit: result[0].autoRevalidateAfterEdit ?? false,
+        autoRevalidateOnVersionChange: result[0].autoRevalidateOnVersionChange ?? true,
+        listViewPollingInterval: result[0].listViewPollingInterval ?? 30000,
       } as ValidationSettings;
     } catch (error) {
       console.error('[ValidationSettingsRepository] Error getting active settings:', error);
@@ -148,7 +153,9 @@ export class ValidationSettingsRepository {
           remote: 'https://tx.fhir.org/r4'
         },
         useFhirValidateOperation: false,
-        autoRevalidateAfterEdit: false,
+        autoRevalidateAfterEdit: row.autoRevalidateAfterEdit ?? false,
+        autoRevalidateOnVersionChange: row.autoRevalidateOnVersionChange ?? true,
+        listViewPollingInterval: row.listViewPollingInterval ?? 30000,
       };
       
       return {
@@ -182,6 +189,9 @@ export class ValidationSettingsRepository {
           aspects: input.settings.aspects,
           performance: input.settings.performance,
           resourceTypes: input.settings.resourceTypes,
+          autoRevalidateAfterEdit: input.settings.autoRevalidateAfterEdit ?? false,
+          autoRevalidateOnVersionChange: input.settings.autoRevalidateOnVersionChange ?? true,
+          listViewPollingInterval: input.settings.listViewPollingInterval ?? 30000,
           isActive: input.isActive !== false,
           createdAt: new Date(),
           updatedAt: new Date()
@@ -223,6 +233,9 @@ export class ValidationSettingsRepository {
           aspects: input.settings.aspects,
           performance: input.settings.performance,
           resourceTypes: input.settings.resourceTypes,
+          autoRevalidateAfterEdit: input.settings.autoRevalidateAfterEdit ?? false,
+          autoRevalidateOnVersionChange: input.settings.autoRevalidateOnVersionChange ?? true,
+          listViewPollingInterval: input.settings.listViewPollingInterval ?? 30000,
           isActive: input.isActive !== false,
           updatedAt: new Date()
         })

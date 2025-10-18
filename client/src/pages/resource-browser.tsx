@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useServerData } from "@/hooks/use-server-data";
 import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-polling";
+import { useResourceVersionTracker, type ResourceVersionInfo } from "@/hooks/use-resource-version-tracker";
 import ResourceSearch, { type ValidationFilters } from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
 import { ValidationOverview, type ValidationSummary } from "@/components/resources/validation-overview";
@@ -373,13 +374,18 @@ export default function ResourceBrowser() {
   const apiEndpoint = (hasValidationFilters || hasFhirParamsInUrl || hasTextSearch) ? "/api/fhir/resources/filtered" : "/api/fhir/resources";
   
 
+  // Get polling interval from validation settings (default: 30 seconds, range: 10s-5min)
+  const pollingInterval = validationSettingsData?.listViewPollingInterval || 30000;
+  const isPollingEnabled = validationSettingsData?.autoRevalidateOnVersionChange !== false; // Default to true
+  
   const { data: resourcesData, isLoading, error} = useQuery<ResourcesResponse>({
     queryKey: ['resources', { endpoint: apiEndpoint, resourceType, search: searchQuery, page, pageSize, location, filters: validationFilters }],
     // Only fetch resources when there's an active server (resourceType can be empty for "all types")
     enabled: !!stableActiveServer,
     staleTime: apiEndpoint.includes('/filtered') ? 0 : 2 * 60 * 1000, // Fresh data for searches, cache for browsing
     gcTime: 5 * 60 * 1000, // 5 minutes - keep in cache longer
-    refetchInterval: false, // Don't auto-refetch
+    refetchInterval: isPollingEnabled ? pollingInterval : false, // Poll based on settings
+    refetchIntervalInBackground: false, // Only poll when tab is visible
     refetchOnWindowFocus: false, // Don't refetch on window focus
     refetchOnMount: apiEndpoint.includes('/filtered') ? true : false, // Refetch for searches
     placeholderData: undefined, // Disable placeholder to prevent stale data display
@@ -562,6 +568,74 @@ export default function ResourceBrowser() {
     staleTime: 30 * 1000, // 30 seconds
     refetchInterval: false,
   });
+
+  // Track resource version changes and auto-revalidate when versionId changes
+  const handleVersionChange = useCallback(async (changedResources: ResourceVersionInfo[]) => {
+    if (changedResources.length === 0) return;
+    
+    console.log(`[ResourceBrowser] Detected ${changedResources.length} resource(s) with version changes:`, 
+      changedResources.map(r => `${r.resourceType}/${r.resourceId} (v${r.versionId})`).join(', ')
+    );
+
+    // Batch enqueue changed resources for high-priority validation
+    try {
+      const enqueuePromises = changedResources.map(async (resourceInfo) => {
+        const response = await fetch('/api/validation/queue/enqueue', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            serverId: stableActiveServer?.id || 1,
+            resourceType: resourceInfo.resourceType,
+            resourceId: resourceInfo.resourceId,
+            priority: 'high', // High priority for auto-revalidation
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          console.error(`[ResourceBrowser] Failed to enqueue ${resourceInfo.resourceType}/${resourceInfo.resourceId}:`, error);
+          return null;
+        }
+
+        return resourceInfo;
+      });
+
+      const results = await Promise.all(enqueuePromises);
+      const successCount = results.filter(r => r !== null).length;
+
+      if (successCount > 0) {
+        // Show subtle toast notification
+        toast({
+          title: 'Auto-Revalidation',
+          description: `${successCount} resource${successCount > 1 ? 's' : ''} queued for validation due to version changes`,
+          duration: 3000,
+        });
+
+        // Soft refetch after 3 seconds to get updated validation results
+        setTimeout(() => {
+          queryClient.refetchQueries({
+            queryKey: ['resources'],
+          });
+        }, 3000);
+      }
+    } catch (error) {
+      console.error('[ResourceBrowser] Error during auto-revalidation:', error);
+    }
+  }, [stableActiveServer, toast, queryClient]);
+
+  // Initialize version tracker
+  const { reset: resetVersionTracker } = useResourceVersionTracker(
+    resourcesData?.resources || [],
+    isPollingEnabled && !isLoading, // Only track when polling is enabled and data is loaded
+    handleVersionChange
+  );
+
+  // Reset version tracker when page, filters, or resource type changes
+  useEffect(() => {
+    resetVersionTracker();
+  }, [page, resourceType, searchQuery, JSON.stringify(validationFilters), resetVersionTracker]);
 
   // Debug validation messages query state
   useEffect(() => {

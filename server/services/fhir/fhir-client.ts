@@ -401,6 +401,59 @@ export class FhirClient {
     }
   }
 
+  async getResourceHistory(resourceType: string, id: string, count: number = 10): Promise<{
+    total: number;
+    versions: Array<{
+      versionId: string;
+      lastModified: string;
+      resource?: any;
+    }>;
+  }> {
+    try {
+      const url = `${this.baseUrl}/${resourceType}/${id}/_history?_count=${count}&_format=json`;
+      console.log(`[FhirClient] Fetching version history: ${url}`);
+      
+      const response: AxiosResponse<FhirBundle> = await axios.get(url, {
+        headers: this.headers,
+        timeout: 10000,
+      });
+
+      const bundle = response.data;
+      const versions: Array<{ versionId: string; lastModified: string; resource?: any }> = [];
+
+      if (bundle.entry) {
+        for (const entry of bundle.entry) {
+          const resource = entry.resource;
+          if (resource?.meta?.versionId) {
+            versions.push({
+              versionId: resource.meta.versionId,
+              lastModified: resource.meta.lastUpdated || new Date().toISOString(),
+              resource: resource,
+            });
+          }
+        }
+      }
+
+      return {
+        total: bundle.total || versions.length,
+        versions,
+      };
+    } catch (error: any) {
+      // If server doesn't support _history, return minimal data
+      if (error.response?.status === 404 || error.response?.status === 501) {
+        console.warn(`[FhirClient] Server does not support _history for ${resourceType}/${id}`);
+        return { total: 1, versions: [] };
+      }
+      
+      if (error.response?.data?.resourceType === 'OperationOutcome') {
+        console.warn(`[FhirClient] History operation failed: ${this.formatOperationOutcome(error.response.data)}`);
+        return { total: 1, versions: [] };
+      }
+      
+      throw new Error(`Failed to get history for ${resourceType}/${id}: ${error.message}`);
+    }
+  }
+
   async getAllResourceTypes(): Promise<string[]> {
     try {
       console.log('[FhirClient] Fetching CapabilityStatement to determine supported resource types...');

@@ -132,6 +132,8 @@ export interface ValidationSettings {
 
   /** Auto-Revalidation Settings */
   autoRevalidateAfterEdit?: boolean; // Automatically revalidate after resource edit (default: false)
+  autoRevalidateOnVersionChange?: boolean; // Automatically revalidate when versionId changes in list view (default: true)
+  listViewPollingInterval?: number; // Polling interval for list view in milliseconds (default: 30000, range: 10000-300000)
 
   /** Task 6.6 & 6.7: Recursive Reference Validation Configuration */
   recursiveReferenceValidation?: {
@@ -541,6 +543,8 @@ export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
   },
   profileSources: 'simplifier', // Fetch profiles from Simplifier, resolve locally
   autoRevalidateAfterEdit: false,
+  autoRevalidateOnVersionChange: true, // Automatically revalidate when versionId changes
+  listViewPollingInterval: 30000, // Poll every 30 seconds (30000ms)
   cacheConfig: DEFAULT_CACHE_CONFIG
 };
 
@@ -575,6 +579,8 @@ export const DEFAULT_VALIDATION_SETTINGS_R5: ValidationSettings = {
   },
   profileSources: 'simplifier', // Fetch profiles from Simplifier, resolve locally
   autoRevalidateAfterEdit: false,
+  autoRevalidateOnVersionChange: true, // Automatically revalidate when versionId changes
+  listViewPollingInterval: 30000, // Poll every 30 seconds (30000ms)
   cacheConfig: DEFAULT_CACHE_CONFIG
 };
 
@@ -601,6 +607,8 @@ export interface ValidationSettingsUpdate {
   };
   profileSources?: 'local' | 'simplifier' | 'both';
   autoRevalidateAfterEdit?: boolean;
+  autoRevalidateOnVersionChange?: boolean;
+  listViewPollingInterval?: number;
   recursiveReferenceValidation?: Partial<ValidationSettings['recursiveReferenceValidation']>;
   cacheConfig?: Partial<ValidationSettings['cacheConfig']>;
 }

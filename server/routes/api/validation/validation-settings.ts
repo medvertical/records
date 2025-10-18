@@ -149,6 +149,8 @@ export function setupValidationSettingsRoutes(app: Express) {
         update.mode !== undefined || update.useFhirValidateOperation !== undefined ||
         update.terminologyFallback || update.offlineConfig || update.profileSources || 
         update.autoRevalidateAfterEdit !== undefined ||
+        update.autoRevalidateOnVersionChange !== undefined ||
+        update.listViewPollingInterval !== undefined ||
         update.terminologyServers || update.circuitBreaker;
       
       if (!hasValidFields) {

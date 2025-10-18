@@ -8,7 +8,6 @@
 export { default as ResourceViewer } from './resource-viewer';
 export { default as UnifiedTreeViewer } from './UnifiedTreeViewer';
 export { ResourceEditor } from './ResourceEditor';
-export { ResourceDetailHeader } from './ResourceDetailHeader';
 export { ResourceDetailActions } from './ResourceDetailActions';
 
 // State components

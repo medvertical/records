@@ -18,6 +18,8 @@ import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import ProfileBadge from "@/components/resources/ProfileBadge";
 import { getShortId } from "@/lib/resource-utils";
+import { ResourceVersionCount } from "@/components/resources/resource-version-count";
+import { useResourceVersions } from "@/hooks/use-resource-versions";
 
 // Helper function to check if a string is a UUID
 const isUUID = (str: string): boolean => {
@@ -311,6 +313,12 @@ export default function ResourceDetail() {
     retry: 1,
   });
   
+  // Fetch version data for this resource
+  const { data: versionData, isLoading: isLoadingVersions } = useResourceVersions(
+    resource?.resourceType,
+    resource?.resourceId
+  );
+  
   // Fetch validation messages to pass to ResourceViewer for tree badges
   const { data: validationMessages } = useQuery({
     queryKey: ['/api/validation/resources', resource?.resourceType, resource?.resourceId, 'messages', activeServer?.id],
@@ -511,6 +519,11 @@ export default function ResourceDetail() {
                       size="md"
                     />
                   )}
+                  {/* Display version count */}
+                  <ResourceVersionCount
+                    versionData={versionData}
+                    isLoading={isLoadingVersions}
+                  />
                 </div>
                 <div className="flex items-center space-x-4">
                   <div className="flex items-center space-x-2">

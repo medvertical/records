@@ -34,6 +34,8 @@ import { getFilteredValidationSummary } from '@/lib/validation-filtering-utils';
 import { getShortId, getShortReference } from "@/lib/resource-utils";
 import ProfileBadge from "@/components/resources/ProfileBadge";
 import { getResourceTypeIcon } from "@/lib/resource-type-icons";
+import { ResourceVersionCount } from "@/components/resources/resource-version-count";
+import { useResourceVersionsBulk } from "@/hooks/use-resource-versions";
 
 // Extended types for this component
 interface ExtendedValidationProgress extends ValidationProgress {
@@ -116,6 +118,16 @@ export default function ResourceList({
     staleTime: 30 * 1000, // 30 seconds
     refetchInterval: false,
   });
+
+  // Fetch version data for all resources on the current page
+  const resourceIdentifiers = resources.map(r => ({
+    resourceType: r.resourceType,
+    id: r.resourceId || r.id,
+  }));
+  const { data: versionData, isLoading: isLoadingVersions } = useResourceVersionsBulk(
+    resourceIdentifiers,
+    { enabled: resources.length > 0 }
+  );
 
   // Create a ref map to track resource elements for auto-scroll
   const resourceRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -710,6 +722,12 @@ export default function ResourceList({
                                 maxDisplay={2}
                               />
                             )}
+                            {/* Display version count */}
+                            <ResourceVersionCount
+                              versionData={versionData?.[`${resource.resourceType}/${resource.resourceId || resource.id}`]}
+                              isLoading={isLoadingVersions}
+                              compact
+                            />
                             {validationStatus === 'not-validated' && (
                               <Tooltip>
                                 <TooltipTrigger asChild>
