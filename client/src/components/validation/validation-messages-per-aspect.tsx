@@ -3,11 +3,12 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, XCircle, AlertTriangle, Info, RefreshCw } from 'lucide-react';
+import { CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { CircularProgress } from '@/components/ui/circular-progress';
 import { ValidationMessageItem } from './ValidationMessageItem';
 import type { ValidationMessage as ValidationMessageType } from './ValidationMessageItem';
+import { getSeverityIcon } from '@/components/resources/unified-tree-viewer/utils';
 
 interface ValidationMessage {
   severity: string;
@@ -247,22 +248,35 @@ export function ValidationMessagesPerAspect({
                       Valid
                     </Badge>
                   ) : (
-                    <Badge className="bg-red-50 text-red-600 border-red-200">
-                      <XCircle className="h-3 w-3 mr-1" />
-                      {errorCount}
-                    </Badge>
-                  )}
-                  {warningCount > 0 && (
-                    <Badge className="bg-orange-50 text-orange-600 border-orange-200">
-                      <AlertTriangle className="h-3 w-3 mr-1" />
-                      {warningCount}
-                    </Badge>
-                  )}
-                  {informationCount > 0 && (
-                    <Badge className="bg-blue-50 text-blue-600 border-blue-200">
-                      <Info className="h-3 w-3 mr-1" />
-                      {informationCount}
-                    </Badge>
+                    <>
+                      {errorCount > 0 && (
+                        <Badge
+                          variant="destructive"
+                          className="h-6 px-2 text-xs flex items-center gap-1.5"
+                        >
+                          <span>{getSeverityIcon('error')}</span>
+                          <span>{errorCount}</span>
+                        </Badge>
+                      )}
+                      {warningCount > 0 && (
+                        <Badge
+                          variant="secondary"
+                          className="h-6 px-2 text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 flex items-center gap-1.5"
+                        >
+                          <span>{getSeverityIcon('warning')}</span>
+                          <span>{warningCount}</span>
+                        </Badge>
+                      )}
+                      {informationCount > 0 && (
+                        <Badge
+                          variant="secondary"
+                          className="h-6 px-2 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 flex items-center gap-1.5"
+                        >
+                          <span>{getSeverityIcon('information')}</span>
+                          <span>{informationCount}</span>
+                        </Badge>
+                      )}
+                    </>
                   )}
                 </>
               ) : (
