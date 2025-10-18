@@ -1,5 +1,6 @@
-import { RefreshCw, Edit, Save, Eye } from 'lucide-react';
+import { Edit, Save, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { RevalidateButton } from '@/components/ui/revalidate-button';
 import { useServerData } from '@/hooks/use-server-data';
 
 // ============================================================================
@@ -58,16 +59,13 @@ export function ResourceDetailActions({
               Edit
             </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
+            <RevalidateButton
               onClick={onRevalidate}
-              disabled={isRevalidating || !activeServer}
-              className="gap-2"
-            >
-              <RefreshCw className={`h-4 w-4 ${isRevalidating ? 'animate-spin' : ''}`} />
-              {isRevalidating ? 'Revalidating...' : 'Revalidate'}
-            </Button>
+              isRevalidating={isRevalidating}
+              disabled={!activeServer}
+              size="sm"
+              variant="outline"
+            />
           </>
         ) : (
           // Edit mode: Show View and Save buttons

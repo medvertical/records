@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
-import { ArrowLeft, CheckCircle, XCircle, AlertCircle, AlertTriangle, Info, RefreshCw, Edit, Loader2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, AlertCircle, AlertTriangle, Info, Edit, Loader2 } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CircularProgress } from '@/components/ui/circular-progress';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { RevalidateButton } from '@/components/ui/revalidate-button';
 import { useAspectSettingsReactive } from '@/hooks/use-aspect-settings-reactive';
 import { cn } from '@/lib/utils';
 import { getShortId } from "@/lib/resource-utils";
@@ -359,25 +360,12 @@ export function ResourceDetailHeader({
                 </Button>
               )}
               {onRevalidate && (
-                <Button
-                  variant="outline"
-                  size="sm"
+                <RevalidateButton
                   onClick={onRevalidate}
-                  disabled={isRevalidating}
-                  className="gap-2"
-                >
-                  {isRevalidating ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Revalidating...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="h-4 w-4" />
-                      Revalidate
-                    </>
-                  )}
-                </Button>
+                  isRevalidating={isRevalidating}
+                  size="sm"
+                  variant="outline"
+                />
               )}
             </div>
           )}

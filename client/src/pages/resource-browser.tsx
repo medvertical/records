@@ -215,7 +215,7 @@ export default function ResourceBrowser() {
     setSelectionMode(false);
     // Refetch resource list to see updated resources
     queryClient.invalidateQueries({
-      queryKey: ['/api/fhir/resources'],
+      queryKey: ['resources'],
     });
   }, [queryClient]);
 
@@ -1138,15 +1138,18 @@ export default function ResourceBrowser() {
         });
       });
 
-      // Clear progress after showing completion
+      // Refetch immediately - validation is already complete and stored in DB
+      queryClient.invalidateQueries({ queryKey: ['resources'] });
+      
+      // Clear progress after showing completion briefly
       setTimeout(() => {
         setValidationProgress(new Map());
         // Remove from activity context
         resourceIds.forEach(id => removeResourceValidation(id));
-      }, 1500);
-
-      // No need to refetch - validation results are already in the server response
-      // and will be reflected on the next natural data update
+        
+        // One more refetch to catch any async DB writes
+        queryClient.invalidateQueries({ queryKey: ['resources'] });
+      }, 500);
 
       // Mark this page as validated only after successful validation
       setHasValidatedCurrentPage(true);
@@ -1354,43 +1357,59 @@ export default function ResourceBrowser() {
     setIsValidating(true);
     
     try {
-      // Get resource IDs from current page - ensure they are numbers
-      const resourceIds = resourcesData.resources
-        .map((r: any) => r._dbId)
-        .filter((id): id is number => id != null && !isNaN(Number(id)))
-        .map(id => Number(id));
+      // Use the same synchronous validate-by-ids approach as background validation
+      const batchSize = currentSettings?.performance?.batchSize || 50;
+      const allResults = [];
       
-      if (resourceIds.length === 0) {
-        throw new Error('No valid resource IDs found');
+      for (let i = 0; i < resourcesData.resources.length; i += batchSize) {
+        const batch = resourcesData.resources.slice(i, i + batchSize);
+        const batchNumber = Math.floor(i/batchSize) + 1;
+        
+        console.log(`[Manual Revalidation] Processing batch ${batchNumber} with ${batch.length} resources`);
+        
+        try {
+          const response = await fetch('/api/validation/validate-by-ids', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              resources: batch.map((resource: any) => ({
+                _dbId: resource._dbId || resource.id,
+                resourceType: resource.resourceType,
+                resourceId: resource.resourceId || resource.id
+              }))
+            })
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`[Manual Revalidation] Batch ${batchNumber} failed:`, errorText);
+            continue;
+          }
+
+          const batchResult = await response.json();
+          allResults.push(...(batchResult.detailedResults || []));
+          console.log(`[Manual Revalidation] Batch ${batchNumber} completed successfully`);
+        } catch (error) {
+          console.error(`[Manual Revalidation] Batch ${batchNumber} error:`, error);
+          continue;
+        }
+
+        // Small delay between batches to reduce server load
+        if (i + batchSize < resourcesData.resources.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
 
-      // Call batch revalidation endpoint
-      const response = await fetch('/api/validation/batch-revalidate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resourceIds,
-          serverId: Number(stableActiveServer?.id) || 1,
-          forceRevalidation: true,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error || errorData.message || 'Revalidation request failed';
-        const details = errorData.details ? ` - ${JSON.stringify(errorData.details)}` : '';
-        throw new Error(`${errorMessage}${details}`);
-      }
-
-      const result = await response.json();
-
+      // Validation complete - refetch immediately to show results
+      queryClient.invalidateQueries({ queryKey: ['resources'] });
+      
       toast({
-        title: "Revalidation started",
-        description: `Queued ${result.queuedCount} resources for revalidation.`,
+        title: "Revalidation complete",
+        description: `Successfully revalidated ${allResults.length} resources.`,
       });
 
-      // No need to refetch - validation results will be updated automatically
-      // The resources remain visible and will show updated validation status naturally
       setIsValidating(false);
 
     } catch (error) {
@@ -1401,7 +1420,7 @@ export default function ResourceBrowser() {
       });
       setIsValidating(false);
     }
-  }, [resourcesData, stableActiveServer, queryClient, toast]);
+  }, [resourcesData, currentSettings, queryClient, toast]);
 
   // Calculate validation summary for current page (with stats for filters)
   const validationSummaryWithStats = useMemo(() => {

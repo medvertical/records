@@ -1,5 +1,4 @@
-import { Button } from '@/components/ui/button';
-import { RefreshCw } from 'lucide-react';
+import { RevalidateButton } from '@/components/ui/revalidate-button';
 import ValidationMessageNavigator, { SeverityNavigator } from '@/components/validation/validation-message-navigator';
 import type { ValidationMessage } from '@/components/validation/validation-messages-card';
 
@@ -91,15 +90,12 @@ export function ValidationOverview({
       )}
       
       {/* Revalidate Button */}
-      <Button
-        variant="outline"
-        size="sm"
+      <RevalidateButton
         onClick={onRevalidate}
-        disabled={isRevalidating}
-      >
-        <RefreshCw className={`h-4 w-4 mr-2 ${isRevalidating ? 'animate-spin' : ''}`} />
-        Revalidate
-      </Button>
+        isRevalidating={isRevalidating}
+        size="sm"
+        variant="outline"
+      />
 
       {/* Show message when no validation messages */}
       {messages.length === 0 && validationSummary.errorCount === 0 && validationSummary.warningCount === 0 && validationSummary.infoCount === 0 && (
