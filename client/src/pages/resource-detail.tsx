@@ -519,11 +519,6 @@ export default function ResourceDetail() {
                       size="md"
                     />
                   )}
-                  {/* Display version count */}
-                  <ResourceVersionCount
-                    versionData={versionData}
-                    isLoading={isLoadingVersions}
-                  />
                 </div>
                 <div className="flex items-center space-x-4">
                   <div className="flex items-center space-x-2">
@@ -567,11 +562,18 @@ export default function ResourceDetail() {
                       </Badge>
                     )}
                   </div>
-                  {validationSummary?.lastValidated && (
-                    <span className="text-xs text-gray-500">
-                      Last validated: {new Date(validationSummary.lastValidated).toLocaleString()}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {/* Display version count */}
+                    <ResourceVersionCount
+                      versionData={versionData}
+                      isLoading={isLoadingVersions}
+                    />
+                    {validationSummary?.lastValidated && (
+                      <span className="text-xs text-gray-500">
+                        Last validated: {new Date(validationSummary.lastValidated).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
