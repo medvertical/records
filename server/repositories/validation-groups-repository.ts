@@ -214,7 +214,7 @@ export async function getResourceMessages(
   console.log(`[getResourceMessages] Querying for serverId=${serverId}, resourceType=${resourceType}, fhirId=${fhirId}`);
   
   // Get all validation results for this resource
-  const results = await db
+  const allResults = await db
     .select({
       id: validationResultsPerAspect.id,
       aspect: validationResultsPerAspect.aspect,
@@ -234,7 +234,25 @@ export async function getResourceMessages(
       )
     );
   
-  console.log(`[getResourceMessages] Found ${results.length} validation result records for ${resourceType}/${fhirId}`);
+  console.log(`[getResourceMessages] Found ${allResults.length} validation result records for ${resourceType}/${fhirId}`);
+  
+  // Normalize aspect names (handle businessRule vs businessRules inconsistency)
+  const normalizeAspect = (aspect: string): string => {
+    return aspect === 'businessRules' ? 'businessRule' : aspect;
+  };
+  
+  // Keep only the latest result for each aspect (by validatedAt timestamp)
+  const latestByAspect = new Map<string, typeof allResults[0]>();
+  for (const result of allResults) {
+    const normalizedAspect = normalizeAspect(result.aspect);
+    const existing = latestByAspect.get(normalizedAspect);
+    if (!existing || new Date(result.validatedAt) > new Date(existing.validatedAt)) {
+      latestByAspect.set(normalizedAspect, result);
+    }
+  }
+  
+  const results = Array.from(latestByAspect.values());
+  console.log(`[getResourceMessages] Filtered to ${results.length} latest validation results (one per aspect)`);
   
   // For each result, get its messages
   const aspects = await Promise.all(
