@@ -3,13 +3,14 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { CheckCircle, AlertCircle, RefreshCw, Info } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { CircularProgress } from '@/components/ui/circular-progress';
 import { ValidationMessageItem } from './ValidationMessageItem';
 import type { ValidationMessage as ValidationMessageType } from './ValidationMessageItem';
 import { getSeverityIcon } from '@/components/resources/unified-tree-viewer/utils';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ValidationMessage {
   severity: string;
@@ -47,16 +48,41 @@ interface ValidationMessagesPerAspectProps {
   lastValidated?: string;
 }
 
-function getAspectBadgeColor(aspect: string): string {
-  const colors: Record<string, string> = {
-    structural: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-    profile: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-    terminology: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-    reference: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-    businessRule: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-    metadata: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
+function getAspectDescription(aspect: string): string {
+  const descriptions: Record<string, string> = {
+    structural: 'Validates basic structure, required fields, data types, and cardinality constraints',
+    profile: 'Checks conformance to declared FHIR profiles and their constraints',
+    terminology: 'Validates codes against code systems, value sets, and terminology bindings',
+    reference: 'Verifies that references to other resources are valid and resolvable',
+    businessRule: 'Evaluates business logic rules and custom validation constraints',
+    metadata: 'Checks metadata requirements like lastUpdated, versionId, and tags',
   };
-  return colors[aspect] || 'bg-gray-100 text-gray-800';
+  return descriptions[aspect] || 'Validation aspect';
+}
+
+function getRelativeTime(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffSecs < 60) return 'just now';
+  if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+  if (diffDays < 30) {
+    const weeks = Math.floor(diffDays / 7);
+    return `${weeks} week${weeks !== 1 ? 's' : ''} ago`;
+  }
+  if (diffDays < 365) {
+    const months = Math.floor(diffDays / 30);
+    return `${months} month${months !== 1 ? 's' : ''} ago`;
+  }
+  const years = Math.floor(diffDays / 365);
+  return `${years} year${years !== 1 ? 's' : ''} ago`;
 }
 
 export function ValidationMessagesPerAspect({
@@ -233,14 +259,13 @@ export function ValidationMessagesPerAspect({
         sum + filterMessagesBySeverity(aspect.messages).length, 0
       );
 
-  // Separate aspects with and without messages (after filtering)
+  // Filter aspects to only show those with messages (after filtering by severity)
   const aspectsWithMessages = data.aspects
     .map(aspect => ({
       ...aspect,
       messages: filterMessagesBySeverity(aspect.messages)
     }))
     .filter(aspect => aspect.messages.length > 0);
-  const aspectsWithoutMessages = data.aspects.filter(aspect => aspect.messages.length === 0);
 
   return (
     <Card className="text-left">
@@ -249,10 +274,19 @@ export function ValidationMessagesPerAspect({
           <div className="flex-1 min-w-0">
             <CardTitle className="text-left">Validation Messages</CardTitle>
             <CardDescription className="text-left">
-              {selectedSeverities.size === 0 ? (
-                `${totalMessages} validation message${totalMessages !== 1 ? 's' : ''} across ${data.aspects.length} aspect${data.aspects.length !== 1 ? 's' : ''}`
+              {lastValidated ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help">
+                      Last validated: {getRelativeTime(lastValidated)}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-sm">{new Date(lastValidated).toLocaleString()}</p>
+                  </TooltipContent>
+                </Tooltip>
               ) : (
-                `${filteredMessageCount} of ${totalMessages} message${totalMessages !== 1 ? 's' : ''} (filtered)`
+                'Not yet validated'
               )}
             </CardDescription>
           </div>
@@ -266,8 +300,8 @@ export function ValidationMessagesPerAspect({
         
         {/* Badges and metadata section */}
         <div className="mt-4">
-          {/* Validation status badges and last validated */}
-          <div className="flex items-center justify-between gap-2">
+          {/* Validation status badges */}
+          <div className="flex items-center gap-2">
             <div className="flex flex-wrap items-center gap-2">
               {isRevalidating && (
                 <Badge className="bg-blue-50 text-blue-600 border-blue-200">
@@ -339,13 +373,6 @@ export function ValidationMessagesPerAspect({
                 </Badge>
               )}
             </div>
-            
-            {/* Last validated timestamp - aligned right */}
-            {lastValidated && (
-              <span className="text-xs text-gray-500 whitespace-nowrap">
-                Last validated: {new Date(lastValidated).toLocaleString()}
-              </span>
-            )}
           </div>
         </div>
       </CardHeader>
@@ -358,12 +385,20 @@ export function ValidationMessagesPerAspect({
                 <AccordionItem key={`aspect-${index}`} value={`aspect-${index}`} className="text-left">
                   <AccordionTrigger className="hover:no-underline text-left">
                     <div className="flex items-center justify-start gap-2 w-full text-left">
-                      <Badge className={getAspectBadgeColor(aspectData.aspect)}>
+                      <Badge variant="outline" className="bg-muted/50">
                         {aspectData.aspect}
                       </Badge>
-                      <Badge variant="outline" className="ml-auto mr-2">
-                        {aspectData.messages.length} message{aspectData.messages.length !== 1 ? 's' : ''}
-                      </Badge>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p className="text-sm">{getAspectDescription(aspectData.aspect)}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <span className="ml-auto mr-2 text-sm text-muted-foreground">
+                        {aspectData.messages.length}
+                      </span>
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="text-left">
@@ -387,22 +422,6 @@ export function ValidationMessagesPerAspect({
                 </AccordionItem>
               ))}
             </Accordion>
-          )}
-
-          {/* Aspects without messages - non-collapsible */}
-          {aspectsWithoutMessages.length > 0 && (
-            <div className="space-y-2">
-              {aspectsWithoutMessages.map((aspectData, index) => (
-                <div key={`no-messages-${index}`} className="flex items-center justify-between py-3 px-4 border rounded-lg bg-muted/50">
-                  <Badge className={getAspectBadgeColor(aspectData.aspect)}>
-                    {aspectData.aspect}
-                  </Badge>
-                  <Badge variant="outline" className="text-muted-foreground">
-                    0 messages
-                  </Badge>
-                </div>
-              ))}
-            </div>
           )}
         </div>
       </CardContent>

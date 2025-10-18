@@ -441,11 +441,9 @@ export default function ResourceViewer({
     <Card>
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'tree' | 'json' | 'form')}>
         <CardHeader className="pb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <CardTitle>{title}</CardTitle>
-              {getValidationBadge()}
-            </div>
+          <div className="flex items-center justify-between gap-4">
+            <CardTitle>{title}</CardTitle>
+            
             <TabsList className="grid grid-cols-2">
               {!isEditMode ? (
                 <>
@@ -459,14 +457,10 @@ export default function ResourceViewer({
                 </>
               )}
             </TabsList>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-0">
-
-          {/* Tree View (View Mode Only) */}
-          {!isEditMode && (
-            <TabsContent value="tree" className="mt-0">
-              <div className="flex items-center justify-end mb-2">
+            
+            <div className="flex gap-2">
+              {/* Tree view actions (view mode only) */}
+              {!isEditMode && activeTab === 'tree' && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -475,7 +469,87 @@ export default function ResourceViewer({
                 >
                   {expandAll ? 'Collapse All' : 'Expand All'}
                 </Button>
-              </div>
+              )}
+              
+              {/* JSON view actions (view mode) */}
+              {!isEditMode && activeTab === 'json' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(formatJSON(resourceData));
+                      setCopiedToClipboard(true);
+                      setTimeout(() => setCopiedToClipboard(false), 2000);
+                    } catch (error) {
+                      console.error('Failed to copy to clipboard:', error);
+                    }
+                  }}
+                >
+                  {copiedToClipboard ? (
+                    <>
+                      <Check className="h-4 w-4 mr-1" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-4 w-4 mr-1" />
+                      Copy
+                    </>
+                  )}
+                </Button>
+              )}
+              
+              {/* Form view actions (edit mode) */}
+              {isEditMode && activeTab === 'form' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExpandAll}
+                  className="text-xs"
+                >
+                  {expandAll ? 'Collapse All' : 'Expand All'}
+                </Button>
+              )}
+              
+              {/* JSON view actions (edit mode) */}
+              {isEditMode && activeTab === 'json' && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleFormat}
+                    disabled={!jsonValidation.valid}
+                  >
+                    Format
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyToClipboard}
+                  >
+                    {copiedToClipboard ? (
+                      <>
+                        <Check className="h-4 w-4 mr-1" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-1" />
+                        Copy
+                      </>
+                    )}
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+
+          {/* Tree View (View Mode Only) */}
+          {!isEditMode && (
+            <TabsContent value="tree" className="mt-0">
               <UnifiedTreeViewer 
                 resourceData={resourceData}
                 resourceType={resourceType}
@@ -497,97 +571,38 @@ export default function ResourceViewer({
           <TabsContent value="json" className="mt-0">
             {!isEditMode ? (
               // Read-only JSON view
-              <div className="space-y-3">
-                <div className="flex items-center justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(formatJSON(resourceData));
-                        setCopiedToClipboard(true);
-                        setTimeout(() => setCopiedToClipboard(false), 2000);
-                      } catch (error) {
-                        console.error('Failed to copy to clipboard:', error);
-                      }
-                    }}
-                  >
-                    {copiedToClipboard ? (
-                      <>
-                        <Check className="h-4 w-4 mr-1" />
-                        Copied!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-4 w-4 mr-1" />
-                        Copy
-                      </>
-                    )}
-                  </Button>
-                </div>
-                <div className="border rounded-md overflow-hidden bg-gray-50">
-                  <SyntaxHighlighter
-                    language="json"
-                    style={prism}
-                    customStyle={{
-                      margin: 0,
-                      padding: '1rem',
-                      fontSize: '0.875rem',
-                      maxHeight: '600px',
-                      overflow: 'auto',
-                      backgroundColor: '#f9fafb',
-                    }}
-                    wrapLongLines={false}
-                  >
-                    {formatJSON(resourceData)}
-                  </SyntaxHighlighter>
-                </div>
+              <div className="border rounded-md overflow-hidden bg-gray-50">
+                <SyntaxHighlighter
+                  language="json"
+                  style={prism}
+                  customStyle={{
+                    margin: 0,
+                    padding: '1rem',
+                    fontSize: '0.875rem',
+                    maxHeight: '600px',
+                    overflow: 'auto',
+                    backgroundColor: '#f9fafb',
+                  }}
+                  wrapLongLines={false}
+                >
+                  {formatJSON(resourceData)}
+                </SyntaxHighlighter>
               </div>
             ) : (
               // Editable JSON
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {jsonValidation.valid ? (
-                      <div className="flex items-center gap-1 text-green-600 text-sm">
-                        <Check className="h-4 w-4" />
-                        <span>Valid JSON</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1 text-red-600 text-sm">
-                        <AlertCircle className="h-4 w-4" />
-                        <span>{jsonValidation.errors.length} error(s)</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleFormat}
-                      disabled={!jsonValidation.valid}
-                    >
-                      Format
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleCopyToClipboard}
-                    >
-                      {copiedToClipboard ? (
-                        <>
-                          <Check className="h-4 w-4 mr-1" />
-                          Copied!
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="h-4 w-4 mr-1" />
-                          Copy
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                <div className="flex items-center gap-2">
+                  {jsonValidation.valid ? (
+                    <div className="flex items-center gap-1 text-green-600 text-sm">
+                      <Check className="h-4 w-4" />
+                      <span>Valid JSON</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-red-600 text-sm">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>{jsonValidation.errors.length} error(s)</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Validation Errors */}
