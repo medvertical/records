@@ -739,6 +739,7 @@ export default function ResourceBrowser() {
       const resource = resources.find(r => (r._dbId || r.id) === id);
       const progressData = {
         resourceId: id,
+        fhirId: resource?.resourceId || resource?.id || String(id),
         resourceType: resource?.resourceType || 'Unknown',
         progress: 0,
         currentAspect: 'Starting validation...',

@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/popover';
 import { Progress } from '@/components/ui/progress';
 import { useValidationActivity } from '@/contexts/validation-activity-context';
+import { getShortId } from '@/lib/resource-utils';
 import { cn } from '@/lib/utils';
 
 // ============================================================================
@@ -181,7 +182,7 @@ export function ActivityWidget() {
                   >
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-gray-900 dark:text-gray-100">
-                        {validation.resourceType}/{validation.resourceId}
+                        {validation.resourceType}/{getShortId(validation.fhirId)}
                       </span>
                       <span className="text-xs text-gray-600 dark:text-gray-400">
                         {Math.round(validation.progress)}%

@@ -6,6 +6,7 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 
 export interface ResourceValidationProgress {
   resourceId: number;
+  fhirId: string;
   resourceType: string;
   progress: number;
   currentAspect: string;
