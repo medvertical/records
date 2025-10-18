@@ -9,6 +9,7 @@ import { CircularProgress } from '@/components/ui/circular-progress';
 import { ValidationMessageItem } from './ValidationMessageItem';
 import type { ValidationMessage as ValidationMessageType } from './ValidationMessageItem';
 import { getSeverityIcon } from '@/components/resources/unified-tree-viewer/utils';
+import { cn } from '@/lib/utils';
 
 interface ValidationMessage {
   severity: string;
@@ -74,6 +75,18 @@ export function ValidationMessagesPerAspect({
   lastValidated,
 }: ValidationMessagesPerAspectProps) {
   const [highlightedSignatures, setHighlightedSignatures] = useState<string[]>([]);
+  const [selectedSeverities, setSelectedSeverities] = useState<Set<string>>(new Set());
+  
+  // Toggle severity filter
+  const toggleSeverity = (severity: string) => {
+    const newSelected = new Set(selectedSeverities);
+    if (newSelected.has(severity)) {
+      newSelected.delete(severity);
+    } else {
+      newSelected.add(severity);
+    }
+    setSelectedSeverities(newSelected);
+  };
   
   const { data, isLoading, error } = useQuery<ResourceMessagesResponse>({
     queryKey: ['/api/validation/resources', resourceType, resourceId, 'messages', serverId],
@@ -206,9 +219,27 @@ export function ValidationMessagesPerAspect({
   }
 
   const totalMessages = data.aspects.reduce((sum, aspect) => sum + aspect.messages.length, 0);
+  
+  // Filter messages by selected severities
+  const filterMessagesBySeverity = (messages: ValidationMessage[]) => {
+    if (selectedSeverities.size === 0) return messages;
+    return messages.filter(msg => selectedSeverities.has(msg.severity.toLowerCase()));
+  };
+  
+  // Calculate filtered message count
+  const filteredMessageCount = selectedSeverities.size === 0
+    ? totalMessages
+    : data.aspects.reduce((sum, aspect) => 
+        sum + filterMessagesBySeverity(aspect.messages).length, 0
+      );
 
-  // Separate aspects with and without messages
-  const aspectsWithMessages = data.aspects.filter(aspect => aspect.messages.length > 0);
+  // Separate aspects with and without messages (after filtering)
+  const aspectsWithMessages = data.aspects
+    .map(aspect => ({
+      ...aspect,
+      messages: filterMessagesBySeverity(aspect.messages)
+    }))
+    .filter(aspect => aspect.messages.length > 0);
   const aspectsWithoutMessages = data.aspects.filter(aspect => aspect.messages.length === 0);
 
   return (
@@ -218,7 +249,11 @@ export function ValidationMessagesPerAspect({
           <div className="flex-1 min-w-0">
             <CardTitle className="text-left">Validation Messages</CardTitle>
             <CardDescription className="text-left">
-              {totalMessages} validation message{totalMessages !== 1 ? 's' : ''} across {data.aspects.length} aspect{data.aspects.length !== 1 ? 's' : ''}
+              {selectedSeverities.size === 0 ? (
+                `${totalMessages} validation message${totalMessages !== 1 ? 's' : ''} across ${data.aspects.length} aspect${data.aspects.length !== 1 ? 's' : ''}`
+              ) : (
+                `${filteredMessageCount} of ${totalMessages} message${totalMessages !== 1 ? 's' : ''} (filtered)`
+              )}
             </CardDescription>
           </div>
           <CircularProgress 
@@ -251,8 +286,14 @@ export function ValidationMessagesPerAspect({
                     <>
                       {errorCount > 0 && (
                         <Badge
-                          variant="destructive"
-                          className="h-6 px-2 text-xs flex items-center gap-1.5"
+                          variant="secondary"
+                          className={cn(
+                            "h-6 px-2 text-xs flex items-center gap-1.5 cursor-pointer transition-colors",
+                            selectedSeverities.has('error')
+                              ? "bg-red-600 text-white hover:bg-red-700"
+                              : "bg-red-100 text-red-700 hover:bg-red-200"
+                          )}
+                          onClick={() => toggleSeverity('error')}
                         >
                           <span>{getSeverityIcon('error')}</span>
                           <span>{errorCount}</span>
@@ -261,7 +302,13 @@ export function ValidationMessagesPerAspect({
                       {warningCount > 0 && (
                         <Badge
                           variant="secondary"
-                          className="h-6 px-2 text-xs bg-orange-100 text-orange-700 hover:bg-orange-200 flex items-center gap-1.5"
+                          className={cn(
+                            "h-6 px-2 text-xs flex items-center gap-1.5 cursor-pointer transition-colors",
+                            selectedSeverities.has('warning')
+                              ? "bg-orange-600 text-white hover:bg-orange-700"
+                              : "bg-orange-100 text-orange-700 hover:bg-orange-200"
+                          )}
+                          onClick={() => toggleSeverity('warning')}
                         >
                           <span>{getSeverityIcon('warning')}</span>
                           <span>{warningCount}</span>
@@ -270,7 +317,13 @@ export function ValidationMessagesPerAspect({
                       {informationCount > 0 && (
                         <Badge
                           variant="secondary"
-                          className="h-6 px-2 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 flex items-center gap-1.5"
+                          className={cn(
+                            "h-6 px-2 text-xs flex items-center gap-1.5 cursor-pointer transition-colors",
+                            selectedSeverities.has('information')
+                              ? "bg-blue-600 text-white hover:bg-blue-700"
+                              : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                          )}
+                          onClick={() => toggleSeverity('information')}
                         >
                           <span>{getSeverityIcon('information')}</span>
                           <span>{informationCount}</span>

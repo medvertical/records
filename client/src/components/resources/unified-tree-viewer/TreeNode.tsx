@@ -486,8 +486,8 @@ export default function TreeNode({
                 <>
                   {issuesBySeverity.error.length > 0 && (
                     <Badge
-                      variant="destructive"
-                      className="h-6 px-2 text-xs cursor-pointer transition-all duration-150 hover:scale-110 hover:shadow-md flex items-center gap-1.5"
+                      variant="secondary"
+                      className="h-6 px-2 text-xs cursor-pointer transition-colors bg-red-100 text-red-700 hover:bg-red-200 flex items-center gap-1.5"
                       onClick={(e) => handleSeverityClick('error', e)}
                       title={`${issuesBySeverity.error.length} error${issuesBySeverity.error.length > 1 ? 's' : ''}`}
                     >
@@ -498,7 +498,7 @@ export default function TreeNode({
                   {issuesBySeverity.warning.length > 0 && (
                     <Badge
                       variant="secondary"
-                      className="h-6 px-2 text-xs cursor-pointer transition-all duration-150 hover:scale-110 hover:shadow-md bg-orange-100 text-orange-700 hover:bg-orange-200 flex items-center gap-1.5"
+                      className="h-6 px-2 text-xs cursor-pointer transition-colors bg-orange-100 text-orange-700 hover:bg-orange-200 flex items-center gap-1.5"
                       onClick={(e) => handleSeverityClick('warning', e)}
                       title={`${issuesBySeverity.warning.length} warning${issuesBySeverity.warning.length > 1 ? 's' : ''}`}
                     >
@@ -509,7 +509,7 @@ export default function TreeNode({
                   {issuesBySeverity.info.length > 0 && (
                     <Badge
                       variant="secondary"
-                      className="h-6 px-2 text-xs cursor-pointer transition-all duration-150 hover:scale-110 hover:shadow-md bg-blue-100 text-blue-700 hover:bg-blue-200 flex items-center gap-1.5"
+                      className="h-6 px-2 text-xs cursor-pointer transition-colors bg-blue-100 text-blue-700 hover:bg-blue-200 flex items-center gap-1.5"
                       onClick={(e) => handleSeverityClick('information', e)}
                       title={`${issuesBySeverity.info.length} info message${issuesBySeverity.info.length > 1 ? 's' : ''}`}
                     >
