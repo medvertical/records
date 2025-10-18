@@ -9,7 +9,7 @@ import ResourceList from "@/components/resources/resource-list";
 import { ValidationOverview, type ValidationSummary } from "@/components/resources/validation-overview";
 import { ValidationMessagesCard } from "@/components/validation/validation-messages-card";
 import { BatchEditDialog } from "@/components/resources/BatchEditDialog";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ResourceListSkeleton } from "@/components/resources/resource-list-skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -1778,39 +1778,7 @@ export default function ResourceBrowser() {
         
         {/* Only show skeleton on initial load, not during refetch */}
         {isLoading && !resourcesData ? (
-          <div className="space-y-4">
-            {Array.from({ length: pageSize }, (_, i) => i + 1).map(i => (
-              <div key={i} className="border rounded-lg p-4 bg-white shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4 flex-1 min-w-0">
-                    {/* Resource type icon skeleton */}
-                    <Skeleton className="h-10 w-10 rounded-lg" />
-                    
-                    {/* Resource details skeleton */}
-                    <div className="flex-1 min-w-0 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Skeleton className="h-5 w-16" /> {/* Resource type */}
-                        <Skeleton className="h-4 w-20" /> {/* Resource ID */}
-                      </div>
-                      <div className="space-y-1">
-                        <Skeleton className="h-4 w-48" /> {/* Resource name/description */}
-                        <Skeleton className="h-3 w-32" /> {/* Last updated */}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Validation status skeleton */}
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      <Skeleton className="h-6 w-16 rounded-full" /> {/* Validation badge */}
-                      <Skeleton className="h-8 w-8 rounded-full" /> {/* Progress circle */}
-                    </div>
-                    <Skeleton className="h-4 w-4" /> {/* Chevron */}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ResourceListSkeleton count={pageSize} />
         ) : (
           <ResourceList 
             resources={resourcesData?.resources || []}

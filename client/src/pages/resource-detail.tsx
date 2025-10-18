@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FhirResourceWithValidation } from "@shared/schema";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ResourceDetailSkeleton } from "@/components/resources/resource-detail-skeleton";
 import { ArrowLeft } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -401,15 +401,7 @@ export default function ResourceDetail() {
   }, []);
 
   if (isLoading) {
-    return (
-      <div className="p-6 space-y-6">
-        <Skeleton className="h-20 rounded-xl" />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Skeleton className="h-96 rounded-xl" />
-          <Skeleton className="h-96 rounded-xl" />
-        </div>
-      </div>
-    );
+    return <ResourceDetailSkeleton />;
   }
 
   if (!resource) {
