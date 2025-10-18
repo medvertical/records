@@ -1,13 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, PanelLeft, AlertTriangle } from "lucide-react";
+import { PanelLeft, AlertTriangle } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import AppIcon from "@/components/ui/app-icon";
 import { ValidationAspectsDropdown } from "@/components/ui/validation-aspects-dropdown";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import type { ServerStatus as ConnectionStatus } from "@/hooks/use-server-data";
 import { ActivityWidget } from "@/components/layout/activity-widget";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -24,33 +23,6 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-
-  const handleRefresh = async () => {
-    try {
-      // First, call the backend to clear resource count caches
-      await fetch('/api/dashboard/force-refresh', { method: 'POST' });
-      
-      // Then invalidate frontend queries to trigger refetch
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["/api/fhir/resource-counts"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/fhir/resource-types"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/fhir-server-stats"] }),
-        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/validation-stats"] }),
-      ]);
-      
-      toast({
-        title: "Data Refreshed",
-        description: "Resource counts and dashboard data have been refreshed.",
-      });
-    } catch (error) {
-      toast({
-        title: "Refresh Failed",
-        description: "Failed to refresh data. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
 
   const handleClearAllValidationResults = async () => {
     console.log('[Header] Starting validation results deletion...');
@@ -148,21 +120,6 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
             cancelText="Cancel"
             variant="destructive"
           />
-          
-          {/* Refresh Button - Keep for now but make it smaller */}
-          <Button 
-            onClick={handleRefresh}
-            variant="outline"
-            size="sm"
-            className="flex items-center space-x-1"
-            aria-label="Refresh resource data"
-          >
-            <RefreshCw className="h-4 w-4" />
-            <span className="hidden lg:inline">Refresh</span>
-          </Button>
-          
-          {/* Theme Toggle - Dark Mode */}
-          <ThemeToggle />
         </div>
       </div>
     </header>
