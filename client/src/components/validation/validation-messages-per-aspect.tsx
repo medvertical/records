@@ -229,55 +229,57 @@ export function ValidationMessagesPerAspect({
         </div>
         
         {/* Badges and metadata section */}
-        <div className="mt-4 space-y-3">
-          {/* Validation status badges */}
-          <div className="flex flex-wrap items-center gap-2">
-            {isRevalidating && (
-              <Badge className="bg-blue-50 text-blue-600 border-blue-200">
-                <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                Revalidating...
-              </Badge>
-            )}
-            {isValid !== undefined ? (
-              <>
-                {isValid ? (
-                  <Badge className="bg-green-50 text-green-600 border-green-200">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Valid
-                  </Badge>
-                ) : (
-                  <Badge className="bg-red-50 text-red-600 border-red-200">
-                    <XCircle className="h-3 w-3 mr-1" />
-                    {errorCount}
-                  </Badge>
-                )}
-                {warningCount > 0 && (
-                  <Badge className="bg-orange-50 text-orange-600 border-orange-200">
-                    <AlertTriangle className="h-3 w-3 mr-1" />
-                    {warningCount}
-                  </Badge>
-                )}
-                {informationCount > 0 && (
-                  <Badge className="bg-blue-50 text-blue-600 border-blue-200">
-                    <Info className="h-3 w-3 mr-1" />
-                    {informationCount}
-                  </Badge>
-                )}
-              </>
-            ) : (
-              <Badge className="bg-gray-50 text-gray-600 border-gray-200">
-                <AlertCircle className="h-3 w-3 mr-1" />
-                Not Validated
-              </Badge>
+        <div className="mt-4">
+          {/* Validation status badges and last validated */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {isRevalidating && (
+                <Badge className="bg-blue-50 text-blue-600 border-blue-200">
+                  <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                  Revalidating...
+                </Badge>
+              )}
+              {isValid !== undefined ? (
+                <>
+                  {isValid ? (
+                    <Badge className="bg-green-50 text-green-600 border-green-200">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      Valid
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-red-50 text-red-600 border-red-200">
+                      <XCircle className="h-3 w-3 mr-1" />
+                      {errorCount}
+                    </Badge>
+                  )}
+                  {warningCount > 0 && (
+                    <Badge className="bg-orange-50 text-orange-600 border-orange-200">
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      {warningCount}
+                    </Badge>
+                  )}
+                  {informationCount > 0 && (
+                    <Badge className="bg-blue-50 text-blue-600 border-blue-200">
+                      <Info className="h-3 w-3 mr-1" />
+                      {informationCount}
+                    </Badge>
+                  )}
+                </>
+              ) : (
+                <Badge className="bg-gray-50 text-gray-600 border-gray-200">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  Not Validated
+                </Badge>
+              )}
+            </div>
+            
+            {/* Last validated timestamp - aligned right */}
+            {lastValidated && (
+              <span className="text-xs text-gray-500 whitespace-nowrap">
+                Last validated: {new Date(lastValidated).toLocaleString()}
+              </span>
             )}
           </div>
-          
-          {/* Last validated timestamp */}
-          {lastValidated && (
-            <div className="text-xs text-gray-500">
-              Last validated: {new Date(lastValidated).toLocaleString()}
-            </div>
-          )}
         </div>
       </CardHeader>
       <CardContent className="text-left">
