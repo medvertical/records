@@ -1006,7 +1006,7 @@ export class ProfileResolver {
       // Insert or update profile in cache
       await db.execute(sql`
         INSERT INTO profiles_cache (
-          canonical_url, version, name, title, profile_id, resource_type, kind, abstract,
+          canonical_url, version, name, title, profile_id, package_id, resource_type, kind, abstract,
           base_definition, derivation, type, source, fhir_version, profile_content,
           differential_elements, snapshot_elements, status, experimental, date,
           publisher, contact_info, use_context, jurisdiction, purpose, copyright,
@@ -1018,6 +1018,7 @@ export class ProfileResolver {
           ${profile.name || profileId},
           ${profile.title || profile.name || profileId},
           ${profileId},
+          ${null},
           ${resourceType},
           ${kind},
           ${profile.abstract || false},
