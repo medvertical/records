@@ -66,13 +66,6 @@ export const MobileNavigationDrawer: React.FC<MobileNavigationProps> = ({
       active: false,
     },
     {
-      id: 'packages',
-      label: 'Packages',
-      icon: Database,
-      href: '/packages',
-      active: false,
-    },
-    {
       id: 'settings',
       label: 'Settings',
       icon: Database,

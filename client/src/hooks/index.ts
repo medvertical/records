@@ -13,7 +13,6 @@ export { useToast } from './use-toast';
 export { useIsMobile } from './use-mobile';
 export { useServerData } from './use-server-data';
 export { useSystemSettings } from './use-system-settings';
-export { useFhirServerPackages } from './use-fhir-data';
 export { useResponsiveLayout } from './use-responsive-layout';
 export { useSettingsNotifications } from './use-settings-notifications';
 

@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils";
 import Dashboard from "@/pages/dashboard";
 import ResourceBrowser from "@/pages/resource-browser";
 import ResourceDetail from "@/pages/resource-detail";
-import { ProfileManagement } from "@/pages/profile-management";
 import SettingsPage from "@/pages/settings";
 import { PerformanceDashboardPage } from "@/pages/PerformanceDashboardPage";
 import NotFound from "@/pages/not-found";
@@ -49,7 +48,6 @@ function Router() {
     if (location === "/" || location === "/dashboard") return "Records";
     if (location === "/resources") return "Records";
     if (location.startsWith("/resources/")) return "Records";
-    if (location === "/packages") return "Records";
     if (location === "/performance") return "Records";
     if (location === "/settings") return "Records";
     return "Records";
@@ -59,7 +57,6 @@ function Router() {
     if (location === "/" || location === "/dashboard") return "Dashboard";
     if (location === "/resources") return "Browse Resources";
     if (location.startsWith("/resources/")) return "Resource Details";
-    if (location === "/packages") return "Package Management";
     if (location === "/performance") return "Performance Dashboard";
     if (location === "/settings") return "Settings";
     return "Records";
@@ -159,27 +156,6 @@ function Router() {
                 sidebarOpen && !isMobile ? "ml-64" : "ml-0"
               )}>
                 <ResourceBrowserComponent />
-              </main>
-            </div>
-          </div>
-        </Route>
-        <Route path="/packages">
-          <div className="min-h-screen bg-gray-50">
-            <Header 
-              title={getPageTitle()}
-              connectionStatus={connectionStatus}
-              onSidebarToggle={toggleSidebar}
-            />
-            <div className="flex pt-16">
-              <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
-              <main className={cn(
-                "flex-1 relative z-10 transition-all duration-300 ease-in-out",
-                sidebarOpen && !isMobile ? "ml-64" : "ml-0"
-              )}>
-                <div className="p-8">
-                  <h1 className="text-2xl font-bold mb-4">Package Management</h1>
-                  <p className="text-gray-600">Package management functionality coming soon...</p>
-                </div>
               </main>
             </div>
           </div>

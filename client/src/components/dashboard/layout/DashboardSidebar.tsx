@@ -8,7 +8,6 @@ import {
   Database, 
   ChartPie, 
   Settings, 
-  Package,
   ChevronLeft,
   ChevronRight,
   Loader2
@@ -49,13 +48,6 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
       icon: Database,
       href: '/resources',
       active: location.startsWith('/resources'),
-    },
-    {
-      id: 'packages',
-      label: 'Packages',
-      icon: Package,
-      href: '/packages',
-      active: location.startsWith('/packages'),
     },
     {
       id: 'settings',

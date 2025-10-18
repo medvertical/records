@@ -27,7 +27,6 @@ const SHORTCUTS: Shortcut[] = [
   // Navigation
   { key: 'D', description: 'Go to Dashboard', category: 'Navigation' },
   { key: 'B', description: 'Go to Browse Resources', category: 'Navigation' },
-  { key: 'P', description: 'Go to Package Management', category: 'Navigation' },
   { key: 'S', description: 'Go to Settings', category: 'Navigation' },
   
   // Actions

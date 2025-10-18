@@ -14,7 +14,6 @@ import {
   ChartPie, 
   Settings,
   Loader2, 
-  Package,
   Server,
   Activity
 } from "lucide-react";
@@ -25,7 +24,6 @@ import { getResourceTypeIcon } from "@/lib/resource-type-icons";
 const navigationItems = [
   { href: "/", label: "Dashboard", icon: ChartPie },
   { href: "/resources", label: "Browse Resources", icon: Database },
-  { href: "/packages", label: "Package Management", icon: Package },
   { href: "/performance", label: "Performance", icon: Activity },
 ];
 

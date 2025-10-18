@@ -10,7 +10,6 @@
  * - S: Go to Settings
  * - D: Go to Dashboard
  * - B: Go to Browse Resources
- * - P: Go to Package Management
  * - ?: Show keyboard shortcuts help
  * - Esc: Close modals/dialogs
  * - Ctrl+K / Cmd+K: Command palette (future)
@@ -101,10 +100,6 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
     setLocation('/resources');
   }, [setLocation]);
 
-  const handleGoToPackages = useCallback(() => {
-    setLocation('/packages');
-  }, [setLocation]);
-
   // Handle escape key (close modals)
   const handleEscape = useCallback(() => {
     // Dispatch custom event for escape
@@ -116,7 +111,6 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
     // Navigation
     { key: 'd', description: 'Go to Dashboard', action: handleGoToDashboard, category: 'navigation' },
     { key: 'b', description: 'Go to Browse Resources', action: handleGoToBrowse, category: 'navigation' },
-    { key: 'p', description: 'Go to Package Management', action: handleGoToPackages, category: 'navigation' },
     { key: 's', description: 'Go to Settings', action: handleGoToSettings, category: 'navigation' },
     
     // Actions
