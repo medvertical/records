@@ -58,10 +58,24 @@ interface ValidationUpdateMessage {
 
 export default function ResourceBrowser() {
   const [location] = useLocation();
+  
+  // Initialize pagination from URL parameters
+  const getInitialPaginationFromUrl = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const pageParam = parseInt(urlParams.get('page') || '1'); // 1-based in URL
+    const pageSizeParam = parseInt(urlParams.get('pageSize') || '20');
+    return {
+      page: Math.max(0, pageParam - 1), // Convert to 0-based for internal use
+      pageSize: Math.max(1, pageSizeParam)
+    };
+  };
+  
+  const initialPagination = getInitialPaginationFromUrl();
+  
   const [resourceType, setResourceType] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(20);
+  const [page, setPage] = useState(initialPagination.page);
+  const [pageSize, setPageSize] = useState(initialPagination.pageSize);
   const [isValidating, setIsValidating] = useState(false);
   const [validatingResourceIds, setValidatingResourceIds] = useState<Set<number>>(new Set());
   const [validationProgress, setValidationProgress] = useState<Map<number, any>>(new Map());
@@ -159,6 +173,10 @@ export default function ResourceBrowser() {
       searchParams.set('search', query);
     }
     
+    // Add pagination parameters to URL
+    searchParams.set('page', '1'); // Reset to page 1 when searching
+    searchParams.set('pageSize', pageSize.toString());
+    
     // Add FHIR search params to URL
     if (fhirParams) {
       Object.entries(fhirParams).forEach(([key, config]) => {
@@ -175,7 +193,7 @@ export default function ResourceBrowser() {
     
     // Trigger a custom event to notify the sidebar of URL changes
     window.dispatchEvent(new PopStateEvent('popstate'));
-  }, []);
+  }, [pageSize]);
 
   // Selection mode handlers
   const toggleSelectionMode = useCallback(() => {
@@ -228,12 +246,14 @@ export default function ResourceBrowser() {
     const aspectsParam = urlParams.get('aspects');
     const severitiesParam = urlParams.get('severities');
     const hasIssuesParam = urlParams.get('hasIssues');
+    const pageParam = parseInt(urlParams.get('page') || '1');
+    const pageSizeParam = parseInt(urlParams.get('pageSize') || '20');
     
     // Parse FHIR search parameters from URL
     const fhirSearchParams: Record<string, { value: string | string[]; operator?: string }> = {};
     urlParams.forEach((value, key) => {
-      // Skip known params like 'type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'limit'
-      if (!['type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'limit'].includes(key)) {
+      // Skip known params like 'type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize'
+      if (!['type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize'].includes(key)) {
         // Parse operator if present (e.g., "birthdate:gt")
         const [paramName, operator] = key.split(':');
         fhirSearchParams[paramName] = { value, operator };
@@ -243,6 +263,8 @@ export default function ResourceBrowser() {
     // Update state directly - this will trigger the query to re-run
     setResourceType(typeParam || "");
     setSearchQuery(searchParam || "");
+    setPage(Math.max(0, pageParam - 1)); // Convert from 1-based to 0-based
+    setPageSize(Math.max(1, pageSizeParam));
     setValidationFilters({
       aspects: aspectsParam ? aspectsParam.split(',') : [],
       severities: severitiesParam ? severitiesParam.split(',') : [],
@@ -250,7 +272,6 @@ export default function ResourceBrowser() {
       issueFilter: undefined, // Clear issue filter when URL changes
       fhirSearchParams: Object.keys(fhirSearchParams).length > 0 ? fhirSearchParams : undefined,
     });
-    setPage(0); // Reset to first page when navigating
   }, [location]);
 
   // Also listen for popstate events to handle programmatic URL changes
@@ -259,11 +280,13 @@ export default function ResourceBrowser() {
       const urlParams = new URLSearchParams(window.location.search);
       const typeParam = urlParams.get('type');
       const searchParam = urlParams.get('search');
+      const pageParam = parseInt(urlParams.get('page') || '1');
+      const pageSizeParam = parseInt(urlParams.get('pageSize') || '20');
 
       // Parse FHIR params
       const fhirParams: Record<string, { value: string | string[]; operator?: string }> = {};
       urlParams.forEach((value, key) => {
-        if (!['type','search','aspects','severities','hasIssues','page','limit'].includes(key)) {
+        if (!['type','search','aspects','severities','hasIssues','page','pageSize'].includes(key)) {
           const [paramName, operator] = key.split(':');
           fhirParams[paramName] = { value, operator };
         }
@@ -271,11 +294,12 @@ export default function ResourceBrowser() {
 
       setResourceType(typeParam || "");
       setSearchQuery(searchParam || "");
+      setPage(Math.max(0, pageParam - 1)); // Convert from 1-based to 0-based
+      setPageSize(Math.max(1, pageSizeParam));
       setValidationFilters(prev => ({
         ...prev,
         fhirSearchParams: Object.keys(fhirParams).length > 0 ? fhirParams : undefined,
       }));
-      setPage(0);
     };
     
     window.addEventListener('popstate', handleUrlChange);
@@ -734,6 +758,14 @@ export default function ResourceBrowser() {
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
+    
+    // Update URL with new page (convert to 1-based for URL)
+    const urlParams = new URLSearchParams(window.location.search);
+    urlParams.set('page', (newPage + 1).toString());
+    urlParams.set('pageSize', pageSize.toString());
+    const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+    window.history.replaceState({}, '', newUrl);
+    
     // Reset message navigation when page changes
     setIsMessagesVisible(false);
     setCurrentMessageIndex(0);
@@ -742,6 +774,14 @@ export default function ResourceBrowser() {
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize);
     setPage(0); // Reset to first page when changing page size
+    
+    // Update URL with new page size and reset to page 1
+    const urlParams = new URLSearchParams(window.location.search);
+    urlParams.set('page', '1');
+    urlParams.set('pageSize', newPageSize.toString());
+    const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
+    window.history.replaceState({}, '', newUrl);
+    
     setHasValidatedCurrentPage(false); // Reset validation status when changing page size
   };
 
