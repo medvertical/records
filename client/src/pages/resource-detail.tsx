@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FhirResourceWithValidation } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle, XCircle, ArrowLeft, AlertCircle, AlertTriangle, Info, Settings, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import ProfileBadge from "@/components/resources/ProfileBadge";
@@ -493,7 +493,7 @@ export default function ResourceDetail() {
   return (
     <div className="p-6">
       <div className="space-y-6">
-        {/* Header section with validation summary */}
+        {/* Header section with resource identifier and version count */}
         <div className="bg-white rounded-lg border p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -506,12 +506,12 @@ export default function ResourceDetail() {
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {isUUID(resource.resourceId) 
-                      ? `${resource.resourceType}/${getShortId(resource.resourceId)}` 
-                      : `${resource.resourceType}/${resource.resourceId}`}
-                  </h1>
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                  {isUUID(resource.resourceId) 
+                    ? `${resource.resourceType}/${getShortId(resource.resourceId)}` 
+                    : `${resource.resourceType}/${resource.resourceId}`}
+                </h1>
+                <div className="flex items-center gap-3">
                   {/* Display declared profiles */}
                   {(resource.data?.meta?.profile || resource.meta?.profile) && (
                     <ProfileBadge 
@@ -519,61 +519,11 @@ export default function ResourceDetail() {
                       size="md"
                     />
                   )}
-                </div>
-                <div className="flex items-center space-x-4">
-                  <div className="flex items-center space-x-2">
-                    {/* Show revalidating badge when validation is in progress */}
-                    {(isRevalidating || (resource as any)._isRevalidating) && (
-                      <Badge className="bg-blue-50 text-blue-600 border-blue-200">
-                        <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                        Revalidating...
-                      </Badge>
-                    )}
-                    {validationSummary ? (
-                      <>
-                        {validationSummary.isValid ? (
-                          <Badge className="bg-green-50 text-green-600 border-green-200">
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Valid
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-red-50 text-red-600 border-red-200">
-                            <XCircle className="h-3 w-3 mr-1" />
-                            {validationSummary.errorCount}
-                          </Badge>
-                        )}
-                        {validationSummary.warningCount > 0 && (
-                          <Badge className="bg-orange-50 text-orange-600 border-orange-200">
-                            <AlertTriangle className="h-3 w-3 mr-1" />
-                            {validationSummary.warningCount}
-                          </Badge>
-                        )}
-                        {validationSummary.informationCount > 0 && (
-                          <Badge className="bg-blue-50 text-blue-600 border-blue-200">
-                            <Info className="h-3 w-3 mr-1" />
-                            {validationSummary.informationCount}
-                          </Badge>
-                        )}
-                      </>
-                    ) : (
-                      <Badge className="bg-gray-50 text-gray-600 border-gray-200">
-                        <AlertCircle className="h-3 w-3 mr-1" />
-                        Not Validated
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {/* Display version count */}
-                    <ResourceVersionCount
-                      versionData={versionData}
-                      isLoading={isLoadingVersions}
-                    />
-                    {validationSummary?.lastValidated && (
-                      <span className="text-xs text-gray-500">
-                        Last validated: {new Date(validationSummary.lastValidated).toLocaleString()}
-                      </span>
-                    )}
-                  </div>
+                  {/* Display version count */}
+                  <ResourceVersionCount
+                    versionData={versionData}
+                    isLoading={isLoadingVersions}
+                  />
                 </div>
               </div>
             </div>
@@ -626,6 +576,13 @@ export default function ResourceDetail() {
               highlightSignature={highlightSignature}
               validationScore={validationSummary?.validationScore || 0}
               onPathClick={handlePathClick}
+              profiles={resource.data?.meta?.profile || resource.meta?.profile || []}
+              isValid={validationSummary?.isValid}
+              errorCount={validationSummary?.errorCount}
+              warningCount={validationSummary?.warningCount}
+              informationCount={validationSummary?.informationCount}
+              isRevalidating={isRevalidating || (resource as any)._isRevalidating}
+              lastValidated={validationSummary?.lastValidated}
             />
           </div>
         </div>

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle, AlertCircle, XCircle, AlertTriangle, Info, RefreshCw } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { CircularProgress } from '@/components/ui/circular-progress';
 import { ValidationMessageItem } from './ValidationMessageItem';
@@ -36,6 +36,13 @@ interface ValidationMessagesPerAspectProps {
   highlightSignature?: string;
   validationScore?: number;
   onPathClick?: (path: string) => void;
+  profiles?: string[];
+  isValid?: boolean;
+  errorCount?: number;
+  warningCount?: number;
+  informationCount?: number;
+  isRevalidating?: boolean;
+  lastValidated?: string;
 }
 
 function getAspectBadgeColor(aspect: string): string {
@@ -57,6 +64,13 @@ export function ValidationMessagesPerAspect({
   highlightSignature,
   validationScore = 0,
   onPathClick,
+  profiles = [],
+  isValid,
+  errorCount = 0,
+  warningCount = 0,
+  informationCount = 0,
+  isRevalidating = false,
+  lastValidated,
 }: ValidationMessagesPerAspectProps) {
   const [highlightedSignatures, setHighlightedSignatures] = useState<string[]>([]);
   
@@ -212,6 +226,58 @@ export function ValidationMessagesPerAspect({
             showValue={true}
             className="flex-shrink-0"
           />
+        </div>
+        
+        {/* Badges and metadata section */}
+        <div className="mt-4 space-y-3">
+          {/* Validation status badges */}
+          <div className="flex flex-wrap items-center gap-2">
+            {isRevalidating && (
+              <Badge className="bg-blue-50 text-blue-600 border-blue-200">
+                <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                Revalidating...
+              </Badge>
+            )}
+            {isValid !== undefined ? (
+              <>
+                {isValid ? (
+                  <Badge className="bg-green-50 text-green-600 border-green-200">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Valid
+                  </Badge>
+                ) : (
+                  <Badge className="bg-red-50 text-red-600 border-red-200">
+                    <XCircle className="h-3 w-3 mr-1" />
+                    {errorCount}
+                  </Badge>
+                )}
+                {warningCount > 0 && (
+                  <Badge className="bg-orange-50 text-orange-600 border-orange-200">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    {warningCount}
+                  </Badge>
+                )}
+                {informationCount > 0 && (
+                  <Badge className="bg-blue-50 text-blue-600 border-blue-200">
+                    <Info className="h-3 w-3 mr-1" />
+                    {informationCount}
+                  </Badge>
+                )}
+              </>
+            ) : (
+              <Badge className="bg-gray-50 text-gray-600 border-gray-200">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Not Validated
+              </Badge>
+            )}
+          </div>
+          
+          {/* Last validated timestamp */}
+          {lastValidated && (
+            <div className="text-xs text-gray-500">
+              Last validated: {new Date(lastValidated).toLocaleString()}
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent className="text-left">
