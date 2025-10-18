@@ -36,7 +36,7 @@ export const CircularProgress = forwardRef<HTMLDivElement, CircularProgressProps
   // Color based on percentage
   const getColor = (value: number) => {
     if (value >= 80) return 'rgb(34 197 94)'; // green-500
-    if (value >= 60) return 'rgb(250 204 21)'; // yellow-400
+    if (value >= 60) return 'rgb(233 146 11)'; // fhir-warning - matches warning badges
     return 'rgb(239 68 68)'; // red-500
   };
   

@@ -388,7 +388,7 @@ export default function ResourceBrowser() {
   // Also check URL directly for FHIR search parameters as a fallback
   const urlParams = new URLSearchParams(window.location.search);
   const hasFhirParamsInUrl = Array.from(urlParams.keys()).some(key => 
-    !['type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'limit'].includes(key)
+    !['type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize', 'limit'].includes(key)
   );
   
   // Check if there's a text search query
@@ -1414,7 +1414,7 @@ export default function ResourceBrowser() {
       // Remove all FHIR search parameters if none are set
       const keysToRemove: string[] = [];
       urlParams.forEach((value, key) => {
-        if (!['type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'limit'].includes(key)) {
+        if (!['type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize', 'limit'].includes(key)) {
           keysToRemove.push(key);
         }
       });

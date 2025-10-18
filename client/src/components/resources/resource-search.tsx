@@ -282,8 +282,8 @@ export default function ResourceSearch({
     const fhirParams: Record<string, { value: string | string[]; operator?: string }> = {};
     
     params.forEach((value, key) => {
-      // Skip known params like 'type', 'search', etc.
-      if (!['type', 'search', 'page', 'limit'].includes(key)) {
+      // Skip known params like 'type', 'search', pagination params, etc.
+      if (!['type', 'search', 'page', 'pageSize', 'limit'].includes(key)) {
         // Parse operator if present (e.g., "birthdate:gt")
         const [paramName, operator] = key.split(':');
         fhirParams[paramName] = { value, operator };
