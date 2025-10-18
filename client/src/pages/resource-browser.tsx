@@ -1356,6 +1356,13 @@ export default function ResourceBrowser() {
 
     setIsValidating(true);
     
+    // Track which resources are being validated
+    const resourceIds = resourcesData.resources.map((r: any) => r._dbId || r.id);
+    setValidatingResourceIds(new Set(resourceIds));
+
+    // Start progress simulation for activity widget
+    const progressCleanup = simulateValidationProgress(resourceIds, resourcesData.resources);
+    
     try {
       // Use the same synchronous validate-by-ids approach as background validation
       const batchSize = currentSettings?.performance?.batchSize || 50;
@@ -1402,6 +1409,14 @@ export default function ResourceBrowser() {
         }
       }
 
+      // Update activity context with completion
+      resourceIds.forEach(id => {
+        updateResourceValidation(id, {
+          progress: 100,
+          currentAspect: 'Validation complete'
+        });
+      });
+
       // Validation complete - refetch immediately to show results
       queryClient.invalidateQueries({ queryKey: ['resources'] });
       
@@ -1410,17 +1425,33 @@ export default function ResourceBrowser() {
         description: `Successfully revalidated ${allResults.length} resources.`,
       });
 
-      setIsValidating(false);
+      // Clear progress after showing completion briefly
+      setTimeout(() => {
+        if (progressCleanup) {
+          progressCleanup();
+        }
+        setValidationProgress(new Map());
+        resourceIds.forEach(id => removeResourceValidation(id));
+        setIsValidating(false);
+        setValidatingResourceIds(new Set());
+      }, 500);
 
     } catch (error) {
+      // Clean up progress on error
+      if (progressCleanup) {
+        progressCleanup();
+      }
+      resourceIds.forEach(id => removeResourceValidation(id));
+      
       toast({
         title: "Revalidation failed",
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: "destructive",
       });
       setIsValidating(false);
+      setValidatingResourceIds(new Set());
     }
-  }, [resourcesData, currentSettings, queryClient, toast]);
+  }, [resourcesData, currentSettings, queryClient, toast, simulateValidationProgress, updateResourceValidation, removeResourceValidation]);
 
   // Calculate validation summary for current page (with stats for filters)
   const validationSummaryWithStats = useMemo(() => {
