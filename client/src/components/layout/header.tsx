@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, PanelLeft, Trash2 } from "lucide-react";
+import { RefreshCw, PanelLeft, AlertTriangle } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -10,6 +10,8 @@ import { ValidationAspectsDropdown } from "@/components/ui/validation-aspects-dr
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import type { ServerStatus as ConnectionStatus } from "@/hooks/use-server-data";
 import { ActivityWidget } from "@/components/layout/activity-widget";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useState } from "react";
 
 interface HeaderProps {
   title: string;
@@ -21,6 +23,7 @@ interface HeaderProps {
 export default function Header({ title, subtitle, connectionStatus, onSidebarToggle }: HeaderProps) {
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   const handleRefresh = async () => {
     try {
@@ -49,13 +52,12 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
     }
   };
 
-  const handleClearCache = async () => {
-    console.log('[Header] Starting cache clearing process...');
+  const handleClearAllValidationResults = async () => {
+    console.log('[Header] Starting validation results deletion...');
     
     try {
-      console.log('[Header] Clearing validation caches...');
-      // Clear all validation caches
-      const response = await fetch('/api/validation/cache/clear-all', { 
+      // Clear all validation results from database
+      const response = await fetch('/api/admin/clear-all-validation-results', { 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -67,24 +69,9 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
       }
 
       const result = await response.json();
-      console.log('[Header] Validation cache clear result:', result);
+      console.log('[Header] Validation results cleared:', result);
       
-      console.log('[Header] Clearing analytics cache...');
-      // Also clear analytics cache
-      const analyticsResponse = await fetch('/api/validation/analytics/clear-cache', { 
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (analyticsResponse.ok) {
-        const analyticsResult = await analyticsResponse.json();
-        console.log('[Header] Analytics cache clear result:', analyticsResult);
-      }
-      
-      console.log('[Header] Invalidating frontend query caches...');
-      // Invalidate all validation-related queries
+      // Invalidate all validation-related queries to refresh UI
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["/api/validation/results"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/validation/aspects"] }),
@@ -93,22 +80,17 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
         queryClient.invalidateQueries({ queryKey: ["/api/dashboard/validation-stats"] }),
       ]);
       
-      console.log('[Header] Cache clearing completed successfully');
-      
-      // Trigger cache cleared event for other components
-      if (typeof window !== 'undefined' && (window as any).triggerCacheCleared) {
-        (window as any).triggerCacheCleared();
-      }
+      console.log('[Header] Validation results deletion completed');
       
       toast({
-        title: "Cache Cleared",
-        description: "All validation caches have been cleared successfully.",
+        title: "Validation Results Cleared",
+        description: `Successfully deleted ${result.totalDeleted} validation records (${result.deleted.results} results, ${result.deleted.messages} messages, ${result.deleted.groups} groups).`,
       });
     } catch (error) {
-      console.error('[Header] Cache clear error:', error);
+      console.error('[Header] Validation results clear error:', error);
       toast({
-        title: "Cache Clear Failed",
-        description: "Failed to clear validation cache. Please try again.",
+        title: "Clear Failed",
+        description: "Failed to clear validation results. Please try again.",
         variant: "destructive",
       });
     }
@@ -143,17 +125,29 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
           {/* Activity Widget */}
           <ActivityWidget />
           
-          {/* Cache Clear Button */}
+          {/* Clear All Validation Results Button */}
           <Button 
-            onClick={handleClearCache}
+            onClick={() => setConfirmDialogOpen(true)}
             variant="outline"
             size="sm"
-            className="flex items-center space-x-1 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-            aria-label="Clear validation cache"
+            className="flex items-center space-x-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+            aria-label="Clear all validation results"
           >
-            <Trash2 className="h-4 w-4" />
-            <span className="hidden lg:inline">Clear Cache</span>
+            <AlertTriangle className="h-4 w-4" />
+            <span className="hidden lg:inline">Clear Results</span>
           </Button>
+          
+          {/* Confirmation Dialog */}
+          <ConfirmDialog
+            open={confirmDialogOpen}
+            onOpenChange={setConfirmDialogOpen}
+            title="⚠️ Clear All Validation Results?"
+            description="This will permanently delete all validation results, messages, and groups from the database. This action cannot be undone."
+            onConfirm={handleClearAllValidationResults}
+            confirmText="Yes, Delete All"
+            cancelText="Cancel"
+            variant="destructive"
+          />
           
           {/* Refresh Button - Keep for now but make it smaller */}
           <Button 

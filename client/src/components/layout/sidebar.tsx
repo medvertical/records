@@ -14,8 +14,7 @@ import {
   ChartPie, 
   Settings,
   Loader2, 
-  Server,
-  Activity
+  Server
 } from "lucide-react";
 import { useQuickAccessItems, useQuickAccessCounts } from "@/hooks/use-quick-access-preferences";
 import { ManageQuickAccessDialog } from "@/components/dashboard/AddQuickAccessDialog";
@@ -24,7 +23,6 @@ import { getResourceTypeIcon } from "@/lib/resource-type-icons";
 const navigationItems = [
   { href: "/", label: "Dashboard", icon: ChartPie },
   { href: "/resources", label: "Browse Resources", icon: Database },
-  { href: "/performance", label: "Performance", icon: Activity },
 ];
 
 const settingsItem = { href: "/settings", label: "Settings", icon: Settings };

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../../../db.js';
 import { fhirResources } from '@shared/schema';
-import { validationResultsPerAspect, validationMessages } from '@shared/schema-validation-per-aspect';
+import { validationResultsPerAspect, validationMessages, validationMessageGroups } from '@shared/schema-validation-per-aspect';
 import { and, eq, like } from 'drizzle-orm';
 
 const router = Router();
@@ -97,6 +97,51 @@ router.post('/remove-mock-patients', async (req, res) => {
       success: false,
       message: 'Failed to remove mock patients',
       error: error.message
+    });
+  }
+});
+
+router.post('/clear-all-validation-results', async (req, res) => {
+  try {
+    console.log('⚠️  Clearing ALL validation results from database...');
+    
+    // Delete all validation data in order (respecting FK constraints)
+    // validationMessages has FK to validationResultsPerAspect with onDelete: cascade
+    // So we delete child tables first, then parent
+    
+    // 1. Delete all message groups first (no FK constraints, independent table)
+    const groupsResult = await db.delete(validationMessageGroups);
+    const groupsDeleted = groupsResult.rowCount || 0;
+    console.log(`✅ Deleted ${groupsDeleted} message groups`);
+    
+    // 2. Delete all validation messages (child table with FK to results)
+    const messagesResult = await db.delete(validationMessages);
+    const messagesDeleted = messagesResult.rowCount || 0;
+    console.log(`✅ Deleted ${messagesDeleted} validation messages`);
+    
+    // 3. Delete all per-aspect validation results (parent table)
+    const resultsResult = await db.delete(validationResultsPerAspect);
+    const resultsDeleted = resultsResult.rowCount || 0;
+    console.log(`✅ Deleted ${resultsDeleted} validation results`);
+    
+    const totalDeleted = groupsDeleted + messagesDeleted + resultsDeleted;
+    
+    console.log(`🎉 Total validation records deleted: ${totalDeleted}`);
+    
+    res.json({
+      success: true,
+      deleted: {
+        results: resultsDeleted,
+        messages: messagesDeleted,
+        groups: groupsDeleted
+      },
+      totalDeleted
+    });
+  } catch (error) {
+    console.error('❌ Error clearing all validation results:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Unknown error occurred'
     });
   }
 });

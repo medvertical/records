@@ -13,7 +13,6 @@ import Dashboard from "@/pages/dashboard";
 import ResourceBrowser from "@/pages/resource-browser";
 import ResourceDetail from "@/pages/resource-detail";
 import SettingsPage from "@/pages/settings";
-import { PerformanceDashboardPage } from "@/pages/PerformanceDashboardPage";
 import NotFound from "@/pages/not-found";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
@@ -48,7 +47,6 @@ function Router() {
     if (location === "/" || location === "/dashboard") return "Records";
     if (location === "/resources") return "Records";
     if (location.startsWith("/resources/")) return "Records";
-    if (location === "/performance") return "Records";
     if (location === "/settings") return "Records";
     return "Records";
   };
@@ -57,7 +55,6 @@ function Router() {
     if (location === "/" || location === "/dashboard") return "Dashboard";
     if (location === "/resources") return "Browse Resources";
     if (location.startsWith("/resources/")) return "Resource Details";
-    if (location === "/performance") return "Performance Dashboard";
     if (location === "/settings") return "Settings";
     return "Records";
   };
@@ -156,24 +153,6 @@ function Router() {
                 sidebarOpen && !isMobile ? "ml-64" : "ml-0"
               )}>
                 <ResourceBrowserComponent />
-              </main>
-            </div>
-          </div>
-        </Route>
-        <Route path="/performance">
-          <div className="min-h-screen bg-gray-50">
-            <Header 
-              title={getPageTitle()}
-              connectionStatus={connectionStatus}
-              onSidebarToggle={toggleSidebar}
-            />
-            <div className="flex pt-16">
-              <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
-              <main className={cn(
-                "flex-1 relative z-10 transition-all duration-300 ease-in-out",
-                sidebarOpen && !isMobile ? "ml-64" : "ml-0"
-              )}>
-                <PerformanceDashboardPage />
               </main>
             </div>
           </div>
