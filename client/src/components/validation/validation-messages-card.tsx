@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { CircularProgress } from '@/components/ui/circular-progress';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ValidationMessageItem } from './ValidationMessageItem';
 import type { ValidationMessage as ValidationMessageType } from './ValidationMessageItem';
 
@@ -39,16 +40,16 @@ export interface ValidationMessagesCardProps {
   onResourceClick?: (resourceType: string, resourceId: string) => void;
 }
 
-function getAspectBadgeColor(aspect: string): string {
-  const colors: Record<string, string> = {
-    structural: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-    profile: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-    terminology: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-    reference: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-    businessRule: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-    metadata: 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200',
+function getAspectDescription(aspect: string): string {
+  const descriptions: Record<string, string> = {
+    structural: 'Validates basic structure, required fields, data types, and cardinality constraints',
+    profile: 'Checks conformance to declared FHIR profiles and their constraints',
+    terminology: 'Validates codes against code systems, value sets, and terminology bindings',
+    reference: 'Verifies that references to other resources are valid and resolvable',
+    businessRule: 'Evaluates business logic rules and custom validation constraints',
+    metadata: 'Checks metadata requirements like lastUpdated, versionId, and tags',
   };
-  return colors[aspect] || 'bg-gray-100 text-gray-800';
+  return descriptions[aspect] || 'Validation aspect';
 }
 
 export function ValidationMessagesCard({
@@ -190,12 +191,20 @@ export function ValidationMessagesCard({
                 <AccordionItem key={`aspect-${index}`} value={`aspect-${index}`} className="text-left">
                   <AccordionTrigger className="hover:no-underline text-left">
                     <div className="flex items-center justify-start gap-2 w-full text-left">
-                      <Badge className={getAspectBadgeColor(aspectData.aspect)}>
+                      <Badge variant="outline" className="bg-muted/50">
                         {aspectData.aspect}
                       </Badge>
-                      <Badge variant="outline" className="ml-auto mr-2">
-                        {aspectData.messages.length} message{aspectData.messages.length !== 1 ? 's' : ''}
-                      </Badge>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p className="text-sm">{getAspectDescription(aspectData.aspect)}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                      <span className="ml-auto mr-2 text-sm text-muted-foreground">
+                        {aspectData.messages.length}
+                      </span>
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="text-left">
@@ -226,12 +235,12 @@ export function ValidationMessagesCard({
             <div className="space-y-2">
               {aspectsWithoutMessages.map((aspectData, index) => (
                 <div key={`no-messages-${index}`} className="flex items-center justify-between py-3 px-4 border rounded-lg bg-muted/50">
-                  <Badge className={getAspectBadgeColor(aspectData.aspect)}>
+                  <Badge variant="outline" className="bg-muted/50">
                     {aspectData.aspect}
                   </Badge>
-                  <Badge variant="outline" className="text-muted-foreground">
+                  <span className="text-sm text-muted-foreground">
                     0 messages
-                  </Badge>
+                  </span>
                 </div>
               ))}
             </div>
