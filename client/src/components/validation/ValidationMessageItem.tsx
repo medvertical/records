@@ -5,6 +5,7 @@ import { SeverityIcon, getSeverityVariant } from '@/components/ui/severity-icon'
 import type { SeverityLevel } from '@/components/ui/severity-icon';
 import { getShortId } from '@/lib/resource-utils';
 import { ProfileBadge } from '@/components/resources/ProfileBadge';
+import { ResourceBadge } from '@/components/resources/ResourceBadge';
 
 // ============================================================================
 // Helper Functions
@@ -83,13 +84,6 @@ export function ValidationMessageItem({
                 {message.code}
               </code>
             )}
-            
-            {/* Highlighted Badge */}
-            {isHighlighted && (
-              <Badge variant="default" className="text-xs">
-                Highlighted
-              </Badge>
-            )}
           </div>
           
           {/* Message Text */}
@@ -113,13 +107,13 @@ export function ValidationMessageItem({
               {onPathClick ? (
                 <button
                   onClick={() => onPathClick(message.canonicalPath)}
-                  className="bg-muted px-1 py-0.5 rounded hover:bg-muted/80 cursor-pointer transition-colors ml-1"
+                  className="bg-muted px-1 py-0.5 rounded hover:bg-muted/80 cursor-pointer transition-colors ml-1 font-mono"
                   title="Click to highlight in tree viewer"
                 >
                   {message.canonicalPath}
                 </button>
               ) : (
-                <code className="bg-muted px-1 py-0.5 rounded ml-1">{message.canonicalPath}</code>
+                <code className="bg-muted px-1 py-0.5 rounded ml-1 font-mono">{message.canonicalPath}</code>
               )}
             </div>
             
@@ -130,19 +124,14 @@ export function ValidationMessageItem({
             
             {/* Resource Info - only shown in resource browser context */}
             {showResourceInfo && message.resourceType && message.resourceId && (
-              <div className="text-left">
-                Resource: 
-                {onResourceClick ? (
-                  <button
-                    onClick={() => onResourceClick(message.resourceType!, message.resourceId!)}
-                    className="bg-muted px-1 py-0.5 rounded hover:bg-muted/80 cursor-pointer transition-colors ml-1"
-                    title="Click to view this resource"
-                  >
-                    {message.resourceType}/{getShortId(message.resourceId)}
-                  </button>
-                ) : (
-                  <code className="bg-muted px-1 py-0.5 rounded ml-1">{message.resourceType}/{getShortId(message.resourceId)}</code>
-                )}
+              <div className="text-left flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Resource:</span>
+                <ResourceBadge
+                  resourceType={message.resourceType}
+                  resourceId={message.resourceId}
+                  onClick={onResourceClick ? () => onResourceClick(message.resourceType!, message.resourceId!) : undefined}
+                  showExternalLink={!!onResourceClick}
+                />
               </div>
             )}
           </div>

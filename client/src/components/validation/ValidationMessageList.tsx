@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { ResourceBadge } from '@/components/resources/ResourceBadge';
 
 // ============================================================================
 // Types
@@ -384,19 +385,14 @@ function MessageItem({
           {message.resourceType && message.resourceId && (
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium text-gray-500 w-20">Resource:</span>
-              <button
-                className="text-xs text-gray-600 hover:text-blue-600 hover:underline font-mono break-all bg-gray-50 px-2 py-1 rounded flex-1 text-left transition-colors group"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onResourceClick?.(message.resourceType!, message.resourceId!);
-                }}
-                title="Click to view this resource"
-              >
-                <span className="inline-flex items-center gap-1">
-                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity inline" />
-                  {message.resourceType}/{message.resourceId}
-                </span>
-              </button>
+              <ResourceBadge
+                resourceType={message.resourceType}
+                resourceId={message.resourceId}
+                onClick={onResourceClick ? (e) => {
+                  onResourceClick(message.resourceType!, message.resourceId!);
+                } : undefined}
+                showExternalLink={!!onResourceClick}
+              />
             </div>
           )}
         </div>

@@ -9,6 +9,8 @@ export { default as ResourceViewer } from './resource-viewer';
 export { default as UnifiedTreeViewer } from './UnifiedTreeViewer';
 export { ResourceEditor } from './ResourceEditor';
 export { ResourceDetailActions } from './ResourceDetailActions';
+export { ResourceBadge } from './ResourceBadge';
+export type { ResourceBadgeProps } from './ResourceBadge';
 
 // State components
 export {
