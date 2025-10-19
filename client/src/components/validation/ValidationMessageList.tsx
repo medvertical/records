@@ -391,7 +391,6 @@ function MessageItem({
                 onClick={onResourceClick ? (e) => {
                   onResourceClick(message.resourceType!, message.resourceId!);
                 } : undefined}
-                showExternalLink={!!onResourceClick}
               />
             </div>
           )}

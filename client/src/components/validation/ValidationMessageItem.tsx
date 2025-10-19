@@ -130,7 +130,6 @@ export function ValidationMessageItem({
                   resourceType={message.resourceType}
                   resourceId={message.resourceId}
                   onClick={onResourceClick ? () => onResourceClick(message.resourceType!, message.resourceId!) : undefined}
-                  showExternalLink={!!onResourceClick}
                 />
               </div>
             )}
