@@ -126,7 +126,8 @@ function MessageItem({
       className={cn(
         'border rounded-lg overflow-hidden transition-all duration-300',
         config.borderColor,
-        showHighlight ? 'bg-white ring-2 ring-inset ring-blue-500' : config.bgColor
+        config.bgColor,
+        showHighlight && 'ring-2 ring-inset ring-blue-500'
       )}
     >
       {/* Message Header */}

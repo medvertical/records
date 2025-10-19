@@ -49,14 +49,16 @@ export function getSeverityColor(severity: SeverityLevel): string {
 /**
  * Get severity badge variant for shadcn/ui Badge component
  */
-export function getSeverityVariant(severity: SeverityLevel): "default" | "destructive" | "secondary" {
+export function getSeverityVariant(severity: SeverityLevel): "error" | "warning" | "information" | "default" {
   const normalizedSeverity = severity.toLowerCase();
   
   switch (normalizedSeverity) {
     case 'error':
-      return 'destructive';
+      return 'error';
     case 'warning':
-      return 'secondary';
+      return 'warning';
+    case 'information':
+      return 'information';
     default:
       return 'default';
   }

@@ -22,6 +22,24 @@ function extractProfileUrl(messageText: string): string | null {
   return match ? match[1] : null;
 }
 
+/**
+ * Get badge color classes based on severity
+ */
+function getSeverityBadgeClasses(severity: string): string {
+  const normalizedSeverity = severity.toLowerCase();
+  
+  switch (normalizedSeverity) {
+    case 'error':
+      return 'bg-red-100 text-red-900 dark:bg-red-950/50 dark:text-red-200';
+    case 'warning':
+      return 'bg-orange-100 text-orange-900 dark:bg-orange-950/50 dark:text-orange-200';
+    case 'information':
+      return 'bg-blue-100 text-blue-900 dark:bg-blue-950/50 dark:text-blue-200';
+    default:
+      return 'bg-muted text-muted-foreground';
+  }
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -64,7 +82,7 @@ export function ValidationMessageItem({
     <Alert
       variant={getSeverityVariant(message.severity as SeverityLevel)}
       className={`text-left transition-all duration-300 ${
-        isHighlighted ? 'bg-white ring-2 ring-inset ring-blue-500' : ''
+        isHighlighted ? 'ring-2 ring-inset ring-blue-500' : ''
       }`}
       data-signature={message.signature}
     >
@@ -74,7 +92,7 @@ export function ValidationMessageItem({
           <div className="flex items-center justify-start gap-2 text-left">
             {/* Code Badge */}
             {message.code && (
-              <code className="text-xs bg-muted px-2 py-0.5 rounded">
+              <code className={`text-xs px-2 py-0.5 rounded font-medium ${getSeverityBadgeClasses(message.severity)}`}>
                 {message.code}
               </code>
             )}
