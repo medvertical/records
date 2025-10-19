@@ -266,9 +266,9 @@ export class FhirClient {
       const url = `${this.baseUrl}/${resourceType}?${searchParams.toString()}`;
       console.log(`[FhirClient] Calling URL: ${url}`);
       
-      // Use shorter timeout for count-only queries (when _count is 1 or 0)
+      // Use longer timeout for count queries since they can be slow on large datasets
       const isCountQuery = params._count === '1' || params._count === 1 || params._count === '0' || params._count === 0;
-      const timeout = isCountQuery ? 5000 : 8000; // 5s for counts, 8s for normal queries
+      const timeout = isCountQuery ? 30000 : 8000; // 30s for counts, 8s for normal queries
       
       const response: AxiosResponse<FhirBundle> = await axios.get(
         url,

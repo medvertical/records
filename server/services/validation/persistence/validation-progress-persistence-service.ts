@@ -254,6 +254,24 @@ export class ValidationProgressPersistenceService {
   }
 
   /**
+   * Get recent validation progress states for history
+   */
+  async getRecentProgressStates(limit: number = 10): Promise<ValidationProgressState[]> {
+    try {
+      const result = await db
+        .select()
+        .from(validationProgressState)
+        .orderBy(validationProgressState.updatedAt)
+        .limit(limit);
+
+      return result.map(row => row.stateData as ValidationProgressState);
+    } catch (error) {
+      console.error(`[ValidationProgressPersistence] Error getting recent progress states:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Validate and sanitize progress state
    */
   validateProgressState(state: any): ValidationProgressState | null {

@@ -1,3 +1,17 @@
+/**
+ * @deprecated This component has been replaced by the new Dashboard implementation
+ * with batch validation control. See /client/src/pages/dashboard.tsx
+ * This file is kept for reference but is no longer used in the application.
+ * 
+ * New dashboard features:
+ * - 4 metric cards with real-time updates
+ * - Batch validation control widget (idle/running states)
+ * - Resources by type table
+ * - Validation status chart
+ * 
+ * Replaced on: 2025-10-19
+ */
+
 import React from 'react';
 import { Card } from '@/components/ui/card';
 import { ValidationControlPanel } from '../controls/ValidationControlPanel';
@@ -16,6 +30,9 @@ interface ModernDashboardLayoutProps {
   className?: string;
 }
 
+/**
+ * @deprecated Use the new Dashboard component from /client/src/pages/dashboard.tsx
+ */
 export const ModernDashboardLayout: React.FC<ModernDashboardLayoutProps> = ({
   className,
 }) => {

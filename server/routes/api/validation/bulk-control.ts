@@ -1400,6 +1400,41 @@ export function setupBulkControlRoutes(app: Express): void {
       handleError(error, req, res, 'validation-restore-active');
     }
   });
+
+  // GET /api/validation/batch/history - Get batch validation history
+  app.get("/api/validation/batch/history", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const persistenceService = getValidationProgressPersistenceService();
+      
+      // Get recent validation states from persistence
+      const recentStates = await persistenceService.getRecentProgressStates(limit);
+      
+      // Transform to history items
+      const history = recentStates.map((state: any) => ({
+        batchId: state.batchId || state.jobId,
+        jobId: state.jobId,
+        startTime: state.startTime || new Date(state.startTimestamp),
+        endTime: state.stopTimestamp ? new Date(state.stopTimestamp) : undefined,
+        status: state.isRunning ? (state.isPaused ? 'paused' : 'running') : 
+                state.shouldStop ? 'completed' : 'stopped',
+        resourceTypes: state.requestPayload?.resourceTypes || [],
+        totalResources: state.totalResources || 0,
+        processedResources: state.processedResources || 0,
+        validResources: state.processedResources - state.errors || 0,
+        errorResources: state.errors || 0,
+        warningResources: state.warnings || 0,
+        duration: state.stopTimestamp && state.startTimestamp ? 
+                  state.stopTimestamp - state.startTimestamp : undefined
+      }));
+      
+      res.json(history);
+    } catch (error: any) {
+      console.error('[BulkValidation] Error fetching batch history:', error);
+      // Return empty array as fallback
+      res.json([]);
+    }
+  });
 }
 
 /**

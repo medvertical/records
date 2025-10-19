@@ -123,3 +123,41 @@ export interface DashboardError {
   recoverable: boolean;
   retryCount: number;
 }
+
+/**
+ * Batch Validation History Item
+ */
+export interface BatchValidationHistoryItem {
+  batchId: string;
+  jobId: string;
+  startTime: Date;
+  endTime?: Date;
+  status: 'running' | 'paused' | 'completed' | 'stopped' | 'error';
+  resourceTypes: string[];
+  totalResources: number;
+  processedResources: number;
+  validResources: number;
+  errorResources: number;
+  warningResources: number;
+  duration?: number; // in ms
+}
+
+/**
+ * Dashboard Batch State
+ */
+export interface DashboardBatchState {
+  mode: 'idle' | 'running';
+  currentBatch?: ValidationProgress;
+  history: BatchValidationHistoryItem[];
+}
+
+/**
+ * Resource Counts Response
+ */
+export interface ResourceCountsResponse {
+  counts: Record<string, number>;
+  totalResources: number;
+  totalTypes: number;
+  lastUpdated: Date;
+  cacheStatus: 'complete' | 'partial' | 'loading';
+}
