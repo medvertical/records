@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { ResourceBadge } from '@/components/resources/ResourceBadge';
+import { PathBadge } from './PathBadge';
 
 // ============================================================================
 // Types
@@ -234,17 +235,13 @@ function MessageItem({
             )}
 
             {/* Path */}
-            <button
-              className="text-sm text-gray-600 hover:text-blue-600 hover:underline font-mono break-all text-left mt-2 flex items-center gap-1 group"
-              onClick={(e) => {
-                e.stopPropagation();
-                onPathClick?.(message.canonicalPath);
-              }}
-              title="Click to navigate to this path in the tree"
-            >
-              <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
-              {message.canonicalPath}
-            </button>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-xs text-muted-foreground">Path:</span>
+              <PathBadge
+                path={message.canonicalPath}
+                onClick={onPathClick ? () => onPathClick(message.canonicalPath) : undefined}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -350,22 +347,13 @@ function MessageItem({
           )}
 
           {/* Path with Link */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-gray-500 w-20">Path:</span>
+          <div className="flex items-start gap-2">
+            <span className="text-xs font-medium text-gray-500 w-20 pt-1">Path:</span>
             <div className="flex items-center gap-2 flex-1">
-              <button
-                className="text-xs text-gray-600 hover:text-blue-600 hover:underline font-mono break-all bg-gray-50 px-2 py-1 rounded flex-1 text-left transition-colors group"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPathClick?.(message.canonicalPath);
-                }}
-                title="Click to navigate to this path in the tree"
-              >
-                <span className="inline-flex items-center gap-1">
-                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity inline" />
-                  {message.canonicalPath}
-                </span>
-              </button>
+              <PathBadge
+                path={message.canonicalPath}
+                onClick={onPathClick ? () => onPathClick(message.canonicalPath) : undefined}
+              />
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button

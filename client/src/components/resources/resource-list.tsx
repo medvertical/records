@@ -23,7 +23,7 @@ import {
   Filter,
   Info
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { CircularProgress } from "@/components/ui/circular-progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -88,6 +88,7 @@ export interface ResourceListProps {
   selectedIds?: Set<string>; // Set of selected resource keys (resourceType/id)
   onSelectionChange?: (resourceKey: string, selected: boolean) => void; // Callback for selection changes
   highlightedResourceId?: string; // Resource ID to highlight (resourceType/resourceId)
+  onSeverityBadgeClick?: (severity: 'error' | 'warning' | 'information') => void; // Callback when severity badge is clicked
 }
 
 export default function ResourceList({
@@ -106,7 +107,10 @@ export default function ResourceList({
   selectedIds = new Set(),
   onSelectionChange,
   highlightedResourceId,
+  onSeverityBadgeClick,
 }: ResourceListProps) {
+  const [, setLocation] = useLocation();
+  
   // Fetch current validation settings for UI filtering
   const { data: validationSettingsData } = useQuery({
     queryKey: ['/api/validation/settings'],
@@ -118,6 +122,13 @@ export default function ResourceList({
     staleTime: 30 * 1000, // 30 seconds
     refetchInterval: false,
   });
+
+  // Helper function to handle severity badge clicks
+  const handleSeverityBadgeClick = (severity: 'error' | 'warning' | 'information') => {
+    if (onSeverityBadgeClick) {
+      onSeverityBadgeClick(severity);
+    }
+  };
 
   // Fetch version data for all resources on the current page
   const resourceIdentifiers = resources.map(r => ({
@@ -432,7 +443,16 @@ export default function ResourceList({
             <div className="flex items-center gap-2">
               {/* Error badge */}
               {filteredSummary && filteredSummary.errorCount > 0 && (
-                <Badge className="h-6 px-2 text-xs flex items-center gap-1.5 bg-red-100 text-red-700 hover:bg-red-200">
+                <Badge 
+                  data-severity-badge="error"
+                  className="severity-badge h-6 px-2 text-xs flex items-center gap-1.5 bg-red-100 text-red-700 hover:bg-red-200 cursor-pointer transition-all"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSeverityBadgeClick('error');
+                  }}
+                  title="Click to view error messages"
+                >
                   <XCircle className="h-3 w-3" />
                   {filteredSummary.errorCount}
                 </Badge>
@@ -440,7 +460,16 @@ export default function ResourceList({
               
               {/* Warning badge */}
               {filteredSummary?.hasWarnings && filteredSummary.warningCount > 0 && (
-                <Badge className="h-6 px-2 text-xs flex items-center gap-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200">
+                <Badge 
+                  data-severity-badge="warning"
+                  className="severity-badge h-6 px-2 text-xs flex items-center gap-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200 cursor-pointer transition-all"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSeverityBadgeClick('warning');
+                  }}
+                  title="Click to view warning messages"
+                >
                   <AlertTriangle className="h-3 w-3" />
                   {filteredSummary.warningCount}
                 </Badge>
@@ -448,7 +477,16 @@ export default function ResourceList({
               
               {/* Information badge */}
               {(filteredSummary?.informationCount || 0) > 0 && (
-                <Badge className="h-6 px-2 text-xs flex items-center gap-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200">
+                <Badge 
+                  data-severity-badge="information"
+                  className="severity-badge h-6 px-2 text-xs flex items-center gap-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 cursor-pointer transition-all"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSeverityBadgeClick('information');
+                  }}
+                  title="Click to view information messages"
+                >
                   <Info className="h-3 w-3" />
                   {filteredSummary.informationCount}
                 </Badge>
@@ -763,14 +801,30 @@ export default function ResourceList({
                       resourceRefs.current.delete(resourceKey);
                     }
                   }}
+                  style={{ cursor: selectionMode ? 'default' : 'pointer' }}
+                  onClick={(e) => {
+                    // Don't navigate if in selection mode
+                    if (selectionMode) return;
+                    
+                    const target = e.target as HTMLElement;
+                    
+                    // Check if click is on a severity badge or inside one
+                    if (
+                      target.classList.contains('severity-badge') ||
+                      target.closest('.severity-badge') ||
+                      target.closest('[data-severity-badge]') ||
+                      target.closest('button') ||
+                      target.closest('[role="checkbox"]')
+                    ) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return;
+                    }
+                    
+                    setLocation(`/resources/${resource.resourceType}/${resource.resourceId || resource.id}`);
+                  }}
                 >
-                  {selectionMode ? (
-                    itemContent
-                  ) : (
-                    <Link href={`/resources/${resource.resourceId || resource.id}?type=${resource.resourceType}`}>
-                      {itemContent}
-                    </Link>
-                  )}
+                  {itemContent}
                 </div>
               );
             })}

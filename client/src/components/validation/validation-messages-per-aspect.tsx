@@ -50,6 +50,7 @@ interface ValidationMessagesPerAspectProps {
   informationCount?: number;
   isRevalidating?: boolean;
   lastValidated?: string;
+  initialSeverity?: 'error' | 'warning' | 'information';
 }
 
 function getAspectDescription(aspect: string): string {
@@ -104,9 +105,13 @@ export function ValidationMessagesPerAspect({
   informationCount = 0,
   isRevalidating = false,
   lastValidated,
+  initialSeverity,
 }: ValidationMessagesPerAspectProps) {
   const [highlightedSignatures, setHighlightedSignatures] = useState<string[]>([]);
-  const [selectedSeverities, setSelectedSeverities] = useState<Set<string>>(new Set());
+  const [selectedSeverities, setSelectedSeverities] = useState<Set<string>>(() => {
+    // If initialSeverity is provided, start with it selected
+    return initialSeverity ? new Set([initialSeverity]) : new Set();
+  });
   
   // Toggle severity filter
   const toggleSeverity = (severity: string) => {
@@ -132,6 +137,55 @@ export function ValidationMessagesPerAspect({
     },
     refetchInterval: 30000, // Poll every 30 seconds
   });
+
+  // Group identical messages within each aspect (must be called before any early returns)
+  const groupedAspects = useMemo(() => {
+    if (!data || !data.aspects) return [];
+    
+    return data.aspects.map(aspect => {
+      const messageMap = new Map<string, ValidationMessage>();
+      
+      aspect.messages.forEach(msg => {
+        // Create a unique key based on message content (excluding resource info)
+        const contentKey = `${msg.severity}|${msg.code || ''}|${msg.canonicalPath}|${msg.text}`;
+        
+        if (messageMap.has(contentKey)) {
+          // Message already exists, add this resource to the list
+          const existingMsg = messageMap.get(contentKey)!;
+          if (msg.resourceType && msg.resourceId) {
+            if (!existingMsg.resources) {
+              existingMsg.resources = [];
+              // Add the first resource if it exists
+              if (existingMsg.resourceType && existingMsg.resourceId) {
+                existingMsg.resources.push({
+                  resourceType: existingMsg.resourceType,
+                  resourceId: existingMsg.resourceId
+                });
+              }
+            }
+            // Check if this resource is already in the list
+            const resourceExists = existingMsg.resources.some(
+              r => r.resourceType === msg.resourceType && r.resourceId === msg.resourceId
+            );
+            if (!resourceExists) {
+              existingMsg.resources.push({
+                resourceType: msg.resourceType,
+                resourceId: msg.resourceId
+              });
+            }
+          }
+        } else {
+          // New message, add it to the map
+          messageMap.set(contentKey, { ...msg });
+        }
+      });
+      
+      return {
+        ...aspect,
+        messages: Array.from(messageMap.values())
+      };
+    });
+  }, [data]);
   
   // Listen for highlight-messages events from tree badge clicks
   useEffect(() => {
@@ -230,7 +284,7 @@ export function ValidationMessagesPerAspect({
     );
   }
 
-  if (!data || data.aspects.length === 0) {
+  if (!data || groupedAspects.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -248,53 +302,6 @@ export function ValidationMessagesPerAspect({
       </Card>
     );
   }
-
-  // Group identical messages within each aspect
-  const groupedAspects = useMemo(() => {
-    return data.aspects.map(aspect => {
-      const messageMap = new Map<string, ValidationMessage>();
-      
-      aspect.messages.forEach(msg => {
-        // Create a unique key based on message content (excluding resource info)
-        const contentKey = `${msg.severity}|${msg.code || ''}|${msg.canonicalPath}|${msg.text}`;
-        
-        if (messageMap.has(contentKey)) {
-          // Message already exists, add this resource to the list
-          const existingMsg = messageMap.get(contentKey)!;
-          if (msg.resourceType && msg.resourceId) {
-            if (!existingMsg.resources) {
-              existingMsg.resources = [];
-              // Add the first resource if it exists
-              if (existingMsg.resourceType && existingMsg.resourceId) {
-                existingMsg.resources.push({
-                  resourceType: existingMsg.resourceType,
-                  resourceId: existingMsg.resourceId
-                });
-              }
-            }
-            // Check if this resource is already in the list
-            const resourceExists = existingMsg.resources.some(
-              r => r.resourceType === msg.resourceType && r.resourceId === msg.resourceId
-            );
-            if (!resourceExists) {
-              existingMsg.resources.push({
-                resourceType: msg.resourceType,
-                resourceId: msg.resourceId
-              });
-            }
-          }
-        } else {
-          // New message, add it to the map
-          messageMap.set(contentKey, { ...msg });
-        }
-      });
-      
-      return {
-        ...aspect,
-        messages: Array.from(messageMap.values())
-      };
-    });
-  }, [data.aspects]);
 
   const totalMessages = groupedAspects.reduce((sum, aspect) => sum + aspect.messages.length, 0);
   

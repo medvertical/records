@@ -6,6 +6,7 @@ import type { SeverityLevel } from '@/components/ui/severity-icon';
 import { getShortId } from '@/lib/resource-utils';
 import { ProfileBadge } from '@/components/resources/ProfileBadge';
 import { ResourceBadge } from '@/components/resources/ResourceBadge';
+import { PathBadge } from './PathBadge';
 
 // ============================================================================
 // Helper Functions
@@ -114,19 +115,12 @@ export function ValidationMessageItem({
             )}
             
             {/* Path */}
-            <div className="text-left">
-              Path: 
-              {onPathClick ? (
-                <button
-                  onClick={() => onPathClick(message.canonicalPath)}
-                  className="bg-muted px-1 py-0.5 rounded hover:bg-muted/80 cursor-pointer transition-colors ml-1 font-mono"
-                  title="Click to highlight in tree viewer"
-                >
-                  {message.canonicalPath}
-                </button>
-              ) : (
-                <code className="bg-muted px-1 py-0.5 rounded ml-1 font-mono">{message.canonicalPath}</code>
-              )}
+            <div className="text-left flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Path:</span>
+              <PathBadge
+                path={message.canonicalPath}
+                onClick={onPathClick ? () => onPathClick(message.canonicalPath) : undefined}
+              />
             </div>
             
             {/* Timestamp */}

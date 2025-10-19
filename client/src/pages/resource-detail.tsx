@@ -29,7 +29,7 @@ const isUUID = (str: string): boolean => {
 };
 
 export default function ResourceDetail() {
-  const { id } = useParams<{ id: string }>();
+  const { type, id } = useParams<{ type: string; id: string }>();
   const [location] = useLocation();
   const queryClient = useQueryClient();
   const { activeServer } = useServerData();
@@ -72,7 +72,8 @@ export default function ResourceDetail() {
   // Parse query parameters
   const searchParams = new URLSearchParams(window.location.search);
   const highlightSignature = searchParams.get('highlightSignature') || undefined;
-  const resourceType = searchParams.get('type') || undefined;
+  const resourceType = type; // Get resourceType from URL params instead of query params
+  const initialSeverity = searchParams.get('severity') as 'error' | 'warning' | 'information' | undefined;
   
   // Use validation settings polling to detect changes and refresh resource detail
   const { lastChange } = useValidationSettingsPolling({
@@ -298,9 +299,7 @@ export default function ResourceDetail() {
     queryFn: async ({ queryKey }) => {
       const [baseUrl, resourceId, type] = queryKey;
       console.log('Fetching resource with ID:', resourceId, 'Type:', type);
-      const url = type 
-        ? `${baseUrl}/${resourceId}?resourceType=${type}`
-        : `${baseUrl}/${resourceId}`;
+      const url = `${baseUrl}/${resourceId}?resourceType=${type}`;
       const response = await fetch(url);
       if (!response.ok) {
         console.error('Resource fetch failed:', response.status, response.statusText);
@@ -575,6 +574,7 @@ export default function ResourceDetail() {
               serverId={activeServer?.id}
               highlightSignature={highlightSignature}
               validationScore={validationSummary?.validationScore || 0}
+              initialSeverity={initialSeverity}
               onPathClick={handlePathClick}
               onResourceClick={handleResourceClick}
               profiles={resource.data?.meta?.profile || resource.meta?.profile || []}

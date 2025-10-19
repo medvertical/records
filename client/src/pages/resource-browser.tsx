@@ -1923,6 +1923,7 @@ export default function ResourceBrowser() {
             selectionMode={selectionMode}
             selectedIds={selectedResources}
             onSelectionChange={handleSelectionChange}
+            onSeverityBadgeClick={handleSeverityChange}
             highlightedResourceId={
               currentMessage && isMessagesVisible
                 ? `${currentMessage.resourceType}/${currentMessage.resourceId}` 
@@ -1934,7 +1935,7 @@ export default function ResourceBrowser() {
 
         {/* Right side - Validation Messages Card */}
         {isMessagesVisible && (
-          <div className="sticky top-20 self-start">
+          <div className="sticky top-20 self-start max-h-[calc(100vh-5rem)] overflow-auto">
             <ValidationMessagesCard
               aspects={messagesByAspect}
               highlightSignature={allMessages[currentMessageIndex]?.signature}

@@ -91,10 +91,10 @@ function Router() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Switch>
-        <Route path="/resources/:id">
+        <Route path="/resources/:type/:id">
           {(params) => {
-            if (!params?.id) {
-              return <div className="p-4">No resource ID provided</div>;
+            if (!params?.type || !params?.id) {
+              return <div className="p-4">Invalid resource URL</div>;
             }
             return (
               <div className="min-h-screen bg-gray-50">
@@ -109,7 +109,7 @@ function Router() {
                     "flex-1 relative z-10 transition-all duration-300 ease-in-out",
                     sidebarOpen && !isMobile ? "ml-64" : "ml-0"
                   )}>
-                    <ResourceDetail resourceId={params.id} />
+                    <ResourceDetail />
                   </main>
                 </div>
               </div>
