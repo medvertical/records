@@ -39,6 +39,7 @@ interface ValidationMessagesPerAspectProps {
   highlightSignature?: string;
   validationScore?: number;
   onPathClick?: (path: string) => void;
+  onResourceClick?: (resourceType: string, resourceId: string) => void;
   profiles?: string[];
   isValid?: boolean;
   errorCount?: number;
@@ -92,6 +93,7 @@ export function ValidationMessagesPerAspect({
   highlightSignature,
   validationScore = 0,
   onPathClick,
+  onResourceClick,
   profiles = [],
   isValid,
   errorCount = 0,
@@ -413,6 +415,7 @@ export function ValidationMessagesPerAspect({
                             message={message}
                             isHighlighted={isHighlighted}
                             onPathClick={onPathClick}
+                            onResourceClick={onResourceClick}
                             showResourceInfo={false}
                           />
                         );

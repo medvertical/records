@@ -24,6 +24,7 @@ export interface ValidationAspectTabsProps {
   onMessageClick?: (message: ValidationMessage, aspect: ValidationAspect) => void;
   onSignatureClick?: (signature: string, aspect: ValidationAspect) => void;
   onPathClick?: (path: string, aspect: ValidationAspect) => void;
+  onResourceClick?: (resourceType: string, resourceId: string, aspect: ValidationAspect) => void;
   onAspectChange?: (aspect: ValidationAspect) => void;
   className?: string;
 }
@@ -78,6 +79,7 @@ export function ValidationAspectTabs({
   onMessageClick,
   onSignatureClick,
   onPathClick,
+  onResourceClick,
   onAspectChange,
   className,
 }: ValidationAspectTabsProps) {
@@ -181,6 +183,7 @@ export function ValidationAspectTabs({
               onMessageClick={(msg) => onMessageClick?.(msg, aspectData.aspect)}
               onSignatureClick={(sig) => onSignatureClick?.(sig, aspectData.aspect)}
               onPathClick={(path) => onPathClick?.(path, aspectData.aspect)}
+              onResourceClick={(resourceType, resourceId) => onResourceClick?.(resourceType, resourceId, aspectData.aspect)}
               emptyMessage={`No ${ASPECT_CONFIG[aspectData.aspect].label.toLowerCase()} validation issues found.`}
             />
           ) : (

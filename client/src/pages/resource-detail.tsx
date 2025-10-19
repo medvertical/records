@@ -13,13 +13,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FhirResourceWithValidation } from "@shared/schema";
 import { ResourceDetailSkeleton } from "@/components/resources/resource-detail-skeleton";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, XCircle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import ProfileBadge from "@/components/resources/ProfileBadge";
 import { getShortId } from "@/lib/resource-utils";
 import { ResourceVersionCount } from "@/components/resources/resource-version-count";
 import { useResourceVersions } from "@/hooks/use-resource-versions";
+import { useGroupNavigation } from "@/hooks/use-group-navigation";
 
 // Helper function to check if a string is a UUID
 const isUUID = (str: string): boolean => {
@@ -400,6 +401,13 @@ export default function ResourceDetail() {
     window.dispatchEvent(event);
   }, []);
 
+  // Handle resource clicks from validation messages
+  const { navigateToResourceDetail } = useGroupNavigation();
+  const handleResourceClick = useCallback((resourceType: string, resourceId: string) => {
+    console.log('[ResourceDetail] Resource clicked:', { resourceType, resourceId });
+    navigateToResourceDetail(resourceType, resourceId);
+  }, [navigateToResourceDetail]);
+
   if (isLoading) {
     return <ResourceDetailSkeleton />;
   }
@@ -568,6 +576,7 @@ export default function ResourceDetail() {
               highlightSignature={highlightSignature}
               validationScore={validationSummary?.validationScore || 0}
               onPathClick={handlePathClick}
+              onResourceClick={handleResourceClick}
               profiles={resource.data?.meta?.profile || resource.meta?.profile || []}
               isValid={validationSummary?.isValid}
               errorCount={validationSummary?.errorCount}

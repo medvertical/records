@@ -26,6 +26,10 @@ export interface ValidationMessage {
   originalMessage?: string;     // Original technical message
   suggestions?: string[];       // Helpful suggestions
   hasMappedMessage?: boolean;   // Whether message was mapped
+  // Resource identification
+  resourceType?: string;        // e.g., 'Patient'
+  resourceId?: string;          // e.g., 'test-mii-violations'
+  profileUrl?: string;          // e.g., 'https://www.medizininformatik-initiative.de/fhir/...'
 }
 
 export interface ValidationMessageListProps {
@@ -34,6 +38,7 @@ export interface ValidationMessageListProps {
   onMessageClick?: (message: ValidationMessage) => void;
   onSignatureClick?: (signature: string) => void;
   onPathClick?: (path: string) => void;
+  onResourceClick?: (resourceType: string, resourceId: string) => void;
   emptyMessage?: string;
   className?: string;
   // Filter messages by severity - if provided, only show messages matching these severities
@@ -79,12 +84,14 @@ function MessageItem({
   onMessageClick,
   onSignatureClick,
   onPathClick,
+  onResourceClick,
   isHighlighted = false,
 }: { 
   message: ValidationMessage;
   onMessageClick?: (message: ValidationMessage) => void;
   onSignatureClick?: (signature: string) => void;
   onPathClick?: (path: string) => void;
+  onResourceClick?: (resourceType: string, resourceId: string) => void;
   isHighlighted?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -340,13 +347,23 @@ function MessageItem({
             </div>
           )}
 
-          {/* Path Copy Action */}
+          {/* Path with Link */}
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-gray-500 w-20">Path:</span>
             <div className="flex items-center gap-2 flex-1">
-              <code className="text-xs text-gray-600 font-mono break-all bg-gray-50 px-2 py-1 rounded flex-1">
-                {message.canonicalPath}
-              </code>
+              <button
+                className="text-xs text-gray-600 hover:text-blue-600 hover:underline font-mono break-all bg-gray-50 px-2 py-1 rounded flex-1 text-left transition-colors group"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPathClick?.(message.canonicalPath);
+                }}
+                title="Click to navigate to this path in the tree"
+              >
+                <span className="inline-flex items-center gap-1">
+                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity inline" />
+                  {message.canonicalPath}
+                </span>
+              </button>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -362,6 +379,26 @@ function MessageItem({
               </Tooltip>
             </div>
           </div>
+
+          {/* Resource with Link */}
+          {message.resourceType && message.resourceId && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-gray-500 w-20">Resource:</span>
+              <button
+                className="text-xs text-gray-600 hover:text-blue-600 hover:underline font-mono break-all bg-gray-50 px-2 py-1 rounded flex-1 text-left transition-colors group"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onResourceClick?.(message.resourceType!, message.resourceId!);
+                }}
+                title="Click to view this resource"
+              >
+                <span className="inline-flex items-center gap-1">
+                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity inline" />
+                  {message.resourceType}/{message.resourceId}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -378,6 +415,7 @@ export function ValidationMessageList({
   onMessageClick,
   onSignatureClick,
   onPathClick,
+  onResourceClick,
   emptyMessage = 'No validation issues found for this aspect.',
   className,
   severityFilter,
@@ -453,6 +491,7 @@ export function ValidationMessageList({
               onMessageClick={onMessageClick}
               onSignatureClick={onSignatureClick}
               onPathClick={onPathClick}
+              onResourceClick={onResourceClick}
               isHighlighted={highlightedMessageIds.includes(message.signature)}
             />
           ))}
@@ -469,6 +508,7 @@ export function ValidationMessageList({
               onMessageClick={onMessageClick}
               onSignatureClick={onSignatureClick}
               onPathClick={onPathClick}
+              onResourceClick={onResourceClick}
               isHighlighted={highlightedMessageIds.includes(message.signature)}
             />
           ))}
@@ -485,6 +525,7 @@ export function ValidationMessageList({
               onMessageClick={onMessageClick}
               onSignatureClick={onSignatureClick}
               onPathClick={onPathClick}
+              onResourceClick={onResourceClick}
               isHighlighted={highlightedMessageIds.includes(message.signature)}
             />
           ))}

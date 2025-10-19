@@ -35,6 +35,8 @@ export interface ValidationMessagesCardProps {
   isLoading?: boolean;
   error?: string | null;
   severityFilter?: ('error' | 'warning' | 'information')[];
+  onPathClick?: (path: string) => void;
+  onResourceClick?: (resourceType: string, resourceId: string) => void;
 }
 
 function getAspectBadgeColor(aspect: string): string {
@@ -60,6 +62,8 @@ export function ValidationMessagesCard({
   isLoading = false,
   error = null,
   severityFilter,
+  onPathClick,
+  onResourceClick,
 }: ValidationMessagesCardProps) {
   if (isLoading) {
     return (
@@ -204,6 +208,8 @@ export function ValidationMessagesCard({
                             key={msgIndex}
                             message={message}
                             isHighlighted={isHighlighted}
+                            onPathClick={onPathClick}
+                            onResourceClick={onResourceClick}
                             showResourceInfo={true}
                           />
                         );

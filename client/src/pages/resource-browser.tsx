@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { getFilteredValidationSummary } from '@/lib/validation-filtering-utils';
 import { useValidationActivity } from "@/contexts/validation-activity-context";
+import { useGroupNavigation } from "@/hooks/use-group-navigation";
 import { CheckSquare, Edit2, X } from "lucide-react";
 
 // Simple client-side cache to track validated resources
@@ -828,6 +829,19 @@ export default function ResourceBrowser() {
       setIsMessagesVisible(false);
     }
   }, [validationFilters]);
+
+  // Navigation handlers for validation messages
+  const { navigateToResourceDetail } = useGroupNavigation();
+  
+  const handlePathClick = useCallback((path: string) => {
+    // Path navigation is not applicable in list view
+    console.log('[ResourceBrowser] Path clicked (not implemented in list view):', path);
+  }, []);
+  
+  const handleResourceClick = useCallback((resourceType: string, resourceId: string) => {
+    console.log('[ResourceBrowser] Resource clicked:', { resourceType, resourceId });
+    navigateToResourceDetail(resourceType, resourceId);
+  }, [navigateToResourceDetail]);
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
@@ -1928,6 +1942,8 @@ export default function ResourceBrowser() {
               description={`${allMessages.filter(msg => msg.severity.toLowerCase() === currentSeverity).length} ${currentSeverity} messages from ${resourcesData?.resources?.length || 0} resources`}
               isLoading={isLoadingMessages}
               severityFilter={[currentSeverity]}
+              onPathClick={handlePathClick}
+              onResourceClick={handleResourceClick}
             />
           </div>
         )}

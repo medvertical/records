@@ -40,6 +40,7 @@ export interface ValidationMessageItemProps {
   message: ValidationMessage;
   isHighlighted?: boolean;
   onPathClick?: (path: string) => void;
+  onResourceClick?: (resourceType: string, resourceId: string) => void;
   showResourceInfo?: boolean;
 }
 
@@ -51,6 +52,7 @@ export function ValidationMessageItem({
   message,
   isHighlighted = false,
   onPathClick,
+  onResourceClick,
   showResourceInfo = false,
 }: ValidationMessageItemProps) {
   // Extract profile URL from message text if present
@@ -129,7 +131,18 @@ export function ValidationMessageItem({
             {/* Resource Info - only shown in resource browser context */}
             {showResourceInfo && message.resourceType && message.resourceId && (
               <div className="text-left">
-                Resource: <code className="bg-muted px-1 py-0.5 rounded">{message.resourceType}/{getShortId(message.resourceId)}</code>
+                Resource: 
+                {onResourceClick ? (
+                  <button
+                    onClick={() => onResourceClick(message.resourceType!, message.resourceId!)}
+                    className="bg-muted px-1 py-0.5 rounded hover:bg-muted/80 cursor-pointer transition-colors ml-1"
+                    title="Click to view this resource"
+                  >
+                    {message.resourceType}/{getShortId(message.resourceId)}
+                  </button>
+                ) : (
+                  <code className="bg-muted px-1 py-0.5 rounded ml-1">{message.resourceType}/{getShortId(message.resourceId)}</code>
+                )}
               </div>
             )}
           </div>

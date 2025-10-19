@@ -266,6 +266,8 @@ export async function getResourceMessages(
           text: validationMessages.text,
           signature: validationMessages.signature,
           createdAt: validationMessages.createdAt,
+          resourceType: validationMessages.resourceType,
+          fhirId: validationMessages.fhirId,
         })
         .from(validationMessages)
         .where(eq(validationMessages.validationResultId, result.id));
@@ -286,6 +288,8 @@ export async function getResourceMessages(
           text: msg.text,
           signature: msg.signature,
           createdAt: msg.createdAt,
+          resourceType: msg.resourceType,
+          resourceId: msg.fhirId,
         })),
       };
     })
