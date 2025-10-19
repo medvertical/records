@@ -31,6 +31,7 @@ export interface ValidationMessage {
   resourceType?: string;        // e.g., 'Patient'
   resourceId?: string;          // e.g., 'test-mii-violations'
   profileUrl?: string;          // e.g., 'https://www.medizininformatik-initiative.de/fhir/...'
+  resources?: Array<{ resourceType: string; resourceId: string; }>;  // Multiple resources with the same message
 }
 
 export interface ValidationMessageListProps {
@@ -125,8 +126,7 @@ function MessageItem({
       className={cn(
         'border rounded-lg overflow-hidden transition-all duration-300',
         config.borderColor,
-        config.bgColor,
-        showHighlight && 'ring-4 ring-yellow-400 shadow-lg'
+        showHighlight ? 'bg-white ring-2 ring-inset ring-blue-500' : config.bgColor
       )}
     >
       {/* Message Header */}
@@ -382,16 +382,29 @@ function MessageItem({
           </div>
 
           {/* Resource with Link */}
-          {message.resourceType && message.resourceId && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-gray-500 w-20">Resource:</span>
-              <ResourceBadge
-                resourceType={message.resourceType}
-                resourceId={message.resourceId}
-                onClick={onResourceClick ? (e) => {
-                  onResourceClick(message.resourceType!, message.resourceId!);
-                } : undefined}
-              />
+          {((message.resources && message.resources.length > 0) || (message.resourceType && message.resourceId)) && (
+            <div className="flex items-start gap-2">
+              <span className="text-xs font-medium text-gray-500 w-20 pt-1">Resource{(message.resources && message.resources.length > 1) ? 's' : ''}:</span>
+              <div className="flex flex-wrap items-center gap-1.5 flex-1">
+                {message.resources && message.resources.length > 0 ? (
+                  message.resources.map((resource, idx) => (
+                    <ResourceBadge
+                      key={`${resource.resourceType}/${resource.resourceId}-${idx}`}
+                      resourceType={resource.resourceType}
+                      resourceId={resource.resourceId}
+                      onClick={onResourceClick ? () => onResourceClick(resource.resourceType, resource.resourceId) : undefined}
+                    />
+                  ))
+                ) : message.resourceType && message.resourceId ? (
+                  <ResourceBadge
+                    resourceType={message.resourceType}
+                    resourceId={message.resourceId}
+                    onClick={onResourceClick ? () => {
+                      onResourceClick(message.resourceType!, message.resourceId!);
+                    } : undefined}
+                  />
+                ) : null}
+              </div>
             </div>
           )}
         </div>
@@ -425,17 +438,59 @@ export function ValidationMessageList({
     return messages.filter(m => severityFilter.includes(m.severity));
   }, [messages, severityFilter]);
 
+  // Group identical messages together (same severity, code, path, text) and collect all resources
+  const deduplicatedMessages = useMemo(() => {
+    const messageMap = new Map<string, ValidationMessage>();
+    
+    filteredMessages.forEach(msg => {
+      // Create a unique key based on message content (excluding resource info)
+      const contentKey = `${msg.severity}|${msg.code || ''}|${msg.canonicalPath}|${msg.text}`;
+      
+      if (messageMap.has(contentKey)) {
+        // Message already exists, add this resource to the list
+        const existingMsg = messageMap.get(contentKey)!;
+        if (msg.resourceType && msg.resourceId) {
+          if (!existingMsg.resources) {
+            existingMsg.resources = [];
+            // Add the first resource if it exists
+            if (existingMsg.resourceType && existingMsg.resourceId) {
+              existingMsg.resources.push({
+                resourceType: existingMsg.resourceType,
+                resourceId: existingMsg.resourceId
+              });
+            }
+          }
+          // Check if this resource is already in the list
+          const resourceExists = existingMsg.resources.some(
+            r => r.resourceType === msg.resourceType && r.resourceId === msg.resourceId
+          );
+          if (!resourceExists) {
+            existingMsg.resources.push({
+              resourceType: msg.resourceType,
+              resourceId: msg.resourceId
+            });
+          }
+        }
+      } else {
+        // New message, add it to the map
+        messageMap.set(contentKey, { ...msg });
+      }
+    });
+    
+    return Array.from(messageMap.values());
+  }, [filteredMessages]);
+
   // Group messages by severity for better organization
   const groupedMessages = useMemo(() => {
     const groups = {
-      error: filteredMessages.filter(m => m.severity === 'error'),
-      warning: filteredMessages.filter(m => m.severity === 'warning'),
-      information: filteredMessages.filter(m => m.severity === 'information'),
+      error: deduplicatedMessages.filter(m => m.severity === 'error'),
+      warning: deduplicatedMessages.filter(m => m.severity === 'warning'),
+      information: deduplicatedMessages.filter(m => m.severity === 'information'),
     };
     return groups;
-  }, [filteredMessages]);
+  }, [deduplicatedMessages]);
 
-  const totalMessages = filteredMessages.length;
+  const totalMessages = deduplicatedMessages.length;
 
   if (totalMessages === 0) {
     const displayMessage = severityFilter && severityFilter.length === 0

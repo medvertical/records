@@ -674,7 +674,7 @@ export default function ResourceList({
                   !selectionMode && "hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer",
                   validationStatus === 'not-validated' && "bg-gray-50/50 dark:bg-gray-800/50",
                   isSelected && "bg-blue-50/50 dark:bg-blue-900/20 ring-2 ring-inset ring-blue-500",
-                  isHighlighted && "bg-orange-50/50 dark:bg-orange-900/20 ring-2 ring-inset ring-orange-500 animate-pulse"
+                  isHighlighted && "bg-white dark:bg-gray-900 ring-2 ring-inset ring-blue-500"
                 )}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4 flex-1 min-w-0">

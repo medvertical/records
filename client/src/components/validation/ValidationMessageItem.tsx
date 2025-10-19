@@ -35,6 +35,7 @@ export interface ValidationMessage {
   timestamp?: string;
   resourceType?: string;
   resourceId?: string;
+  resources?: Array<{ resourceType: string; resourceId: string; }>;
 }
 
 export interface ValidationMessageItemProps {
@@ -63,7 +64,7 @@ export function ValidationMessageItem({
     <Alert
       variant={getSeverityVariant(message.severity as SeverityLevel)}
       className={`text-left transition-all duration-300 ${
-        isHighlighted ? 'ring-4 ring-yellow-400 shadow-lg' : ''
+        isHighlighted ? 'bg-white ring-2 ring-inset ring-blue-500' : ''
       }`}
       data-signature={message.signature}
     >
@@ -71,13 +72,6 @@ export function ValidationMessageItem({
         <SeverityIcon severity={message.severity as SeverityLevel} />
         <div className="flex-1 space-y-1 text-left">
           <div className="flex items-center justify-start gap-2 text-left">
-            {/* Severity Badge - only shown in resource browser context */}
-            {showResourceInfo && (
-              <Badge variant={getSeverityVariant(message.severity as SeverityLevel)} className="text-xs">
-                {message.severity}
-              </Badge>
-            )}
-            
             {/* Code Badge */}
             {message.code && (
               <code className="text-xs bg-muted px-2 py-0.5 rounded">
@@ -123,14 +117,27 @@ export function ValidationMessageItem({
             )}
             
             {/* Resource Info - only shown in resource browser context */}
-            {showResourceInfo && message.resourceType && message.resourceId && (
-              <div className="text-left flex items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">Resource:</span>
-                <ResourceBadge
-                  resourceType={message.resourceType}
-                  resourceId={message.resourceId}
-                  onClick={onResourceClick ? () => onResourceClick(message.resourceType!, message.resourceId!) : undefined}
-                />
+            {showResourceInfo && ((message.resources && message.resources.length > 0) || (message.resourceType && message.resourceId)) && (
+              <div className="text-left">
+                <span className="text-xs text-muted-foreground">Resource{(message.resources && message.resources.length > 1) ? 's' : ''}:</span>
+                <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                  {message.resources && message.resources.length > 0 ? (
+                    message.resources.map((resource, idx) => (
+                      <ResourceBadge
+                        key={`${resource.resourceType}/${resource.resourceId}-${idx}`}
+                        resourceType={resource.resourceType}
+                        resourceId={resource.resourceId}
+                        onClick={onResourceClick ? () => onResourceClick(resource.resourceType, resource.resourceId) : undefined}
+                      />
+                    ))
+                  ) : message.resourceType && message.resourceId ? (
+                    <ResourceBadge
+                      resourceType={message.resourceType}
+                      resourceId={message.resourceId}
+                      onClick={onResourceClick ? () => onResourceClick(message.resourceType!, message.resourceId!) : undefined}
+                    />
+                  ) : null}
+                </div>
               </div>
             )}
           </div>

@@ -66,6 +66,52 @@ export function ValidationMessagesCard({
   onPathClick,
   onResourceClick,
 }: ValidationMessagesCardProps) {
+  // Group identical messages within each aspect
+  const groupedAspects = React.useMemo(() => {
+    return aspects.map(aspect => {
+      const messageMap = new Map<string, ValidationMessageType>();
+      
+      aspect.messages.forEach(msg => {
+        // Create a unique key based on message content (excluding resource info)
+        const contentKey = `${msg.severity}|${msg.code || ''}|${msg.canonicalPath}|${msg.text}`;
+        
+        if (messageMap.has(contentKey)) {
+          // Message already exists, add this resource to the list
+          const existingMsg = messageMap.get(contentKey)!;
+          if (msg.resourceType && msg.resourceId) {
+            if (!existingMsg.resources) {
+              existingMsg.resources = [];
+              // Add the first resource if it exists
+              if (existingMsg.resourceType && existingMsg.resourceId) {
+                existingMsg.resources.push({
+                  resourceType: existingMsg.resourceType,
+                  resourceId: existingMsg.resourceId
+                });
+              }
+            }
+            // Check if this resource is already in the list
+            const resourceExists = existingMsg.resources.some(
+              r => r.resourceType === msg.resourceType && r.resourceId === msg.resourceId
+            );
+            if (!resourceExists) {
+              existingMsg.resources.push({
+                resourceType: msg.resourceType,
+                resourceId: msg.resourceId
+              });
+            }
+          }
+        } else {
+          // New message, add it to the map
+          messageMap.set(contentKey, { ...msg });
+        }
+      });
+      
+      return {
+        ...aspect,
+        messages: Array.from(messageMap.values())
+      };
+    });
+  }, [aspects]);
   if (isLoading) {
     return (
       <Card>
@@ -99,15 +145,15 @@ export function ValidationMessagesCard({
   const filteredAspects = useMemo(() => {
     if (!severityFilter || severityFilter.length === 0) {
       // If no severity filter is provided, return empty aspects (to avoid highlighting when no filter is selected)
-      return aspects.map(aspect => ({ ...aspect, messages: [] }));
+      return groupedAspects.map(aspect => ({ ...aspect, messages: [] }));
     }
-    return aspects.map(aspect => ({
+    return groupedAspects.map(aspect => ({
       ...aspect,
       messages: aspect.messages.filter(message => 
         severityFilter.includes(message.severity.toLowerCase() as any)
       )
     }));
-  }, [aspects, severityFilter]);
+  }, [groupedAspects, severityFilter]);
 
   const totalMessages = filteredAspects.reduce((sum, aspect) => sum + aspect.messages.length, 0);
 

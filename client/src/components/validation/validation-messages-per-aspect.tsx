@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -19,6 +19,9 @@ interface ValidationMessage {
   text: string;
   signature: string;
   timestamp?: string;
+  resourceType?: string;
+  resourceId?: string;
+  resources?: Array<{ resourceType: string; resourceId: string; }>;
 }
 
 interface AspectMessages {
@@ -246,23 +249,70 @@ export function ValidationMessagesPerAspect({
     );
   }
 
-  const totalMessages = data.aspects.reduce((sum, aspect) => sum + aspect.messages.length, 0);
+  // Group identical messages within each aspect
+  const groupedAspects = useMemo(() => {
+    return data.aspects.map(aspect => {
+      const messageMap = new Map<string, ValidationMessage>();
+      
+      aspect.messages.forEach(msg => {
+        // Create a unique key based on message content (excluding resource info)
+        const contentKey = `${msg.severity}|${msg.code || ''}|${msg.canonicalPath}|${msg.text}`;
+        
+        if (messageMap.has(contentKey)) {
+          // Message already exists, add this resource to the list
+          const existingMsg = messageMap.get(contentKey)!;
+          if (msg.resourceType && msg.resourceId) {
+            if (!existingMsg.resources) {
+              existingMsg.resources = [];
+              // Add the first resource if it exists
+              if (existingMsg.resourceType && existingMsg.resourceId) {
+                existingMsg.resources.push({
+                  resourceType: existingMsg.resourceType,
+                  resourceId: existingMsg.resourceId
+                });
+              }
+            }
+            // Check if this resource is already in the list
+            const resourceExists = existingMsg.resources.some(
+              r => r.resourceType === msg.resourceType && r.resourceId === msg.resourceId
+            );
+            if (!resourceExists) {
+              existingMsg.resources.push({
+                resourceType: msg.resourceType,
+                resourceId: msg.resourceId
+              });
+            }
+          }
+        } else {
+          // New message, add it to the map
+          messageMap.set(contentKey, { ...msg });
+        }
+      });
+      
+      return {
+        ...aspect,
+        messages: Array.from(messageMap.values())
+      };
+    });
+  }, [data.aspects]);
+
+  const totalMessages = groupedAspects.reduce((sum, aspect) => sum + aspect.messages.length, 0);
   
   // Filter messages by selected severities
   const filterMessagesBySeverity = (messages: ValidationMessage[]) => {
     if (selectedSeverities.size === 0) return messages;
     return messages.filter(msg => selectedSeverities.has(msg.severity.toLowerCase()));
   };
-  
+
   // Calculate filtered message count
   const filteredMessageCount = selectedSeverities.size === 0
     ? totalMessages
-    : data.aspects.reduce((sum, aspect) => 
+    : groupedAspects.reduce((sum, aspect) => 
         sum + filterMessagesBySeverity(aspect.messages).length, 0
       );
 
   // Filter aspects to only show those with messages (after filtering by severity)
-  const aspectsWithMessages = data.aspects
+  const aspectsWithMessages = groupedAspects
     .map(aspect => ({
       ...aspect,
       messages: filterMessagesBySeverity(aspect.messages)
