@@ -58,6 +58,10 @@ export default function Dashboard() {
     ? progress.warnings
     : dashboardData?.validation?.warningResources || 0;
 
+  // Get trends from dashboard data
+  const errorTrend = dashboardData?.validation?.errorTrend || null;
+  const warningTrend = dashboardData?.validation?.warningTrend || null;
+
   // Convert resource counts array to object format
   const resourceCounts = resourceCountsData?.resourceTypes?.reduce((acc: Record<string, number>, item: any) => {
     acc[item.resourceType] = item.count;
@@ -87,6 +91,8 @@ export default function Dashboard() {
               value={errorResources.toLocaleString()}
               subtitle="Validation errors found"
               variant="error"
+              trend={errorTrend}
+              trendInverted={true}
               loading={isLoading}
             />
             <MetricCard
@@ -94,6 +100,8 @@ export default function Dashboard() {
               value={warningResources.toLocaleString()}
               subtitle="Validation warnings"
               variant="warning"
+              trend={warningTrend}
+              trendInverted={true}
               loading={isLoading}
             />
           </div>

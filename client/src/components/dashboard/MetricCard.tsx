@@ -2,12 +2,19 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
+interface TrendData {
+  value: number;
+  percentage: number;
+  direction: 'up' | 'down' | 'stable';
+}
+
 interface MetricCardProps {
   title: string;
   value: string | number;
   subtitle?: string;
   variant?: 'default' | 'success' | 'warning' | 'error';
-  trend?: 'up' | 'down' | 'neutral';
+  trend?: TrendData | null;
+  trendInverted?: boolean; // If true, down is good (for errors/warnings)
   className?: string;
   loading?: boolean;
 }
@@ -19,22 +26,41 @@ const variantStyles = {
   error: 'bg-red-50 dark:bg-red-950 text-red-900 dark:text-red-100 border-red-200 dark:border-red-800',
 };
 
-const trendIcons = {
-  up: TrendingUp,
-  down: TrendingDown,
-  neutral: Minus,
-};
-
 export function MetricCard({
   title,
   value,
   subtitle,
   variant = 'default',
   trend,
+  trendInverted = false,
   className,
   loading,
 }: MetricCardProps) {
-  const TrendIcon = trend ? trendIcons[trend] : null;
+  const formatTrendValue = (val: number) => {
+    const abs = Math.abs(val);
+    if (abs >= 1000) {
+      return `${(abs / 1000).toFixed(1)}K`;
+    }
+    return abs.toString();
+  };
+
+  const getTrendColor = (direction: string) => {
+    if (direction === 'stable') return 'text-gray-500 dark:text-gray-400';
+    
+    // For errors/warnings, down is good (green), up is bad (red)
+    // For other metrics, up is good (green), down is bad (red)
+    if (trendInverted) {
+      return direction === 'down' ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500';
+    }
+    return direction === 'up' ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500';
+  };
+
+  const getTrendIcon = (direction: string) => {
+    if (direction === 'stable') return Minus;
+    return direction === 'down' ? TrendingDown : TrendingUp;
+  };
+
+  const TrendIcon = trend ? getTrendIcon(trend.direction) : null;
 
   return (
     <Card className={cn(
@@ -49,13 +75,19 @@ export function MetricCard({
         ) : (
           <div className="flex items-baseline space-x-2">
             <p className="text-3xl font-bold tracking-tight">{value}</p>
-            {TrendIcon && (
-              <TrendIcon className={cn(
-                "h-4 w-4",
-                trend === 'up' && "text-green-600",
-                trend === 'down' && "text-red-600",
-                trend === 'neutral' && "text-gray-600"
-              )} />
+            {trend && TrendIcon && (
+              <div className={cn(
+                "flex items-center space-x-1 text-sm font-medium",
+                getTrendColor(trend.direction)
+              )}>
+                <TrendIcon className="h-4 w-4" />
+                <span>
+                  {trend.value > 0 ? '+' : ''}{formatTrendValue(trend.value)}
+                </span>
+                <span className="opacity-70">
+                  ({trend.percentage > 0 ? '+' : ''}{trend.percentage.toFixed(1)}%)
+                </span>
+              </div>
             )}
           </div>
         )}

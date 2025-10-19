@@ -1,6 +1,6 @@
 import { db } from "../../../db";
 import { validationProgressState } from "../../../../shared/schema";
-import { eq, and, lt } from "drizzle-orm";
+import { eq, and, lt, desc } from "drizzle-orm";
 
 export interface ValidationProgressState {
   isRunning: boolean;
@@ -261,7 +261,7 @@ export class ValidationProgressPersistenceService {
       const result = await db
         .select()
         .from(validationProgressState)
-        .orderBy(validationProgressState.updatedAt)
+        .orderBy(desc(validationProgressState.createdAt))
         .limit(limit);
 
       return result.map(row => row.stateData as ValidationProgressState);

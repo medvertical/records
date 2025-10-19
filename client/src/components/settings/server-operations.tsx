@@ -219,10 +219,25 @@ export function useServerOperations({ existingServers, refreshServerData }: Serv
         { predicate: (query) => query.queryKey[0] === "/api/servers" },
         (old: any) => {
           if (!old) return old;
-          return old.map((server: any) => ({
-            ...server,
-            isActive: server.id === serverId
-          }));
+          
+          // Handle both array format (old) and object format (new: { servers: [], activeServer: {} })
+          if (Array.isArray(old)) {
+            return old.map((server: any) => ({
+              ...server,
+              isActive: server.id === serverId
+            }));
+          } else if (old.servers && Array.isArray(old.servers)) {
+            return {
+              ...old,
+              servers: old.servers.map((server: any) => ({
+                ...server,
+                isActive: server.id === serverId
+              })),
+              activeServer: old.servers.find((s: any) => s.id === serverId) || old.activeServer
+            };
+          }
+          
+          return old;
         }
       );
     },

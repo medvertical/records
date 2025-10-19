@@ -567,7 +567,7 @@ export default function ResourceDetail() {
           </div>
           
           {/* Right: Per-Aspect Validation Messages - Sticky */}
-          <div className="sticky top-20 self-start">
+          <div className="lg:sticky lg:top-6 lg:self-start max-h-[calc(100vh-8rem)] overflow-y-auto">
             <ValidationMessagesPerAspect
               resourceType={resource.resourceType}
               resourceId={resource.resourceId}

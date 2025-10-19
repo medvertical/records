@@ -75,25 +75,63 @@ export function setupDashboardRoutes(app: Express, dashboardService: DashboardSe
       try {
         const { getValidationProgressPersistenceService } = await import('../../../services/validation/persistence/validation-progress-persistence-service.js');
         const persistenceService = getValidationProgressPersistenceService();
-        const recentStates = await persistenceService.getRecentProgressStates(1);
+        const recentStates = await persistenceService.getRecentProgressStates(10); // Get more to find completed ones
         console.log('[Dashboard Combined] Recent states:', { count: recentStates?.length || 0 });
         
         if (recentStates && recentStates.length > 0) {
-          const mostRecent = recentStates[0];
-          console.log('[Dashboard Combined] Most recent batch:', { 
-            isRunning: mostRecent.isRunning, 
-            processedResources: mostRecent.processedResources,
-            errors: mostRecent.errors 
+          // Find completed batches only (skip running/paused)
+          const completedBatches = recentStates.filter(
+            state => !state.isRunning && !state.isPaused && state.processedResources > 0
+          );
+          
+          const mostRecent = completedBatches[0];
+          const previous = completedBatches.length > 1 ? completedBatches[1] : null;
+          
+          console.log('[Dashboard Combined] Most recent completed batch:', { 
+            isRunning: mostRecent?.isRunning, 
+            processedResources: mostRecent?.processedResources,
+            errors: mostRecent?.errors,
+            completedCount: completedBatches.length
           });
           
           // Only use batch stats if they exist and the batch completed
-          if (mostRecent && !mostRecent.isRunning && mostRecent.processedResources > 0) {
+          if (mostRecent && mostRecent.processedResources > 0) {
             const processedResources = mostRecent.processedResources || 0;
             
             // Calculate coverage as percentage of ALL server resources that have been validated
             const validationCoverage = totalServerResources > 0 
               ? (processedResources / totalServerResources) * 100 
               : 0;
+            
+            // Calculate trends compared to previous run
+            let errorTrend = null;
+            let warningTrend = null;
+            
+            if (previous && previous.processedResources > 0) {
+              const currentErrors = mostRecent.errors || 0;
+              const previousErrors = previous.errors || 0;
+              const currentWarnings = mostRecent.warnings || 0;
+              const previousWarnings = previous.warnings || 0;
+              
+              // Calculate percentage change (negative = improvement for errors/warnings)
+              if (previousErrors > 0) {
+                const errorChange = ((currentErrors - previousErrors) / previousErrors) * 100;
+                errorTrend = {
+                  value: currentErrors - previousErrors,
+                  percentage: errorChange,
+                  direction: errorChange < 0 ? 'down' : errorChange > 0 ? 'up' : 'stable'
+                };
+              }
+              
+              if (previousWarnings > 0) {
+                const warningChange = ((currentWarnings - previousWarnings) / previousWarnings) * 100;
+                warningTrend = {
+                  value: currentWarnings - previousWarnings,
+                  percentage: warningChange,
+                  direction: warningChange < 0 ? 'down' : warningChange > 0 ? 'up' : 'stable'
+                };
+              }
+            }
             
             console.log('[Dashboard Combined] Validation coverage:', { 
               processedResources, 
@@ -111,6 +149,8 @@ export function setupDashboardRoutes(app: Express, dashboardService: DashboardSe
               validationCoverage: validationCoverage,
               validationProgress: validationCoverage, // Same as coverage
               lastValidationRun: mostRecent.startTimestamp ? new Date(mostRecent.startTimestamp).toISOString() : combined.validation.lastValidationRun,
+              errorTrend,
+              warningTrend,
             };
           }
         }
