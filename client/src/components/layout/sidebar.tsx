@@ -293,7 +293,7 @@ function SidebarContent({
       {/* Server Connection Status */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-700">Server Connection</span>
+          <span className="text-sm font-medium text-gray-700">Server</span>
           <div className="flex items-center space-x-1">
             <div className={cn(
               "w-2 h-2 rounded-full transition-colors duration-200",
@@ -391,7 +391,7 @@ function SidebarContent({
               
               return (
                 <li key={item.href}>
-                  <Link href={item.href}>
+                  {item.href === "/resources" ? (
                     <div 
                       className={cn(
                         "flex items-center space-x-3 p-2 rounded-lg font-medium transition-colors cursor-pointer",
@@ -399,12 +399,36 @@ function SidebarContent({
                           ? "text-fhir-blue bg-blue-50 dark:bg-blue-900/30" 
                           : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                       )}
-                      onClick={onItemClick}
+                      onClick={() => {
+                        // Explicitly navigate to clear any query params
+                        // Include default pagination parameters
+                        window.history.pushState({}, '', '/resources?page=1&pageSize=20');
+                        window.dispatchEvent(new PopStateEvent('popstate'));
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        if (onItemClick) onItemClick();
+                      }}
                     >
                       <Icon className="w-4 h-4" />
                       <span>{item.label}</span>
                     </div>
-                  </Link>
+                  ) : (
+                    <Link href={item.href}>
+                      <div 
+                        className={cn(
+                          "flex items-center space-x-3 p-2 rounded-lg font-medium transition-colors cursor-pointer",
+                          isActive 
+                            ? "text-fhir-blue bg-blue-50 dark:bg-blue-900/30" 
+                            : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        )}
+                        onClick={() => {
+                          if (onItemClick) onItemClick();
+                        }}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>{item.label}</span>
+                      </div>
+                    </Link>
+                  )}
                 </li>
               );
             })}
@@ -458,6 +482,8 @@ function SidebarContent({
                         // Use the same navigation approach as resource browser
                         window.history.pushState({}, '', item.href);
                         window.dispatchEvent(new PopStateEvent('popstate'));
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                        if (onItemClick) onItemClick();
                       }}
                     >
                       <div className="flex items-center space-x-2">

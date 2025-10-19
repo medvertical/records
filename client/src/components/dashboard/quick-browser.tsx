@@ -61,96 +61,43 @@ export default function QuickBrowser({ resourceCounts }: QuickBrowserProps) {
       );
     }
     
-    if (validationSummary.hasErrors) {
-      return (
-        <div className="flex items-center gap-2">
-          {/* Error column */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-            <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50 text-xs">
-              <XCircle className="h-3 w-3 mr-1" />
-              {validationSummary.errorCount}
-            </Badge>
-          </div>
-          
-          {/* Warning column */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-            {validationSummary.hasWarnings && (
-              <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
-                <AlertTriangle className="h-3 w-3 mr-1" />
-                {validationSummary.warningCount}
-              </Badge>
-            )}
-          </div>
-          
-          {/* Info column */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-            {validationSummary.informationCount > 0 && (
-              <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50 text-xs">
-                <Info className="h-3 w-3 mr-1" />
-                {validationSummary.informationCount}
-              </Badge>
-            )}
-          </div>
-        </div>
-      );
-    }
-    
-    if (validationSummary.hasWarnings) {
-      return (
-        <div className="flex items-center gap-2">
-          {/* Error column - empty placeholder for alignment */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-          </div>
-          
-          {/* Warning column */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-            <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
-              <AlertTriangle className="h-3 w-3 mr-1" />
-              {validationSummary.warningCount}
-            </Badge>
-          </div>
-          
-          {/* Info column */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-            {validationSummary.informationCount > 0 && (
-              <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50 text-xs">
-                <Info className="h-3 w-3 mr-1" />
-                {validationSummary.informationCount}
-              </Badge>
-            )}
-          </div>
-        </div>
-      );
-    }
-    
-    if (validationSummary.informationCount > 0) {
-      return (
-        <div className="flex items-center gap-2">
-          {/* Error column - empty placeholder for alignment */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-          </div>
-          
-          {/* Warning column - empty placeholder for alignment */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-          </div>
-          
-          {/* Info column */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-            <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50 text-xs">
-              <Info className="h-3 w-3 mr-1" />
-              {validationSummary.informationCount}
-            </Badge>
-          </div>
-        </div>
-      );
-    }
-    
     if (validationSummary.isValid) {
       return (
         <Badge className="bg-green-50 text-fhir-success border-green-200 hover:bg-green-50 text-xs">
           <CheckCircle className="h-3 w-3 mr-1" />
           Valid
         </Badge>
+      );
+    }
+    
+    // Show severity badges for resources with issues
+    if (validationSummary.hasErrors || validationSummary.hasWarnings || validationSummary.informationCount > 0) {
+      return (
+        <div className="flex items-center gap-2">
+          {/* Error badge */}
+          {validationSummary.hasErrors && (
+            <Badge className="h-6 px-2 text-xs flex items-center gap-1.5 bg-red-100 text-red-700 hover:bg-red-200">
+              <XCircle className="h-3 w-3" />
+              {validationSummary.errorCount}
+            </Badge>
+          )}
+          
+          {/* Warning badge */}
+          {validationSummary.hasWarnings && (
+            <Badge className="h-6 px-2 text-xs flex items-center gap-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200">
+              <AlertTriangle className="h-3 w-3" />
+              {validationSummary.warningCount}
+            </Badge>
+          )}
+          
+          {/* Information badge */}
+          {validationSummary.informationCount > 0 && (
+            <Badge className="h-6 px-2 text-xs flex items-center gap-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200">
+              <Info className="h-3 w-3" />
+              {validationSummary.informationCount}
+            </Badge>
+          )}
+        </div>
       );
     }
     
@@ -168,7 +115,7 @@ export default function QuickBrowser({ resourceCounts }: QuickBrowserProps) {
           <CardTitle className="text-lg font-semibold text-gray-900">
             Quick Resource Browser
           </CardTitle>
-          <Link href="/resources">
+          <Link href="/resources" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
             <Button variant="ghost" className="text-fhir-blue hover:text-blue-700 text-sm font-medium">
               <ExternalLink className="h-4 w-4 mr-1" />
               Open Full Browser
@@ -199,7 +146,7 @@ export default function QuickBrowser({ resourceCounts }: QuickBrowserProps) {
         {resourceCounts && Object.keys(resourceCounts).length > 0 && (
           <div className="grid grid-cols-2 gap-2 mb-4">
             {Object.entries(resourceCounts).map(([type, count]) => (
-              <Link key={type} href={`/resources?type=${type}`}>
+              <Link key={type} href={`/resources?type=${type}`} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                 <div className="p-2 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-700">{type}</span>
@@ -233,7 +180,7 @@ export default function QuickBrowser({ resourceCounts }: QuickBrowserProps) {
             </div>
           ) : resources.length > 0 ? (
             resources.map((resource, index) => (
-              <Link key={resource.id || index} href={`/resources/${resource.id}`}>
+              <Link key={resource.id || index} href={`/resources/${resource.id}`} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                 <div className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
                   <div className="flex items-center space-x-3">
                     <div className="w-2 h-2 bg-fhir-success rounded-full" />

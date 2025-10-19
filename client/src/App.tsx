@@ -3,7 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -27,6 +27,7 @@ function Router() {
   const isMobile = useIsMobile();
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const prevLocationRef = useRef<string>(location);
 
   const { activeServer, serverStatus, isConnectionLoading } = useServerData();
   
@@ -38,6 +39,18 @@ function Router() {
     enabled: true,
     showNotifications: false,
   });
+
+  // Scroll to top when location pathname changes (not query params)
+  useEffect(() => {
+    const currentPath = location.split('?')[0];
+    const prevPath = prevLocationRef.current.split('?')[0];
+    
+    if (currentPath !== prevPath) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    
+    prevLocationRef.current = location;
+  }, [location]);
 
   const toggleSidebar = () => {
     setSidebarOpen(prev => !prev);

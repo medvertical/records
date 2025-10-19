@@ -135,7 +135,7 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="flex items-center gap-1 cursor-pointer">
           <span>{display}</span>
-          <ChevronDown className="h-3 w-3" />
+          <ChevronDown className="h-3 w-3 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72" align="start">

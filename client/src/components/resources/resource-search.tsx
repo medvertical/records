@@ -9,6 +9,8 @@ import { Separator } from "@/components/ui/separator";
 import { Search, ListFilter, ChevronDown, ChevronUp, X, Clock, Zap } from "lucide-react";
 import { SeverityIcon } from "@/components/ui/severity-icon";
 import { FilterChipList } from "@/components/filters/FilterChipList";
+import { SortDropdown } from "@/components/resources/sort-dropdown";
+import { useCapabilitySearchParams } from "@/hooks/useCapabilitySearchParams";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { SeverityLevel } from "@/components/ui/severity-icon";
 import { cn } from "@/lib/utils";
@@ -41,9 +43,10 @@ export interface ValidationFilters {
 
 interface ResourceSearchProps {
   resourceTypes: string[];
-  onSearch: (query: string, resourceType: string, fhirParams?: Record<string, { value: string | string[]; operator?: string }>) => void;
+  onSearch: (query: string, resourceType: string, fhirParams?: Record<string, { value: string | string[]; operator?: string }>, sort?: string) => void;
   defaultQuery?: string;
   defaultResourceType?: string;
+  defaultSort?: string;
   filters?: ValidationFilters;
   onFilterChange?: (filters: ValidationFilters) => void;
   validationSummary?: {
@@ -89,6 +92,7 @@ export default function ResourceSearch({
   onSearch,
   defaultQuery = "",
   defaultResourceType = "",
+  defaultSort = "",
   filters = { aspects: [], severities: [], hasIssuesOnly: false },
   onFilterChange,
   validationSummary,
@@ -96,6 +100,7 @@ export default function ResourceSearch({
 }: ResourceSearchProps) {
   const [query, setQuery] = useState(defaultQuery);
   const [resourceType, setResourceType] = useState(defaultResourceType);
+  const [sort, setSort] = useState(defaultSort);
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const [isManuallyCollapsed, setIsManuallyCollapsed] = useState(false);
   const [fhirSearchParams, setFhirSearchParams] = useState<Record<string, { value: string | string[]; operator?: string }>>({});
@@ -107,11 +112,16 @@ export default function ResourceSearch({
   
   // Ref for search input to manage focus
   const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // Get sortable search parameters from server capabilities
+  const activeResourceTypes = resourceType && resourceType !== 'all' ? [resourceType] : [];
+  const { params: searchParams } = useCapabilitySearchParams(activeResourceTypes);
 
   useEffect(() => {
     setQuery(defaultQuery);
     setResourceType(defaultResourceType);
-  }, [defaultQuery, defaultResourceType]);
+    setSort(defaultSort);
+  }, [defaultQuery, defaultResourceType, defaultSort]);
 
   // Load search history from localStorage
   useEffect(() => {
@@ -312,16 +322,22 @@ export default function ResourceSearch({
     
     // Convert "all" back to empty string for the API
     const searchResourceType = resourceType === "all" ? "" : resourceType;
-    onSearch(query, searchResourceType, fhirSearchParams);
+    onSearch(query, searchResourceType, fhirSearchParams, sort);
     setIsAutocompleteOpen(false);
-  }, [query, resourceType, fhirSearchParams, onSearch, searchHistory]);
+  }, [query, resourceType, fhirSearchParams, sort, onSearch, searchHistory]);
+  
+  const handleSortChange = useCallback((newSort: string) => {
+    setSort(newSort);
+    const searchResourceType = resourceType === "all" ? "" : resourceType;
+    onSearch(query, searchResourceType, fhirSearchParams, newSort);
+  }, [query, resourceType, fhirSearchParams, onSearch]);
 
   // Auto-expand filters when there are active filters, but respect manual collapse
   useEffect(() => {
     const hasActiveFilters = 
       (resourceType && resourceType !== 'all') || 
       (query && query.trim() !== '') || 
-      Object.keys(fhirSearchParams).length > 0;
+      Object.keys(fhirSearchParams).filter(key => key !== '_sort' && key !== 'sort').length > 0;
     
     // Auto-expand if there are active filters and user hasn't manually collapsed
     if (hasActiveFilters && !isManuallyCollapsed) {
@@ -485,18 +501,18 @@ export default function ResourceSearch({
                                 localStorage.setItem('fhir-search-history', JSON.stringify(newHistory));
                               }
                               
-                              // Trigger search with the new query value directly
-                              const searchResourceType = resourceType === "all" ? "" : resourceType;
-                              onSearch(newQuery, searchResourceType, fhirSearchParams);
-                              setIsAutocompleteOpen(false);
-                              // Focus is now handled by onCloseAutoFocus in PopoverContent
-                            }}
-                          >
-                            <Search className="mr-2 h-4 w-4 text-blue-500" />
-                            {suggestion.label}
-                          </button>
-                        ))}
-                      </div>
+              // Trigger search with the new query value directly
+              const searchResourceType = resourceType === "all" ? "" : resourceType;
+              onSearch(newQuery, searchResourceType, fhirSearchParams, sort);
+              setIsAutocompleteOpen(false);
+              // Focus is now handled by onCloseAutoFocus in PopoverContent
+            }}
+          >
+            <Search className="mr-2 h-4 w-4 text-blue-500" />
+            {suggestion.label}
+          </button>
+        ))}
+      </div>
                     )}
                     
                     {suggestions.some(s => s.type === 'syntax') && (
@@ -548,6 +564,12 @@ export default function ResourceSearch({
           <span className="hidden sm:inline">Search</span>
         </Button>
         
+        <SortDropdown
+          value={sort}
+          onChange={handleSortChange}
+          availableParams={searchParams}
+        />
+        
         {onFilterChange && (
           <Button 
             variant="outline" 
@@ -569,15 +591,17 @@ export default function ResourceSearch({
               const hasActiveFilters = 
                 (resourceType && resourceType !== 'all') || 
                 (query && query.trim() !== '') || 
-                Object.keys(fhirSearchParams).length > 0;
+                Object.keys(fhirSearchParams).filter(key => key !== '_sort' && key !== 'sort').length > 0;
               
               return (
-                <div className="flex items-center ml-1">
+                <>
                   {hasActiveFilters && (
-                    <div className="w-2 h-2 bg-blue-500 rounded-full mr-1" />
+                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full" />
                   )}
-                  {isFilterExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                </div>
+                  <div className="flex items-center ml-1">
+                    {isFilterExpanded ? <ChevronUp className="h-3 w-3 opacity-50" /> : <ChevronDown className="h-3 w-3 opacity-50" />}
+                  </div>
+                </>
               );
             })()}
           </Button>
@@ -601,6 +625,9 @@ export default function ResourceSearch({
               // Update local state
               if (newFilters.resourceTypes.length > 0) {
                 setResourceType(newFilters.resourceTypes[0]);
+              } else {
+                // Reset to "all" when type filter is removed
+                setResourceType('all');
               }
               if (newFilters.search !== undefined) {
                 setQuery(newFilters.search);
@@ -610,11 +637,11 @@ export default function ResourceSearch({
               }
               
               // Trigger search with FHIR params
-              // Use current resourceType state if no resource type in newFilters
+              // Use "all" when no resource type is selected
               const searchResourceType = newFilters.resourceTypes.length > 0 
                 ? newFilters.resourceTypes[0] 
-                : resourceType;
-              onSearch(newFilters.search || query, searchResourceType, newFilters.fhirSearchParams);
+                : 'all';
+              onSearch(newFilters.search || query, searchResourceType, newFilters.fhirSearchParams, sort);
             }}
           />
         </div>

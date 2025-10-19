@@ -273,7 +273,7 @@ export function ValidationAspectsDropdown({ className }: ValidationAspectsDropdo
           <Badge variant="secondary" className="ml-2">
             {enabledAspectsCount}/6
           </Badge>
-          <ChevronDown className="h-4 w-4 ml-2" />
+          <ChevronDown className="h-4 w-4 ml-2 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
       

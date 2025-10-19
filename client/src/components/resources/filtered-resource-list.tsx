@@ -93,89 +93,39 @@ export function FilteredResourceList({
       return <Badge variant="outline" className="text-gray-500">Not Validated</Badge>;
     }
     
-    if (validation.errorCount > 0) {
-      return (
-        <div className="flex items-center gap-2">
-          {/* Error column */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-            <Badge className="bg-red-50 text-fhir-error border-red-200">
-              <XCircle className="h-3 w-3 mr-1" />
-              {validation.errorCount}
-            </Badge>
-          </div>
-          
-          {/* Warning column */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-            {validation.warningCount > 0 && (
-              <Badge className="bg-orange-50 text-fhir-warning border-orange-200 text-xs">
-                <AlertTriangle className="h-3 w-3 mr-1" />
-                {validation.warningCount}
-              </Badge>
-            )}
-          </div>
-          
-          {/* Info column */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-            {validation.informationCount > 0 && (
-              <Badge className="bg-blue-50 text-blue-600 border-blue-200 text-xs">
-                <Info className="h-3 w-3 mr-1" />
-                {validation.informationCount}
-              </Badge>
-            )}
-          </div>
-        </div>
-      );
-    }
-    if (validation.warningCount > 0) {
-      return (
-        <div className="flex items-center gap-2">
-          {/* Error column - empty placeholder for alignment */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-          </div>
-          
-          {/* Warning column */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-            <Badge className="bg-orange-50 text-fhir-warning border-orange-200">
-              <AlertTriangle className="h-3 w-3 mr-1" />
-              {validation.warningCount}
-            </Badge>
-          </div>
-          
-          {/* Info column */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-            {validation.informationCount > 0 && (
-              <Badge className="bg-blue-50 text-blue-600 border-blue-200 text-xs">
-                <Info className="h-3 w-3 mr-1" />
-                {validation.informationCount}
-              </Badge>
-            )}
-          </div>
-        </div>
-      );
-    }
-    if (validation.informationCount > 0) {
-      return (
-        <div className="flex items-center gap-2">
-          {/* Error column - empty placeholder for alignment */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-          </div>
-          
-          {/* Warning column - empty placeholder for alignment */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-          </div>
-          
-          {/* Info column */}
-          <div className="flex flex-col items-center min-w-[3rem]">
-            <Badge className="bg-blue-50 text-blue-600 border-blue-200">
-              <Info className="h-3 w-3 mr-1" />
-              {validation.informationCount}
-            </Badge>
-          </div>
-        </div>
-      );
-    }
     if (validation.isValid) {
       return <Badge variant="secondary" className="bg-green-100 text-green-800">Valid</Badge>;
+    }
+    
+    // Show severity badges for resources with issues
+    if (validation.errorCount > 0 || validation.warningCount > 0 || validation.informationCount > 0) {
+      return (
+        <div className="flex items-center gap-2">
+          {/* Error badge */}
+          {validation.errorCount > 0 && (
+            <Badge className="h-6 px-2 text-xs flex items-center gap-1.5 bg-red-100 text-red-700 hover:bg-red-200">
+              <XCircle className="h-3 w-3" />
+              {validation.errorCount}
+            </Badge>
+          )}
+          
+          {/* Warning badge */}
+          {validation.warningCount > 0 && (
+            <Badge className="h-6 px-2 text-xs flex items-center gap-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200">
+              <AlertTriangle className="h-3 w-3" />
+              {validation.warningCount}
+            </Badge>
+          )}
+          
+          {/* Information badge */}
+          {validation.informationCount > 0 && (
+            <Badge className="h-6 px-2 text-xs flex items-center gap-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200">
+              <Info className="h-3 w-3" />
+              {validation.informationCount}
+            </Badge>
+          )}
+        </div>
+      );
     }
     
     return <Badge variant="outline" className="text-gray-500">Unknown</Badge>;

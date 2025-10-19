@@ -74,6 +74,11 @@ export function FilterChipList({ filterOptions, availableResourceTypes, onFilter
     // FHIR param chips
     if (filterOptions.fhirSearchParams) {
       Object.entries(filterOptions.fhirSearchParams).forEach(([name, cfg]) => {
+        // Exclude sorting parameters from being displayed as chips
+        if (name === '_sort' || name === 'sort') {
+          return;
+        }
+        
         const isNew = newlyAddedParams.has(name);
         list.push(
           <FilterChip
@@ -120,6 +125,7 @@ export function FilterChipList({ filterOptions, availableResourceTypes, onFilter
     const existing = new Set(Object.keys(filterOptions.fhirSearchParams || {}));
     return params
       .filter(p => !existing.has(p.name))
+      .filter(p => p.name !== '_sort' && p.name !== 'sort') // Exclude sorting parameters
       .filter(p => !search || `${p.name} ${p.type}`.toLowerCase().includes(search.toLowerCase()));
   }, [params, filterOptions.fhirSearchParams, search]);
 

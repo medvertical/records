@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { flushSync } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useServerData } from "@/hooks/use-server-data";
@@ -64,18 +65,21 @@ export default function ResourceBrowser() {
     const urlParams = new URLSearchParams(window.location.search);
     const pageParam = parseInt(urlParams.get('page') || '1'); // 1-based in URL
     const pageSizeParam = parseInt(urlParams.get('pageSize') || '20');
+    const sortParam = urlParams.get('sort') || '';
     return {
       page: Math.max(0, pageParam - 1), // Convert to 0-based for internal use
-      pageSize: Math.max(1, pageSizeParam)
+      pageSize: Math.max(1, pageSizeParam),
+      sort: sortParam
     };
   };
   
   const initialPagination = getInitialPaginationFromUrl();
   
-  const [resourceType, setResourceType] = useState<string>("");
+  const [resourceType, setResourceType] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [page, setPage] = useState(initialPagination.page);
   const [pageSize, setPageSize] = useState(initialPagination.pageSize);
+  const [sort, setSort] = useState<string>(initialPagination.sort);
   const [isValidating, setIsValidating] = useState(false);
   const [validatingResourceIds, setValidatingResourceIds] = useState<Set<number>>(new Set());
   const [validationProgress, setValidationProgress] = useState<Map<number, any>>(new Map());
@@ -159,10 +163,21 @@ export default function ResourceBrowser() {
 
 
   // Define handleSearch function before using it in useEffect
-  const handleSearch = useCallback((query: string, type: string, fhirParams?: Record<string, { value: string | string[]; operator?: string }>) => {
-    setSearchQuery(query);
-    setResourceType(type);
-    setPage(0);
+  const handleSearch = useCallback((query: string, type: string, fhirParams?: Record<string, { value: string | string[]; operator?: string }>, sortParam?: string) => {
+    // Determine the final sort value to use
+    const finalSort = sortParam !== undefined ? sortParam : sort;
+    
+    // Use flushSync to force synchronous state updates before invalidating query
+    flushSync(() => {
+      setSearchQuery(query);
+      setResourceType(type);
+      setPage(0);
+      
+      // Update sort state if provided
+      if (sortParam !== undefined) {
+        setSort(sortParam);
+      }
+    });
     
     // Update URL to reflect the search parameters
     const searchParams = new URLSearchParams();
@@ -176,6 +191,11 @@ export default function ResourceBrowser() {
     // Add pagination parameters to URL
     searchParams.set('page', '1'); // Reset to page 1 when searching
     searchParams.set('pageSize', pageSize.toString());
+    
+    // Add sort parameter to URL
+    if (finalSort) {
+      searchParams.set('sort', finalSort);
+    }
     
     // Add FHIR search params to URL
     if (fhirParams) {
@@ -193,7 +213,13 @@ export default function ResourceBrowser() {
     
     // Trigger a custom event to notify the sidebar of URL changes
     window.dispatchEvent(new PopStateEvent('popstate'));
-  }, [pageSize]);
+    
+    // Force query invalidation - state is now guaranteed to be updated due to flushSync
+    queryClient.invalidateQueries({ queryKey: ['resources'] });
+    
+    // Reset scroll position to top when search/filter/sort changes
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [pageSize, sort, queryClient]);
 
   // Selection mode handlers
   const toggleSelectionMode = useCallback(() => {
@@ -248,23 +274,38 @@ export default function ResourceBrowser() {
     const hasIssuesParam = urlParams.get('hasIssues');
     const pageParam = parseInt(urlParams.get('page') || '1');
     const pageSizeParam = parseInt(urlParams.get('pageSize') || '20');
+    const sortParam = urlParams.get('sort') || '';
     
     // Parse FHIR search parameters from URL
     const fhirSearchParams: Record<string, { value: string | string[]; operator?: string }> = {};
     urlParams.forEach((value, key) => {
-      // Skip known params like 'type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize'
-      if (!['type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize'].includes(key)) {
+      // Skip known UI params and FHIR system params
+      const excludedParams = [
+        'type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize', 'sort',
+        '_count', '_skip', '_sort', '_total', '_summary', '_elements', '_include', '_revinclude'
+      ];
+      if (!excludedParams.includes(key) && !excludedParams.includes(key.split(':')[0])) {
         // Parse operator if present (e.g., "birthdate:gt")
         const [paramName, operator] = key.split(':');
         fhirSearchParams[paramName] = { value, operator };
       }
     });
     
+    // Check if this is a content change (not just pagination)
+    const isContentChange = 
+      typeParam !== resourceType ||
+      searchParam !== searchQuery ||
+      sortParam !== sort ||
+      aspectsParam !== validationFilters.aspects.join(',') ||
+      severitiesParam !== validationFilters.severities.join(',');
+    
     // Update state directly - this will trigger the query to re-run
-    setResourceType(typeParam || "");
+    // Use "all" when no type is specified to indicate browsing all resources
+    setResourceType(typeParam || "all");
     setSearchQuery(searchParam || "");
     setPage(Math.max(0, pageParam - 1)); // Convert from 1-based to 0-based
     setPageSize(Math.max(1, pageSizeParam));
+    setSort(sortParam);
     setValidationFilters({
       aspects: aspectsParam ? aspectsParam.split(',') : [],
       severities: severitiesParam ? severitiesParam.split(',') : [],
@@ -272,6 +313,19 @@ export default function ResourceBrowser() {
       issueFilter: undefined, // Clear issue filter when URL changes
       fhirSearchParams: Object.keys(fhirSearchParams).length > 0 ? fhirSearchParams : undefined,
     });
+    
+    // Ensure URL always has page and pageSize parameters for clarity
+    if (!urlParams.has('page') || !urlParams.has('pageSize')) {
+      const newParams = new URLSearchParams(window.location.search);
+      if (!newParams.has('page')) newParams.set('page', pageParam.toString());
+      if (!newParams.has('pageSize')) newParams.set('pageSize', pageSizeParam.toString());
+      window.history.replaceState({}, '', `${window.location.pathname}?${newParams.toString()}`);
+    }
+    
+    // Scroll to top only when content changes (not pagination)
+    if (isContentChange) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   }, [location]);
 
   // Also listen for popstate events to handle programmatic URL changes
@@ -282,20 +336,26 @@ export default function ResourceBrowser() {
       const searchParam = urlParams.get('search');
       const pageParam = parseInt(urlParams.get('page') || '1');
       const pageSizeParam = parseInt(urlParams.get('pageSize') || '20');
+      const sortParam = urlParams.get('sort') || '';
 
       // Parse FHIR params
       const fhirParams: Record<string, { value: string | string[]; operator?: string }> = {};
+      const excludedParams = [
+        'type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize', 'sort',
+        '_count', '_skip', '_sort', '_total', '_summary', '_elements', '_include', '_revinclude'
+      ];
       urlParams.forEach((value, key) => {
-        if (!['type','search','aspects','severities','hasIssues','page','pageSize'].includes(key)) {
+        if (!excludedParams.includes(key) && !excludedParams.includes(key.split(':')[0])) {
           const [paramName, operator] = key.split(':');
           fhirParams[paramName] = { value, operator };
         }
       });
 
-      setResourceType(typeParam || "");
+      setResourceType(typeParam || "all");
       setSearchQuery(searchParam || "");
       setPage(Math.max(0, pageParam - 1)); // Convert from 1-based to 0-based
       setPageSize(Math.max(1, pageSizeParam));
+      setSort(sortParam);
       setValidationFilters(prev => ({
         ...prev,
         fhirSearchParams: Object.keys(fhirParams).length > 0 ? fhirParams : undefined,
@@ -403,7 +463,7 @@ export default function ResourceBrowser() {
   const isPollingEnabled = validationSettingsData?.autoRevalidateOnVersionChange !== false; // Default to true
   
   const { data: resourcesData, isLoading, error} = useQuery<ResourcesResponse>({
-    queryKey: ['resources', { endpoint: apiEndpoint, resourceType, search: searchQuery, page, pageSize, location, filters: validationFilters }],
+    queryKey: ['resources', { endpoint: apiEndpoint, resourceType, search: searchQuery, page, pageSize, sort, location, filters: validationFilters }],
     // Only fetch resources when there's an active server (resourceType can be empty for "all types")
     enabled: !!stableActiveServer,
     staleTime: apiEndpoint.includes('/filtered') ? 0 : 2 * 60 * 1000, // Fresh data for searches, cache for browsing
@@ -414,7 +474,7 @@ export default function ResourceBrowser() {
     refetchOnMount: apiEndpoint.includes('/filtered') ? true : false, // Refetch for searches
     placeholderData: undefined, // Disable placeholder to prevent stale data display
     queryFn: async ({ queryKey }) => {
-      const [_, params] = queryKey as [string, { endpoint: string; resourceType?: string; search?: string; page: number; pageSize: number; location: string; filters: ValidationFilters }];
+      const [_, params] = queryKey as [string, { endpoint: string; resourceType?: string; search?: string; page: number; pageSize: number; sort?: string; location: string; filters: ValidationFilters }];
       const url = params.endpoint;
       
       const searchParams = new URLSearchParams();
@@ -428,6 +488,11 @@ export default function ResourceBrowser() {
           searchParams.set('resourceTypes', params.resourceType);
         }
         if (params?.search) searchParams.set('search', params.search);
+        
+        // Add sort parameter using FHIR _sort convention
+        if (params?.sort) {
+          searchParams.set('_sort', params.sort);
+        }
         
         // Add serverId
         searchParams.set('serverId', '1'); // TODO: Get from context
@@ -469,8 +534,16 @@ export default function ResourceBrowser() {
         }
       } else {
         // Standard /resources endpoint parameters
-        if (params?.resourceType) searchParams.set('resourceType', params.resourceType);
+        // Only set resourceType if it's not "all" (which means browse all types)
+        if (params?.resourceType && params.resourceType !== 'all') {
+          searchParams.set('resourceType', params.resourceType);
+        }
         if (params?.search) searchParams.set('search', params.search);
+        
+        // Add sort parameter using FHIR _sort convention
+        if (params?.sort) {
+          searchParams.set('_sort', params.sort);
+        }
         
         // Add FHIR search parameters directly to query string for standard endpoint
         if (params?.filters?.fhirSearchParams && Object.keys(params.filters.fhirSearchParams).length > 0) {
@@ -1747,6 +1820,7 @@ export default function ResourceBrowser() {
           onSearch={handleSearch}
           defaultResourceType={resourceType}
           defaultQuery={searchQuery}
+          defaultSort={sort}
           filters={validationFilters}
           onFilterChange={handleFilterChange}
           validationSummary={validationSummaryWithStats}

@@ -259,6 +259,11 @@ async function performFhirTextSearch(
           searchParams._skip = offset;
         }
         
+        // Add sorting support
+        if (filterOptions.fhirSort) {
+          searchParams._sort = filterOptions.fhirSort;
+        }
+        
         const contentBundle = await fhirClient.searchResources(resourceType, searchParams);
         
         if (contentBundle.entry && contentBundle.entry.length > 0) {
@@ -337,6 +342,11 @@ async function performFhirTextSearch(
             searchParams._skip = offset;
           }
           
+          // Add sorting support
+          if (filterOptions.fhirSort) {
+            searchParams._sort = filterOptions.fhirSort;
+          }
+          
           const textBundle = await fhirClient.searchResources(resourceType, searchParams);
           
           if (textBundle.entry && textBundle.entry.length > 0) {
@@ -407,10 +417,17 @@ async function performFhirTextSearch(
         const searchFields = resourceSearchParams[resourceType];
         for (const field of searchFields) {
           try {
-            const fieldBundle = await fhirClient.searchResources(resourceType, {
+            const fieldSearchParams: any = {
               [field]: searchTerm,
               '_count': fetchCount
-            });
+            };
+            
+            // Add sorting support
+            if (filterOptions.fhirSort) {
+              fieldSearchParams._sort = filterOptions.fhirSort;
+            }
+            
+            const fieldBundle = await fhirClient.searchResources(resourceType, fieldSearchParams);
             
             if (fieldBundle.entry && fieldBundle.entry.length > 0) {
               resourceResults.push(...fieldBundle.entry.map((e: any) => e.resource));
@@ -432,10 +449,17 @@ async function performFhirTextSearch(
         console.log(`[FHIR Text Search] Trying generic contains search for ${resourceType}`);
         try {
           // Try a generic search that might work on some servers
-          const genericBundle = await fhirClient.searchResources(resourceType, {
+          const genericSearchParams: any = {
             'name': searchTerm, // Many resources have a name field
             '_count': fetchCount
-          });
+          };
+          
+          // Add sorting support
+          if (filterOptions.fhirSort) {
+            genericSearchParams._sort = filterOptions.fhirSort;
+          }
+          
+          const genericBundle = await fhirClient.searchResources(resourceType, genericSearchParams);
           
           if (genericBundle.entry && genericBundle.entry.length > 0) {
             resourceResults.push(...genericBundle.entry.map((e: any) => e.resource));
@@ -680,7 +704,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         sortDirection = 'desc',
         serverId = 1,
         // New: FHIR search parameters (JSON string)
-        fhirParams
+        fhirParams,
+        // FHIR sort parameter
+        _sort
       } = req.query;
 
       console.log('[FHIR API] Filtered resources endpoint called with filters:', {
@@ -748,7 +774,8 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         sorting: {
           field: sortBy as any,
           direction: sortDirection as 'asc' | 'desc'
-        }
+        },
+        fhirSort: _sort as string | undefined
       };
 
       // If search parameter is provided, perform FHIR text search using multiple strategies
@@ -1117,6 +1144,11 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
           q['_count'] = filterOptions.pagination.limit;
           if (filterOptions.pagination.offset > 0) {
             q['_skip'] = filterOptions.pagination.offset;
+          }
+          
+          // Sorting
+          if (filterOptions.fhirSort) {
+            q['_sort'] = filterOptions.fhirSort;
           }
 
           try {
@@ -1685,23 +1717,48 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
     try {
       const { resourceType, limit = 20, offset = 0, search, ...fhirSearchParams } = req.query;
       
-    // If no resource type is specified, fetch from all common resource types (expensive but requested)
+    // If no resource type is specified, fetch from ALL resource types on the server
     if (!resourceType) {
-      console.log('[FHIR API] No resource type specified, fetching from all common resource types');
+      const requestedLimit = parseInt(limit as string);
+      const offsetValue = parseInt(offset as string) || 0;
+      console.log('[FHIR API] No resource type specified, fetching from ALL resource types on server', {
+        requestedLimit,
+        offset: offsetValue
+      });
       
-      const commonResourceTypes = [
-        'Patient', 'Observation', 'Encounter', 'Condition', 'Procedure',
-        'Medication', 'MedicationRequest', 'DiagnosticReport', 'Organization',
-        'Practitioner', 'Location', 'Appointment', 'AllergyIntolerance'
-      ];
+      // Get the current FHIR client (may have been updated due to server activation)
+      const currentFhirClient = getCurrentFhirClient(fhirClient);
+      if (!currentFhirClient) {
+        throw new Error("FHIR client not initialized");
+      }
+      
+      // Get all supported resource types from the server's capability statement
+      const allResourceTypes = await currentFhirClient.getAllResourceTypes();
+      console.log(`[FHIR API] Server supports ${allResourceTypes.length} resource types`);
       
       const allResources = [];
       let totalCount = 0;
       
-      for (const type of commonResourceTypes) {
+      // Fetch enough resources from each type to ensure we have enough after sorting
+      // We need more than requested to account for sorting across all types
+      const countPerType = Math.max(
+        requestedLimit,  // Fetch at least the page size from each type
+        20  // Minimum to ensure good coverage
+      );
+      
+      console.log('[FHIR API] Fetching resources from all types:', {
+        requestedLimit,
+        offsetValue,
+        countPerType,
+        numTypes: allResourceTypes.length
+      });
+      
+      // Fetch resources from all types in parallel with sorting by _lastUpdated
+      const fetchPromises = allResourceTypes.map(async (type) => {
         try {
           const searchParams: Record<string, string | number> = {
-            _count: Math.min(parseInt(limit as string), 10), // Limit per type to avoid huge responses
+            _count: countPerType,
+            _sort: '-_lastUpdated',  // Sort by last updated descending (most recent first)
             _total: 'accurate'
           };
           
@@ -1712,34 +1769,68 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
             }
           });
           
-          if (parseInt(offset as string) > 0) {
-            // Fire.ly server uses _skip instead of _offset for pagination
-            searchParams._skip = Math.floor(parseInt(offset as string) / commonResourceTypes.length);
-          }
-          
-          // Get the current FHIR client (may have been updated due to server activation)
-          const currentFhirClient = getCurrentFhirClient(fhirClient);
-          if (!currentFhirClient) {
-            throw new Error("FHIR client not initialized");
-          }
           const bundle = await currentFhirClient.searchResources(type, searchParams);
           const resources = bundle.entry?.map(entry => entry.resource) || [];
           
-          allResources.push(...resources);
-          totalCount += bundle.total || 0;
-          
+          return {
+            type,
+            resources,
+            total: bundle.total || 0
+          };
         } catch (error: any) {
           console.warn(`Failed to fetch ${type} resources:`, error.message);
+          return {
+            type,
+            resources: [],
+            total: 0
+          };
         }
-      }
+      });
+      
+      // Wait for all fetches to complete
+      const results = await Promise.all(fetchPromises);
+      
+      // Aggregate all resources and total counts
+      results.forEach(({ resources, total }) => {
+        allResources.push(...resources);
+        totalCount += total;
+      });
+      
+      console.log('[FHIR API] Fetched resources from all types:', {
+        totalFetched: allResources.length,
+        totalCount
+      });
+      
+      // Sort all resources by lastUpdated timestamp (most recent first)
+      allResources.sort((a, b) => {
+        const dateA = a.meta?.lastUpdated ? new Date(a.meta.lastUpdated).getTime() : 0;
+        const dateB = b.meta?.lastUpdated ? new Date(b.meta.lastUpdated).getTime() : 0;
+        return dateB - dateA;  // Descending order (newest first)
+      });
+      
+      console.log('[FHIR API] Sorted resources by lastUpdated:', {
+        totalResources: allResources.length,
+        firstLastUpdated: allResources[0]?.meta?.lastUpdated,
+        lastLastUpdated: allResources[allResources.length - 1]?.meta?.lastUpdated
+      });
       
       // Enhance all resources with validation data
       const enhancedResources = await enhanceResourcesWithValidationData(allResources);
       
+      // Apply offset and limit to the sorted results
+      const paginatedResources = enhancedResources.slice(offsetValue, offsetValue + requestedLimit);
+      
+      console.log('[FHIR API] Pagination result:', {
+        totalFetched: allResources.length,
+        afterEnhancement: enhancedResources.length,
+        afterPagination: paginatedResources.length,
+        requestedLimit
+      });
+      
       return res.json({
-        resources: enhancedResources,
+        resources: paginatedResources,
         total: totalCount,
-        message: `Fetched from ${commonResourceTypes.length} resource types`,
+        message: `Fetched from ${allResourceTypes.length} resource types, sorted by last updated`,
         resourceType: "All Types"
       });
     }

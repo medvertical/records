@@ -430,56 +430,52 @@ export default function ResourceList({
         return (
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2">
-              {/* Error column */}
-              <div className="flex flex-col items-center min-w-[3rem]">
-                <Badge className="bg-red-50 text-fhir-error border-red-200 hover:bg-red-50">
-                  <XCircle className="h-3 w-3 mr-1" />
-                  {filteredSummary?.errorCount || 0}
+              {/* Error badge */}
+              {filteredSummary && filteredSummary.errorCount > 0 && (
+                <Badge className="h-6 px-2 text-xs flex items-center gap-1.5 bg-red-100 text-red-700 hover:bg-red-200">
+                  <XCircle className="h-3 w-3" />
+                  {filteredSummary.errorCount}
                 </Badge>
-              </div>
+              )}
               
-              {/* Warning column */}
-              <div className="flex flex-col items-center min-w-[3rem]">
-                {filteredSummary?.hasWarnings && (
-                  <Badge className="bg-orange-50 text-fhir-warning border-orange-200 hover:bg-orange-50 text-xs">
-                    <AlertTriangle className="h-3 w-3 mr-1" />
-                    {filteredSummary.warningCount}
-                  </Badge>
-                )}
-              </div>
+              {/* Warning badge */}
+              {filteredSummary?.hasWarnings && filteredSummary.warningCount > 0 && (
+                <Badge className="h-6 px-2 text-xs flex items-center gap-1.5 bg-orange-100 text-orange-700 hover:bg-orange-200">
+                  <AlertTriangle className="h-3 w-3" />
+                  {filteredSummary.warningCount}
+                </Badge>
+              )}
               
-              {/* Info column */}
-              <div className="flex flex-col items-center min-w-[3rem]">
-                {(filteredSummary?.informationCount || 0) > 0 && (
-                  <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50 text-xs">
-                    <Info className="h-3 w-3 mr-1" />
-                    {filteredSummary.informationCount}
-                  </Badge>
-                )}
-              </div>
-              
-              {/* Retry indicator */}
-              {resource.retryInfo && (
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge variant="outline" className="text-xs bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700">
-                      🔄 {resource.retryInfo.attemptCount}/{resource.retryInfo.maxAttempts}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <div className="space-y-1">
-                      <p className="font-medium">Retry Information</p>
-                      <p className="text-sm">Attempts: {resource.retryInfo.attemptCount}/{resource.retryInfo.maxAttempts}</p>
-                      <p className="text-sm">Duration: {resource.retryInfo.totalRetryDurationMs}ms</p>
-                      <p className="text-sm">Status: {resource.retryInfo.canRetry ? 'Can retry' : 'Max retries reached'}</p>
-                      {resource.retryInfo.retryReason && (
-                        <p className="text-xs text-gray-500">Reason: {resource.retryInfo.retryReason}</p>
-                      )}
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
+              {/* Information badge */}
+              {(filteredSummary?.informationCount || 0) > 0 && (
+                <Badge className="h-6 px-2 text-xs flex items-center gap-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200">
+                  <Info className="h-3 w-3" />
+                  {filteredSummary.informationCount}
+                </Badge>
               )}
             </div>
+            
+            {/* Retry indicator */}
+            {resource.retryInfo && (
+              <Tooltip>
+                <TooltipTrigger>
+                  <Badge variant="outline" className="text-xs bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700">
+                    🔄 {resource.retryInfo.attemptCount}/{resource.retryInfo.maxAttempts}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="space-y-1">
+                    <p className="font-medium">Retry Information</p>
+                    <p className="text-sm">Attempts: {resource.retryInfo.attemptCount}/{resource.retryInfo.maxAttempts}</p>
+                    <p className="text-sm">Duration: {resource.retryInfo.totalRetryDurationMs}ms</p>
+                    <p className="text-sm">Status: {resource.retryInfo.canRetry ? 'Can retry' : 'Max retries reached'}</p>
+                    {resource.retryInfo.retryReason && (
+                      <p className="text-xs text-gray-500">Reason: {resource.retryInfo.retryReason}</p>
+                    )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            )}
             {(filteredSummary?.lastValidated || validationScore > 0) && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -701,12 +697,12 @@ export default function ResourceList({
                         "w-4 h-4 bg-gray-400 border-2 border-gray-300"
                       )} />
                       
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-3 mb-1">
-                          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
+                      <div className="flex-1 min-w-0 max-w-full">
+                        <div className="flex items-center space-x-3 mb-1 min-w-0">
+                          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate shrink min-w-0">
                             {resource.resourceType}/{getShortId(resource.id)}
                           </h3>
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-2 flex-shrink-0">
                             <Badge variant="outline" className="text-xs inline-flex items-center gap-1">
                               {(() => {
                                 const Icon = getResourceTypeIcon(resource.resourceType);
@@ -740,12 +736,10 @@ export default function ResourceList({
                             )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                            {getResourceDisplayName(resource)}
-                          </p>
-                        </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-500 truncate mt-1">
+                        <p className="text-sm text-gray-600 dark:text-gray-400 overflow-hidden text-ellipsis whitespace-nowrap block w-full">
+                          {getResourceDisplayName(resource)}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-500 overflow-hidden text-ellipsis whitespace-nowrap block w-full mt-1">
                           {getResourceSubtext(resource)}
                         </p>
                       </div>
