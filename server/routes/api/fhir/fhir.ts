@@ -1944,6 +1944,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         return res.status(503).json({ message: "FHIR client not initialized" });
       }
       
+      // Check if caller wants ALL resource types (bypass settings filter)
+      const getAllTypes = req.query.all === 'true';
+      
       // Check if specific resource types are requested via query param
       const requestedTypes = req.query.types 
         ? (req.query.types as string).split(',').map(t => t.trim())
@@ -1951,7 +1954,11 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       
       let resourceTypesToQuery: string[] | undefined = undefined;
       
-      if (requestedTypes && requestedTypes.length > 0) {
+      if (getAllTypes) {
+        // Explicitly bypass validation settings - get ALL types from server
+        resourceTypesToQuery = undefined;
+        console.log('[Resource Counts] Getting ALL resource types from server (bypassing validation settings)');
+      } else if (requestedTypes && requestedTypes.length > 0) {
         // Use requested types if provided
         resourceTypesToQuery = requestedTypes;
         console.log(`[Resource Counts] Using requested types: ${requestedTypes.join(', ')}`);
@@ -1974,9 +1981,10 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         }
       }
       
-      // Add timeout to the entire operation (15s should be enough with parallel requests)
+      // Add timeout to the entire operation (60s for comprehensive counts, 15s for filtered)
+      const timeoutMs = getAllTypes ? 60000 : 15000; // Longer timeout when fetching all types
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Request timeout')), 15000);
+        setTimeout(() => reject(new Error('Request timeout')), timeoutMs);
       });
       
       const startTime = Date.now();
