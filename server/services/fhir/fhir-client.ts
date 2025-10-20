@@ -979,6 +979,84 @@ export class FhirClient {
     }
   }
 
+  /**
+   * Get resource counts sequentially with per-type timeout to avoid overloading slow FHIR servers
+   * @param resourceTypes Optional array of resource types to query
+   * @param timeoutPerType Timeout in ms for each resource type (default: 5000ms)
+   */
+  async getResourceCountsSequential(resourceTypes?: string[], timeoutPerType: number = 5000): Promise<Record<string, number>> {
+    try {
+      console.log('[FhirClient] Getting resource counts sequentially...');
+      
+      // If no resource types provided, get all from CapabilityStatement
+      let typesToQuery: string[];
+      if (resourceTypes && resourceTypes.length > 0) {
+        typesToQuery = resourceTypes;
+        console.log(`[FhirClient] Using provided ${typesToQuery.length} resource types`);
+      } else {
+        // Use getAllResourceTypes which reads from CapabilityStatement
+        typesToQuery = await this.getAllResourceTypes();
+        console.log(`[FhirClient] Using ${typesToQuery.length} resource types from CapabilityStatement`);
+      }
+      
+      const counts: Record<string, number> = {};
+      let successCount = 0;
+      let failCount = 0;
+      
+      console.log(`[FhirClient] Fetching counts for ${typesToQuery.length} resource types sequentially (${timeoutPerType}ms timeout per type)...`);
+      
+      // Fetch counts one at a time
+      for (const resourceType of typesToQuery) {
+        try {
+          // Race between the actual fetch and a timeout
+          const count = await Promise.race([
+            this.getResourceCount(resourceType),
+            new Promise<number>((_, reject) => 
+              setTimeout(() => reject(new Error(`Timeout after ${timeoutPerType}ms`)), timeoutPerType)
+            )
+          ]);
+          
+          counts[resourceType] = count;
+          successCount++;
+          
+          // Log progress every 5 types or on last
+          if (successCount % 5 === 0 || successCount + failCount === typesToQuery.length) {
+            console.log(`[FhirClient] Progress: ${successCount + failCount}/${typesToQuery.length} (${successCount} succeeded, ${failCount} failed)`);
+          }
+        } catch (error: any) {
+          console.warn(`[FhirClient] Failed to fetch ${resourceType} count:`, error.message);
+          counts[resourceType] = 0; // Fallback to 0 on error
+          failCount++;
+        }
+      }
+      
+      console.log(`[FhirClient] Sequential fetch complete: ${successCount} succeeded, ${failCount} failed, ${Object.keys(counts).length} total types`);
+      return counts;
+    } catch (error) {
+      console.error('[FhirClient] Failed to get resource counts sequentially:', error);
+      return {};
+    }
+  }
+
+  /**
+   * Get count for a single resource type
+   */
+  private async getResourceCount(resourceType: string): Promise<number> {
+    try {
+      const response = await this.searchResources(resourceType, { _count: '1', _total: 'accurate' });
+      
+      if (response.total !== undefined && response.total !== null) {
+        return response.total;
+      } else {
+        console.warn(`[FhirClient] No total available for ${resourceType}`);
+        return 0;
+      }
+    } catch (error: any) {
+      console.warn(`[FhirClient] Error fetching count for ${resourceType}:`, error.message);
+      return 0;
+    }
+  }
+
   private formatOperationOutcome(outcome: FhirOperationOutcome): string {
     return outcome.issue
       .map(issue => `${issue.severity}: ${issue.details?.text || issue.diagnostics || 'Unknown error'}`)

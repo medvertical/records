@@ -383,38 +383,52 @@ async function processValidationResources(jobId: string, requestPayload: StartRe
       resourceTypesToValidate = ['Patient', 'Observation', 'Encounter', 'Condition', 'Procedure', 'Medication', 'DiagnosticReport'];
     }
     
-    console.log(`[BulkValidation] Resource types to validate (${resourceTypesToValidate.length} types): ${resourceTypesToValidate.join(', ')}`);
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`[BulkValidation] 📋 Resource types to validate (${resourceTypesToValidate.length} types):`);
+    console.log(`[BulkValidation] ${resourceTypesToValidate.join(', ')}`);
+    console.log(`${'='.repeat(80)}\n`);
     
     // Initialize total resources count to 0 to show UI that we're loading
     globalValidationState.totalResources = 0;
     globalValidationState.lastUpdateTime = Date.now();
     
     // Fetch resources from FHIR server by type
+    let typeIndex = 0;
     for (const resourceType of resourceTypesToValidate) {
       try {
-        console.log(`[BulkValidation] Fetching ${resourceType} resources from FHIR server...`);
+        typeIndex++;
+        const startTime = Date.now();
+        console.log(`\n[BulkValidation] 🔄 [${typeIndex}/${resourceTypesToValidate.length}] Fetching ${resourceType} resources from FHIR server...`);
+        
         // Use searchAllResources to get all available resources with pagination
         const typeResources = await fhirClient.searchAllResources(resourceType, {}, 10000); // Limit to 10k per type for performance
-        console.log(`[BulkValidation] Found ${typeResources.length} ${resourceType} resources from FHIR server`);
+        
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        console.log(`[BulkValidation] ✅ [${typeIndex}/${resourceTypesToValidate.length}] Found ${typeResources.length} ${resourceType} resources (took ${duration}s)`);
+        console.log(`[BulkValidation] 📊 Total so far: ${resources.length + typeResources.length} resources from ${typeIndex} types`);
+        
         resources.push(...typeResources);
         
         // Update total resources count incrementally so UI shows progress
         globalValidationState.totalResources = resources.length;
         globalValidationState.lastUpdateTime = Date.now();
       } catch (error) {
-        console.error(`[BulkValidation] Error fetching ${resourceType} resources from FHIR server:`, error);
+        console.error(`[BulkValidation] ❌ Error fetching ${resourceType} resources from FHIR server:`, error);
         // Continue with other resource types
       }
     }
     
-    console.log(`[BulkValidation] Total resources fetched from FHIR server: ${resources.length} (from ${resourceTypesToValidate.length} resource types)`);
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`[BulkValidation] 🎉 RESOURCE FETCHING COMPLETE!`);
+    console.log(`[BulkValidation] 📊 Total resources fetched: ${resources.length} from ${resourceTypesToValidate.length} resource types`);
+    console.log(`${'='.repeat(80)}\n`);
     
     // Final update of total resources count
     globalValidationState.totalResources = resources.length;
     globalValidationState.lastUpdateTime = Date.now();
     
     if (resources.length === 0) {
-      console.log(`[BulkValidation] No resources to validate for job ${jobId}`);
+      console.log(`[BulkValidation] ⚠️  No resources to validate for job ${jobId}`);
       globalValidationState.isRunning = false;
       globalValidationState.shouldStop = true;
       return;
@@ -425,7 +439,10 @@ async function processValidationResources(jobId: string, requestPayload: StartRe
     const totalBatches = Math.ceil(resources.length / batchSize);
     globalValidationState.totalBatches = totalBatches;
     
-    console.log(`[BulkValidation] Processing ${resources.length} resources in ${totalBatches} batches of ${batchSize}`);
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`[BulkValidation] 🚀 STARTING VALIDATION PROCESS`);
+    console.log(`[BulkValidation] 📦 Processing ${resources.length} resources in ${totalBatches} batches (${batchSize} per batch)`);
+    console.log(`${'='.repeat(80)}\n`);
     
     for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
       // Check if validation should stop
@@ -451,7 +468,8 @@ async function processValidationResources(jobId: string, requestPayload: StartRe
       globalValidationState.currentBatch = batchIndex + 1;
       globalValidationState.lastUpdateTime = Date.now();
       
-      console.log(`[BulkValidation] Processing batch ${batchIndex + 1}/${totalBatches} (${batch.length} resources)`);
+      const percentComplete = ((batchIndex / totalBatches) * 100).toFixed(1);
+      console.log(`\n[BulkValidation] 🔄 Batch ${batchIndex + 1}/${totalBatches} (${percentComplete}%) - Processing ${batch.length} resources (${globalValidationState.processedResources}/${resources.length} done)`);
       
       // Process batch in parallel
       const batchPromises = batch.map(async (resource) => {
@@ -541,10 +559,9 @@ async function processValidationResources(jobId: string, requestPayload: StartRe
       // Wait for batch to complete
       await Promise.all(batchPromises);
       
-      // Save progress periodically
-      if (batchIndex % 5 === 0 || batchIndex === totalBatches - 1) {
-        await saveValidationState(jobId);
-      }
+      // Save progress after every batch to ensure real-time persistence
+      // This ensures UI updates immediately after page reload
+      await saveValidationState(jobId);
     }
     
     // Mark validation as completed
@@ -552,7 +569,15 @@ async function processValidationResources(jobId: string, requestPayload: StartRe
     globalValidationState.shouldStop = true;
     globalValidationState.lastUpdateTime = Date.now();
     
-    console.log(`[BulkValidation] Completed validation for job ${jobId}. Processed: ${globalValidationState.processedResources}/${globalValidationState.totalResources}`);
+    const totalTime = ((Date.now() - globalValidationState.startTimestamp) / 1000).toFixed(2);
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`[BulkValidation] 🎉 VALIDATION COMPLETED for job ${jobId}`);
+    console.log(`[BulkValidation] ⏱️  Total Time: ${totalTime}s`);
+    console.log(`[BulkValidation] 📊 Results:`);
+    console.log(`[BulkValidation]    ✅ Processed: ${globalValidationState.processedResources}/${globalValidationState.totalResources} resources`);
+    console.log(`[BulkValidation]    ❌ Errors: ${globalValidationState.errors}`);
+    console.log(`[BulkValidation]    ⚠️  Warnings: ${globalValidationState.warnings}`);
+    console.log(`${'='.repeat(80)}\n`);
     
     // Save final state
     await saveValidationState(jobId);
@@ -617,14 +642,14 @@ function calculateEnhancedProgressMetrics(
   const startTime = globalState.startTimestamp || now;
   const elapsedTime = (now - startTime) / 1000; // seconds
   
-  // Calculate total resources (use progress stats if available, otherwise global state)
+  // Calculate total resources (use global state first - it's the source of truth)
   const totalResources = Math.max(
-    progressStats.totalResources || globalState.totalResources || 0,
+    globalState.totalResources || progressStats.totalResources || 0,
     progressStats.completedResources + progressStats.failedResources + progressStats.pendingResources + progressStats.validatingResources || 0
   );
   
-  // Calculate processed resources
-  const processedResources = progressStats.completedResources + progressStats.failedResources || globalState.processedResources || 0;
+  // Calculate processed resources (use global state first - it's the source of truth)
+  const processedResources = globalState.processedResources || (progressStats.completedResources + progressStats.failedResources) || 0;
   
   // Calculate completion percentage
   const completionPercentage = totalResources > 0 ? (processedResources / totalResources) * 100 : 0;
@@ -1100,6 +1125,44 @@ export function setupBulkControlRoutes(app: Express): void {
   // GET /api/validation/bulk/progress - Get validation progress and status
   app.get("/api/validation/bulk/progress", async (req, res) => {
     try {
+      // Auto-restore state from persistence if not running but should be
+      // This handles the case where the page was reloaded and in-memory state was lost
+      if (!globalValidationState.isRunning) {
+        try {
+          const activeServerId = await getActiveServerId();
+          const persistenceService = getValidationProgressPersistenceService();
+          const activeState = await persistenceService.loadActiveProgressState(activeServerId);
+          
+          if (activeState && activeState.isRunning) {
+            // After server restart, background process is not running
+            // Mark any "active" states as completed since they're orphaned
+            console.log('[BulkValidation Progress] Found orphaned validation state after server restart, marking as completed', {
+              jobId: activeState.jobId,
+              processedResources: activeState.processedResources,
+              totalResources: activeState.totalResources
+            });
+            activeState.isRunning = false;
+            activeState.shouldStop = true;
+            activeState.stopTimestamp = Date.now();
+            activeState.finalStats = {
+              processedResources: activeState.processedResources,
+              totalResources: activeState.totalResources,
+              errors: activeState.errors,
+              warnings: activeState.warnings,
+              duration: activeState.startTimestamp ? Date.now() - activeState.startTimestamp : 0
+            };
+            globalValidationState = activeState;
+            // Update persistence to reflect completion
+            if (activeState.jobId) {
+              await saveValidationState(activeState.jobId, activeServerId);
+            }
+          }
+        } catch (restoreError) {
+          console.error('[BulkValidation Progress] Error auto-restoring state:', restoreError);
+          // Continue with current state
+        }
+      }
+      
       // Get progress from consolidated service
       const progressService = getIndividualResourceProgressService();
       const progressStats = progressService.getProgressStats();
@@ -1123,16 +1186,28 @@ export function setupBulkControlRoutes(app: Express): void {
       );
       
 
-      // Calculate valid and error resources from resourceTypeProgress
-      let totalValidResources = 0;
-      let totalErrorResources = 0;
+      // Calculate valid resources: total processed minus those with errors
+      // Note: 'errors' and 'warnings' are ISSUE counts, not resource counts
+      // We need to count resources with errors from resourceTypeProgress
+      let resourcesWithErrors = 0;
+      let resourcesWithWarnings = 0;
       
       if (globalValidationState.resourceTypeProgress) {
         Object.values(globalValidationState.resourceTypeProgress).forEach((resourceType: any) => {
-          totalValidResources += (resourceType.processed || 0) - (resourceType.errors || 0);
-          totalErrorResources += resourceType.errors || 0;
+          // Count resources that have at least one error (not the total error count)
+          if (resourceType.errors && resourceType.errors > 0) {
+            // This is an approximation - we'd need to track actual resource-level status
+            resourcesWithErrors += resourceType.errors; // For now, use error count as proxy
+          }
+          if (resourceType.warnings && resourceType.warnings > 0) {
+            resourcesWithWarnings += resourceType.warnings;
+          }
         });
       }
+      
+      // Valid resources = processed - those with errors
+      const totalValidResources = Math.max(0, globalValidationState.processedResources - resourcesWithErrors);
+      const totalErrorResources = resourcesWithErrors;
 
       const response = {
         isRunning: globalValidationState.isRunning,
@@ -1405,28 +1480,33 @@ export function setupBulkControlRoutes(app: Express): void {
   app.get("/api/validation/batch/history", async (req, res) => {
     try {
       const limit = parseInt(req.query.limit as string) || 10;
+      const serverId = req.query.serverId ? parseInt(req.query.serverId as string) : undefined;
       const persistenceService = getValidationProgressPersistenceService();
       
-      // Get recent validation states from persistence
-      const recentStates = await persistenceService.getRecentProgressStates(limit);
-      
+      // Get recent validation states from persistence, filtered by server
+      const recentStates = await persistenceService.getRecentProgressStates(limit, serverId);
+
       // Transform to history items
-      const history = recentStates.map((state: any) => ({
-        batchId: state.batchId || state.jobId,
-        jobId: state.jobId,
-        startTime: state.startTime || new Date(state.startTimestamp),
-        endTime: state.stopTimestamp ? new Date(state.stopTimestamp) : undefined,
-        status: state.isRunning ? (state.isPaused ? 'paused' : 'running') : 
-                state.shouldStop ? 'completed' : 'stopped',
-        resourceTypes: state.requestPayload?.resourceTypes || [],
-        totalResources: state.totalResources || 0,
-        processedResources: state.processedResources || 0,
-        validResources: state.processedResources - state.errors || 0,
-        errorResources: state.errors || 0,
-        warningResources: state.warnings || 0,
-        duration: state.stopTimestamp && state.startTimestamp ? 
-                  state.stopTimestamp - state.startTimestamp : undefined
-      }));
+      const history = recentStates.map((row: any) => {
+        const state = row.stateData || row; // Handle both new format and fallback
+        return {
+          id: row.id || `${state.jobId}_${row.createdAt}`, // Unique database ID
+          batchId: state.batchId || state.jobId,
+          jobId: state.jobId,
+          startTime: state.startTime || new Date(state.startTimestamp),
+          endTime: state.stopTimestamp ? new Date(state.stopTimestamp) : undefined,
+          status: state.isRunning ? (state.isPaused ? 'paused' : 'running') : 
+                  state.shouldStop ? 'completed' : 'stopped',
+          resourceTypes: state.requestPayload?.resourceTypes || [],
+          totalResources: state.totalResources || 0,
+          processedResources: state.processedResources || 0,
+          validResources: state.processedResources - state.errors || 0,
+          errorResources: state.errors || 0,
+          warningResources: state.warnings || 0,
+          duration: state.stopTimestamp && state.startTimestamp ? 
+                    state.stopTimestamp - state.startTimestamp : undefined
+        };
+      });
       
       res.json(history);
     } catch (error: any) {

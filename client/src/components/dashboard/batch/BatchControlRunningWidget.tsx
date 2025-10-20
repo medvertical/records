@@ -69,9 +69,9 @@ export function BatchControlRunningWidget() {
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-green-600" />
               <div>
-                <p className="text-xs text-muted-foreground">Valid</p>
+                <p className="text-xs text-muted-foreground">Valid Resources</p>
                 <p className="text-2xl font-bold text-green-900 dark:text-green-100">
-                  {(progress.processedResources - progress.errors).toLocaleString()}
+                  {(progress.validResources ?? (progress.processedResources - (progress.errorResources ?? 0))).toLocaleString()}
                 </p>
               </div>
             </div>
@@ -80,7 +80,7 @@ export function BatchControlRunningWidget() {
             <div className="flex items-center gap-2">
               <XCircle className="h-5 w-5 text-red-600" />
               <div>
-                <p className="text-xs text-muted-foreground">Errors</p>
+                <p className="text-xs text-muted-foreground">Error Issues</p>
                 <p className="text-2xl font-bold text-red-900 dark:text-red-100">
                   {progress.errors.toLocaleString()}
                 </p>
@@ -91,7 +91,7 @@ export function BatchControlRunningWidget() {
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-yellow-600" />
               <div>
-                <p className="text-xs text-muted-foreground">Warnings</p>
+                <p className="text-xs text-muted-foreground">Warning Issues</p>
                 <p className="text-2xl font-bold text-yellow-900 dark:text-yellow-100">
                   {progress.warnings.toLocaleString()}
                 </p>

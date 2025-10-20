@@ -44,6 +44,26 @@ app.use((req, res, next) => {
   const { setupRoutes } = await import('./routes.js');
   await setupRoutes(app);
 
+  // Warm up resource count cache for active server in background
+  console.log('[Server] Starting cache warmup...');
+  setTimeout(async () => {
+    try {
+      const { getActiveServerId } = await import('./utils/server-scoping.js');
+      const { resourceCountCache } = await import('./services/cache/resource-count-cache.js');
+      
+      const serverId = await getActiveServerId();
+      if (serverId && global.fhirClient) {
+        console.log(`[Server] 🔥 Warming up resource count cache for server ${serverId}...`);
+        await resourceCountCache.refresh(serverId, global.fhirClient);
+        console.log('[Server] ✅ Cache warmup complete!');
+      } else {
+        console.log('[Server] ⚠️  No active server or FHIR client - skipping cache warmup');
+      }
+    } catch (error) {
+      console.warn('[Server] ⚠️  Cache warmup failed (will retry on first request):', error);
+    }
+  }, 2000); // Wait 2 seconds after server start before warming cache
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";

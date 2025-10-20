@@ -67,7 +67,7 @@ export function BatchHistoryTable({ history }: BatchHistoryTableProps) {
               : '-';
 
             return (
-              <TableRow key={item.jobId}>
+              <TableRow key={item.id}>
                 <TableCell className="text-sm">
                   {formatDistanceToNow(new Date(item.startTime), { addSuffix: true })}
                 </TableCell>

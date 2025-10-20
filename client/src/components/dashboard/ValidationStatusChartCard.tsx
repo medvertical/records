@@ -18,13 +18,16 @@ interface ValidationStatusChartCardProps {
 export function ValidationStatusChartCard({ data }: ValidationStatusChartCardProps) {
   // Transform data for chart
   const chartData = Object.entries(data)
-    .filter(([, stats]) => stats.validated > 0) // Only show types that have been validated
+    .filter(([, stats]) => {
+      // Show types that have any validation data, even if incomplete
+      return stats.total > 0 || stats.validated > 0 || stats.valid > 0 || stats.errors > 0;
+    })
     .map(([type, stats]) => ({
       type,
-      valid: stats.valid,
-      errors: stats.errors,
-      warnings: stats.warnings,
-      total: stats.validated,
+      valid: stats.valid || 0,
+      invalid: stats.errors || 0, // Only errors count as invalid
+      warnings: stats.warnings || 0, // Keep for reference
+      total: stats.validated || stats.total || 0,
     }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 10); // Show top 10
@@ -80,13 +83,15 @@ export function ValidationStatusChartCard({ data }: ValidationStatusChartCardPro
                             <span className="font-medium">{data.valid}</span>
                           </div>
                           <div className="flex justify-between gap-4">
-                            <span className="text-red-600">Errors:</span>
-                            <span className="font-medium">{data.errors}</span>
+                            <span className="text-red-600">Invalid:</span>
+                            <span className="font-medium">{data.invalid}</span>
                           </div>
-                          <div className="flex justify-between gap-4">
-                            <span className="text-yellow-600">Warnings:</span>
-                            <span className="font-medium">{data.warnings}</span>
-                          </div>
+                          {data.warnings > 0 && (
+                            <div className="flex justify-between gap-4">
+                              <span className="text-yellow-600">Warnings:</span>
+                              <span className="font-medium">{data.warnings}</span>
+                            </div>
+                          )}
                           <div className="flex justify-between gap-4 pt-1 border-t">
                             <span>Total:</span>
                             <span className="font-medium">{data.total}</span>
@@ -102,9 +107,8 @@ export function ValidationStatusChartCard({ data }: ValidationStatusChartCardPro
                 wrapperStyle={{ paddingTop: '20px' }}
                 iconType="square"
               />
-              <Bar dataKey="valid" name="Valid" fill="hsl(142, 76%, 36%)" stackId="a" />
-              <Bar dataKey="errors" name="Errors" fill="hsl(0, 84%, 60%)" stackId="a" />
-              <Bar dataKey="warnings" name="Warnings" fill="hsl(48, 96%, 53%)" stackId="a" />
+              <Bar dataKey="valid" name="Valid" fill="hsl(142, 76%, 36%)" />
+              <Bar dataKey="invalid" name="Invalid" fill="hsl(0, 84%, 60%)" />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -119,9 +123,9 @@ export function ValidationStatusChartCard({ data }: ValidationStatusChartCardPro
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-red-600">
-                {chartData.reduce((sum, item) => sum + item.errors, 0)}
+                {chartData.reduce((sum, item) => sum + item.invalid, 0)}
               </div>
-              <div className="text-xs text-muted-foreground">Total Errors</div>
+              <div className="text-xs text-muted-foreground">Total Invalid</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-yellow-600">

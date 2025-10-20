@@ -128,6 +128,7 @@ export interface DashboardError {
  * Batch Validation History Item
  */
 export interface BatchValidationHistoryItem {
+  id: number | string; // Unique database ID for React keys
   batchId: string;
   jobId: string;
   startTime: Date;

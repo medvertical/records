@@ -247,12 +247,22 @@ export class CodeExtractor {
     codes: ExtractedCode[],
     context?: ResourceTypeContext
   ): void {
-    // Try to find system from context
-    // Match both exact path and array-indexed paths (e.g., identifier.use matches identifier[0].use)
     const normalizedPath = path.replace(/\[\d+\]/g, ''); // Remove array indices
     
-    // Find matching field definition
-    // Match by exact normalized path or by matching the last two segments (e.g., "identifier.use")
+    // Check if this is a universal field first (e.g., text.status)
+    const universalSystem = this.getUniversalFieldSystem(normalizedPath);
+    if (universalSystem) {
+      codes.push({
+        code,
+        system: universalSystem,
+        path,
+        type: 'code',
+      });
+      return;
+    }
+    
+    // Try to find system from context
+    // Match both exact path and array-indexed paths (e.g., identifier.use matches identifier[0].use)
     const fieldDef = context?.codeFields.find(f => {
       if (f.type !== 'code') return false;
       
@@ -334,6 +344,21 @@ export class CodeExtractor {
     ];
 
     return codeFieldNames.includes(fieldName);
+  }
+
+  /**
+   * Check if this is a universal field (present in all DomainResource types)
+   * Returns the code system URL if it's a universal field, null otherwise
+   */
+  private getUniversalFieldSystem(path: string): string | null {
+    const normalizedPath = path.replace(/\[\d+\]/g, '');
+    
+    // text.status appears in ALL DomainResource types
+    if (normalizedPath === 'text.status') {
+      return 'http://hl7.org/fhir/narrative-status';
+    }
+    
+    return null;
   }
 
   /**
@@ -511,6 +536,160 @@ export class CodeExtractor {
         {
           path: 'code',
           type: 'CodeableConcept',
+        },
+      ],
+    });
+
+    // ServiceRequest resource context
+    contexts.set('ServiceRequest', {
+      codeFields: [
+        {
+          path: 'status',
+          system: 'http://hl7.org/fhir/request-status',
+          valueSet: 'http://hl7.org/fhir/ValueSet/request-status',
+          type: 'code',
+        },
+        {
+          path: 'intent',
+          system: 'http://hl7.org/fhir/request-intent',
+          valueSet: 'http://hl7.org/fhir/ValueSet/request-intent',
+          type: 'code',
+        },
+        {
+          path: 'priority',
+          system: 'http://hl7.org/fhir/request-priority',
+          valueSet: 'http://hl7.org/fhir/ValueSet/request-priority',
+          type: 'code',
+        },
+        {
+          path: 'code',
+          type: 'CodeableConcept',
+        },
+      ],
+    });
+
+    // MedicationRequest resource context
+    contexts.set('MedicationRequest', {
+      codeFields: [
+        {
+          path: 'status',
+          system: 'http://hl7.org/fhir/request-status',
+          valueSet: 'http://hl7.org/fhir/ValueSet/medicationrequest-status',
+          type: 'code',
+        },
+        {
+          path: 'intent',
+          system: 'http://hl7.org/fhir/request-intent',
+          valueSet: 'http://hl7.org/fhir/ValueSet/medicationrequest-intent',
+          type: 'code',
+        },
+        {
+          path: 'priority',
+          system: 'http://hl7.org/fhir/request-priority',
+          valueSet: 'http://hl7.org/fhir/ValueSet/request-priority',
+          type: 'code',
+        },
+      ],
+    });
+
+    // Encounter resource context
+    contexts.set('Encounter', {
+      codeFields: [
+        {
+          path: 'status',
+          system: 'http://hl7.org/fhir/encounter-status',
+          valueSet: 'http://hl7.org/fhir/ValueSet/encounter-status',
+          type: 'code',
+        },
+        {
+          path: 'class',
+          type: 'Coding',
+        },
+        {
+          path: 'location.status',
+          system: 'http://hl7.org/fhir/encounter-location-status',
+          valueSet: 'http://hl7.org/fhir/ValueSet/encounter-location-status',
+          type: 'code',
+        },
+      ],
+    });
+
+    // Procedure resource context
+    contexts.set('Procedure', {
+      codeFields: [
+        {
+          path: 'status',
+          system: 'http://hl7.org/fhir/procedure-status',
+          valueSet: 'http://hl7.org/fhir/ValueSet/event-status',
+          type: 'code',
+        },
+        {
+          path: 'code',
+          type: 'CodeableConcept',
+        },
+      ],
+    });
+
+    // DiagnosticReport resource context
+    contexts.set('DiagnosticReport', {
+      codeFields: [
+        {
+          path: 'status',
+          system: 'http://hl7.org/fhir/diagnostic-report-status',
+          valueSet: 'http://hl7.org/fhir/ValueSet/diagnostic-report-status',
+          type: 'code',
+        },
+        {
+          path: 'code',
+          type: 'CodeableConcept',
+        },
+      ],
+    });
+
+    // MedicationStatement resource context
+    contexts.set('MedicationStatement', {
+      codeFields: [
+        {
+          path: 'status',
+          system: 'http://hl7.org/fhir/medication-statement-status',
+          valueSet: 'http://hl7.org/fhir/ValueSet/medication-statement-status',
+          type: 'code',
+        },
+      ],
+    });
+
+    // AllergyIntolerance resource context
+    contexts.set('AllergyIntolerance', {
+      codeFields: [
+        {
+          path: 'clinicalStatus',
+          type: 'CodeableConcept',
+        },
+        {
+          path: 'verificationStatus',
+          type: 'CodeableConcept',
+        },
+        {
+          path: 'code',
+          type: 'CodeableConcept',
+        },
+      ],
+    });
+
+    // Location resource context
+    contexts.set('Location', {
+      codeFields: [
+        {
+          path: 'status',
+          system: 'http://hl7.org/fhir/location-status',
+          valueSet: 'http://hl7.org/fhir/ValueSet/location-status',
+          type: 'code',
+        },
+        {
+          path: 'mode',
+          system: 'http://hl7.org/fhir/location-mode',
+          valueSet: 'http://hl7.org/fhir/ValueSet/location-mode',
+          type: 'code',
         },
       ],
     });

@@ -15,16 +15,54 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
-import { Check, ChevronsUpDown, X, Plus } from 'lucide-react';
+import { Check, ChevronsUpDown, X, Plus, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getResourceTypeIcon } from '@/lib/resource-type-icons';
 
-// Most common FHIR resource types - preselected by default
+// Most common FHIR resource types - preselected by default (26 types)
+// Organized by healthcare domain for clarity
 const COMMON_RESOURCE_TYPES = [
+  // Clinical Core
   'Patient',
+  'Practitioner',
+  'PractitionerRole',
+  'Organization',
+  'Location',
+  
+  // Clinical Observations & Conditions
   'Observation',
-  'Encounter',
   'Condition',
+  'Procedure',
+  'AllergyIntolerance',
+  'FamilyMemberHistory',
+  'ClinicalImpression',
+  
+  // Medications
+  'Medication',
+  'MedicationRequest',
+  'MedicationStatement',
+  'MedicationAdministration',
+  
+  // Encounters & Visits
+  'Encounter',
+  'EpisodeOfCare',
+  
+  // Orders & Requests
+  'ServiceRequest',
+  'DiagnosticReport',
+  'Specimen',
+  
+  // Preventive Care
+  'Immunization',
+  
+  // Appointments & Scheduling
+  'Appointment',
+  'Schedule',
+  'Slot',
+  
+  // Documents & Plans
+  'DocumentReference',
+  'CarePlan',
 ];
 
 // Comprehensive list of FHIR R4 resource types
@@ -75,23 +113,36 @@ export function ResourceTypeMultiSelect({
   const [open, setOpen] = useState(false);
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
-  // Fetch resource counts - use ?all=true to get ALL server types (bypass validation settings filter)
-  const { data: resourceCounts, isLoading } = useQuery({
-    queryKey: ['fhir-resource-counts-all'],
+  // Fetch ALL resource types from server - separate from sidebar filtered counts
+  // This ensures batch validation shows ALL available types, not just validated ones
+  const { data: resourceCounts, isLoading: isCountsLoading, isFetching: isCountsFetching } = useQuery({
+    queryKey: ["/api/fhir/resource-counts-all"],
     queryFn: async () => {
       const response = await fetch('/api/fhir/resource-counts?all=true');
       if (!response.ok) throw new Error('Failed to fetch resource counts');
-      return response.json();
+      
+      const data = await response.json();
+      
+      // Transform API response to Record<string, number>
+      const counts: Record<string, number> = {};
+      if (data.resourceTypes && Array.isArray(data.resourceTypes)) {
+        data.resourceTypes.forEach((item: { resourceType: string; count: number }) => {
+          counts[item.resourceType] = item.count;
+        });
+      }
+      
+      return counts;
     },
+    enabled: true, // Fetch immediately - non-blocking selection
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    placeholderData: (previousData) => previousData,
   });
 
-  // Create a map of server counts
-  const serverCounts = resourceCounts?.resourceTypes
-    ? resourceCounts.resourceTypes.reduce((acc: Record<string, number>, rt: any) => {
-        acc[rt.resourceType] = rt.count;
-        return acc;
-      }, {})
-    : {};
+  // Resource counts already in correct format from query
+  const serverCounts = resourceCounts || {};
 
   // Merge all FHIR R4 resource types with server counts
   // Sort: available types (with counts) first, then unavailable types
@@ -109,18 +160,15 @@ export function ResourceTypeMultiSelect({
     return a.type.localeCompare(b.type);
   });
 
-  // Auto-select common types on mount if they're available on the server
+  // Auto-select common types on mount IMMEDIATELY - don't wait for counts!
+  // Counts will populate in the chips once loaded
   useEffect(() => {
-    if (autoSelectCommon && !hasAutoSelected && resourceCounts && selectedTypes.length === 0) {
-      const availableCommonTypes = COMMON_RESOURCE_TYPES.filter(
-        type => serverCounts[type] && serverCounts[type] > 0
-      );
-      if (availableCommonTypes.length > 0) {
-        onChange(availableCommonTypes);
-        setHasAutoSelected(true);
-      }
+    if (autoSelectCommon && !hasAutoSelected && selectedTypes.length === 0) {
+      // Select common types immediately, regardless of server availability
+      onChange(COMMON_RESOURCE_TYPES);
+      setHasAutoSelected(true);
     }
-  }, [autoSelectCommon, hasAutoSelected, resourceCounts, selectedTypes.length, serverCounts, onChange]);
+  }, [autoSelectCommon, hasAutoSelected, selectedTypes.length, onChange]);
 
   const handleSelect = (type: string) => {
     if (selectedTypes.includes(type)) {
@@ -131,16 +179,21 @@ export function ResourceTypeMultiSelect({
   };
 
   const handleSelectAll = () => {
-    // Only select available types (with count > 0)
-    const availableTypes = allResourceTypes.filter(rt => rt.available).map(rt => rt.type);
-    onChange(availableTypes);
+    // Select all types immediately - counts will show which are available
+    // Still filter by availability if counts are loaded, otherwise select all
+    if (isCountsLoading || Object.keys(serverCounts).length === 0) {
+      // Counts not loaded yet - select all known types
+      onChange(ALL_FHIR_R4_RESOURCE_TYPES);
+    } else {
+      // Counts loaded - only select available types
+      const availableTypes = allResourceTypes.filter(rt => rt.available).map(rt => rt.type);
+      onChange(availableTypes);
+    }
   };
 
   const handleSelectCommon = () => {
-    const availableCommonTypes = COMMON_RESOURCE_TYPES.filter(
-      type => serverCounts[type] && serverCounts[type] > 0
-    );
-    onChange(availableCommonTypes);
+    // Select common types immediately - counts will follow
+    onChange(COMMON_RESOURCE_TYPES);
   };
 
   const handleClearAll = () => {
@@ -168,7 +221,11 @@ export function ResourceTypeMultiSelect({
             ) : (
               <span>{selectedTypes.length} type(s) selected</span>
             )}
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            {isCountsFetching ? (
+              <Loader2 className="ml-2 h-4 w-4 shrink-0 animate-spin opacity-50" />
+            ) : (
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            )}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-full p-0" align="start">
@@ -176,9 +233,11 @@ export function ResourceTypeMultiSelect({
             <CommandInput placeholder="Search all FHIR R4 resource types..." />
             <CommandList>
               <CommandEmpty>
-                {isLoading ? 'Loading...' : 'No resource types found.'}
+                No resource types found.
               </CommandEmpty>
-              <CommandGroup heading="Quick Select">
+              {/* Always show resource types, counts load in background */}
+              <>
+                <CommandGroup heading="Quick Select">
                 <CommandItem
                   onSelect={handleSelectCommon}
                   className="justify-between font-medium text-blue-600"
@@ -235,7 +294,11 @@ export function ResourceTypeMultiSelect({
                           </span>
                         </div>
                         <Badge variant="secondary" className="ml-2">
-                          {count.toLocaleString()}
+                          {isCountsLoading ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            count.toLocaleString()
+                          )}
                         </Badge>
                       </CommandItem>
                     );
@@ -267,12 +330,17 @@ export function ResourceTypeMultiSelect({
                           <span>{type}</span>
                         </div>
                         <Badge variant="outline" className="ml-2 text-xs">
-                          0
+                          {isCountsLoading ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            0
+                          )}
                         </Badge>
                       </CommandItem>
                     );
                   })}
               </CommandGroup>
+              </>
             </CommandList>
           </Command>
         </PopoverContent>
@@ -288,23 +356,22 @@ export function ResourceTypeMultiSelect({
             return (
               <Badge
                 key={type}
-                variant="default"
-                className={cn(
-                  "gap-1.5 pr-1.5 pl-2 py-1",
-                  isCommon && "bg-blue-500 hover:bg-blue-600"
-                )}
+                variant="outline"
+                className="gap-1.5 pr-1.5 pl-2 py-1 bg-white rounded-sm border-gray-300"
               >
                 <Icon className="h-3.5 w-3.5" />
                 <span className="font-medium">{type}</span>
-                {resourceType && resourceType.count > 0 && (
-                  <span className="text-xs opacity-80 font-normal">
+                {isCountsLoading ? (
+                  <Loader2 className="h-3 w-3 animate-spin opacity-60" />
+                ) : resourceType && resourceType.count > 0 ? (
+                  <span className="text-xs opacity-60 font-normal">
                     {resourceType.count.toLocaleString()}
                   </span>
-                )}
+                ) : null}
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-5 w-5 p-0 ml-0.5 hover:bg-black/10 rounded-full"
+                  className="h-5 w-5 p-0 ml-0.5 hover:bg-gray-100 rounded-sm"
                   onClick={() => handleRemove(type)}
                 >
                   <X className="h-3 w-3" />

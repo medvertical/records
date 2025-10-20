@@ -173,7 +173,7 @@ export class ValidationProgressPersistenceService {
             lt(new Date(), validationProgressState.expiresAt) // Only get non-expired states
           )
         )
-        .orderBy(validationProgressState.updatedAt)
+        .orderBy(desc(validationProgressState.updatedAt)) // Get most recent first
         .limit(1);
 
       if (result.length === 0) {
@@ -256,15 +256,26 @@ export class ValidationProgressPersistenceService {
   /**
    * Get recent validation progress states for history
    */
-  async getRecentProgressStates(limit: number = 10): Promise<ValidationProgressState[]> {
+  async getRecentProgressStates(limit: number = 10, serverId?: number): Promise<Array<{id: number; stateData: ValidationProgressState; createdAt: Date | null}>> {
     try {
-      const result = await db
+      let query = db
         .select()
-        .from(validationProgressState)
+        .from(validationProgressState);
+
+      // Filter by serverId if provided
+      if (serverId !== undefined) {
+        query = query.where(eq(validationProgressState.serverId, serverId)) as any;
+      }
+
+      const result = await query
         .orderBy(desc(validationProgressState.createdAt))
         .limit(limit);
 
-      return result.map(row => row.stateData as ValidationProgressState);
+      return result.map(row => ({
+        id: row.id,
+        stateData: row.stateData as ValidationProgressState,
+        createdAt: row.createdAt
+      }));
     } catch (error) {
       console.error(`[ValidationProgressPersistence] Error getting recent progress states:`, error);
       return [];

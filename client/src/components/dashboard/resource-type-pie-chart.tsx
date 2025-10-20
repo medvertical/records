@@ -34,7 +34,6 @@ export function ResourceTypePieChart({ resourceCounts }: ResourceTypePieChartPro
           percentage: 0 // Will be calculated
         }))
         .sort((a, b) => b.value - a.value) // Sort by count descending
-        .slice(0, 12) // Show top 12 resource types
     : [];
 
   // Calculate total for percentages

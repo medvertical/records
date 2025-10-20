@@ -64,7 +64,7 @@ export function MetricCard({
 
   return (
     <Card className={cn(
-      'p-6 transition-all hover:shadow-md',
+      'p-6',
       variantStyles[variant],
       className
     )}>

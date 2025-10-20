@@ -8,7 +8,7 @@ import { DashboardErrorBoundary } from '@/components/dashboard/shared/ErrorBound
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { BatchControlIdleWidget } from '@/components/dashboard/batch/BatchControlIdleWidget';
 import { BatchControlRunningWidget } from '@/components/dashboard/batch/BatchControlRunningWidget';
-import { ResourcesByTypeCard } from '@/components/dashboard/ResourcesByTypeCard';
+import { ResourceTypePieChart } from '@/components/dashboard/resource-type-pie-chart';
 import { ValidationStatusChartCard } from '@/components/dashboard/ValidationStatusChartCard';
 import { useDashboardBatchState } from '@/hooks/use-dashboard-batch-state';
 
@@ -19,15 +19,37 @@ import { useDashboardBatchState } from '@/hooks/use-dashboard-batch-state';
 export default function Dashboard() {
   const { mode, progress } = useDashboardBatchState();
 
-  // Fetch FHIR server resource counts
+  // Fetch FHIR server resource counts - filtered/validated types
+  // Shared with sidebar/quick access via same query key
+  // Uses in-memory cache on backend for instant loading
   const { data: resourceCountsData, isLoading: isResourcesLoading } = useQuery({
-    queryKey: ['fhir-resource-counts'],
+    queryKey: ["/api/fhir/resource-counts"], // Same key as sidebar
     queryFn: async () => {
       const response = await fetch('/api/fhir/resource-counts');
       if (!response.ok) throw new Error('Failed to fetch resource counts');
-      return response.json();
+      
+      const data = await response.json();
+      
+      // Transform to match sidebar format: Record<string, number>
+      const counts: Record<string, number> = {};
+      if (data.resourceTypes && Array.isArray(data.resourceTypes)) {
+        data.resourceTypes.forEach((item: { resourceType: string; count: number }) => {
+          counts[item.resourceType] = item.count;
+        });
+      }
+      
+      return {
+        resourceTypes: data.resourceTypes,
+        totalResources: data.totalResources,
+        counts // Add transformed counts
+      };
     },
-    refetchInterval: 60000, // Refetch every minute
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes (backend has its own cache)
+    refetchInterval: false,
+    refetchOnWindowFocus: true, // Refetch in background when tab focused
+    refetchOnMount: false,
+    placeholderData: (previousData) => previousData, // Show old data during refetch
+    retry: 2, // Retry failed requests
   });
 
   // Fetch validation stats
@@ -41,15 +63,25 @@ export default function Dashboard() {
     refetchInterval: mode === 'running' ? 5000 : 30000, // Poll faster when batch running
   });
 
+  // Fetch validation settings to get included resource types
+  const { data: validationSettings } = useQuery({
+    queryKey: ['validation-settings'],
+    queryFn: async () => {
+      const response = await fetch('/api/validation/settings');
+      if (!response.ok) throw new Error('Failed to fetch validation settings');
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
   const isLoading = isResourcesLoading || isValidationLoading;
 
-  // Use live progress data when batch is running, otherwise use static dashboard data
-  const totalResources = mode === 'running' && progress?.totalResources
-    ? progress.totalResources
-    : resourceCountsData?.totalResources || 0;
+  // Total Resources: ALWAYS show total from FHIR server, not from batch validation
+  const totalResources = resourceCountsData?.totalResources || 0;
 
   const validationCoverage = dashboardData?.validation?.validationCoverage || 0;
   
+  // Errors/Warnings: Use live batch progress when running, otherwise use dashboard data
   const errorResources = mode === 'running' && progress?.errors !== undefined
     ? progress.errors
     : dashboardData?.validation?.errorResources || 0;
@@ -62,11 +94,18 @@ export default function Dashboard() {
   const errorTrend = dashboardData?.validation?.errorTrend || null;
   const warningTrend = dashboardData?.validation?.warningTrend || null;
 
-  // Convert resource counts array to object format
-  const resourceCounts = resourceCountsData?.resourceTypes?.reduce((acc: Record<string, number>, item: any) => {
-    acc[item.resourceType] = item.count;
-    return acc;
-  }, {}) || {};
+  // Use transformed counts from query, filtered by included types from settings
+  const allResourceCounts = resourceCountsData?.counts || {};
+  const includedTypes = validationSettings?.resourceTypes?.includedTypes || [];
+  
+  // Filter resource counts to only show types that are in the settings
+  const resourceCounts = includedTypes.length > 0
+    ? Object.fromEntries(
+        Object.entries(allResourceCounts).filter(([type]) => 
+          includedTypes.includes(type)
+        )
+      )
+    : allResourceCounts;
 
   return (
     <div className="min-h-screen bg-background">
@@ -118,8 +157,8 @@ export default function Dashboard() {
           {/* Bottom Row: Resources by Type (left) + Valid vs Invalid Chart (right) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <DashboardErrorBoundary context="ResourcesByType">
-              <ResourcesByTypeCard
-                data={resourceCounts}
+              <ResourceTypePieChart
+                resourceCounts={resourceCounts}
               />
             </DashboardErrorBoundary>
 
