@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -12,32 +12,47 @@ import { cn } from "@/lib/utils";
 import Dashboard from "@/pages/dashboard";
 import ResourceBrowser from "@/pages/resource-browser";
 import ResourceDetail from "@/pages/resource-detail";
-import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
-import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { useKeyboardShortcuts, useKeyboardShortcutListener } from "@/hooks/use-keyboard-shortcuts";
 import { ValidationActivityProvider } from "@/contexts/validation-activity-context";
 import { ShortcutsHelpDialog } from "@/components/keyboard-shortcuts/shortcuts-help-dialog";
+import { SettingsModalProvider, useSettingsModalControl } from "@/contexts/settings-modal-context";
+import { SettingsModal } from "@/components/settings/SettingsModal";
 
 // ConnectionStatus interface is now imported from use-server-data
 import type { ServerStatus as ConnectionStatus } from "@/hooks/use-server-data";
 
 function Router() {
   const isMobile = useIsMobile();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const prevLocationRef = useRef<string>(location);
 
   const { activeServer, serverStatus, isConnectionLoading } = useServerData();
+  const { isOpen, setIsOpen, activeTab, open } = useSettingsModalControl();
   
   // Use the centralized server status instead of separate query
   const connectionStatus = serverStatus as ConnectionStatus | undefined;
+
+  // Handle /settings route by opening modal
+  useEffect(() => {
+    if (location === '/settings') {
+      open('validation');
+      setLocation('/');
+    }
+  }, [location, open, setLocation]);
 
   // Enable keyboard shortcuts globally
   useKeyboardShortcuts({
     enabled: true,
     showNotifications: false,
+  });
+
+  // Listen for settings modal shortcut
+  useKeyboardShortcutListener('open-settings-modal', () => {
+    open('validation');
   });
 
   // Scroll to top when location pathname changes (not query params)
@@ -170,29 +185,18 @@ function Router() {
             </div>
           </div>
         </Route>
-        <Route path="/settings">
-          <div className="min-h-screen bg-gray-50">
-            <Header 
-              title={getPageTitle()}
-              connectionStatus={connectionStatus}
-              onSidebarToggle={toggleSidebar}
-            />
-            <div className="flex pt-16">
-              <Sidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
-              <main className={cn(
-                "flex-1 relative z-10 transition-all duration-300 ease-in-out",
-                sidebarOpen && !isMobile ? "ml-64" : "ml-0"
-              )}>
-                <SettingsPage />
-              </main>
-            </div>
-          </div>
-        </Route>
         <Route component={NotFound} />
       </Switch>
       
       {/* Global Keyboard Shortcuts Help Dialog */}
       <ShortcutsHelpDialog />
+      
+      {/* Global Settings Modal */}
+      <SettingsModal 
+        open={isOpen} 
+        onOpenChange={setIsOpen}
+        defaultTab={activeTab}
+      />
     </div>
   );
 }
@@ -202,8 +206,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ValidationActivityProvider>
-          <Toaster />
-          <Router />
+          <SettingsModalProvider>
+            <Toaster />
+            <Router />
+          </SettingsModalProvider>
         </ValidationActivityProvider>
       </TooltipProvider>
     </QueryClientProvider>

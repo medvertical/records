@@ -87,10 +87,11 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
     }
   }, [showNotifications, toast]);
 
-  // Navigation shortcuts
+  // Settings shortcut - dispatch custom event that will be caught by settings modal
   const handleGoToSettings = useCallback(() => {
-    setLocation('/settings');
-  }, [setLocation]);
+    // Dispatch custom event to open settings modal
+    window.dispatchEvent(new CustomEvent('open-settings-modal'));
+  }, []);
 
   const handleGoToDashboard = useCallback(() => {
     setLocation('/');
@@ -106,12 +107,16 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
     window.dispatchEvent(new CustomEvent('app-escape'));
   }, []);
 
+  // Detect if we're on Mac
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+
   // Define default shortcuts
   const defaultShortcuts: KeyboardShortcut[] = [
     // Navigation
     { key: 'd', description: 'Go to Dashboard', action: handleGoToDashboard, category: 'navigation' },
     { key: 'b', description: 'Go to Browse Resources', action: handleGoToBrowse, category: 'navigation' },
     { key: 's', description: 'Go to Settings', action: handleGoToSettings, category: 'navigation' },
+    { key: ',', description: 'Open Settings (Cmd+, / Ctrl+,)', action: handleGoToSettings, modifier: isMac ? 'cmd' : 'ctrl', category: 'navigation' },
     
     // Actions
     { key: 'r', description: 'Refresh current view', action: handleRefresh, category: 'actions' },
@@ -182,7 +187,7 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions = {}) {
  * Useful for components that need to respond to specific shortcuts
  */
 export function useKeyboardShortcutListener(
-  eventName: 'app-refresh' | 'trigger-validation' | 'app-escape' | 'show-keyboard-shortcuts-help',
+  eventName: 'app-refresh' | 'trigger-validation' | 'app-escape' | 'show-keyboard-shortcuts-help' | 'open-settings-modal',
   handler: () => void
 ) {
   useEffect(() => {

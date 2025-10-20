@@ -10,12 +10,25 @@
 // Core Validation Aspect Configuration
 // ============================================================================
 
+/**
+ * Validation engine types for different aspects
+ */
+export type StructuralValidationEngine = 'schema' | 'hapi' | 'server';
+export type ProfileValidationEngine = 'hapi' | 'server' | 'auto';
+export type TerminologyValidationEngine = 'server' | 'ontoserver' | 'cached';
+export type ReferenceValidationEngine = 'internal' | 'server';
+export type BusinessRuleValidationEngine = 'fhirpath' | 'custom';
+export type MetadataValidationEngine = 'schema' | 'hapi';
+
 export interface ValidationAspectConfig {
   /** Whether this validation aspect is enabled */
   enabled: boolean;
   
   /** Severity level for issues found by this aspect */
   severity: 'error' | 'warning' | 'info';
+  
+  /** Validation engine to use for this aspect (optional - defaults per aspect type) */
+  engine?: string;
 }
 
 // ============================================================================
@@ -373,12 +386,12 @@ export const VALIDATION_CONFIGS = {
   // Strict validation - all aspects enabled with error severity
   STRICT: {
     aspects: {
-      structural: { enabled: true, severity: 'error' as const },
-      profile: { enabled: true, severity: 'error' as const },
-      terminology: { enabled: true, severity: 'error' as const },
-      reference: { enabled: true, severity: 'error' as const },
-      businessRule: { enabled: true, severity: 'error' as const },
-      metadata: { enabled: true, severity: 'error' as const }
+      structural: { enabled: true, severity: 'error' as const, engine: 'schema' },
+      profile: { enabled: true, severity: 'error' as const, engine: 'hapi' },
+      terminology: { enabled: true, severity: 'error' as const, engine: 'server' },
+      reference: { enabled: true, severity: 'error' as const, engine: 'internal' },
+      businessRule: { enabled: true, severity: 'error' as const, engine: 'fhirpath' },
+      metadata: { enabled: true, severity: 'error' as const, engine: 'schema' }
     },
     performance: {
       maxConcurrent: 3,
@@ -389,12 +402,12 @@ export const VALIDATION_CONFIGS = {
   // Balanced validation - mix of error and warning severity
   BALANCED: {
     aspects: {
-      structural: { enabled: true, severity: 'error' as const },
-      profile: { enabled: true, severity: 'warning' as const },
-      terminology: { enabled: true, severity: 'warning' as const },
-      reference: { enabled: true, severity: 'error' as const },
-      businessRule: { enabled: true, severity: 'warning' as const },
-      metadata: { enabled: true, severity: 'error' as const }
+      structural: { enabled: true, severity: 'error' as const, engine: 'schema' },
+      profile: { enabled: true, severity: 'warning' as const, engine: 'hapi' },
+      terminology: { enabled: true, severity: 'warning' as const, engine: 'server' },
+      reference: { enabled: true, severity: 'error' as const, engine: 'internal' },
+      businessRule: { enabled: true, severity: 'warning' as const, engine: 'fhirpath' },
+      metadata: { enabled: true, severity: 'error' as const, engine: 'schema' }
     },
     performance: {
       maxConcurrent: 4,
@@ -405,12 +418,12 @@ export const VALIDATION_CONFIGS = {
   // Fast validation - only critical aspects with higher concurrency
   FAST: {
     aspects: {
-      structural: { enabled: true, severity: 'error' as const },
-      profile: { enabled: false, severity: 'warning' as const },
-      terminology: { enabled: false, severity: 'warning' as const },
-      reference: { enabled: true, severity: 'error' as const },
-      businessRule: { enabled: false, severity: 'warning' as const },
-      metadata: { enabled: false, severity: 'info' as const }
+      structural: { enabled: true, severity: 'error' as const, engine: 'schema' },
+      profile: { enabled: false, severity: 'warning' as const, engine: 'hapi' },
+      terminology: { enabled: false, severity: 'warning' as const, engine: 'server' },
+      reference: { enabled: true, severity: 'error' as const, engine: 'internal' },
+      businessRule: { enabled: false, severity: 'warning' as const, engine: 'fhirpath' },
+      metadata: { enabled: false, severity: 'info' as const, engine: 'schema' }
     },
     performance: {
       maxConcurrent: 10,
@@ -514,12 +527,12 @@ export const DEFAULT_CACHE_CONFIG = {
 
 export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
   aspects: {
-    structural: { enabled: true, severity: 'error' },
-    profile: { enabled: true, severity: 'warning' },
-    terminology: { enabled: true, severity: 'warning' },
-    reference: { enabled: true, severity: 'error' },
-    businessRule: { enabled: true, severity: 'error' },
-    metadata: { enabled: true, severity: 'error' }
+    structural: { enabled: true, severity: 'error', engine: 'schema' },
+    profile: { enabled: true, severity: 'warning', engine: 'hapi' },
+    terminology: { enabled: true, severity: 'warning', engine: 'server' },
+    reference: { enabled: true, severity: 'error', engine: 'internal' },
+    businessRule: { enabled: true, severity: 'error', engine: 'fhirpath' },
+    metadata: { enabled: true, severity: 'error', engine: 'schema' }
   },
   performance: {
     maxConcurrent: 5,

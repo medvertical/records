@@ -8,6 +8,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import ServerConnectionModal from "@/components/settings/server-connection-modal";
+import { useSettingsModalControl } from "@/contexts/settings-modal-context";
 
 import { 
   Database, 
@@ -44,6 +45,14 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
   const isMobile = useIsMobile();
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const { open: openSettingsModal } = useSettingsModalControl();
+  
+  // Helper function for handling item clicks (close sidebar on mobile)
+  const onItemClick = () => {
+    if (isMobile && onToggle) {
+      onToggle();
+    }
+  };
   
   // Close sidebar on mobile when location changes
   useEffect(() => {
@@ -121,8 +130,8 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}>
           <div className="h-full flex flex-col">
-        <SidebarContent 
-          serverStatus={serverStatus} 
+        <SidebarContent
+          serverStatus={serverStatus}
           resourceCounts={resourceCounts}
           isCountsLoading={isCountsLoading}
           isCountsError={isCountsError}
@@ -137,6 +146,7 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
           onChangeServer={() => setIsServerModalOpen(true)}
           addDialogOpen={addDialogOpen}
           setAddDialogOpen={setAddDialogOpen}
+          openSettingsModal={openSettingsModal}
         />
           </div>
         </aside>
@@ -162,9 +172,11 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
           refreshServerData={refreshServerData}
           location={location}
           isServerConnected={isServerConnected}
+          onItemClick={onItemClick}
           onChangeServer={() => setIsServerModalOpen(true)}
           addDialogOpen={addDialogOpen}
           setAddDialogOpen={setAddDialogOpen}
+          openSettingsModal={openSettingsModal}
         />
       </div>
       
@@ -198,7 +210,8 @@ function SidebarContent({
   onItemClick,
   onChangeServer,
   addDialogOpen,
-  setAddDialogOpen
+  setAddDialogOpen,
+  openSettingsModal
 }: {
   serverStatus?: ServerStatus;
   resourceCounts?: Record<string, number>;
@@ -213,6 +226,7 @@ function SidebarContent({
   isServerConnected: boolean;
   onItemClick?: () => void;
   onChangeServer?: () => void;
+  openSettingsModal: (tab?: string) => void;
   addDialogOpen: boolean;
   setAddDialogOpen: (open: boolean) => void;
 }) {
@@ -520,20 +534,19 @@ function SidebarContent({
 
       {/* Settings at Bottom */}
       <div className="p-4 border-t border-gray-200 dark:border-gray-700 mt-auto flex-shrink-0">
-        <Link href={settingsItem.href}>
-          <div 
-            className={cn(
-              "flex items-center space-x-3 p-2 rounded-lg font-medium transition-colors cursor-pointer",
-              location === settingsItem.href 
-                ? "text-fhir-blue bg-blue-50 dark:bg-blue-900/30" 
-                : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
-            )}
-            onClick={onItemClick}
-          >
-            <Settings className="w-4 h-4" />
-            <span>{settingsItem.label}</span>
-          </div>
-        </Link>
+        <div 
+          className={cn(
+            "flex items-center space-x-3 p-2 rounded-lg font-medium transition-colors cursor-pointer",
+            "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+          )}
+          onClick={() => {
+            openSettingsModal('validation');
+            onItemClick();
+          }}
+        >
+          <Settings className="w-4 h-4" />
+          <span>{settingsItem.label}</span>
+        </div>
       </div>
     </div>
   );
