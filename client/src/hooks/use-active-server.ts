@@ -257,6 +257,8 @@ export function useActiveServer(
       queryClient.invalidateQueries({ queryKey: ['validation'] });
       queryClient.invalidateQueries({ queryKey: ['fhir-resources'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resource-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['quickAccessCounts'] });
       
       if (showNotifications) {
         toast({

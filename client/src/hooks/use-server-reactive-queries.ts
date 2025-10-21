@@ -3,54 +3,63 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useServerData } from './use-server-data';
 
 /**
- * Hook to ensure React Query cache is invalidated and refetched when the active server changes
+ * Hook to ensure React Query cache is invalidated when the active server changes
  * 
  * This implements the per-server cache namespacing strategy:
  * - All query keys should include serverId
  * - When server changes, invalidate all queries with the old serverId
- * - Automatically refetch queries with the new serverId
+ * - Queries will automatically refetch when components use them (respects staleTime and enabled flags)
  */
 export function useServerReactiveQueries() {
   const queryClient = useQueryClient();
   const { activeServer } = useServerData();
-  const previousServerIdRef = useRef<number | undefined>(activeServer?.id);
+  const previousServerIdRef = useRef<number | undefined>();
+  const isInitializedRef = useRef(false);
 
   useEffect(() => {
     const currentServerId = activeServer?.id;
     const previousServerId = previousServerIdRef.current;
 
-    // If server changed, invalidate and refetch
-    if (currentServerId !== undefined && previousServerId !== undefined && currentServerId !== previousServerId) {
+    // Initialize on first run when we have a server
+    if (!isInitializedRef.current && currentServerId !== undefined) {
+      isInitializedRef.current = true;
+      previousServerIdRef.current = currentServerId;
+      console.log(`[ServerReactiveQueries] Initialized with server ID: ${currentServerId}`);
+      return;
+    }
+
+    // If server changed, invalidate queries (they'll refetch naturally when components need them)
+    if (isInitializedRef.current && currentServerId !== undefined && previousServerId !== undefined && currentServerId !== previousServerId) {
       console.log(`[ServerReactiveQueries] Active server changed from ${previousServerId} to ${currentServerId}`);
       
-      // Invalidate all validation-related queries
+      // First, invalidate specific query keys directly (most reliable)
+      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resource-counts'] });
+      queryClient.invalidateQueries({ queryKey: ['quickAccessCounts'] });
+      
+      // Then invalidate all validation-related queries with predicate
       // These queries should all have serverId in their queryKey
       queryClient.invalidateQueries({
         predicate: (query) => {
           const queryKey = query.queryKey;
+          const keyString = JSON.stringify(queryKey);
           // Check if query key includes validation endpoints or the old server ID
-          return (
+          const shouldInvalidate = (
             queryKey.includes('/api/validation/issues/groups') ||
             queryKey.includes('/api/validation/resources') ||
             queryKey.includes('/api/fhir/resources') ||
+            queryKey.includes('/api/fhir/resource-counts') ||
+            queryKey.includes('quickAccessCounts') ||
             queryKey.includes(previousServerId)
           );
+          if (shouldInvalidate) {
+            console.log(`[ServerReactiveQueries] Invalidating query: ${keyString}`);
+          }
+          return shouldInvalidate;
         },
+        refetchType: 'active', // Only refetch queries that are currently mounted
       });
 
-      // Immediately refetch queries for the new server
-      queryClient.refetchQueries({
-        predicate: (query) => {
-          const queryKey = query.queryKey;
-          return (
-            queryKey.includes('/api/validation/issues/groups') ||
-            queryKey.includes('/api/validation/resources') ||
-            queryKey.includes('/api/fhir/resources')
-          );
-        },
-      });
-
-      console.log('[ServerReactiveQueries] Cache invalidated and queries refetched for new server');
+      console.log('[ServerReactiveQueries] Cache invalidated for new server - queries will refetch naturally');
     }
 
     // Update ref for next comparison

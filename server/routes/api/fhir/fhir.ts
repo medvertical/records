@@ -940,17 +940,23 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
             // Simple approach: Just fill the page quickly, don't worry about total count
             let allFoundResources: any[] = [];
             let totalProcessed = 0;
+            const MAX_BATCHES_PER_TYPE = 10; // Max 10 batches (1000 resources) per type
+            const MAX_TOTAL_PROCESSED = 5000; // Hard limit on total resources processed across all types
             
             console.log(`[FHIR API] Fast page-filling approach: Get ${userPageSize} results as quickly as possible`);
             
             for (const resourceType of searchResourceTypes) {
               try {
                 let resourceTypeOffset = 0;
+                let batchCount = 0;
+                let consecutiveEmptyBatches = 0;
                 
                 console.log(`[FHIR API] Fetching ${resourceType} resources to fill page...`);
                 
-                // Keep fetching until we have enough results for the page
-                while (allFoundResources.length < userPageSize && resourceTypeOffset < 10000) {
+                // Keep fetching until we have enough results for the page, with smart bailout conditions
+                while (allFoundResources.length < userPageSize && 
+                       batchCount < MAX_BATCHES_PER_TYPE && 
+                       totalProcessed < MAX_TOTAL_PROCESSED) {
                   const bundle = await currentFhirClient.searchResources(resourceType, {
                     _count: 100, // Server's actual batch size
                     _skip: resourceTypeOffset,
@@ -993,11 +999,25 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
                   
                   totalProcessed += bundle.entry.length;
                   resourceTypeOffset += bundle.entry.length;
+                  batchCount++;
                   
-                  console.log(`[FHIR API] ${resourceType} batch: Found ${filteredResources.length} resources ${profileExistsValue ? 'with' : 'without'} profiles (${allFoundResources.length}/${userPageSize} for page, ${totalProcessed} processed)`);
+                  // Track consecutive empty batches to bail out early
+                  if (filteredResources.length === 0) {
+                    consecutiveEmptyBatches++;
+                  } else {
+                    consecutiveEmptyBatches = 0;
+                  }
+                  
+                  console.log(`[FHIR API] ${resourceType} batch ${batchCount}: Found ${filteredResources.length} resources ${profileExistsValue ? 'with' : 'without'} profiles (${allFoundResources.length}/${userPageSize} for page, ${totalProcessed} total processed)`);
+                  
+                  // Bail out if we've had 3 consecutive batches with no matching resources
+                  if (consecutiveEmptyBatches >= 3) {
+                    console.log(`[FHIR API] No matches found in ${consecutiveEmptyBatches} consecutive batches, giving up on ${resourceType}`);
+                    break;
+                  }
                   
                   // If we got fewer results than expected, we might be at the end
-                  if (bundle.entry.length < 51) {
+                  if (bundle.entry.length < 100) {
                     console.log(`[FHIR API] Reached end of ${resourceType} data`);
                     break;
                   }
@@ -1007,6 +1027,12 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
                     console.log(`[FHIR API] Page filled with ${allFoundResources.length} results`);
                     break;
                   }
+                }
+                
+                // Check if we hit the global limit
+                if (totalProcessed >= MAX_TOTAL_PROCESSED) {
+                  console.log(`[FHIR API] Hit global processing limit of ${MAX_TOTAL_PROCESSED} resources`);
+                  break;
                 }
                 
                 console.log(`[FHIR API] Completed ${resourceType}: Found ${allFoundResources.length} resources for page out of ${totalProcessed} processed`);
@@ -1022,6 +1048,11 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
             // Calculate pagination metadata
             const totalFound = allFoundResources.length;
             const hasMore = totalFound >= userPageSize; // If we filled the page, there might be more
+            
+            // Provide helpful message if no results found
+            const progressMessage = totalFound === 0 
+              ? `No resources found ${profileExistsValue ? 'with' : 'without'} profiles after checking ${totalProcessed} resources. Try searching ${profileExistsValue ? 'without' : 'with'} the profile filter.`
+              : `Found ${totalFound} resources ${profileExistsValue ? 'with' : 'without'} profiles after processing ${totalProcessed} resources`;
             
             res.json({
               success: true,
@@ -1040,7 +1071,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
                   resourceTypes: searchResourceTypes,
                   totalMatching: totalFound,
                   processedResources: totalProcessed,
-                  progressMessage: `Found ${totalFound} resources ${profileExistsValue ? 'with' : 'without'} profiles after processing ${totalProcessed} resources`
+                  progressMessage
                 },
                 appliedFilters: {
                   resourceTypes: searchResourceTypes,

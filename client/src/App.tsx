@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useServerData } from "@/hooks/use-server-data";
+import { useServerReactiveQueries } from "@/hooks/use-server-reactive-queries";
 import { cn } from "@/lib/utils";
 import Dashboard from "@/pages/dashboard";
 import ResourceBrowser from "@/pages/resource-browser";
@@ -32,6 +33,9 @@ function Router() {
 
   const { activeServer, serverStatus, isConnectionLoading } = useServerData();
   const { isOpen, setIsOpen, activeTab, open } = useSettingsModalControl();
+  
+  // Enable automatic cache invalidation when server changes
+  useServerReactiveQueries();
   
   // Use the centralized server status instead of separate query
   const connectionStatus = serverStatus as ConnectionStatus | undefined;

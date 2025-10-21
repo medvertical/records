@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { X, ChevronDown, Equal, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Search, Type, Hash } from 'lucide-react';
+import { X, ChevronDown, Equal, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Search, Type, Hash, CheckCircle } from 'lucide-react';
 import { getResourceTypeIcon } from '@/lib/resource-type-icons';
 
 export type ChipKind = 'resourceType' | 'validation' | 'search' | 'fhirParam';
@@ -47,7 +47,7 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
       case 'equals':
         return <Equal className="h-4 w-4" />;
       case 'exists':
-        return <Search className="h-4 w-4" />;
+        return <CheckCircle className="h-4 w-4" />;
       case 'gt':
       case '>':
       case 'greaterThan':
