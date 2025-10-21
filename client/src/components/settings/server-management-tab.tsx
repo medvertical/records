@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useServerData } from '@/hooks/use-server-data';
 import { Plus, Loader2, Server } from 'lucide-react';
-import { ServerList } from './server-list';
+import { FhirServerList } from './servers';
 import { ServerForm } from './server-form';
 import { useServerOperations } from './server-operations';
 import { testFhirConnection, handleConnectionTestError, handleConnectionTestSuccess } from './connection-testing';
@@ -161,13 +161,11 @@ export function ServerManagementTab({ onServersChange }: ServerManagementTabProp
         </Button>
       </div>
 
-      <ServerList
+      <FhirServerList
         servers={existingServers || []}
-        isConnecting={connectingId !== null}
-        isDisconnecting={disconnectingId !== null}
-        isAnyOperationPending={isAnyOperationPending}
         connectingId={connectingId}
         disconnectingId={disconnectingId}
+        isAnyOperationPending={isAnyOperationPending}
         onEditServer={handleEditServer}
         onConnectServer={handleConnectServer}
         onDisconnectServer={handleDisconnectServer}

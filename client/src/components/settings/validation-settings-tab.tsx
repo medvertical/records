@@ -49,7 +49,7 @@ import type {
   FHIRVersion,
   TerminologyServer
 } from '@shared/validation-settings';
-import { TerminologyServersSection } from './terminology-servers-section';
+import { TerminologyServerList } from './servers';
 import { DEFAULT_TERMINOLOGY_SERVERS } from '@shared/validation-settings';
 
 // ============================================================================
@@ -1072,7 +1072,7 @@ export function ValidationSettingsTab() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <TerminologyServersSection
+          <TerminologyServerList
             servers={settings.terminologyServers || DEFAULT_TERMINOLOGY_SERVERS}
             onChange={(servers: TerminologyServer[]) => {
               setSettings({

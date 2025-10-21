@@ -20,9 +20,8 @@ import { useServerData } from '@/hooks/use-server-data';
 import { useServerOperations } from '@/components/settings/server-operations';
 import { testFhirConnection, handleConnectionTestSuccess, handleConnectionTestError } from '@/components/settings/connection-testing';
 import { SectionTitle, TabHeader } from '../shared';
-import { ServerList } from '../server-list';
 import { ServerForm } from '../server-form';
-import { TerminologyServersSection } from '../terminology-servers-section';
+import { FhirServerList, TerminologyServerList } from '../servers';
 import type { TerminologyServer } from '@shared/validation-settings';
 
 interface ServersTabProps {
@@ -179,14 +178,15 @@ export function ServersTab({ onDirtyChange }: ServersTabProps) {
       
       if (result.success) {
         setUrlValidationStatus({ isValid: true });
-        handleConnectionTestSuccess(result.serverInfo, () => {}); // Toast will be handled by the form
+        handleConnectionTestSuccess(result.serverInfo, toast);
       } else {
         setUrlValidationStatus({ isValid: false, error: result.error });
-        handleConnectionTestError(result.error || 'Connection failed', () => {}); // Toast will be handled by the form
+        handleConnectionTestError(result.error || 'Connection failed', toast);
       }
     } catch (error: any) {
       console.error('Test connection error:', error);
       setUrlValidationStatus({ isValid: false, error: 'Failed to test connection' });
+      handleConnectionTestError(error.message || 'Failed to test connection', toast);
     } finally {
       setIsTestingConnection(false);
     }
@@ -219,6 +219,7 @@ export function ServersTab({ onDirtyChange }: ServersTabProps) {
             disabled={isAnyOperationPending}
             className="flex items-center gap-2 disabled:opacity-50"
             size="sm"
+            variant="outline"
           >
             {createServerMutation.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -234,13 +235,11 @@ export function ServersTab({ onDirtyChange }: ServersTabProps) {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <ServerList
+          <FhirServerList
             servers={existingServers || []}
-            isConnecting={connectingId !== null}
-            isDisconnecting={disconnectingId !== null}
-            isAnyOperationPending={isAnyOperationPending}
             connectingId={connectingId}
             disconnectingId={disconnectingId}
+            isAnyOperationPending={isAnyOperationPending}
             onEditServer={handleEditServer}
             onConnectServer={handleConnectServer}
             onDisconnectServer={handleDisconnectServer}
@@ -276,20 +275,30 @@ export function ServersTab({ onDirtyChange }: ServersTabProps) {
 
       {/* 2. Terminology Servers */}
       <div className="space-y-2 pb-3 border-b">
-        <SectionTitle 
-          title="Terminology Servers" 
-          helpText="Servers used to resolve CodeSystems and ValueSets during validation. The first server in the list is used as primary; others act as fallback. Drag to reorder."
-        />
+        <div className="flex items-start justify-between">
+          <SectionTitle 
+            title="Terminology Servers" 
+            helpText="Servers used to resolve CodeSystems and ValueSets during validation. The first server in the list is used as primary; others act as fallback. Drag to reorder."
+          />
+          <Button 
+            onClick={() => {/* This will be handled by TerminologyServerList */}} 
+            size="sm"
+            variant="outline"
+            id="add-terminology-server-button"
+          >
+            <Plus className="h-4 w-4" />
+            Add Server
+          </Button>
+        </div>
         {loadingTermServers ? (
           <div className="flex items-center justify-center p-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <TerminologyServersSection
+          <TerminologyServerList
             servers={terminologyServers}
             onChange={handleTerminologyServersChange}
             onSave={handleTerminologyServersSave}
-            hideHeader={true}
           />
         )}
       </div>

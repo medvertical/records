@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Loader2, Save, RotateCcw } from 'lucide-react';
+import { Loader2, RotateCcw } from 'lucide-react';
 
 interface SaveFooterProps {
   onSave: () => void;
@@ -44,10 +44,7 @@ export function SaveFooter({
               Saving...
             </>
           ) : (
-            <>
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
-            </>
+            "Save"
           )}
         </Button>
       </div>

@@ -32,9 +32,10 @@ import { DEFAULT_VALIDATION_SETTINGS_R4 } from '@shared/validation-settings';
 
 interface ValidationTabProps {
   onDirtyChange?: (isDirty: boolean) => void;
+  onLoadingChange?: (isLoading: boolean) => void;
 }
 
-export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
+export function ValidationTab({ onDirtyChange, onLoadingChange }: ValidationTabProps) {
   const { toast } = useToast();
   const { activeServer } = useActiveServer();
   const [settings, setSettings] = useState<ValidationSettings | null>(null);
@@ -52,6 +53,10 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
   useEffect(() => {
     onDirtyChange?.(isDirty);
   }, [isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    onLoadingChange?.(loading);
+  }, [loading, onLoadingChange]);
 
   useEffect(() => {
     if (fhirVersion) {
@@ -202,7 +207,7 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );

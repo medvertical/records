@@ -8,7 +8,7 @@
 export { default as ServerConnectionModal } from './server-connection-modal-new';
 
 // Server management components
-export { ServerList } from './server-list';
+export { FhirServerList, TerminologyServerList, ServerItem } from './servers';
 export { ServerForm } from './server-form';
 
 // Server operations and utilities

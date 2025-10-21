@@ -14,7 +14,7 @@ interface SectionTitleProps {
 export function SectionTitle({ title, helpText }: SectionTitleProps) {
   return (
     <div className="flex items-center gap-2">
-      <h3 className="text-sm font-semibold">{title}</h3>
+      <h3 className="text-lg font-semibold">{title}</h3>
       {helpText && (
         <TooltipProvider>
           <Tooltip>
@@ -22,7 +22,7 @@ export function SectionTitle({ title, helpText }: SectionTitleProps) {
               <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs">
-              <p className="text-xs">{helpText}</p>
+              <p className="text-sm">{helpText}</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

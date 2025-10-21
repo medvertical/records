@@ -45,6 +45,7 @@ export function SettingsModal({
   const [isSaving, setIsSaving] = useState(false);
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [pendingClose, setPendingClose] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -138,7 +139,7 @@ export function SettingsModal({
             <ScrollArea className="flex-1">
               <div className="p-6">
                 <TabsContent value="validation" className="mt-0">
-                  <ValidationTab onDirtyChange={setIsDirty} />
+                  <ValidationTab onDirtyChange={setIsDirty} onLoadingChange={setIsLoading} />
                 </TabsContent>
                 
                 <TabsContent value="servers" className="mt-0">
@@ -159,12 +160,14 @@ export function SettingsModal({
               </div>
             </ScrollArea>
 
-            <SaveFooter 
-              onSave={handleSave}
-              onReset={handleReset}
-              isSaving={isSaving}
-              isDirty={isDirty}
-            />
+            {!isLoading && (
+              <SaveFooter 
+                onSave={handleSave}
+                onReset={handleReset}
+                isSaving={isSaving}
+                isDirty={isDirty}
+              />
+            )}
           </div>
         </Tabs>
       </DialogContent>
