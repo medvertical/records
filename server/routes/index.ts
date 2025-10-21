@@ -54,7 +54,7 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   app.use('/api/validation/cache', cacheManagementRoutes);
   app.use('/api/validation/analytics', analyticsCacheRoutes);
   app.use('/api/validation/connectivity', connectivityRoutes);
-  app.use('/api/validation/rules', businessRulesRoutes);
+  app.use('/api/validation/business-rules', businessRulesRoutes);
   
   // Streaming validation routes (Task 10.11)
   app.use('/api/validate', validationStreamingRoutes);

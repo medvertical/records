@@ -12,22 +12,24 @@ import { nanoid } from 'nanoid';
  * Business Rule with versioning interface for API
  */
 export interface BusinessRuleDTO {
-  id: string;
+  id: number;
+  ruleId: string;
   name: string;
-  description: string;
-  fhirPathExpression: string;
+  description?: string | null;
+  expression: string;
   resourceTypes: string[];
-  severity: 'error' | 'warning' | 'info';
+  severity: 'error' | 'warning' | 'information';
   enabled: boolean;
-  category: string;
+  category?: string | null;
   version: string;
   previousVersionId?: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy?: string | null;
   updatedBy?: string | null;
-  tags?: string[];
-  metadata?: Record<string, any>;
+  tags?: string[] | null;
+  validationMessage?: string | null;
+  suggestions?: string[] | null;
 }
 
 /**
@@ -426,21 +428,23 @@ export class BusinessRulesService {
   private mapToDTO(rule: BusinessRule): BusinessRuleDTO {
     return {
       id: rule.id,
+      ruleId: rule.ruleId,
       name: rule.name,
       description: rule.description,
-      fhirPathExpression: rule.fhirPathExpression,
+      expression: rule.expression,
       resourceTypes: rule.resourceTypes as string[],
-      severity: rule.severity as 'error' | 'warning' | 'info',
-      enabled: rule.enabled,
+      severity: rule.severity as 'error' | 'warning' | 'information',
+      enabled: rule.enabled ?? true,
       category: rule.category,
       version: rule.version,
       previousVersionId: rule.previousVersionId,
-      createdAt: rule.createdAt.toISOString(),
-      updatedAt: rule.updatedAt.toISOString(),
+      createdAt: rule.createdAt?.toISOString() ?? new Date().toISOString(),
+      updatedAt: rule.updatedAt?.toISOString() ?? new Date().toISOString(),
       createdBy: rule.createdBy,
       updatedBy: rule.updatedBy,
-      tags: rule.tags as string[] | undefined,
-      metadata: rule.metadata as Record<string, any> | undefined,
+      tags: rule.tags,
+      validationMessage: rule.validationMessage,
+      suggestions: rule.suggestions,
     };
   }
 

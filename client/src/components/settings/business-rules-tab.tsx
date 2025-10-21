@@ -1,48 +1,90 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useState, useEffect, useRef } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { 
-  Code2,
   Plus,
   Trash2,
   Edit,
-  Play,
-  Check,
-  X,
-  AlertCircle,
   Loader2,
-  FileCode
+  FileCode,
+  Download,
+  Upload,
+  AlertCircle,
+  Search,
+  Copy,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { SettingSection } from './shared';
+import { RuleEditorModal } from './RuleEditorModal';
 
 interface BusinessRule {
   id: number;
+  ruleId: string;
   name: string;
   description: string | null;
-  fhirPath: string;
+  expression: string;
+  resourceTypes: string[];
   severity: 'error' | 'warning' | 'information';
-  message: string;
   enabled: boolean;
-  resourceType: string | null;
+  category?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
+interface ImportResult {
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
+
+const FHIR_RESOURCE_TYPES = [
+  'Patient', 'Observation', 'Condition', 'Encounter', 'Procedure',
+  'Medication', 'MedicationRequest', 'DiagnosticReport', 'AllergyIntolerance',
+  'Immunization', 'CarePlan', 'Goal', 'ServiceRequest', 'Practitioner',
+  'Organization', 'Location', 'Device', 'Specimen', 'DocumentReference'
+];
+
 export function BusinessRulesTab() {
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Data state
   const [rules, setRules] = useState<BusinessRule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [autoApply, setAutoApply] = useState(false);
+
+  // Filter state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const [resourceTypeFilter, setResourceTypeFilter] = useState<string>('all');
+  const [enabledFilter, setEnabledFilter] = useState<string>('all');
+
+  // UI state
   const [editingRule, setEditingRule] = useState<BusinessRule | null>(null);
-  const [testingRule, setTestingRule] = useState<number | null>(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [ruleToDelete, setRuleToDelete] = useState<number | null>(null);
+  const [importResults, setImportResults] = useState<ImportResult | null>(null);
 
   useEffect(() => {
     loadRules();
+    loadAutoApplySetting();
   }, []);
 
   const loadRules = async () => {
@@ -51,16 +93,29 @@ export function BusinessRulesTab() {
       const response = await fetch('/api/validation/business-rules');
       if (!response.ok) throw new Error('Failed to load rules');
       const data = await response.json();
-      setRules(data.rules || []);
+      // API returns array directly
+      setRules(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error loading rules:', error);
       toast({
         title: 'Error',
         description: 'Failed to load business rules',
-        variant: 'destructive'
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAutoApplySetting = async () => {
+    try {
+      const response = await fetch('/api/validation/settings');
+      if (response.ok) {
+        const data = await response.json();
+        setAutoApply(data.autoApplyBusinessRules || false);
+      }
+    } catch (error) {
+      console.error('Error loading auto-apply setting:', error);
     }
   };
 
@@ -73,7 +128,7 @@ export function BusinessRulesTab() {
       });
       if (!response.ok) throw new Error('Failed to update rule');
       
-      setRules(rules.map(r => r.id === ruleId ? { ...r, enabled } : r));
+      setRules(rules.map((r) => (r.id === ruleId ? { ...r, enabled } : r)));
       toast({
         title: 'Rule Updated',
         description: `Rule ${enabled ? 'enabled' : 'disabled'} successfully`,
@@ -83,58 +138,21 @@ export function BusinessRulesTab() {
       toast({
         title: 'Error',
         description: 'Failed to update rule',
-        variant: 'destructive'
+        variant: 'destructive',
       });
     }
   };
 
-  const handleTestRule = async (ruleId: number) => {
-    try {
-      setTestingRule(ruleId);
-      const response = await fetch(`/api/validation/business-rules/${ruleId}/test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resource: {
-            resourceType: 'Patient',
-            id: 'test-patient',
-            name: [{ family: 'Mustermann', given: ['Max'] }]
-          }
-        }),
-      });
-      
-      if (!response.ok) throw new Error('Test failed');
-      const result = await response.json();
-      
-      toast({
-        title: 'Test Result',
-        description: result.passed 
-          ? '✅ Rule passed test' 
-          : `❌ Rule failed: ${result.message}`,
-        variant: result.passed ? 'default' : 'destructive'
-      });
-    } catch (error) {
-      console.error('Error testing rule:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to test rule',
-        variant: 'destructive'
-      });
-    } finally {
-      setTestingRule(null);
-    }
-  };
+  const handleDeleteRule = async () => {
+    if (!ruleToDelete) return;
 
-  const handleDeleteRule = async (ruleId: number) => {
-    if (!confirm('Are you sure you want to delete this rule?')) return;
-    
     try {
-      const response = await fetch(`/api/validation/business-rules/${ruleId}`, {
+      const response = await fetch(`/api/validation/business-rules/${ruleToDelete}`, {
         method: 'DELETE',
       });
       if (!response.ok) throw new Error('Failed to delete rule');
       
-      setRules(rules.filter(r => r.id !== ruleId));
+      setRules(rules.filter((r) => r.id !== ruleToDelete));
       toast({
         title: 'Rule Deleted',
         description: 'Rule deleted successfully',
@@ -144,17 +162,183 @@ export function BusinessRulesTab() {
       toast({
         title: 'Error',
         description: 'Failed to delete rule',
-        variant: 'destructive'
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleteDialogOpen(false);
+      setRuleToDelete(null);
+    }
+  };
+
+  const handleDuplicateRule = async (ruleId: number) => {
+    try {
+      const response = await fetch(`/api/validation/business-rules/${ruleId}/duplicate`, {
+        method: 'POST',
+      });
+      if (!response.ok) throw new Error('Failed to duplicate rule');
+
+      await loadRules();
+      toast({
+        title: 'Rule Duplicated',
+        description: 'Rule duplicated successfully',
+      });
+    } catch (error) {
+      console.error('Error duplicating rule:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to duplicate rule',
+        variant: 'destructive',
       });
     }
   };
+
+  const handleExport = async () => {
+    try {
+      const response = await fetch('/api/validation/business-rules/export');
+      if (!response.ok) throw new Error('Failed to export rules');
+
+      const data = await response.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `records-business-rules-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: 'Export Successful',
+        description: `Exported ${data.ruleCount} rules`,
+      });
+    } catch (error) {
+      console.error('Error exporting rules:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to export rules',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const importData = JSON.parse(text);
+
+      const response = await fetch('/api/validation/business-rules/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(importData),
+      });
+
+      if (!response.ok) throw new Error('Failed to import rules');
+
+      const result = await response.json();
+      setImportResults(result);
+
+      await loadRules();
+
+      toast({
+        title: 'Import Complete',
+        description: `Imported: ${result.imported}, Skipped: ${result.skipped}`,
+        variant: result.errors.length > 0 ? 'destructive' : 'default',
+      });
+    } catch (error) {
+      console.error('Error importing rules:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to import rules',
+        variant: 'destructive',
+      });
+    } finally {
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleAutoApplyChange = async (checked: boolean) => {
+    try {
+      const response = await fetch('/api/validation/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ autoApplyBusinessRules: checked }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update auto-apply setting');
+
+      setAutoApply(checked);
+      toast({
+        title: 'Setting Updated',
+        description: `Auto-apply ${checked ? 'enabled' : 'disabled'}`,
+      });
+    } catch (error) {
+      console.error('Error updating auto-apply:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update auto-apply setting',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const openRuleEditor = (rule: BusinessRule | null) => {
+    setEditingRule(rule);
+    setIsEditorOpen(true);
+  };
+
+  const closeRuleEditor = () => {
+    setIsEditorOpen(false);
+    setEditingRule(null);
+  };
+
+  const handleRuleSaved = () => {
+    loadRules();
+  };
+
+  const confirmDelete = (ruleId: number) => {
+    setRuleToDelete(ruleId);
+    setDeleteDialogOpen(true);
+  };
+
+  // Filter rules
+  const filteredRules = rules.filter((rule) => {
+    // Search filter
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch =
+      !searchTerm ||
+      rule.name.toLowerCase().includes(searchLower) ||
+      rule.description?.toLowerCase().includes(searchLower) ||
+      rule.fhirPath.toLowerCase().includes(searchLower);
+
+    // Severity filter
+    const matchesSeverity = severityFilter === 'all' || rule.severity === severityFilter;
+
+    // Resource type filter
+    const matchesResourceType =
+      resourceTypeFilter === 'all' || rule.resourceType === resourceTypeFilter;
+
+    // Enabled filter
+    const matchesEnabled =
+      enabledFilter === 'all' ||
+      (enabledFilter === 'enabled' && rule.enabled) ||
+      (enabledFilter === 'disabled' && !rule.enabled);
+
+    return matchesSearch && matchesSeverity && matchesResourceType && matchesEnabled;
+  });
 
   const getSeverityBadge = (severity: string) => {
     switch (severity) {
       case 'error':
         return <Badge variant="destructive">Error</Badge>;
       case 'warning':
-        return <Badge variant="default" className="bg-yellow-500">Warning</Badge>;
+        return <Badge className="bg-yellow-500 hover:bg-yellow-600">Warning</Badge>;
       case 'information':
         return <Badge variant="secondary">Info</Badge>;
       default:
@@ -173,71 +357,107 @@ export function BusinessRulesTab() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">Business Rules</h2>
-          <p className="text-muted-foreground mt-1">
-            Manage FHIRPath-based business rules for advanced validation
-          </p>
+      {/* Section 1: Rule List */}
+      <SettingSection
+        title="Business Rules"
+        description="Define custom validation rules using FHIRPath expressions. Rules can check for domain-specific conditions beyond standard FHIR validation."
+      >
+        <div className="space-y-4">
+          {/* Search and Filter Bar */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search rules..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
         </div>
-        <Button
-          onClick={() => {
-            toast({
-              title: 'Coming Soon',
-              description: 'Visual rule editor is under development',
-            });
-          }}
-        >
-          <Plus className="h-4 w-4 mr-2" />
+            <Select value={severityFilter} onValueChange={setSeverityFilter}>
+              <SelectTrigger className="w-full sm:w-[150px]">
+                <SelectValue placeholder="All Severities" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Severities</SelectItem>
+                <SelectItem value="error">Error</SelectItem>
+                <SelectItem value="warning">Warning</SelectItem>
+                <SelectItem value="information">Info</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={resourceTypeFilter} onValueChange={setResourceTypeFilter}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="All Resources" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Resources</SelectItem>
+                {FHIR_RESOURCE_TYPES.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={enabledFilter} onValueChange={setEnabledFilter}>
+              <SelectTrigger className="w-full sm:w-[140px]">
+                <SelectValue placeholder="All Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="enabled">Enabled Only</SelectItem>
+                <SelectItem value="disabled">Disabled Only</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={() => openRuleEditor(null)} className="whitespace-nowrap">
+              <Plus className="mr-2 h-4 w-4" />
           Add Rule
         </Button>
       </div>
 
-      <Card>
-        <CardContent className="space-y-4 pt-6">
-          {/* Info Alert */}
-          <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
-              <div className="text-sm text-blue-900 dark:text-blue-200">
-                <p className="font-medium mb-1">About Business Rules</p>
-                <p className="text-xs">
-                  Business rules use FHIRPath expressions to validate complex constraints beyond standard FHIR validation.
-                  Each rule is evaluated during validation and can generate custom error messages.
-                </p>
-              </div>
-            </div>
-          </div>
-
           {/* Rules List */}
-          {rules.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <FileCode className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-              <p>No business rules defined</p>
-              <p className="text-sm">Create your first rule to get started</p>
-            </div>
+          {filteredRules.length === 0 ? (
+      <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <FileCode className="h-16 w-16 text-muted-foreground mb-4" />
+                <p className="text-lg font-medium text-muted-foreground mb-2">
+                  {searchTerm || severityFilter !== 'all' || resourceTypeFilter !== 'all'
+                    ? 'No rules match your filters'
+                    : 'No business rules defined'}
+                </p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {searchTerm || severityFilter !== 'all' || resourceTypeFilter !== 'all'
+                    ? 'Try adjusting your search or filters'
+                    : 'Create your first rule to get started'}
+                </p>
+                {!searchTerm && severityFilter === 'all' && resourceTypeFilter === 'all' && (
+                  <Button onClick={() => openRuleEditor(null)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Your First Rule
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
           ) : (
             <div className="space-y-3">
-              {rules.map((rule) => (
+              {filteredRules.map((rule) => (
                 <div
                   key={rule.id}
                   className={cn(
-                    "border rounded-lg p-4 space-y-3 transition-colors",
+                    'border rounded-lg p-4 space-y-3 transition-colors',
                     rule.enabled 
-                      ? "bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700" 
-                      : "bg-gray-50 dark:bg-gray-900/30 border-gray-300 dark:border-gray-800 opacity-60"
+                      ? 'bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
+                      : 'bg-gray-50 dark:bg-gray-900/30 border-gray-300 dark:border-gray-800 opacity-60'
                   )}
                 >
                   {/* Header */}
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1 flex-1">
-                      <div className="flex items-center gap-2">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="font-semibold text-sm">{rule.name}</h4>
                         {getSeverityBadge(rule.severity)}
-                        {rule.resourceType && (
+                        {rule.resourceTypes && rule.resourceTypes.length > 0 && (
                           <Badge variant="outline" className="text-xs">
-                            {rule.resourceType}
+                            {rule.resourceTypes[0]}
                           </Badge>
                         )}
                       </div>
@@ -245,7 +465,7 @@ export function BusinessRulesTab() {
                         <p className="text-xs text-muted-foreground">{rule.description}</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       <Switch
                         checked={rule.enabled}
                         onCheckedChange={(checked) => handleToggleRule(rule.id, checked)}
@@ -256,44 +476,15 @@ export function BusinessRulesTab() {
 
                   {/* FHIRPath Expression */}
                   <div className="bg-gray-100 dark:bg-gray-900 rounded p-3 font-mono text-xs overflow-x-auto">
-                    <code className="text-fhir-blue dark:text-blue-400">{rule.fhirPath}</code>
-                  </div>
-
-                  {/* Message */}
-                  <div className="text-xs">
-                    <span className="text-muted-foreground">Message:</span>{' '}
-                    <span className="text-gray-900 dark:text-gray-100">{rule.message}</span>
+                    <code className="text-blue-600 dark:text-blue-400">{rule.expression}</code>
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 pt-2 border-t dark:border-gray-700">
+                  <div className="flex items-center gap-2 pt-2 border-t dark:border-gray-700 flex-wrap">
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleTestRule(rule.id)}
-                      disabled={testingRule === rule.id}
-                    >
-                      {testingRule === rule.id ? (
-                        <>
-                          <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                          Testing...
-                        </>
-                      ) : (
-                        <>
-                          <Play className="h-3 w-3 mr-1" />
-                          Test
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        toast({
-                          title: 'Coming Soon',
-                          description: 'Rule editing is under development',
-                        });
-                      }}
+                      onClick={() => openRuleEditor(rule)}
                     >
                       <Edit className="h-3 w-3 mr-1" />
                       Edit
@@ -301,7 +492,15 @@ export function BusinessRulesTab() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleDeleteRule(rule.id)}
+                      onClick={() => handleDuplicateRule(rule.id)}
+                    >
+                      <Copy className="h-3 w-3 mr-1" />
+                      Duplicate
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => confirmDelete(rule.id)}
                       className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                     >
                       <Trash2 className="h-3 w-3 mr-1" />
@@ -315,9 +514,112 @@ export function BusinessRulesTab() {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SettingSection>
+
+      {/* Section 2: Import/Export */}
+      <SettingSection
+        title="Import / Export"
+        description="Export all rules as JSON or import existing rule sets from file."
+      >
+        <div className="space-y-4">
+          <div className="flex gap-4">
+            <Button variant="secondary" onClick={handleExport}>
+              <Download className="mr-2 h-4 w-4" />
+              Export Rules
+            </Button>
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+              <Upload className="mr-2 h-4 w-4" />
+              Import Rules
+            </Button>
+            <input
+              type="file"
+              accept="application/json"
+              hidden
+              ref={fileInputRef}
+              onChange={handleImport}
+            />
+          </div>
+
+          {/* Import Results */}
+          {importResults && (
+            <Alert variant={importResults.errors.length > 0 ? 'destructive' : 'default'}>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <div>
+                  <strong>Import Complete:</strong> Imported {importResults.imported} rules, Skipped{' '}
+                  {importResults.skipped}
+                </div>
+                {importResults.errors.length > 0 && (
+                  <div className="mt-2">
+                    <strong>Errors:</strong>
+                    <ul className="list-disc list-inside mt-1">
+                      {importResults.errors.map((err, idx) => (
+                        <li key={idx} className="text-sm">
+                          {err}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      </SettingSection>
+
+      {/* Section 3: Auto-Apply Rules */}
+      <SettingSection
+        title="Auto-Apply Rules"
+        description="When enabled, all active rules will automatically be executed after FHIR validation."
+      >
+        <div className="flex items-center justify-between p-4 border rounded-lg">
+          <div className="flex items-center gap-3">
+            <Switch
+              checked={autoApply}
+              onCheckedChange={handleAutoApplyChange}
+              id="auto-apply"
+            />
+            <div>
+              <p className="text-sm font-medium">
+                {autoApply ? 'Auto-application enabled' : 'Manual application only'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {autoApply
+                  ? 'Rules will run automatically after every validation.'
+                  : 'Rules will only run when manually triggered.'}
+              </p>
+            </div>
+          </div>
+          {autoApply && <Badge variant="default">Active</Badge>}
+        </div>
+      </SettingSection>
+
+      {/* Rule Editor Modal */}
+      <RuleEditorModal
+        open={isEditorOpen}
+        onClose={closeRuleEditor}
+        rule={editingRule}
+        onSave={handleRuleSaved}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Rule</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this rule? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteRule} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
-

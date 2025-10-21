@@ -13,47 +13,58 @@ export const businessRules = pgTable(
   'business_rules',
   {
     // Primary key
-    id: text('id').primaryKey(),
+    id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+    
+    // Rule identifier
+    ruleId: text('rule_id').notNull().unique(),
 
     // Rule metadata
     name: text('name').notNull(),
-    description: text('description').notNull(),
-    category: text('category').notNull().default('Custom'),
+    description: text('description'),
+    category: text('category'),
 
     // FHIRPath expression
-    fhirPathExpression: text('fhirpath_expression').notNull(),
+    expression: text('expression').notNull(),
 
     // Target configuration
-    resourceTypes: jsonb('resource_types').notNull().$type<string[]>(),
+    resourceTypes: text('resource_types').array().notNull(),
+    fhirVersions: text('fhir_versions').array(),
     
     // Severity and status
-    severity: text('severity').notNull().default('warning'), // 'error' | 'warning' | 'info'
-    enabled: boolean('enabled').notNull().default(true),
+    severity: text('severity').notNull().default('error'),
+    enabled: boolean('enabled').default(true),
 
     // Versioning
     version: text('version').notNull().default('1.0.0'),
-    previousVersionId: text('previous_version_id'), // Reference to previous version
+    previousVersionId: text('previous_version_id'),
 
     // Audit fields
-    createdAt: timestamp('created_at').notNull().defaultNow(),
+    createdAt: timestamp('created_at').defaultNow(),
     createdBy: text('created_by'),
-    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
     updatedBy: text('updated_by'),
 
-    // Additional metadata
-    tags: jsonb('tags').$type<string[]>(),
-    metadata: jsonb('metadata').$type<Record<string, any>>(),
+    // Validation message and suggestions
+    validationMessage: text('validation_message'),
+    suggestions: text('suggestions').array(),
 
+    // Execution metrics
+    executionCount: integer('execution_count').default(0),
+    lastExecutedAt: timestamp('last_executed_at'),
+    avgExecutionTimeMs: integer('avg_execution_time_ms'),
+
+    // Additional metadata
+    tags: text('tags').array(),
+    
     // Soft delete
     deletedAt: timestamp('deleted_at'),
   },
   (table) => ({
     // Indexes for efficient querying
-    nameIdx: index('business_rules_name_idx').on(table.name),
-    categoryIdx: index('business_rules_category_idx').on(table.category),
-    enabledIdx: index('business_rules_enabled_idx').on(table.enabled),
-    createdAtIdx: index('business_rules_created_at_idx').on(table.createdAt),
-    deletedAtIdx: index('business_rules_deleted_at_idx').on(table.deletedAt),
+    ruleIdIdx: index('idx_business_rules_rule_id').on(table.ruleId),
+    categoryIdx: index('idx_business_rules_category').on(table.category),
+    enabledIdx: index('idx_business_rules_enabled').on(table.enabled),
+    deletedAtIdx: index('idx_business_rules_deleted_at').on(table.deletedAt),
   })
 );
 
