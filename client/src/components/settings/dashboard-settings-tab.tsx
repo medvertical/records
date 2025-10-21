@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { SettingSection, SectionTitle } from './shared';
@@ -24,6 +25,10 @@ interface DashboardSettings {
     enabled: boolean;
     fastIntervalMs: number;
     slowIntervalMs: number;
+    verySlowIntervalMs: number;
+    maxRetries: number;
+    backoffMultiplier: number;
+    jitterEnabled: boolean;
     pauseOnHidden?: boolean;
   };
 }
@@ -48,6 +53,10 @@ const DEFAULT_SETTINGS: DashboardSettings = {
     enabled: true,
     fastIntervalMs: 5000,
     slowIntervalMs: 30000,
+    verySlowIntervalMs: 60000,
+    maxRetries: 3,
+    backoffMultiplier: 2,
+    jitterEnabled: true,
     pauseOnHidden: true,
   },
 };
@@ -96,6 +105,10 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
             enabled: data.polling?.enabled ?? DEFAULT_SETTINGS.polling.enabled,
             fastIntervalMs: data.polling?.fastIntervalMs ?? DEFAULT_SETTINGS.polling.fastIntervalMs,
             slowIntervalMs: data.polling?.slowIntervalMs ?? DEFAULT_SETTINGS.polling.slowIntervalMs,
+            verySlowIntervalMs: data.polling?.verySlowIntervalMs ?? DEFAULT_SETTINGS.polling.verySlowIntervalMs,
+            maxRetries: data.polling?.maxRetries ?? DEFAULT_SETTINGS.polling.maxRetries,
+            backoffMultiplier: data.polling?.backoffMultiplier ?? DEFAULT_SETTINGS.polling.backoffMultiplier,
+            jitterEnabled: data.polling?.jitterEnabled ?? DEFAULT_SETTINGS.polling.jitterEnabled,
             pauseOnHidden: data.polling?.pauseOnHidden ?? DEFAULT_SETTINGS.polling.pauseOnHidden,
           },
         };
@@ -324,6 +337,72 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
             />
           </div>
         </div>
+
+        {/* Advanced Polling Configuration */}
+        {settings.polling.enabled && (
+          <Accordion type="single" collapsible className="w-full mt-4">
+            <AccordionItem value="advanced-polling">
+              <AccordionTrigger>Advanced Polling Options</AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="very-slow-interval">Very Slow Interval (ms)</Label>
+                    <Input
+                      id="very-slow-interval"
+                      type="number"
+                      value={settings.polling.verySlowIntervalMs}
+                      onChange={(e) => updatePolling('verySlowIntervalMs', parseInt(e.target.value) || 60000)}
+                      min={10000}
+                      step={1000}
+                    />
+                    <p className="text-xs text-muted-foreground">Interval when no activity detected</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="max-retries">Max Retries</Label>
+                    <Input
+                      id="max-retries"
+                      type="number"
+                      value={settings.polling.maxRetries}
+                      onChange={(e) => updatePolling('maxRetries', parseInt(e.target.value) || 3)}
+                      min={1}
+                      max={10}
+                    />
+                    <p className="text-xs text-muted-foreground">Maximum retry attempts on failure</p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="backoff-multiplier">Backoff Multiplier</Label>
+                    <Input
+                      id="backoff-multiplier"
+                      type="number"
+                      value={settings.polling.backoffMultiplier}
+                      onChange={(e) => updatePolling('backoffMultiplier', parseFloat(e.target.value) || 2)}
+                      min={1}
+                      max={5}
+                      step={0.1}
+                    />
+                    <p className="text-xs text-muted-foreground">Exponential backoff multiplier for retries</p>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="jitter-enabled">Enable Jitter</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Add random variation to polling intervals
+                      </p>
+                    </div>
+                    <Switch
+                      id="jitter-enabled"
+                      checked={settings.polling.jitterEnabled ?? true}
+                      onCheckedChange={(checked) => updatePolling('jitterEnabled', checked)}
+                    />
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        )}
       </SettingSection>
       </div>
     </div>

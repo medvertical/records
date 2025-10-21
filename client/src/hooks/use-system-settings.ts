@@ -1,23 +1,37 @@
 import { useState, useEffect } from 'react';
 
 export interface SystemSettings {
-  logLevel: 'debug' | 'info' | 'warn' | 'error';
-  enableAnalytics: boolean;
-  enableCrashReporting: boolean;
-  enableSSE: boolean;
+  theme: 'light' | 'dark' | 'system';
+  logging: {
+    level: 'error' | 'warn' | 'info' | 'debug';
+    maxFileSize: number;
+  };
+  privacy: {
+    telemetry: boolean;
+    crashReporting: boolean;
+  };
   dataRetentionDays: number;
-  maxLogFileSize: number;
-  enableAutoUpdates: boolean;
+  features: {
+    sse: boolean;
+    autoUpdate: boolean;
+  };
 }
 
 const defaultSystemSettings: SystemSettings = {
-  logLevel: 'info',
-  enableAnalytics: true,
-  enableCrashReporting: true,
-  enableSSE: false, // Disabled by default for MVP polling-only mode
+  theme: 'system',
+  logging: {
+    level: 'info',
+    maxFileSize: 100,
+  },
+  privacy: {
+    telemetry: false,
+    crashReporting: true,
+  },
   dataRetentionDays: 30,
-  maxLogFileSize: 100,
-  enableAutoUpdates: true,
+  features: {
+    sse: false, // Disabled by default for MVP polling-only mode
+    autoUpdate: true,
+  },
 };
 
 export function useSystemSettings() {
@@ -52,6 +66,6 @@ export function useSystemSettings() {
   return {
     systemSettings,
     updateSystemSettings,
-    isSSEEnabled: systemSettings.enableSSE,
+    isSSEEnabled: systemSettings.features.sse,
   };
 }

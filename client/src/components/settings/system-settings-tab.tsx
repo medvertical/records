@@ -25,7 +25,6 @@ import { SettingSection, SectionTitle } from './shared';
 
 interface SystemSettings {
   theme: 'light' | 'dark' | 'system';
-  layout: 'grid' | 'list';
   logging: {
     level: 'error' | 'warn' | 'info' | 'debug';
     maxFileSize: number;
@@ -33,17 +32,11 @@ interface SystemSettings {
   privacy: {
     telemetry: boolean;
     crashReporting: boolean;
-    errorStackTrace?: boolean;
   };
   dataRetentionDays: number;
   features: {
     sse: boolean;
     autoUpdate: boolean;
-    experimental?: boolean;
-  };
-  advanced: {
-    debugMode: boolean;
-    performanceTracing?: boolean;
   };
 }
 
@@ -57,7 +50,6 @@ interface SystemSettingsTabProps {
 
 const DEFAULT_SETTINGS: SystemSettings = {
   theme: 'system',
-  layout: 'grid',
   logging: {
     level: 'info',
     maxFileSize: 100,
@@ -65,17 +57,11 @@ const DEFAULT_SETTINGS: SystemSettings = {
   privacy: {
     telemetry: false,
     crashReporting: true,
-    errorStackTrace: false,
   },
   dataRetentionDays: 30,
   features: {
     sse: true,
     autoUpdate: true,
-    experimental: false,
-  },
-  advanced: {
-    debugMode: false,
-    performanceTracing: false,
   },
 };
 
@@ -115,7 +101,6 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
         // Merge with defaults to ensure all properties exist
         const mergedSettings: SystemSettings = {
           theme: data.theme ?? DEFAULT_SETTINGS.theme,
-          layout: data.layout ?? DEFAULT_SETTINGS.layout,
           logging: {
             level: data.logging?.level ?? DEFAULT_SETTINGS.logging.level,
             maxFileSize: data.logging?.maxFileSize ?? DEFAULT_SETTINGS.logging.maxFileSize,
@@ -123,17 +108,11 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
           privacy: {
             telemetry: data.privacy?.telemetry ?? DEFAULT_SETTINGS.privacy.telemetry,
             crashReporting: data.privacy?.crashReporting ?? DEFAULT_SETTINGS.privacy.crashReporting,
-            errorStackTrace: data.privacy?.errorStackTrace ?? DEFAULT_SETTINGS.privacy.errorStackTrace,
           },
           dataRetentionDays: data.dataRetentionDays ?? DEFAULT_SETTINGS.dataRetentionDays,
           features: {
             sse: data.features?.sse ?? DEFAULT_SETTINGS.features.sse,
             autoUpdate: data.features?.autoUpdate ?? DEFAULT_SETTINGS.features.autoUpdate,
-            experimental: data.features?.experimental ?? DEFAULT_SETTINGS.features.experimental,
-          },
-          advanced: {
-            debugMode: data.advanced?.debugMode ?? DEFAULT_SETTINGS.advanced.debugMode,
-            performanceTracing: data.advanced?.performanceTracing ?? DEFAULT_SETTINGS.advanced.performanceTracing,
           },
         };
         setSettings(mergedSettings);
@@ -272,7 +251,7 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
       {/* Section 1: Display Settings */}
       <SettingSection
         title="Display Settings"
-        description="Customize Records appearance and layout preferences."
+        description="Customize Records appearance."
       >
         <div className="space-y-2">
           <Label htmlFor="theme">Theme</Label>
@@ -287,22 +266,6 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
               <SelectItem value="light">Light</SelectItem>
               <SelectItem value="dark">Dark</SelectItem>
               <SelectItem value="system">System Default</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="card-layout">Card Layout</Label>
-          <Select
-            value={settings.layout}
-            onValueChange={(v) => update('layout', v)}
-          >
-            <SelectTrigger id="card-layout">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="grid">Grid</SelectItem>
-              <SelectItem value="list">List</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -364,15 +327,6 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
             id="crash-reporting"
             checked={settings.privacy.crashReporting}
             onCheckedChange={(checked) => update('privacy.crashReporting', checked)}
-          />
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="error-stack">Include error stack traces in bug reports</Label>
-          <Switch
-            id="error-stack"
-            checked={settings.privacy.errorStackTrace ?? false}
-            onCheckedChange={(checked) => update('privacy.errorStackTrace', checked)}
           />
         </div>
       </SettingSection>
@@ -445,49 +399,9 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
             onCheckedChange={(checked) => update('features.autoUpdate', checked)}
           />
         </div>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="experimental">Enable Experimental Features</Label>
-          <Switch
-            id="experimental"
-            checked={settings.features.experimental ?? false}
-            onCheckedChange={(checked) => update('features.experimental', checked)}
-          />
-        </div>
       </SettingSection>
 
       </div>
-
-      {/* Section 6: Advanced Options */}
-      <Accordion type="single" collapsible className="w-full">
-        <AccordionItem value="advanced">
-          <AccordionTrigger>Advanced Options</AccordionTrigger>
-          <AccordionContent>
-            <SettingSection
-              title="Advanced Options"
-              description="Developer-only configuration. Changes here may affect system stability."
-            >
-              <div className="flex items-center justify-between">
-                <Label htmlFor="debug-mode">Enable Debug Mode</Label>
-                <Switch
-                  id="debug-mode"
-                  checked={settings.advanced.debugMode}
-                  onCheckedChange={(checked) => update('advanced.debugMode', checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <Label htmlFor="performance-tracing">Enable Performance Tracing</Label>
-                <Switch
-                  id="performance-tracing"
-                  checked={settings.advanced.performanceTracing ?? false}
-                  onCheckedChange={(checked) => update('advanced.performanceTracing', checked)}
-                />
-              </div>
-            </SettingSection>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
 
       {/* Clear Cache Confirmation Dialog */}
       <AlertDialog open={showClearCacheDialog} onOpenChange={setShowClearCacheDialog}>

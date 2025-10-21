@@ -239,15 +239,20 @@ export const dashboardSettings = pgTable("dashboard_settings", {
 export const systemSettings = pgTable("system_settings", {
   id: serial("id").primaryKey(),
   settings: jsonb("settings").notNull().default({
-    logLevel: "info",
-    enableAnalytics: false,
-    enableCrashReporting: true,
-    enableSSE: true,
-    dataRetentionDays: 30,
-    maxLogFileSize: 100,
-    enableAutoUpdates: true,
     theme: "system",
-    cardLayout: "grid"
+    logging: {
+      level: "info",
+      maxFileSize: 100
+    },
+    privacy: {
+      telemetry: false,
+      crashReporting: true
+    },
+    dataRetentionDays: 30,
+    features: {
+      sse: true,
+      autoUpdate: true
+    }
   }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

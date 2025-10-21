@@ -13,27 +13,37 @@ import { systemSettings } from '@shared/schema';
 // ============================================================================
 
 export interface SystemSettings {
-  logLevel: 'error' | 'warn' | 'info' | 'debug';
-  enableAnalytics: boolean;
-  enableCrashReporting: boolean;
-  enableSSE: boolean;
-  dataRetentionDays: number;
-  maxLogFileSize: number;
-  enableAutoUpdates: boolean;
   theme: 'light' | 'dark' | 'system';
-  cardLayout: 'grid' | 'list';
+  logging: {
+    level: 'error' | 'warn' | 'info' | 'debug';
+    maxFileSize: number;
+  };
+  privacy: {
+    telemetry: boolean;
+    crashReporting: boolean;
+  };
+  dataRetentionDays: number;
+  features: {
+    sse: boolean;
+    autoUpdate: boolean;
+  };
 }
 
 const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
-  logLevel: 'info',
-  enableAnalytics: false,
-  enableCrashReporting: true,
-  enableSSE: true,
-  dataRetentionDays: 30,
-  maxLogFileSize: 100,
-  enableAutoUpdates: true,
   theme: 'system',
-  cardLayout: 'grid',
+  logging: {
+    level: 'info',
+    maxFileSize: 100,
+  },
+  privacy: {
+    telemetry: false,
+    crashReporting: true,
+  },
+  dataRetentionDays: 30,
+  features: {
+    sse: true,
+    autoUpdate: true,
+  },
 };
 
 // ============================================================================
