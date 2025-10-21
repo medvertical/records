@@ -567,12 +567,18 @@ export class DatabaseStorage implements IStorage {
     let validResourcesCount = 0;
     let errorResourcesCount = 0;
     let warningResourcesCount = 0;
-    const resourceBreakdown: Record<string, { total: number; valid: number; validPercent: number }> = {};
+    const resourceBreakdown: Record<string, { 
+      total: number; 
+      valid: number; 
+      errors: number;
+      warnings: number;
+      validPercent: number;
+    }> = {};
     
     // Group resources by type
     resources.forEach(resource => {
       if (!resourceBreakdown[resource.resourceType]) {
-        resourceBreakdown[resource.resourceType] = { total: 0, valid: 0, validPercent: 0 };
+        resourceBreakdown[resource.resourceType] = { total: 0, valid: 0, errors: 0, warnings: 0, validPercent: 0 };
       }
       resourceBreakdown[resource.resourceType].total++;
     });
@@ -632,20 +638,24 @@ export class DatabaseStorage implements IStorage {
       }
       
       // Determine overall resource status
-      if (allAspectsValid) {
+      // Resources with only informational messages (no errors, no warnings) are considered valid
+      if (hasErrors) {
+        // Resource has errors
+        errorResourcesCount++;
+        if (resourceBreakdown[resourceType]) {
+          resourceBreakdown[resourceType].errors++;
+        }
+      } else if (hasWarnings) {
+        // Resource has warnings but no errors
+        warningResourcesCount++;
+        if (resourceBreakdown[resourceType]) {
+          resourceBreakdown[resourceType].warnings++;
+        }
+      } else {
+        // Resource is valid (may have informational messages, but no errors or warnings)
         validResourcesCount++;
         if (resourceBreakdown[resourceType]) {
           resourceBreakdown[resourceType].valid++;
-        }
-      } else {
-        // Resource has validation issues
-        if (hasErrors) {
-          errorResourcesCount++;
-        } else if (hasWarnings) {
-          warningResourcesCount++;
-        } else {
-          // Fallback: if isValid is false but no errors/warnings, count as error
-          errorResourcesCount++;
         }
       }
     });

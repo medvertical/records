@@ -189,11 +189,14 @@ export class DashboardService {
         const serverCount = fhirResourceCounts[type] || 0;
         const validated = breakdown.total;
         const valid = breakdown.valid;
+        const errors = breakdown.errors || 0;
+        const warnings = breakdown.warnings || 0;
         
         // Validate and sanitize counts
         const sanitizedValidated = Math.max(0, Math.min(validated, serverCount));
         const sanitizedValid = Math.max(0, Math.min(valid, sanitizedValidated));
-        const errors = Math.max(0, sanitizedValidated - sanitizedValid);
+        const sanitizedErrors = Math.max(0, Math.min(errors, sanitizedValidated));
+        const sanitizedWarnings = Math.max(0, Math.min(warnings, sanitizedValidated));
         const unvalidated = Math.max(0, serverCount - sanitizedValidated);
         
         // Calculate validation rate (percentage of server resources that have been validated)
@@ -218,8 +221,8 @@ export class DashboardService {
           total: serverCount,
           validated: sanitizedValidated,
           valid: sanitizedValid,
-          errors,
-          warnings: 0, // TODO: Add warning tracking
+          errors: sanitizedErrors,
+          warnings: sanitizedWarnings,
           unvalidated,
           validationRate: validatedRateCheck.isValid ? validationRate : 0,
           successRate: successRateCheck.isValid ? successRate : 0
