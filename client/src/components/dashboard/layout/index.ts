@@ -15,15 +15,3 @@ export {
   CompactHeader, 
   ServerStatusIndicator 
 } from './DashboardHeader';
-
-export { 
-  DashboardSidebar, 
-  DesktopSidebar, 
-  SidebarToggle, 
-  SidebarOverlay 
-} from './DashboardSidebar';
-
-export { 
-  MobileNavigationDrawer, 
-  MobileNavToggle 
-} from './MobileNavigationDrawer';

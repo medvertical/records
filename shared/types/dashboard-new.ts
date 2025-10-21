@@ -261,29 +261,6 @@ export interface DashboardHeaderProps {
   onUserMenuClick: () => void;
 }
 
-export interface DashboardSidebarProps {
-  collapsed: boolean;
-  onToggle: () => void;
-  quickAccessItems: QuickAccessItem[];
-  navigationItems: NavigationItem[];
-}
-
-export interface QuickAccessItem {
-  id: string;
-  label: string;
-  resourceType: string;
-  count: number;
-  href: string;
-}
-
-export interface NavigationItem {
-  id: string;
-  label: string;
-  icon: React.ComponentType;
-  href: string;
-  active: boolean;
-}
-
 /**
  * Error Boundary Types
  */
@@ -334,16 +311,6 @@ export interface DataFreshness {
   isStale: boolean;
   staleThreshold: number; // milliseconds
   pollingInterval: number; // milliseconds
-}
-
-/**
- * Mobile Navigation Types
- */
-export interface MobileNavigationProps {
-  isOpen: boolean;
-  onClose: () => void;
-  navigationItems: NavigationItem[];
-  quickAccessItems: QuickAccessItem[];
 }
 
 /**
@@ -415,16 +382,12 @@ export type {
   BreakpointConfig,
   ResponsiveLayout,
   DashboardHeaderProps,
-  DashboardSidebarProps,
-  QuickAccessItem,
-  NavigationItem,
   ErrorBoundaryState,
   ErrorBoundaryProps,
   LoadingSkeletonProps,
   DashboardGridProps,
   GridItemProps,
   DataFreshness,
-  MobileNavigationProps,
   TouchInteraction,
   AccessibilityProps,
   KeyboardShortcut,
