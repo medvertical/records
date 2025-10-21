@@ -96,7 +96,7 @@ export function SettingsModal({
   return (
     <>
       <Dialog open={open} onOpenChange={handleCloseAttempt}>
-        <DialogContent className="max-w-[90vw] h-[85vh] flex p-0 overflow-hidden">
+        <DialogContent className="max-w-7xl h-[85vh] flex p-0 overflow-hidden">
           <VisuallyHidden>
             <DialogTitle>Settings</DialogTitle>
             <DialogDescription>

@@ -1,12 +1,8 @@
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { PanelLeft, AlertTriangle } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/hooks/use-mobile";
 import AppIcon from "@/components/ui/app-icon";
-import { ValidationAspectsDropdown } from "@/components/ui/validation-aspects-dropdown";
 import type { ServerStatus as ConnectionStatus } from "@/hooks/use-server-data";
 import { ActivityWidget } from "@/components/layout/activity-widget";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -22,7 +18,6 @@ interface HeaderProps {
 
 export default function Header({ title, subtitle, connectionStatus, onSidebarToggle }: HeaderProps) {
   const { toast } = useToast();
-  const isMobile = useIsMobile();
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   const handleClearAllValidationResults = async () => {
@@ -94,9 +89,6 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
           )}
         </div>
         <div className="flex items-center space-x-4">
-          {/* Validation Aspects Dropdown */}
-          <ValidationAspectsDropdown />
-          
           {/* Activity Widget */}
           <ActivityWidget />
           
