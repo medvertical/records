@@ -163,8 +163,20 @@ export class DashboardService {
       }
       const dbStats = await this.storage.getResourceStatsWithSettings();
       
-      // Get FHIR server total for progress calculation (avoid recursion)
-      const fhirResourceCounts = await this.getFhirResourceCounts();
+      // Get FHIR server total for progress calculation (with timeout to avoid blocking)
+      let fhirResourceCounts: Record<string, number> = {};
+      try {
+        fhirResourceCounts = await Promise.race([
+          this.getFhirResourceCounts(),
+          new Promise<Record<string, number>>((_, reject) => 
+            setTimeout(() => reject(new Error('FHIR resource count timeout')), 5000) // 5 second timeout
+          )
+        ]);
+      } catch (error) {
+        console.warn('[DashboardService] FHIR resource count fetch timed out, using fallback');
+        // Use fallback - assume reasonable total if cache isn't ready yet
+        fhirResourceCounts = { 'Unknown': 500000 };
+      }
       const fhirTotalResources = Object.values(fhirResourceCounts).reduce((sum, count) => sum + count, 0);
       
       // Calculate validation coverage (percentage of FHIR server resources that have been validated)
@@ -193,11 +205,24 @@ export class DashboardService {
         const warnings = breakdown.warnings || 0;
         
         // Validate and sanitize counts
-        const sanitizedValidated = Math.max(0, Math.min(validated, serverCount));
-        const sanitizedValid = Math.max(0, Math.min(valid, sanitizedValidated));
-        const sanitizedErrors = Math.max(0, Math.min(errors, sanitizedValidated));
-        const sanitizedWarnings = Math.max(0, Math.min(warnings, sanitizedValidated));
-        const unvalidated = Math.max(0, serverCount - sanitizedValidated);
+        // If serverCount is 0 (FHIR counts not available), use breakdown totals directly
+        let sanitizedValidated, sanitizedValid, sanitizedErrors, sanitizedWarnings, unvalidated;
+        
+        if (serverCount > 0) {
+          // Normal case: sanitize based on server counts
+          sanitizedValidated = Math.max(0, Math.min(validated, serverCount));
+          sanitizedValid = Math.max(0, Math.min(valid, sanitizedValidated));
+          sanitizedErrors = Math.max(0, Math.min(errors, sanitizedValidated));
+          sanitizedWarnings = Math.max(0, Math.min(warnings, sanitizedValidated));
+          unvalidated = Math.max(0, serverCount - sanitizedValidated);
+        } else {
+          // FHIR counts not available: use breakdown data as-is
+          sanitizedValidated = validated;
+          sanitizedValid = valid;
+          sanitizedErrors = errors;
+          sanitizedWarnings = warnings;
+          unvalidated = 0;
+        }
         
         // Calculate validation rate (percentage of server resources that have been validated)
         const validationRate = serverCount > 0 ? Math.min(100, Math.max(0, (sanitizedValidated / serverCount) * 100)) : 0;

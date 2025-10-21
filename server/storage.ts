@@ -534,21 +534,6 @@ export class DatabaseStorage implements IStorage {
     // Import per-aspect validation schema
     const { validationResultsPerAspect } = await import('@shared/schema-validation-per-aspect');
     
-    // Get validation results from per-aspect table
-    // We need to aggregate per-aspect results to determine overall resource validity
-    const allValidationResults = await db.select({
-      serverId: validationResultsPerAspect.serverId,
-      resourceType: validationResultsPerAspect.resourceType,
-      fhirId: validationResultsPerAspect.fhirId,
-      aspect: validationResultsPerAspect.aspect,
-      isValid: validationResultsPerAspect.isValid,
-      errorCount: validationResultsPerAspect.errorCount,
-      warningCount: validationResultsPerAspect.warningCount,
-      informationCount: validationResultsPerAspect.informationCount,
-    })
-      .from(validationResultsPerAspect)
-      .where(targetServerId ? eq(validationResultsPerAspect.serverId, targetServerId) : undefined);
-    
     // Get current validation settings
     const settingsService = getValidationSettingsService();
     const validationSettingsData = await settingsService.getCurrentSettings();
@@ -561,12 +546,15 @@ export class DatabaseStorage implements IStorage {
       metadata: { enabled: true, severity: 'info' as const }
     };
     
-
+    // Determine which aspects are enabled (treat null/undefined as enabled)
+    // Only include actual validation aspects, not other settings properties
+    const validAspects = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'];
+    const enabledAspects = validAspects.filter(aspect => {
+      const aspectSettings = settings[aspect as keyof typeof settings];
+      return aspectSettings?.enabled !== false;
+    });
     
-    // Count valid/error/warning resources based on filtered issues
-    let validResourcesCount = 0;
-    let errorResourcesCount = 0;
-    let warningResourcesCount = 0;
+    // Initialize resource breakdown with totals from resources parameter
     const resourceBreakdown: Record<string, { 
       total: number; 
       valid: number; 
@@ -575,7 +563,6 @@ export class DatabaseStorage implements IStorage {
       validPercent: number;
     }> = {};
     
-    // Group resources by type
     resources.forEach(resource => {
       if (!resourceBreakdown[resource.resourceType]) {
         resourceBreakdown[resource.resourceType] = { total: 0, valid: 0, errors: 0, warnings: 0, validPercent: 0 };
@@ -583,89 +570,119 @@ export class DatabaseStorage implements IStorage {
       resourceBreakdown[resource.resourceType].total++;
     });
     
-    // Group per-aspect results by resource (resourceType + fhirId)
-    const resourceValidationMap = new Map<string, Array<typeof allValidationResults[0]>>();
-    allValidationResults.forEach(result => {
-      const key = `${result.resourceType}/${result.fhirId}`;
-      if (!resourceValidationMap.has(key)) {
-        resourceValidationMap.set(key, []);
+    // Use SQL aggregation to classify resources by validation status
+    // This is much faster than fetching all rows and processing in Node.js
+    const { sql } = await import('drizzle-orm');
+    
+    const startTime = Date.now();
+    
+    // Build the query with proper parameter binding
+    let aggregationResults;
+    if (targetServerId && enabledAspects.length > 0) {
+      // Build the aspect IN clause manually
+      const aspectsArray = enabledAspects.map(a => `'${a}'`).join(',');
+      aggregationResults = await db.execute<{
+        resource_type: string;
+        valid_count: string;
+        error_count: string;
+        warning_count: string;
+      }>(sql.raw(`
+        WITH resource_aggregation AS (
+          SELECT 
+            resource_type,
+            fhir_id,
+            SUM(error_count) as total_errors,
+            SUM(warning_count) as total_warnings
+          FROM validation_results_per_aspect
+          WHERE server_id = ${targetServerId}
+            AND aspect IN (${aspectsArray})
+          GROUP BY resource_type, fhir_id
+        )
+        SELECT 
+          resource_type,
+          COUNT(CASE WHEN total_errors = 0 AND total_warnings = 0 THEN 1 END)::text as valid_count,
+          COUNT(CASE WHEN total_errors > 0 THEN 1 END)::text as error_count,
+          COUNT(CASE WHEN total_errors = 0 AND total_warnings > 0 THEN 1 END)::text as warning_count
+        FROM resource_aggregation
+        GROUP BY resource_type
+      `));
+    } else if (targetServerId) {
+      aggregationResults = await db.execute<{
+        resource_type: string;
+        valid_count: string;
+        error_count: string;
+        warning_count: string;
+      }>(sql`
+        WITH resource_aggregation AS (
+          SELECT 
+            resource_type,
+            fhir_id,
+            SUM(error_count) as total_errors,
+            SUM(warning_count) as total_warnings
+          FROM validation_results_per_aspect
+          WHERE server_id = ${targetServerId}
+          GROUP BY resource_type, fhir_id
+        )
+        SELECT 
+          resource_type,
+          COUNT(CASE WHEN total_errors = 0 AND total_warnings = 0 THEN 1 END)::text as valid_count,
+          COUNT(CASE WHEN total_errors > 0 THEN 1 END)::text as error_count,
+          COUNT(CASE WHEN total_errors = 0 AND total_warnings > 0 THEN 1 END)::text as warning_count
+        FROM resource_aggregation
+        GROUP BY resource_type
+      `);
+    } else {
+      aggregationResults = await db.execute<{
+        resource_type: string;
+        valid_count: string;
+        error_count: string;
+        warning_count: string;
+      }>(sql`
+        WITH resource_aggregation AS (
+          SELECT 
+            resource_type,
+            fhir_id,
+            SUM(error_count) as total_errors,
+            SUM(warning_count) as total_warnings
+          FROM validation_results_per_aspect
+          GROUP BY resource_type, fhir_id
+        )
+        SELECT 
+          resource_type,
+          COUNT(CASE WHEN total_errors = 0 AND total_warnings = 0 THEN 1 END)::text as valid_count,
+          COUNT(CASE WHEN total_errors > 0 THEN 1 END)::text as error_count,
+          COUNT(CASE WHEN total_errors = 0 AND total_warnings > 0 THEN 1 END)::text as warning_count
+        FROM resource_aggregation
+        GROUP BY resource_type
+      `);
+    }
+    
+    const queryTime = Date.now() - startTime;
+    console.log(`[Storage] Validation stats SQL aggregation completed in ${queryTime}ms`);
+    
+    // Merge SQL results into resource breakdown
+    aggregationResults.rows.forEach(row => {
+      if (resourceBreakdown[row.resource_type]) {
+        resourceBreakdown[row.resource_type].valid = Number(row.valid_count) || 0;
+        resourceBreakdown[row.resource_type].errors = Number(row.error_count) || 0;
+        resourceBreakdown[row.resource_type].warnings = Number(row.warning_count) || 0;
       }
-      resourceValidationMap.get(key)!.push(result);
     });
     
-    // Process each validated resource (aggregating across aspects)
-    const processedResources = new Set<string>();
+    // Calculate global totals from per-type breakdown
+    let validResourcesCount = 0;
+    let errorResourcesCount = 0;
+    let warningResourcesCount = 0;
     
-    resourceValidationMap.forEach((aspectResults, resourceKey) => {
-      // Skip if already processed
-      if (processedResources.has(resourceKey)) return;
-      processedResources.add(resourceKey);
-      
-      const resourceType = aspectResults[0].resourceType;
-      
-      // Aggregate across all aspects: resource is valid only if ALL enabled aspects are valid
-      let hasErrors = false;
-      let hasWarnings = false;
-      let allAspectsValid = true;
-      
-      let enabledAspectsCount = 0;
-      aspectResults.forEach(aspectResult => {
-        // Check if this aspect is enabled in settings
-        // Treat null/undefined as enabled (default), only skip if explicitly disabled
-        const aspectSettings = settings[aspectResult.aspect as keyof typeof settings];
-        if (aspectSettings?.enabled === false) {
-          return; // Skip explicitly disabled aspects
-        }
-        
-        enabledAspectsCount++;
-        
-        if (!aspectResult.isValid) {
-          allAspectsValid = false;
-        }
-        
-        if (aspectResult.errorCount > 0) {
-          hasErrors = true;
-        }
-        
-        if (aspectResult.warningCount > 0) {
-          hasWarnings = true;
-        }
-      });
-      
-      // If no enabled aspects were checked, skip this resource
-      if (enabledAspectsCount === 0) {
-        return;
-      }
-      
-      // Determine overall resource status
-      // Resources with only informational messages (no errors, no warnings) are considered valid
-      if (hasErrors) {
-        // Resource has errors
-        errorResourcesCount++;
-        if (resourceBreakdown[resourceType]) {
-          resourceBreakdown[resourceType].errors++;
-        }
-      } else if (hasWarnings) {
-        // Resource has warnings but no errors
-        warningResourcesCount++;
-        if (resourceBreakdown[resourceType]) {
-          resourceBreakdown[resourceType].warnings++;
-        }
-      } else {
-        // Resource is valid (may have informational messages, but no errors or warnings)
-        validResourcesCount++;
-        if (resourceBreakdown[resourceType]) {
-          resourceBreakdown[resourceType].valid++;
-        }
-      }
+    Object.values(resourceBreakdown).forEach(breakdown => {
+      validResourcesCount += breakdown.valid;
+      errorResourcesCount += breakdown.errors;
+      warningResourcesCount += breakdown.warnings;
     });
     
-    // Count unvalidated resources separately (don't count them as errors)
-    const validatedResourceKeys = new Set(Array.from(resourceValidationMap.keys()));
-    const unvalidatedResourcesCount = resources.filter(resource => {
-      const key = `${resource.resourceType}/${resource.resourceId}`;
-      return !validatedResourceKeys.has(key);
-    }).length;
+    // Calculate unvalidated resources: total resources minus validated resources
+    const totalValidatedResources = validResourcesCount + errorResourcesCount + warningResourcesCount;
+    const unvalidatedResourcesCount = resources.length - totalValidatedResources;
     
     // Calculate percentages
     Object.keys(resourceBreakdown).forEach(type => {
@@ -693,8 +710,20 @@ export class DatabaseStorage implements IStorage {
       metadata: { enabled: settings.metadata?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 }
     };
 
+    // Fetch aspect-level data for aspect breakdown (separate query, lighter than full aggregation)
+    const aspectResults = await db.select({
+      aspect: validationResultsPerAspect.aspect,
+      errorCount: validationResultsPerAspect.errorCount,
+      warningCount: validationResultsPerAspect.warningCount,
+      informationCount: validationResultsPerAspect.informationCount,
+    })
+      .from(validationResultsPerAspect)
+      .where(
+        targetServerId ? eq(validationResultsPerAspect.serverId, targetServerId) : undefined
+      );
+    
     // Aggregate issues by aspect from per-aspect validation results
-    allValidationResults.forEach(result => {
+    aspectResults.forEach(result => {
       const aspect = result.aspect;
       if (aspectBreakdown[aspect]) {
         // Count total issues
