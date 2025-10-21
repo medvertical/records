@@ -442,23 +442,21 @@ export default function ResourceBrowser() {
   });
 
   // Check if validation filters are active
+  // Check if there are validation-specific filters (not FHIR search params)
+  // FHIR search params should use the regular /api/fhir/resources endpoint (FHIR server)
+  // Validation filters should use /api/fhir/resources/filtered endpoint (local database)
   const hasValidationFilters = validationFilters.aspects.length > 0 || 
                                 validationFilters.severities.length > 0 || 
                                 validationFilters.hasIssuesOnly ||
-                                (validationFilters.issueFilter && Object.keys(validationFilters.issueFilter).length > 0) ||
-                                (validationFilters.fhirSearchParams && Object.keys(validationFilters.fhirSearchParams || {}).length > 0);
-  
-  // Also check URL directly for FHIR search parameters as a fallback
-  const urlParams = new URLSearchParams(window.location.search);
-  const hasFhirParamsInUrl = Array.from(urlParams.keys()).some(key => 
-    !['resourceType', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize', 'limit'].includes(key)
-  );
+                                (validationFilters.issueFilter && Object.keys(validationFilters.issueFilter).length > 0);
   
   // Check if there's a text search query
   const hasTextSearch = searchQuery && searchQuery.trim().length > 0;
   
-  // Use filtered endpoint when validation filters are active OR when FHIR params are in URL OR when there's a text search
-  const apiEndpoint = (hasValidationFilters || hasFhirParamsInUrl || hasTextSearch) ? "/api/fhir/resources/filtered" : "/api/fhir/resources";
+  // Use filtered endpoint ONLY for validation filters or text search
+  // FHIR search params (like _profile, gender, etc.) should use the regular FHIR server endpoint
+  // This ensures we get the full count from the FHIR server, not just validated resources
+  const apiEndpoint = (hasValidationFilters || hasTextSearch) ? "/api/fhir/resources/filtered" : "/api/fhir/resources";
   
 
   // Get polling interval from validation settings (default: 30 seconds, range: 10s-5min)

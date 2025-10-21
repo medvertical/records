@@ -32,9 +32,9 @@ export function useServerReactiveQueries() {
     if (isInitializedRef.current && currentServerId !== undefined && previousServerId !== undefined && currentServerId !== previousServerId) {
       console.log(`[ServerReactiveQueries] Active server changed from ${previousServerId} to ${currentServerId}`);
       
-      // First, invalidate specific query keys directly (most reliable)
+      // Don't invalidate quickAccessCounts - it has its own server change detection with force refresh
+      // Invalidating here causes double-fetching and the second fetch doesn't have force=true
       queryClient.invalidateQueries({ queryKey: ['/api/fhir/resource-counts'] });
-      queryClient.invalidateQueries({ queryKey: ['quickAccessCounts'] });
       
       // Then invalidate all validation-related queries with predicate
       // These queries should all have serverId in their queryKey
@@ -48,7 +48,6 @@ export function useServerReactiveQueries() {
             queryKey.includes('/api/validation/resources') ||
             queryKey.includes('/api/fhir/resources') ||
             queryKey.includes('/api/fhir/resource-counts') ||
-            queryKey.includes('quickAccessCounts') ||
             queryKey.includes(previousServerId)
           );
           if (shouldInvalidate) {

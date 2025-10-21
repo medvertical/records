@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { useRef, useEffect } from 'react';
+import { useActiveServerId } from './use-server-reactive-queries';
 
 // Types
 export interface QuickAccessPreferences {
@@ -103,7 +105,7 @@ export function useUpdateQuickAccess() {
       });
       // Invalidate resource counts to ensure they update with new quick access items
       queryClient.invalidateQueries({ queryKey: ['/api/fhir/resource-counts'] });
-      queryClient.invalidateQueries({ queryKey: ['quickAccessCounts'] });
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'quickAccessCounts' });
     },
     onSettled: () => {
       // Always refetch after error or success
@@ -147,24 +149,47 @@ export function useResourceTypes() {
 export function useQuickAccessCounts() {
   const { data: quickAccessData } = useQuickAccessItems();
   const quickAccessItems = quickAccessData?.quickAccessItems || [];
+  const serverId = useActiveServerId();
+  const refetchCountRef = useRef(0);
+  const previousServerIdRef = useRef<number | undefined>();
+  const needsForceRefreshRef = useRef(false);
+  const MAX_REFETCH_ATTEMPTS = 15; // Stop after 30 seconds (15 * 2s)
   
   console.log('[useQuickAccessCounts] quickAccessItems:', quickAccessItems);
+  console.log('[useQuickAccessCounts] serverId:', serverId);
   
-  return useQuery({
-    queryKey: ['quickAccessCounts', quickAccessItems],
+  // Reset refetch counter and set force refresh flag when server changes
+  if (serverId !== previousServerIdRef.current) {
+    console.log('[useQuickAccessCounts] Server changed, resetting refetch counter and forcing refresh');
+    refetchCountRef.current = 0;
+    needsForceRefreshRef.current = true;
+    previousServerIdRef.current = serverId;
+  }
+  
+  const query = useQuery({
+    queryKey: ['quickAccessCounts', serverId, quickAccessItems],
     queryFn: async () => {
       console.log('[useQuickAccessCounts] Fetching counts for:', quickAccessItems);
       
       if (quickAccessItems.length === 0) {
         console.log('[useQuickAccessCounts] No items, returning empty object');
+        refetchCountRef.current = 0;
+        needsForceRefreshRef.current = false;
         return { counts: {}, isPartial: false };
       }
       
       const types = quickAccessItems.join(',');
-      const url = `/api/fhir/resource-counts?types=${types}`;
+      const forceParam = needsForceRefreshRef.current ? '&force=true' : '';
+      const url = `/api/fhir/resource-counts?types=${types}${forceParam}`;
       console.log('[useQuickAccessCounts] Fetching from:', url);
       
       const response = await fetch(url);
+      
+      // Clear force refresh flag after first request
+      if (needsForceRefreshRef.current) {
+        console.log('[useQuickAccessCounts] Force refresh completed, clearing flag');
+        needsForceRefreshRef.current = false;
+      }
       if (!response.ok) {
         console.error('[useQuickAccessCounts] Fetch failed:', response.status, response.statusText);
         throw new Error('Failed to fetch resource counts');
@@ -182,22 +207,49 @@ export function useQuickAccessCounts() {
       console.log('[useQuickAccessCounts] Transformed counts:', counts);
       console.log('[useQuickAccessCounts] isPartial:', data.isPartial);
       
+      // Reset refetch counter when data becomes complete
+      if (!data.isPartial) {
+        refetchCountRef.current = 0;
+      }
+      
       return { counts, isPartial: data.isPartial || false };
     },
     enabled: quickAccessItems.length > 0,
     staleTime: 5 * 60 * 1000, // 5 minutes
-    // If cache is partial, refetch more frequently to get complete data
-    refetchInterval: (data) => {
-      // If data is partial, refetch every 2 seconds until complete
-      if (data?.isPartial) {
-        console.log('[useQuickAccessCounts] Cache is partial, will refetch in 2s');
-        return 2000;
-      }
-      // Once complete, stop refetching
-      return false;
-    },
     retry: 2,
   });
+  
+  // Manual polling when data is partial
+  useEffect(() => {
+    const data = query.data;
+    
+    // Stop if data is complete or not loaded yet
+    if (!data?.isPartial) {
+      console.log('[useQuickAccessCounts] Data is complete or not loaded, stopping polling');
+      return;
+    }
+    
+    // Stop after max attempts
+    if (refetchCountRef.current >= MAX_REFETCH_ATTEMPTS) {
+      console.log('[useQuickAccessCounts] Max refetch attempts reached, stopping polling');
+      return;
+    }
+    
+    console.log(`[useQuickAccessCounts] Data is partial, starting 2s polling interval (current attempts: ${refetchCountRef.current}/${MAX_REFETCH_ATTEMPTS})`);
+    
+    const intervalId = setInterval(() => {
+      refetchCountRef.current++;
+      console.log(`[useQuickAccessCounts] 🔄 Polling for updates (attempt ${refetchCountRef.current}/${MAX_REFETCH_ATTEMPTS})`);
+      query.refetch();
+    }, 2000);
+    
+    return () => {
+      console.log('[useQuickAccessCounts] Clearing polling interval');
+      clearInterval(intervalId);
+    };
+  }, [query.data?.isPartial, query.refetch]);
+  
+  return query;
 }
 
 // Helper functions

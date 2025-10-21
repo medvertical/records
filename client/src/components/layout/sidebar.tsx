@@ -1,5 +1,4 @@
 import { Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
 import { useServerData } from "@/hooks/use-server-data";
 import type { ServerStatus } from "@/hooks/use-server-data";
 import { cn, formatCount } from "@/lib/utils";
@@ -65,53 +64,8 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
   // Use actual connection status if available, otherwise fall back to isActive
   const isServerConnected = serverStatus ? serverStatus.connected : (activeServer?.isActive || false);
 
-  const { data: resourceCounts, isLoading: isCountsLoading, isError: isCountsError } = useQuery<Record<string, number>>({
-    queryKey: ["/api/fhir/resource-counts"],
-    // Keep previous data to prevent flickering during refetches
-    placeholderData: (previousData) => previousData,
-    staleTime: 10 * 60 * 1000, // Consider data fresh for 10 minutes
-    refetchInterval: false, // Disable automatic refetching
-    refetchOnWindowFocus: false, // Don't refetch when window gains focus
-    refetchOnMount: false, // Don't refetch on component mount if data exists
-    // Only fetch resource counts when there's an active server
-    enabled: isServerConnected,
-    retry: 2, // Retry failed requests 2 times
-    queryFn: async () => {
-      // Add timeout to prevent hanging forever
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-      
-      try {
-        const response = await fetch('/api/fhir/resource-counts', {
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          throw new Error(`Failed to fetch resource counts: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        // Transform the API response format to the expected format
-        const counts: Record<string, number> = {};
-        if (data.resourceTypes && Array.isArray(data.resourceTypes)) {
-          data.resourceTypes.forEach((item: { resourceType: string; count: number }) => {
-            counts[item.resourceType] = item.count;
-          });
-        }
-        
-        return counts;
-      } catch (error: any) {
-        clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
-          console.error('[Sidebar] Resource counts request timed out after 15 seconds');
-          throw new Error('Request timed out');
-        }
-        throw error;
-      }
-    },
-  });
+  // Resource counts are now handled by useQuickAccessCounts in SidebarContent
+  // Removed duplicate query that was causing timeouts
 
   if (isMobile) {
     return (
@@ -132,9 +86,6 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
           <div className="h-full flex flex-col">
         <SidebarContent
           serverStatus={serverStatus}
-          resourceCounts={resourceCounts}
-          isCountsLoading={isCountsLoading}
-          isCountsError={isCountsError}
           activeServer={activeServer}
           servers={servers}
           isLoading={isLoading}
@@ -162,9 +113,6 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
       <div className="w-64 h-full flex flex-col">
         <SidebarContent 
           serverStatus={serverStatus} 
-          resourceCounts={resourceCounts}
-          isCountsLoading={isCountsLoading}
-          isCountsError={isCountsError}
           activeServer={activeServer}
           servers={servers}
           isLoading={isLoading}
@@ -197,9 +145,6 @@ export default function Sidebar({ isOpen = false, onToggle }: SidebarProps = {})
 
 function SidebarContent({ 
   serverStatus, 
-  resourceCounts,
-  isCountsLoading,
-  isCountsError,
   activeServer,
   servers,
   isLoading,
@@ -214,9 +159,6 @@ function SidebarContent({
   openSettingsModal
 }: {
   serverStatus?: ServerStatus;
-  resourceCounts?: Record<string, number>;
-  isCountsLoading?: boolean;
-  isCountsError?: boolean;
   activeServer?: any;
   servers?: any[];
   isLoading?: boolean;
@@ -506,11 +448,7 @@ function SidebarContent({
                         <Icon className="h-4 w-4" />
                         <span>{item.label}</span>
                       </div>
-                      {isQuickAccessCountsLoading ? (
-                        <span title="Loading count">
-                          <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
-                        </span>
-                      ) : quickAccessCounts?.counts && quickAccessCounts.counts[item.resourceType] !== undefined ? (
+                      {quickAccessCounts?.counts && quickAccessCounts.counts[item.resourceType] !== undefined ? (
                         <span className={cn(
                           "text-xs font-medium",
                           isSelected 
@@ -520,8 +458,8 @@ function SidebarContent({
                           {formatCount(quickAccessCounts.counts[item.resourceType])}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400" title="Count not available">
-                          -
+                        <span title="Loading count">
+                          <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
                         </span>
                       )}
                     </div>

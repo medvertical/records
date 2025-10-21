@@ -61,6 +61,14 @@ export class ResourceCountCache {
   }
 
   /**
+   * Delete cache for a server (force refresh)
+   */
+  async delete(serverId: number): Promise<void> {
+    console.log(`[ResourceCountCache] 🗑️  Deleting cache for server ${serverId}`);
+    this.cache.delete(serverId);
+  }
+
+  /**
    * Check if cache is stale for a server
    */
   isStale(serverId: number): boolean {
@@ -71,6 +79,13 @@ export class ResourceCountCache {
 
     const age = Date.now() - cached.lastUpdated.getTime();
     return age > this.STALE_THRESHOLD_MS;
+  }
+
+  /**
+   * Check if a refresh is currently in progress for a server
+   */
+  async isRefreshInProgress(serverId: number): Promise<boolean> {
+    return this.refreshInProgress.has(serverId);
   }
 
   /**
@@ -103,20 +118,26 @@ export class ResourceCountCache {
   private async _doRefreshWithPriority(serverId: number, fhirClient: FhirClient, priorityTypes?: string[]): Promise<void> {
     const startTime = Date.now();
     console.log(`[ResourceCountCache] 🔄 Starting priority-based refresh for server ${serverId}...`);
+    console.log(`[ResourceCountCache] Received priorityTypes:`, priorityTypes);
 
     try {
       // Get all available resource types from server
       const allTypes = await fhirClient.getAllResourceTypes();
       
-      // Determine priority types (use provided or get from validation settings)
+      // Determine priority types (merge provided with settings)
       let typesToFetchFirst: string[] = [];
+      const settingsPriorityTypes = await this._getPriorityTypesFromSettings();
+      
       if (priorityTypes && priorityTypes.length > 0) {
-        typesToFetchFirst = priorityTypes.filter(t => allTypes.includes(t));
-        console.log(`[ResourceCountCache] Using ${typesToFetchFirst.length} provided priority types`);
+        // Put requested types FIRST, then add settings types (avoid duplicates)
+        // This ensures Quick Access items load before validation settings types
+        const requestedSet = new Set(priorityTypes);
+        const additionalFromSettings = settingsPriorityTypes.filter(t => !requestedSet.has(t));
+        typesToFetchFirst = [...priorityTypes, ...additionalFromSettings].filter(t => allTypes.includes(t));
+        console.log(`[ResourceCountCache] Using ${typesToFetchFirst.length} merged priority types (${priorityTypes.length} requested FIRST, then ${additionalFromSettings.length} from settings)`);
+        console.log(`[ResourceCountCache] First 10 types to fetch:`, typesToFetchFirst.slice(0, 10));
       } else {
-        // Get priority types from validation settings
-        typesToFetchFirst = await this._getPriorityTypesFromSettings();
-        typesToFetchFirst = typesToFetchFirst.filter(t => allTypes.includes(t));
+        typesToFetchFirst = settingsPriorityTypes.filter(t => allTypes.includes(t));
         console.log(`[ResourceCountCache] Using ${typesToFetchFirst.length} priority types from settings`);
       }
       
@@ -127,28 +148,53 @@ export class ResourceCountCache {
         console.log(`[ResourceCountCache] Using ${typesToFetchFirst.length} default priority types`);
       }
       
-      // Phase 1: Fetch priority types in parallel (fast)
-      console.log(`[ResourceCountCache] Phase 1: Fetching ${typesToFetchFirst.length} priority types...`);
-      const priorityPromises = typesToFetchFirst.map(type => 
-        fhirClient.getResourceCount(type).catch(err => {
-          console.warn(`[ResourceCountCache] Failed to get count for priority type ${type}:`, err);
-          return 0;
-        })
-      );
-      
-      const priorityCounts = await Promise.all(priorityPromises);
+      // Phase 1: Fetch priority types SEQUENTIALLY to avoid rate limiting (especially on HAPI)
+      console.log(`[ResourceCountCache] Phase 1: Fetching ${typesToFetchFirst.length} priority types sequentially...`);
       const priorityCountsMap: Record<string, number> = {};
-      typesToFetchFirst.forEach((type, idx) => {
-        if (priorityCounts[idx] > 0) {
-          priorityCountsMap[type] = priorityCounts[idx];
-        }
-      });
       
-      // Determine remaining types for background fetch
-      const remainingTypes = allTypes.filter(t => !typesToFetchFirst.includes(t));
+      for (let i = 0; i < typesToFetchFirst.length; i++) {
+        const type = typesToFetchFirst[i];
+        
+        try {
+          const count = await fhirClient.getResourceCount(type);
+          if (count !== null) {
+            priorityCountsMap[type] = count;
+            console.log(`[ResourceCountCache] ✅ ${type}: ${count} (${i + 1}/${typesToFetchFirst.length})`);
+            
+            // Update cache incrementally after EACH successful fetch
+            // This allows polling requests to get partial results immediately
+            const loadedSoFar = Object.keys(priorityCountsMap);
+            const remainingSoFar = typesToFetchFirst.slice(i + 1).concat(
+              allTypes.filter(t => !typesToFetchFirst.includes(t) && !priorityCountsMap.hasOwnProperty(t))
+            );
+            await this.setPartial(serverId, priorityCountsMap, loadedSoFar, remainingSoFar);
+          } else {
+            console.warn(`[ResourceCountCache] ⚠️  ${type}: fetch returned null (${i + 1}/${typesToFetchFirst.length})`);
+          }
+        } catch (err: any) {
+          console.warn(`[ResourceCountCache] ❌ ${type}: fetch failed (${i + 1}/${typesToFetchFirst.length}):`, err.message || err);
+        }
+        
+        // Delay between requests to avoid rate limiting
+        // Longer delay for servers with aggressive rate limits
+        if (i < typesToFetchFirst.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay between each request
+        }
+      }
+      
+      // Determine which priority types were successfully loaded
+      const loadedTypes = Object.keys(priorityCountsMap);
+      
+      // Determine which priority types failed to load (need to retry in phase 2)
+      const failedPriorityTypes = typesToFetchFirst.filter(t => !priorityCountsMap.hasOwnProperty(t));
+      
+      // Determine remaining types for background fetch (including failed priority types)
+      const remainingTypes = allTypes.filter(t => !priorityCountsMap.hasOwnProperty(t));
+      
+      console.log(`[ResourceCountCache] ✅ Phase 1: ${loadedTypes.length} loaded, ${failedPriorityTypes.length} failed (will retry)`);
       
       // Set partial cache immediately
-      await this.setPartial(serverId, priorityCountsMap, typesToFetchFirst, remainingTypes);
+      await this.setPartial(serverId, priorityCountsMap, loadedTypes, remainingTypes);
       
       const phase1Duration = ((Date.now() - startTime) / 1000).toFixed(2);
       console.log(`[ResourceCountCache] ✅ Phase 1 complete in ${phase1Duration}s (${typesToFetchFirst.length} types, ${Object.values(priorityCountsMap).reduce((a, b) => a + b, 0)} resources)`);
@@ -177,45 +223,56 @@ export class ResourceCountCache {
     remainingTypes: string[]
   ): Promise<void> {
     const startTime = Date.now();
-    const batchSize = 10;
     const allCounts = { ...existingCounts };
     
-    for (let i = 0; i < remainingTypes.length; i += batchSize) {
-      const batch = remainingTypes.slice(i, i + batchSize);
+    console.log(`[ResourceCountCache] Phase 2: Fetching ${remainingTypes.length} remaining types sequentially...`);
+    
+    for (let i = 0; i < remainingTypes.length; i++) {
+      const type = remainingTypes[i];
       
-      const batchPromises = batch.map(type =>
-        fhirClient.getResourceCount(type).catch(err => {
-          console.warn(`[ResourceCountCache] Failed to get count for ${type}:`, err);
-          return 0;
-        })
-      );
-      
-      const batchCounts = await Promise.all(batchPromises);
-      batch.forEach((type, idx) => {
-        if (batchCounts[idx] > 0) {
-          allCounts[type] = batchCounts[idx];
+      try {
+        const count = await fhirClient.getResourceCount(type);
+        if (count !== null) {
+          allCounts[type] = count;
+          
+          // Update cache incrementally after EACH successful fetch in Phase 2
+          const remainingSoFar = remainingTypes.slice(i + 1);
+          await this.setPartial(serverId, allCounts, Object.keys(allCounts), remainingSoFar);
         }
-      });
+      } catch (err: any) {
+        console.warn(`[ResourceCountCache] Phase 2: Failed to get count for ${type}:`, err.message || err);
+      }
       
-      // Small delay between batches
-      if (i + batchSize < remainingTypes.length) {
-        await new Promise(resolve => setTimeout(resolve, 200));
+      // Longer delay between requests in Phase 2 to avoid rate limiting
+      if (i < remainingTypes.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1500)); // 1.5 second delay
       }
     }
     
-    // Update cache with complete data
+    // Determine which types still failed to load
+    const allAttemptedTypes = [...Object.keys(existingCounts), ...remainingTypes];
+    const stillPendingTypes = allAttemptedTypes.filter(t => !allCounts.hasOwnProperty(t));
+    
+    // Update cache (mark as partial if any types still failed)
     const totalResources = Object.values(allCounts).reduce((sum, count) => sum + count, 0);
+    const isStillPartial = stillPendingTypes.length > 0;
+    
     await this.set(serverId, {
       counts: allCounts,
       totalResources,
       totalTypes: Object.keys(allCounts).length,
-      isPartial: false,
+      isPartial: isStillPartial,
       loadedTypes: Object.keys(allCounts),
-      pendingTypes: [],
+      pendingTypes: stillPendingTypes,
     });
     
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`[ResourceCountCache] ✅ Phase 2 complete in ${duration}s (${Object.keys(allCounts).length} types total, ${totalResources} resources)`);
+    const successCount = Object.keys(allCounts).length - Object.keys(existingCounts).length;
+    console.log(`[ResourceCountCache] ✅ Phase 2 complete in ${duration}s (${successCount} new types loaded, ${Object.keys(allCounts).length} total, ${totalResources} resources)`);
+    
+    if (isStillPartial) {
+      console.log(`[ResourceCountCache] ⚠️ ${stillPendingTypes.length} types still pending (failed due to rate limiting): ${stillPendingTypes.slice(0, 5).join(', ')}${stillPendingTypes.length > 5 ? '...' : ''}`);
+    }
   }
 
   /**

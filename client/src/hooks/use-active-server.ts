@@ -258,7 +258,7 @@ export function useActiveServer(
       queryClient.invalidateQueries({ queryKey: ['fhir-resources'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['/api/fhir/resource-counts'] });
-      queryClient.invalidateQueries({ queryKey: ['quickAccessCounts'] });
+      // Don't invalidate quickAccessCounts - it has its own server change detection with force refresh
       
       if (showNotifications) {
         toast({

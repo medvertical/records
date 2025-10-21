@@ -60,25 +60,46 @@ function validateFhirResourceStructure(resource: any): { valid: boolean; errors:
 
 // Helper function to enhance resources with validation data
 async function enhanceResourcesWithValidationData(resources: any[]): Promise<any[]> {
+  const startTime = Date.now();
   console.log(`[FHIR API] enhanceResourcesWithValidationData called with ${resources.length} resources`);
   const enhancedResources = [];
   
-  // OPTIMIZATION: Batch database operations instead of sequential
-  const activeServer = await storage.getActiveFhirServer();
-  console.log(`[FHIR API] Active server:`, activeServer);
+  // Get active server once for all resources
+  let activeServer;
+  try {
+    activeServer = await storage.getActiveFhirServer();
+    console.log(`[FHIR API] Active server:`, activeServer?.id || 'none');
+  } catch (serverError: any) {
+    console.error(`[FHIR API] Failed to get active server:`, serverError.message);
+    // Continue without server - resources will be added without DB entries
+  }
   
   for (const resource of resources) {
+    const resourceKey = `${resource.resourceType}/${resource.id}`;
+    const resourceStartTime = Date.now();
+    
     try {
       // Try to find the resource in our database
-      let dbResource = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
-      console.log(`[FHIR API] Looking up resource ${resource.resourceType}/${resource.id} in database:`, dbResource ? `Found with ID ${dbResource.id}` : 'Not found');
-      console.log(`[FHIR API] Resource data for lookup:`, { resourceType: resource.resourceType, id: resource.id });
+      let dbResource;
+      try {
+        dbResource = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
+        console.log(`[FHIR API] DB lookup for ${resourceKey}: ${dbResource ? `Found (ID: ${dbResource.id})` : 'Not found'} (${Date.now() - resourceStartTime}ms)`);
+      } catch (lookupError: any) {
+        console.error(`[FHIR API] DB lookup failed for ${resourceKey}:`, {
+          error: lookupError.message,
+          code: lookupError.code,
+          duration: Date.now() - resourceStartTime
+        });
+        // Continue without dbResource
+      }
       
       // If resource doesn't exist in database, create it
-      if (!dbResource) {
+      if (!dbResource && activeServer) {
         try {
-          if (activeServer) {
-            // Create resource in database
+          // Check for duplicate insert race condition with a quick re-check
+          dbResource = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
+          
+          if (!dbResource) {
             const resourceData = {
               serverId: activeServer.id,
               resourceType: resource.resourceType,
@@ -88,64 +109,78 @@ async function enhanceResourcesWithValidationData(resources: any[]): Promise<any
               resourceHash: null, // Will be calculated during validation
               lastValidated: null
             };
-            console.log(`[FHIR API] Creating database entry for ${resource.resourceType}/${resource.id} with data:`, resourceData);
+            
             dbResource = await storage.createFhirResource(resourceData);
-            console.log(`[FHIR API] Successfully created database entry for ${resource.resourceType}/${resource.id} with ID: ${dbResource.id}`);
+            console.log(`[FHIR API] Created DB entry for ${resourceKey} (ID: ${dbResource.id}) (${Date.now() - resourceStartTime}ms)`);
           } else {
-            console.warn(`[FHIR API] No active server found, cannot create database entry for ${resource.resourceType}/${resource.id}`);
+            console.log(`[FHIR API] ${resourceKey} created by concurrent request, using existing (${Date.now() - resourceStartTime}ms)`);
           }
         } catch (createError: any) {
-          console.error(`[FHIR API] Failed to create database entry for ${resource.resourceType}/${resource.id}:`, createError);
-          console.error(`[FHIR API] Error details:`, {
-            message: createError.message,
-            stack: createError.stack,
-            code: createError.code,
-            detail: createError.detail
-          });
+          // Handle duplicate key errors gracefully (race condition)
+          if (createError.code === '23505' || createError.message?.includes('duplicate')) {
+            console.log(`[FHIR API] Duplicate key for ${resourceKey}, attempting to fetch existing (${Date.now() - resourceStartTime}ms)`);
+            try {
+              dbResource = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
+            } catch (refetchError: any) {
+              console.error(`[FHIR API] Failed to refetch after duplicate for ${resourceKey}:`, refetchError.message);
+            }
+          } else {
+            console.error(`[FHIR API] Failed to create DB entry for ${resourceKey}:`, {
+              error: createError.message,
+              code: createError.code,
+              detail: createError.detail,
+              duration: Date.now() - resourceStartTime
+            });
+          }
         }
       }
       
-      if (dbResource) {
-        // Get validation summary from per-aspect tables
-        const activeServer = await storage.getActiveFhirServer();
-        const validationSummary = await ValidationGroupsRepository.getResourceValidationSummary(
-          activeServer?.id || 1,
-          resource.resourceType,
-          resource.id
-        );
-        
-        if (validationSummary) {
-          console.log(`[FHIR API] Enhanced ${resource.resourceType}/${resource.id} with per-aspect validation data:`, validationSummary);
-        } else {
-          console.log(`[FHIR API] No per-aspect validation results found for ${resource.resourceType}/${resource.id}`);
+      // Get validation summary if we have a dbResource
+      let validationSummary = null;
+      if (dbResource && activeServer) {
+        try {
+          validationSummary = await ValidationGroupsRepository.getResourceValidationSummary(
+            activeServer.id,
+            resource.resourceType,
+            resource.id
+          );
+          
+          if (validationSummary) {
+            console.log(`[FHIR API] Validation summary for ${resourceKey}: ${validationSummary.errorCount} errors, ${validationSummary.warningCount} warnings (${Date.now() - resourceStartTime}ms)`);
+          }
+        } catch (validationError: any) {
+          console.error(`[FHIR API] Failed to get validation summary for ${resourceKey}:`, {
+            error: validationError.message,
+            duration: Date.now() - resourceStartTime
+          });
+          // Continue without validation summary
         }
-        
-        // Enhance the resource with database ID and validation data
-        enhancedResources.push({
-          ...resource,
-          resourceId: resource.id,  // Map FHIR id to resourceId for consistency
-          _dbId: dbResource.id,
-          _validationSummary: validationSummary
-        });
-      } else {
-        // Resource not in database and couldn't be created, no validation data
-        enhancedResources.push({
-          ...resource,
-          resourceId: resource.id,  // Map FHIR id to resourceId
-          _validationSummary: null
-        });
       }
+      
+      // Enhance the resource
+      enhancedResources.push({
+        ...resource,
+        resourceId: resource.id,  // Map FHIR id to resourceId for consistency
+        _dbId: dbResource?.id,
+        _validationSummary: validationSummary
+      });
+      
     } catch (error: any) {
-      console.warn(`[FHIR API] Error enhancing resource ${resource.resourceType}/${resource.id} with validation data:`, error.message);
+      console.error(`[FHIR API] Unexpected error enhancing ${resourceKey}:`, {
+        error: error.message,
+        stack: error.stack,
+        duration: Date.now() - resourceStartTime
+      });
       // Add resource without validation data if enhancement fails
       enhancedResources.push({
         ...resource,
-        resourceId: resource.id,  // Map FHIR id to resourceId
+        resourceId: resource.id,
         _validationSummary: null
       });
     }
   }
   
+  console.log(`[FHIR API] Enhanced ${enhancedResources.length} resources in ${Date.now() - startTime}ms`);
   return enhancedResources;
 }
 
@@ -906,7 +941,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
           const [paramName, operator] = key.split(':');
           if (paramName === '_profile') {
             if (operator === 'exists') {
-              profileExistsValue = value === 'true';
+            profileExistsValue = value === 'true';
               existsModifier = 'exists';
             } else if (operator === 'missing') {
               profileExistsValue = value === 'false'; // :missing=false means "has profile"
@@ -923,7 +958,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
           if (parsedFhirParams._profile) {
             const operator = parsedFhirParams._profile.operator;
             if (operator === 'exists') {
-              profileExistsValue = parsedFhirParams._profile.value === 'true';
+            profileExistsValue = parsedFhirParams._profile.value === 'true';
               existsModifier = 'exists';
             } else if (operator === 'missing') {
               profileExistsValue = parsedFhirParams._profile.value === 'false';
@@ -1797,94 +1832,143 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
   // This route MUST come AFTER /api/fhir/resources/filtered to avoid conflicts
   
   app.get("/api/fhir/resources/:id", async (req, res) => {
+    const startTime = Date.now();
+    const { id } = req.params;
+    let { resourceType } = req.query;
+    const requestId = `${resourceType || 'unknown'}/${id}`;
+    
     try {
-      const { id } = req.params;
-      let { resourceType } = req.query;
-      
-      console.log(`[FHIR API] Individual resource endpoint called for: ${resourceType || 'unknown'}/${id}`);
+      console.log(`[FHIR API] [${requestId}] Resource detail request started`);
 
       // If resourceType is provided, use it directly
       if (resourceType) {
+        let fetchStartTime = Date.now();
         try {
           // Get the current FHIR client (may have been updated due to server activation)
           const currentFhirClient = getCurrentFhirClient(fhirClient);
           if (!currentFhirClient) {
-            return res.status(503).json({ message: "FHIR client not initialized" });
+            console.error(`[FHIR API] [${requestId}] FHIR client not initialized`);
+            return res.status(503).json({ 
+              message: "FHIR client not initialized",
+              requestId 
+            });
           }
+          
+          console.log(`[FHIR API] [${requestId}] Fetching from FHIR server...`);
           const resource = await currentFhirClient.getResource(resourceType as string, id);
+          const fetchDuration = Date.now() - fetchStartTime;
           
           if (!resource) {
+            console.log(`[FHIR API] [${requestId}] Resource not found (${fetchDuration}ms)`);
             return res.status(404).json({ 
               message: `Resource ${resourceType}/${id} not found`,
               resourceType,
-              id
+              id,
+              requestId
             });
           }
 
-          console.log(`[FHIR API] Successfully fetched ${resourceType} resource ${id}`);
+          console.log(`[FHIR API] [${requestId}] FHIR fetch successful (${fetchDuration}ms)`);
           
           // Enhance resource with validation data
-          console.log(`[FHIR API] About to enhance resource with validation data`);
+          const enhanceStartTime = Date.now();
+          console.log(`[FHIR API] [${requestId}] Enhancing with validation data...`);
           const enhancedResources = await enhanceResourcesWithValidationData([resource]);
-          console.log(`[FHIR API] Enhancement completed, returning enhanced resource`);
+          const enhanceDuration = Date.now() - enhanceStartTime;
+          
+          console.log(`[FHIR API] [${requestId}] Request completed successfully (fetch: ${fetchDuration}ms, enhance: ${enhanceDuration}ms, total: ${Date.now() - startTime}ms)`);
           res.json(enhancedResources[0]);
           return;
           
         } catch (error: any) {
-          console.error(`[FHIR API] Failed to fetch ${resourceType} resource ${id}:`, error.message);
+          const errorDuration = Date.now() - fetchStartTime;
+          console.error(`[FHIR API] [${requestId}] Error during fetch/enhance (${errorDuration}ms):`, {
+            message: error.message,
+            code: error.code,
+            statusCode: error.statusCode,
+            stack: error.stack?.split('\n').slice(0, 3).join('\n') // First 3 lines of stack
+          });
           
-          if (error.message.includes('404') || error.message.includes('not found')) {
+          // Handle 404 specifically
+          if (error.message?.includes('404') || error.message?.includes('not found') || error.statusCode === 404) {
+            console.log(`[FHIR API] [${requestId}] Returning 404 response`);
             return res.status(404).json({ 
               message: `Resource ${resourceType}/${id} not found`,
               resourceType,
-              id
+              id,
+              requestId
             });
           }
           
+          // Re-throw to be caught by outer handler
           throw error;
         }
       }
 
       // If no resourceType provided, try common resource types
+      console.log(`[FHIR API] [${requestId}] No resourceType specified, trying common types`);
       const commonTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'DiagnosticReport', 'Medication', 'MedicationRequest', 'Procedure', 'AllergyIntolerance', 'Immunization', 'DocumentReference', 'Organization', 'Practitioner', 'AuditEvent'];
       
       for (const type of commonTypes) {
+        const typeStartTime = Date.now();
         try {
-          console.log(`[FHIR API] Trying to fetch ${type}/${id}`);
-          // Get the current FHIR client (may have been updated due to server activation)
+          console.log(`[FHIR API] [${requestId}] Trying ${type}...`);
+          
           const currentFhirClient = getCurrentFhirClient(fhirClient);
           if (!currentFhirClient) {
-            return res.status(503).json({ message: "FHIR client not initialized" });
+            console.error(`[FHIR API] [${requestId}] FHIR client not initialized`);
+            return res.status(503).json({ 
+              message: "FHIR client not initialized",
+              requestId 
+            });
           }
+          
           const resource = await currentFhirClient.getResource(type, id);
           
           if (resource) {
-            console.log(`[FHIR API] Successfully fetched ${type} resource ${id}`);
+            const fetchDuration = Date.now() - typeStartTime;
+            console.log(`[FHIR API] [${requestId}] Found as ${type} (${fetchDuration}ms)`);
             
             // Enhance resource with validation data
-            console.log(`[FHIR API] About to enhance resource with validation data (type search)`);
+            const enhanceStartTime = Date.now();
             const enhancedResources = await enhanceResourcesWithValidationData([resource]);
-            console.log(`[FHIR API] Enhancement completed, returning enhanced resource (type search)`);
+            const enhanceDuration = Date.now() - enhanceStartTime;
+            
+            console.log(`[FHIR API] [${requestId}] Request completed (fetch: ${fetchDuration}ms, enhance: ${enhanceDuration}ms, total: ${Date.now() - startTime}ms)`);
             res.json(enhancedResources[0]);
             return;
           }
         } catch (error: any) {
-          // Continue to next type if this one fails
-          console.log(`[FHIR API] ${type}/${id} not found, trying next type`);
+          const typeDuration = Date.now() - typeStartTime;
+          console.log(`[FHIR API] [${requestId}] ${type} failed (${typeDuration}ms): ${error.message}`);
+          // Continue to next type
         }
       }
 
       // If we get here, resource wasn't found with any type
+      console.log(`[FHIR API] [${requestId}] Not found with any resource type (${Date.now() - startTime}ms)`);
       return res.status(404).json({ 
         message: `Resource ${id} not found with any resource type`,
-        id
+        id,
+        requestId,
+        triedTypes: commonTypes
       });
 
     } catch (error: any) {
-      console.error('[FHIR API] Error fetching individual resource:', error);
+      const totalDuration = Date.now() - startTime;
+      console.error(`[FHIR API] [${requestId}] Unhandled error (${totalDuration}ms):`, {
+        message: error.message,
+        code: error.code,
+        statusCode: error.statusCode,
+        name: error.name,
+        stack: error.stack?.split('\n').slice(0, 5).join('\n') // First 5 lines of stack
+      });
+      
       res.status(500).json({ 
         message: "Failed to fetch resource",
-        error: error.message 
+        error: error.message,
+        requestId,
+        duration: totalDuration
       });
     }
   });
@@ -2114,6 +2198,8 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
 
   // FHIR Resource Counts
   app.get("/api/fhir/resource-counts", async (req, res) => {
+    console.log(`[Resource Counts] 📥 Request received: force=${req.query.force}, types=${req.query.types}`);
+    
     try {
       // Get the current FHIR client (may have been updated due to server activation)
       const currentFhirClient = getCurrentFhirClient(fhirClient);
@@ -2129,11 +2215,16 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         return res.status(503).json({ message: "No active FHIR server" });
       }
       
+      console.log(`[Resource Counts] 🔍 Active server ID: ${serverId}`);
+      
       // Import cache service
       const { resourceCountCache } = await import('../../../services/cache/resource-count-cache.js');
       
       // Check if caller wants ALL resource types (bypass settings filter)
       const getAllTypes = req.query.all === 'true';
+      const forceRefresh = req.query.force === 'true';
+      
+      console.log(`[Resource Counts] Query params: force=${req.query.force}, forceRefresh=${forceRefresh}, types=${req.query.types}`);
       
       // Check if specific resource types are requested via query param
       const requestedTypes = req.query.types 
@@ -2169,6 +2260,57 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         }
       }
       
+      // If force refresh, check if refresh is already in progress
+      if (forceRefresh) {
+        console.log('[Resource Counts] 🔄 Force refresh requested for server', serverId);
+        console.log('[Resource Counts] Passing types to refresh:', requestedTypes || resourceTypesToQuery);
+        
+        // Check if refresh is already in progress
+        const isRefreshing = await resourceCountCache.isRefreshInProgress(serverId);
+        if (isRefreshing) {
+          console.log('[Resource Counts] Refresh already in progress, returning current cache state...');
+          // Don't delete cache - let the ongoing refresh complete
+          // Return current partial data if available, otherwise empty
+          const cached = await resourceCountCache.get(serverId);
+          if (cached) {
+            // Return existing partial data
+            const resourceTypesArray = Object.entries(cached.counts)
+              .filter(([type]) => !requestedTypes || requestedTypes.includes(type))
+              .map(([resourceType, count]) => ({ resourceType, count }));
+            
+            return res.json({
+              resourceTypes: resourceTypesArray,
+              totalResources: resourceTypesArray.reduce((sum, item) => sum + item.count, 0),
+              isPartial: cached.isPartial,
+              loadedTypes: cached.loadedTypes,
+              pendingTypes: cached.pendingTypes
+            });
+          }
+        } else {
+          // No refresh in progress - safe to delete cache and start fresh
+          console.log('[Resource Counts] No refresh in progress, clearing cache...');
+          await resourceCountCache.delete(serverId);
+        }
+        
+        // Trigger priority-based refresh in background (don't await full completion)
+        resourceCountCache.refresh(serverId, currentFhirClient, requestedTypes || resourceTypesToQuery).catch(err => {
+          console.error('[Resource Counts] Background refresh failed:', err);
+        });
+        
+        // Return empty partial response immediately - frontend will poll for updates
+        // Incremental updates will populate the cache as each type is fetched
+        console.log('[Resource Counts] Returning empty partial response, fetching in background...');
+        res.json({
+          resourceTypes: [],
+          totalResources: 0,
+          isPartial: true,
+          loadedTypes: [],
+          pendingTypes: requestedTypes || []
+        });
+        
+        return;
+      }
+      
       // Try to get from cache first
       const cached = await resourceCountCache.get(serverId);
       
@@ -2178,20 +2320,65 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         console.log(`[Resource Counts] ⚡ Returning cached data (${statusLabel}, age: ${age}s)`);
         
         // Transform cached counts to expected format
-        const resourceTypes = Object.entries(cached.counts)
+        let resourceTypes = Object.entries(cached.counts)
           .map(([resourceType, count]) => ({
             resourceType,
             count
           }));
         
+        // If specific types were requested, return ONLY those types
+        let isPartialForRequest = cached.isPartial || false;
+        
+        if (requestedTypes && requestedTypes.length > 0) {
+          const countsMap = new Map(resourceTypes.map(rt => [rt.resourceType, rt.count]));
+          const pendingTypesSet = new Set(cached.pendingTypes || []);
+          
+          // Check if ANY of the requested types are still pending
+          const requestedTypesStillPending = requestedTypes.filter(type => pendingTypesSet.has(type));
+          
+          // Build response with only requested types, in requested order
+          resourceTypes = requestedTypes.map(requestedType => {
+            // If cache is partial and this type is still pending, don't include it
+            // (let frontend show loading indicator)
+            if (cached.isPartial && pendingTypesSet.has(requestedType)) {
+              return null;
+            }
+            
+            // Otherwise, return the count (0 if type doesn't exist on server)
+            return {
+              resourceType: requestedType,
+              count: countsMap.get(requestedType) ?? 0
+            };
+          }).filter(rt => rt !== null) as { resourceType: string; count: number }[];
+          
+          // For specific type requests, isPartial should only reflect the REQUESTED types
+          // not the entire backend cache
+          isPartialForRequest = requestedTypesStillPending.length > 0;
+          
+          console.log(`[Resource Counts] Requested ${requestedTypes.length} types, ${requestedTypesStillPending.length} still pending: ${requestedTypesStillPending.join(', ')}`);
+        }
+        
         // Return cached data immediately with partial flag
         res.json({
           resourceTypes,
           totalResources: cached.totalResources,
-          isPartial: cached.isPartial || false,
+          isPartial: isPartialForRequest,
           loadedTypes: cached.loadedTypes || Object.keys(cached.counts),
           pendingTypes: cached.pendingTypes || []
         });
+        
+        // If specific types were requested and some are still pending, trigger priority refresh
+        if (requestedTypes && requestedTypes.length > 0) {
+          const pendingTypesSet = new Set(cached.pendingTypes || []);
+          const requestedTypesStillPending = requestedTypes.filter(type => pendingTypesSet.has(type));
+          
+          if (requestedTypesStillPending.length > 0 && cached.isPartial) {
+            console.log(`[Resource Counts] ${requestedTypesStillPending.length} requested types still pending, triggering priority refresh: ${requestedTypesStillPending.join(', ')}`);
+            resourceCountCache.refresh(serverId, currentFhirClient, requestedTypes).catch(err => {
+              console.error('[Resource Counts] Priority refresh failed:', err);
+            });
+          }
+        }
         
         // If stale, trigger background refresh (don't await)
         if (cached.isStale) {
@@ -2204,44 +2391,28 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         return;
       }
       
-      // No cache - use priority-based fetch (fast initial response)
-      console.log('[Resource Counts] ❌ Cache miss - starting priority-based fetch...');
+      // No cache - start background fetch and return empty partial response
+      console.log('[Resource Counts] ❌ Cache miss - starting background fetch...');
       
       try {
-        // Trigger priority-based refresh (will set partial cache and return)
-        await resourceCountCache.refresh(serverId, currentFhirClient, resourceTypesToQuery);
+        // Trigger priority-based refresh in background (don't await)
+        resourceCountCache.refresh(serverId, currentFhirClient, requestedTypes || resourceTypesToQuery).catch(err => {
+          console.error('[Resource Counts] Background refresh failed:', err);
+        });
         
-        // Get the newly cached data (should be partial at this point)
-        const newlyCached = await resourceCountCache.get(serverId);
-        
-        if (newlyCached) {
-          const resourceTypes = Object.entries(newlyCached.counts)
-            .map(([resourceType, count]) => ({
-              resourceType,
-              count
-            }));
-          
-          res.json({
-            resourceTypes,
-            totalResources: newlyCached.totalResources,
-            isPartial: newlyCached.isPartial || false,
-            loadedTypes: newlyCached.loadedTypes || Object.keys(newlyCached.counts),
-            pendingTypes: newlyCached.pendingTypes || []
-          });
-        } else {
-          // Fallback if somehow cache isn't set
+        // Return empty partial response immediately - frontend will poll for updates
+        console.log('[Resource Counts] Returning empty partial response, fetch in progress...');
           res.json({
             resourceTypes: [],
             totalResources: 0,
-            isPartial: false,
+          isPartial: true,
             loadedTypes: [],
-            pendingTypes: []
+          pendingTypes: requestedTypes || []
           });
-        }
       } catch (error: any) {
-        console.error('[Resource Counts] Failed to fetch fresh data:', error);
-        // Return empty counts on error
-        res.json({
+        console.error('[Resource Counts] Failed to start cache refresh:', error);
+        res.status(500).json({
+          message: "Failed to start resource count refresh",
           resourceTypes: [],
           totalResources: 0,
           isPartial: false,

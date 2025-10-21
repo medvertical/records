@@ -45,29 +45,26 @@ app.use((req, res, next) => {
   await setupRoutes(app);
 
   // Warm up resource count cache BEFORE starting server (priority types only)
-  console.log('[Server] Starting cache warmup (priority types)...');
-  try {
-    const { getActiveServerId } = await import('./utils/server-scoping.js');
-    const { resourceCountCache } = await import('./services/cache/resource-count-cache.js');
-    
-    const serverId = await getActiveServerId();
-    if (serverId && global.fhirClient) {
-      console.log(`[Server] 🔥 Warming up resource count cache for server ${serverId}...`);
+  console.log('[Server] Starting cache warmup (priority types) in background...');
+  // Run cache warmup in background - don't block server startup
+  (async () => {
+    try {
+      const { getActiveServerId } = await import('./utils/server-scoping.js');
+      const { resourceCountCache } = await import('./services/cache/resource-count-cache.js');
       
-      // Set timeout for warmup (30 seconds max)
-      const warmupPromise = resourceCountCache.refresh(serverId, global.fhirClient);
-      const timeoutPromise = new Promise<void>((_, reject) => 
-        setTimeout(() => reject(new Error('Cache warmup timeout')), 30000)
-      );
-      
-      await Promise.race([warmupPromise, timeoutPromise]);
-      console.log('[Server] ✅ Cache warmup complete (priority types loaded, remaining types loading in background)');
-    } else {
-      console.log('[Server] ⚠️  No active server or FHIR client - skipping cache warmup');
+      const serverId = await getActiveServerId();
+      if (serverId && global.fhirClient) {
+        console.log(`[Server] 🔥 Warming up resource count cache for server ${serverId}...`);
+        
+        await resourceCountCache.refresh(serverId, global.fhirClient);
+        console.log('[Server] ✅ Cache warmup complete (priority types loaded, remaining types loading in background)');
+      } else {
+        console.log('[Server] ⚠️  No active server or FHIR client - skipping cache warmup');
+      }
+    } catch (error) {
+      console.warn('[Server] ⚠️  Cache warmup failed (will serve data on first request):', error);
     }
-  } catch (error) {
-    console.warn('[Server] ⚠️  Cache warmup failed or timed out (will serve data on first request):', error);
-  }
+  })();
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
