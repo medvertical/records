@@ -28,3 +28,8 @@ server/cache/fhir-packages/*
 # Temporary FHIR validation output files
 json
 *.xml.tmp
+
+# SQLite databases (legacy - we use PostgreSQL)
+*.db
+*.sqlite
+*.sqlite3

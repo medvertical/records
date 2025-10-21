@@ -65,6 +65,12 @@ Early implementation plans and task breakdowns.
 
 These files are kept for historical reference but are no longer actively maintained. For all current information, use the documentation in the main `docs/` directory.
 
+### ⚠️ Database Technology Note
+
+**Some archived documentation references SQLite** - these are legacy references from early development phases. 
+
+**The current system exclusively uses PostgreSQL.** See [DATABASE.md](../../DATABASE.md) for current database setup and configuration.
+
 **Last Archived:** October 16, 2024  
 **Reason:** Documentation reorganization for 100% completion
 

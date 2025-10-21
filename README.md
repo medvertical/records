@@ -5,6 +5,7 @@ A comprehensive FHIR validation and management platform with **HAPI FHIR Validat
 [![Test Coverage](https://img.shields.io/badge/tests-513%2F528%20passing-brightgreen)](./docs/technical/VERIFICATION_REPORT.md)
 [![FHIR Versions](https://img.shields.io/badge/FHIR-R4%20%7C%20R5%20%7C%20R6-blue)](./docs/technical/validation/VALIDATION_ARCHITECTURE.md)
 [![Code Quality](https://img.shields.io/badge/code%20quality-SRP%20compliant-green)](./docs/requirements/global.mdc)
+[![Database](https://img.shields.io/badge/database-PostgreSQL-336791)](./DATABASE.md)
 
 ## 🎯 Overview
 
@@ -50,6 +51,11 @@ The Records FHIR Platform provides **production-grade FHIR resource validation**
 **📚 [Documentation Index](./docs/README.md)**
 - All 27 guides indexed
 - Quick navigation by use case
+
+**🗄️ [Database Setup](./DATABASE.md)**
+- PostgreSQL configuration
+- Connection setup
+- Migration guide
 
 ---
 

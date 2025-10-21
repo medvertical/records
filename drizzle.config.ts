@@ -1,3 +1,4 @@
+// Database: PostgreSQL (via Drizzle ORM)
 import { defineConfig } from "drizzle-kit";
 
 if (!process.env.DATABASE_URL) {
