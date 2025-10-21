@@ -221,21 +221,6 @@ export function setupServerRoutes(app: Express) {
   });
 
   // Get server capabilities
-  app.get("/api/servers/:id/capabilities", async (req, res) => {
-    try {
-      const serverRepo = getServerRepository();
-      const serverId = req.params.id;
-      
-      const capabilities = await serverRepo.getServerCapabilities(serverId);
-      
-      if (!capabilities) {
-        return res.status(404).json({ message: "Server not found" });
-      }
-      
-      res.json(capabilities);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
+  // Capabilities endpoint moved to servers-capabilities.ts
 }
 

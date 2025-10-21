@@ -22,6 +22,7 @@ import {
 import { setupFhirRoutes, setupProfileRoutes } from "./api/fhir";
 import { setupDashboardRoutes } from "./api/dashboard";
 import { setupServerRoutes } from "./api/servers";
+import { setupServerCapabilitiesRoutes } from "./api/servers-capabilities";
 import { performanceRoutes } from "./api/performance";
 import performanceBaselineRoutes from "./api/performance-baseline";
 import validationStreamingRoutes from "./api/validation-streaming";
@@ -42,6 +43,7 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   setupProfileRoutes(app);
   setupValidationSettingsRoutes(app);
   setupServerRoutes(app);
+  setupServerCapabilitiesRoutes(app);
   
   // Validation API routes
   app.use('/api/validation', validationGroupsRoutes);

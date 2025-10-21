@@ -67,6 +67,9 @@ export class ServerActivationService {
           
           console.log(`[ServerActivationService] Successfully updated FHIR client for server ${event.serverId}`);
           
+          // Detect server capabilities in the background (non-blocking)
+          this.detectCapabilitiesInBackground(parseInt(event.serverId), newFhirClient, event.server.url);
+          
           // Emit client updated event for other services
           serverActivationEmitter.emit('fhirClientUpdated', {
             serverId: event.serverId,
@@ -79,6 +82,22 @@ export class ServerActivationService {
       }
     } catch (error) {
       console.error(`[ServerActivationService] Error handling server activation:`, error);
+    }
+  }
+
+  private async detectCapabilitiesInBackground(serverId: number, fhirClient: FhirClient, serverUrl?: string) {
+    try {
+      console.log(`[ServerActivationService] Detecting capabilities for server ${serverId} in background`);
+      const { ServerCapabilitiesCache } = await import('./fhir/server-capabilities-cache.js');
+      
+      // This will use cached capabilities if available (< 24 hours old)
+      // or detect and cache them if not
+      await ServerCapabilitiesCache.getCapabilities(serverId, fhirClient, serverUrl);
+      
+      console.log(`[ServerActivationService] Capabilities detection complete for server ${serverId}`);
+    } catch (error) {
+      console.error(`[ServerActivationService] Error detecting capabilities for server ${serverId}:`, error);
+      // Don't throw - this is a background task
     }
   }
 

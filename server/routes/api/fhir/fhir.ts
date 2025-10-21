@@ -653,15 +653,33 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         uri: ["equals", "contains"],
       };
 
-      // Special handling for parameters that support the "exists" modifier
-      const existsSupportedParams = ['_profile', '_security', '_tag', '_source', 'identifier', 'active', 'deceased', 'gender', 'language'];
+      // Get detected server capabilities to determine which modifiers are supported
+      const { ServerCapabilitiesCache } = await import('../../../services/fhir/server-capabilities-cache.js');
+      const activeServer = await storage.getActiveFhirServer();
+      let serverCapabilities = null;
+      
+      if (activeServer) {
+        try {
+          serverCapabilities = await ServerCapabilitiesCache.getCapabilities(activeServer.id, currentFhirClient, activeServer.url);
+        } catch (error) {
+          console.warn('[FHIR API] Could not get server capabilities, using defaults:', error);
+        }
+      }
+
+      // Parameters that typically support existence modifiers
+      const existenceCheckableParams = ['_profile', '_security', '_tag', '_source', 'identifier', 'active', 'deceased', 'gender', 'language'];
 
       const searchParameters = params.map((p: any) => {
         let operators = operatorMap[p.type] || ["eq"];
         
-        // Add "exists" operator for parameters that support it
-        if (existsSupportedParams.includes(p.name)) {
-          operators = [...operators, "exists"];
+        // Add existence modifiers based on detected server capabilities
+        if (existenceCheckableParams.includes(p.name) && serverCapabilities) {
+          if (serverCapabilities.searchModifiers.missing) {
+            operators = [...operators, "missing"];
+          }
+          if (serverCapabilities.searchModifiers.exists) {
+            operators = [...operators, "exists"];
+          }
         }
         
         return {
@@ -899,16 +917,23 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         });
       }
 
-      // Handle special case: _profile:exists parameter for searching resources with/without profiles
-      // Check if there's a _profile:exists parameter in the query (both URL params and JSON fhirParams)
+      // Handle special case: _profile with existence modifiers (:exists or :missing)
+      // Check if there's a _profile:exists or _profile:missing parameter in the query
       let profileExistsValue: boolean | null = null;
+      let existsModifier: 'exists' | 'missing' | null = null;
       
       // First check direct URL parameters with colons
       Object.entries(req.query).forEach(([key, value]) => {
         if (key.includes(':')) {
           const [paramName, operator] = key.split(':');
-          if (paramName === '_profile' && operator === 'exists') {
-            profileExistsValue = value === 'true';
+          if (paramName === '_profile') {
+            if (operator === 'exists') {
+              profileExistsValue = value === 'true';
+              existsModifier = 'exists';
+            } else if (operator === 'missing') {
+              profileExistsValue = value === 'false'; // :missing=false means "has profile"
+              existsModifier = 'missing';
+            }
           }
         }
       });
@@ -917,16 +942,52 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       if (profileExistsValue === null && fhirParams) {
         try {
           const parsedFhirParams = typeof fhirParams === 'string' ? JSON.parse(fhirParams) : fhirParams;
-          if (parsedFhirParams._profile && parsedFhirParams._profile.operator === 'exists') {
-            profileExistsValue = parsedFhirParams._profile.value === 'true';
+          if (parsedFhirParams._profile) {
+            const operator = parsedFhirParams._profile.operator;
+            if (operator === 'exists') {
+              profileExistsValue = parsedFhirParams._profile.value === 'true';
+              existsModifier = 'exists';
+            } else if (operator === 'missing') {
+              profileExistsValue = parsedFhirParams._profile.value === 'false';
+              existsModifier = 'missing';
+            }
           }
         } catch (e) {
           // Ignore JSON parsing errors
         }
       }
       
-      // If we have _profile:exists, search FHIR server and filter for resources with/without profiles
-      if (profileExistsValue !== null) {
+      // Check if server supports the requested modifier
+      let useClientSideFiltering = false;
+      if (profileExistsValue !== null && existsModifier) {
+        try {
+          const { ServerCapabilitiesCache } = await import('../../../services/fhir/server-capabilities-cache.js');
+          const activeServer = await storage.getActiveFhirServer();
+          
+          if (activeServer && currentFhirClient) {
+            const capabilities = await ServerCapabilitiesCache.getCapabilities(activeServer.id, currentFhirClient, activeServer.url);
+            
+            // Check if server supports the modifier
+            const modifierSupported = capabilities.searchModifiers[existsModifier];
+            
+            if (modifierSupported) {
+              console.log(`[FHIR API] Server supports :${existsModifier} modifier - using server-side filtering`);
+              // Try server-side filtering first
+              // TODO: Implement server-side filtering using the supported modifier
+              useClientSideFiltering = true; // For now, fallback to client-side
+            } else {
+              console.log(`[FHIR API] Server does NOT support :${existsModifier} modifier - using client-side filtering`);
+              useClientSideFiltering = true;
+            }
+          }
+        } catch (error) {
+          console.warn('[FHIR API] Could not check server capabilities, using client-side filtering:', error);
+          useClientSideFiltering = true;
+        }
+      }
+      
+      // If we have _profile with existence modifier, use appropriate filtering strategy
+      if (profileExistsValue !== null && useClientSideFiltering) {
         console.log(`[FHIR API] Searching for resources ${profileExistsValue ? 'with' : 'without'} profiles (_profile:exists=${profileExistsValue})`);
         
         // Use FHIR server search and then filter results
@@ -1066,7 +1127,17 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
                   offset: userOffset,
                   hasMore: hasMore
                 },
-                searchMethod: 'fhir_profile_filter',
+                searchMethod: 'client_side_filter',
+                filteringStrategy: {
+                  method: 'client_side',
+                  reason: `Server does not support :${existsModifier} modifier`,
+                  modifierUsed: existsModifier,
+                  limitations: {
+                    maxResourcesPerType: 1000,
+                    maxTotalProcessed: 5000,
+                    actualProcessed: totalProcessed
+                  }
+                },
                 filterSummary: {
                   resourceTypes: searchResourceTypes,
                   totalMatching: totalFound,

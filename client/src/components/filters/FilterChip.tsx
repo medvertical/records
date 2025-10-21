@@ -3,8 +3,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Label } from '@/components/ui/label';
 import { X, ChevronDown, Equal, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, Search, Type, Hash, CheckCircle } from 'lucide-react';
 import { getResourceTypeIcon } from '@/lib/resource-type-icons';
+import { BooleanInput, DateInput, NumberInput, TokenInput, ReferenceInput, StringInput } from './inputs';
 
 export type ChipKind = 'resourceType' | 'validation' | 'search' | 'fhirParam';
 
@@ -39,6 +42,37 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
 
   const isText = typeHint === 'string' || kind === 'search';
 
+  // Determine what type of input to show based on operator and parameter type
+  const getOperatorValueType = (paramType: string | undefined, operator: string): string => {
+    // Boolean operators always need boolean input
+    if (operator === 'missing' || operator === 'exists') {
+      return 'boolean';
+    }
+    
+    // Comparison operators depend on parameter type
+    if (['eq', 'gt', 'lt', 'ge', 'le', 'greaterThan', 'lessThan', 'greaterThanOrEqual', 'lessThanOrEqual'].includes(operator)) {
+      if (paramType === 'date') return 'date';
+      if (paramType === 'number' || paramType === 'quantity') return 'number';
+    }
+    
+    // String operators
+    if (['contains', 'exact', 'startsWith', 'endsWith'].includes(operator)) {
+      return 'string';
+    }
+    
+    // Type-specific inputs
+    if (paramType === 'token') return 'token';
+    if (paramType === 'reference') return 'reference';
+    if (paramType === 'date') return 'date';
+    if (paramType === 'number' || paramType === 'quantity') return 'number';
+    if (paramType === 'uri') return 'string'; // URI uses string input with URL placeholder
+    
+    // Default to string
+    return 'string';
+  };
+
+  const valueType = getOperatorValueType(typeHint, localOp);
+
   // Get icon for operator
   const getOperatorIcon = (op: string) => {
     switch (op) {
@@ -48,6 +82,8 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
         return <Equal className="h-4 w-4" />;
       case 'exists':
         return <CheckCircle className="h-4 w-4" />;
+      case 'missing':
+        return <X className="h-4 w-4" />;
       case 'gt':
       case '>':
       case 'greaterThan':
@@ -88,6 +124,8 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
         return 'equals';
       case 'exists':
         return 'exists';
+      case 'missing':
+        return 'missing';
       case 'gt':
       case '>':
       case 'greaterThan':
@@ -141,27 +179,26 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
       <PopoverContent className="w-72" align="start">
         <div className="space-y-3">
           {operators && operators.length > 0 && (
-            <div className="space-y-1">
+            <div className="space-y-2">
               <div className="text-xs text-gray-500">Operator</div>
-              <Select 
+              <RadioGroup 
                 value={localOp} 
-                onValueChange={(v) => setLocalOp(v)} 
+                onValueChange={setLocalOp}
                 disabled={disabled}
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {operators.map(op => (
-                    <SelectItem key={op} value={op}>
-                      <div className="flex items-center gap-2">
-                        {getOperatorIcon(op)}
-                        <span className="text-sm">{getOperatorLabel(op)}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {operators.map(op => (
+                  <div key={op} className="flex items-center space-x-2">
+                    <RadioGroupItem value={op} id={`op-${op}`} />
+                    <Label 
+                      htmlFor={`op-${op}`} 
+                      className="flex items-center gap-2 cursor-pointer text-sm font-normal"
+                    >
+                      {getOperatorIcon(op)}
+                      <span>{getOperatorLabel(op)}</span>
+                    </Label>
+                  </div>
+                ))}
+              </RadioGroup>
             </div>
           )}
 
@@ -190,34 +227,43 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
                   })}
                 </SelectContent>
               </Select>
-            ) : localOp === 'exists' ? (
-              <Select 
-                value={localValue} 
-                onValueChange={(v) => setLocalValue(v)} 
+            ) : valueType === 'boolean' ? (
+              <BooleanInput 
+                value={localValue}
+                onChange={setLocalValue}
                 disabled={disabled}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select existence" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="true">
-                    <div className="flex items-center gap-2">
-                      <span>true (has value)</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="false">
-                    <div className="flex items-center gap-2">
-                      <span>false (no value)</span>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              />
+            ) : valueType === 'date' ? (
+              <DateInput 
+                value={localValue}
+                onChange={setLocalValue}
+                disabled={disabled}
+              />
+            ) : valueType === 'number' ? (
+              <NumberInput 
+                value={localValue}
+                onChange={setLocalValue}
+                disabled={disabled}
+              />
+            ) : valueType === 'token' ? (
+              <TokenInput 
+                value={localValue}
+                onChange={setLocalValue}
+                disabled={disabled}
+                paramName={label}
+              />
+            ) : valueType === 'reference' ? (
+              <ReferenceInput 
+                value={localValue}
+                onChange={setLocalValue}
+                disabled={disabled}
+              />
             ) : (
-              <Input 
-                ref={valueInputRef}
-                value={localValue} 
-                onChange={(e) => setLocalValue(e.target.value)} 
-                disabled={disabled} 
+              <StringInput 
+                value={localValue}
+                onChange={setLocalValue}
+                disabled={disabled}
+                operator={localOp}
               />
             )}
           </div>

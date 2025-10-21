@@ -12,6 +12,14 @@ export const fhirServers = pgTable("fhir_servers", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const serverCapabilities = pgTable("server_capabilities", {
+  id: serial("id").primaryKey(),
+  serverId: integer("server_id").notNull().references(() => fhirServers.id, { onDelete: "cascade" }),
+  capabilities: jsonb("capabilities").notNull(),
+  detectedAt: timestamp("detected_at").notNull().defaultNow(),
+  fhirVersion: text("fhir_version"),
+});
+
 export const validationProgressState = pgTable("validation_progress_state", {
   id: serial("id").primaryKey(),
   jobId: text("job_id").notNull().unique(),
