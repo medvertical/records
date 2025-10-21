@@ -1996,7 +1996,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       const cached = await resourceCountCache.get(serverId);
       
       if (cached) {
-        console.log(`[Resource Counts] ⚡ Returning cached data (${cached.isStale ? 'STALE' : 'FRESH'}, age: ${Math.round((Date.now() - cached.lastUpdated.getTime()) / 1000)}s)`);
+        const age = Math.round((Date.now() - cached.lastUpdated.getTime()) / 1000);
+        const statusLabel = cached.isStale ? 'STALE' : (cached.isPartial ? 'PARTIAL' : 'FRESH');
+        console.log(`[Resource Counts] ⚡ Returning cached data (${statusLabel}, age: ${age}s)`);
         
         // Transform cached counts to expected format
         const resourceTypes = Object.entries(cached.counts)
@@ -2005,10 +2007,13 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
             count
           }));
         
-        // Return cached data immediately
+        // Return cached data immediately with partial flag
         res.json({
           resourceTypes,
-          totalResources: cached.totalResources
+          totalResources: cached.totalResources,
+          isPartial: cached.isPartial || false,
+          loadedTypes: cached.loadedTypes || Object.keys(cached.counts),
+          pendingTypes: cached.pendingTypes || []
         });
         
         // If stale, trigger background refresh (don't await)
@@ -2022,46 +2027,56 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         return;
       }
       
-      // No cache - fetch fresh data (this will be slow but only happens once)
-      console.log('[Resource Counts] ❌ Cache miss - fetching fresh data (this may take a while)...');
+      // No cache - use priority-based fetch (fast initial response)
+      console.log('[Resource Counts] ❌ Cache miss - starting priority-based fetch...');
       
       try {
-        // Use sequential fetch to avoid overloading Fire.ly
-        const counts = await currentFhirClient.getResourceCountsSequential(resourceTypesToQuery, 5000);
+        // Trigger priority-based refresh (will set partial cache and return)
+        await resourceCountCache.refresh(serverId, currentFhirClient, resourceTypesToQuery);
         
-        // Cache the results
-        const totalResources = Object.values(counts).reduce((sum, count) => sum + count, 0);
-        await resourceCountCache.set(serverId, {
-          counts,
-          totalResources,
-          totalTypes: Object.keys(counts).length,
-        });
+        // Get the newly cached data (should be partial at this point)
+        const newlyCached = await resourceCountCache.get(serverId);
         
-        // Transform the counts into the expected format
-        const resourceTypes = Object.entries(counts)
-          .map(([resourceType, count]) => ({
-            resourceType,
-            count
-          }));
-        
-        res.json({
-          resourceTypes,
-          totalResources
-        });
+        if (newlyCached) {
+          const resourceTypes = Object.entries(newlyCached.counts)
+            .map(([resourceType, count]) => ({
+              resourceType,
+              count
+            }));
+          
+          res.json({
+            resourceTypes,
+            totalResources: newlyCached.totalResources,
+            isPartial: newlyCached.isPartial || false,
+            loadedTypes: newlyCached.loadedTypes || Object.keys(newlyCached.counts),
+            pendingTypes: newlyCached.pendingTypes || []
+          });
+        } else {
+          // Fallback if somehow cache isn't set
+          res.json({
+            resourceTypes: [],
+            totalResources: 0,
+            isPartial: false,
+            loadedTypes: [],
+            pendingTypes: []
+          });
+        }
       } catch (error: any) {
         console.error('[Resource Counts] Failed to fetch fresh data:', error);
         // Return empty counts on error
         res.json({
           resourceTypes: [],
-          totalResources: 0
+          totalResources: 0,
+          isPartial: false,
+          loadedTypes: [],
+          pendingTypes: []
         });
       }
     } catch (error: any) {
-      console.warn('[Resource Counts] Request failed:', error.message);
-      // Return empty counts on error
-      res.json({
-        resourceTypes: [],
-        totalResources: 0
+      console.error('[Resource Counts] Unexpected error:', error);
+      res.status(500).json({ 
+        message: 'Failed to get resource counts',
+        error: error.message 
       });
     }
   });

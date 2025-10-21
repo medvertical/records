@@ -101,15 +101,13 @@ export function useDashboardBatchState() {
     staleTime: 0, // Always consider data stale - fetch fresh data on every poll
     gcTime: 0, // Don't cache old data (previously cacheTime)
     refetchInterval: (query) => {
-      // Always poll every 2s to catch state changes
-      // The callback gets query data, but on first mount it's undefined
-      // So we must return a truthy value (2000) to start polling
+      // Only poll when validation is actually running
       const data = query?.state?.data;
-      // Poll every 2s when running OR when we don't know yet (data is undefined)
-      return (!data || data.isRunning) ? 2000 : false;
+      // Poll every 2s ONLY when validation is running
+      return (data?.isRunning) ? 2000 : false;
     },
     refetchIntervalInBackground: false,
-    refetchOnMount: true,
+    refetchOnMount: true, // Fetch once on mount to get initial state
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     networkMode: 'always', // Always make network requests, don't use cache

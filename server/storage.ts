@@ -531,15 +531,23 @@ export class DatabaseStorage implements IStorage {
     const resources = await db.select().from(fhirResources)
       .where(targetServerId ? eq(fhirResources.serverId, targetServerId) : undefined);
     
-    // Get validation results for resources on this server WITH issues
+    // Import per-aspect validation schema
+    const { validationResultsPerAspect } = await import('@shared/schema-validation-per-aspect');
+    
+    // Get validation results from per-aspect table
+    // We need to aggregate per-aspect results to determine overall resource validity
     const allValidationResults = await db.select({
-      ...getTableColumns(validationResults),
-      resourceType: fhirResources.resourceType,
-      resourceId: fhirResources.id
+      serverId: validationResultsPerAspect.serverId,
+      resourceType: validationResultsPerAspect.resourceType,
+      fhirId: validationResultsPerAspect.fhirId,
+      aspect: validationResultsPerAspect.aspect,
+      isValid: validationResultsPerAspect.isValid,
+      errorCount: validationResultsPerAspect.errorCount,
+      warningCount: validationResultsPerAspect.warningCount,
+      informationCount: validationResultsPerAspect.informationCount,
     })
-      .from(validationResults)
-      .innerJoin(fhirResources, eq(validationResults.resourceId, fhirResources.id))
-      .where(targetServerId ? eq(fhirResources.serverId, targetServerId) : undefined);
+      .from(validationResultsPerAspect)
+      .where(targetServerId ? eq(validationResultsPerAspect.serverId, targetServerId) : undefined);
     
     // Get current validation settings
     const settingsService = getValidationSettingsService();
@@ -569,27 +577,58 @@ export class DatabaseStorage implements IStorage {
       resourceBreakdown[resource.resourceType].total++;
     });
     
-    // Process each validated resource
-    const processedResourceIds = new Set<number>();
-    
+    // Group per-aspect results by resource (resourceType + fhirId)
+    const resourceValidationMap = new Map<string, Array<typeof allValidationResults[0]>>();
     allValidationResults.forEach(result => {
-      // Skip if we already processed this resource
-      if (processedResourceIds.has(result.resourceId)) return;
-      processedResourceIds.add(result.resourceId);
+      const key = `${result.resourceType}/${result.fhirId}`;
+      if (!resourceValidationMap.has(key)) {
+        resourceValidationMap.set(key, []);
+      }
+      resourceValidationMap.get(key)!.push(result);
+    });
+    
+    // Process each validated resource (aggregating across aspects)
+    const processedResources = new Set<string>();
+    
+    resourceValidationMap.forEach((aspectResults, resourceKey) => {
+      // Skip if already processed
+      if (processedResources.has(resourceKey)) return;
+      processedResources.add(resourceKey);
       
-      // Re-evaluate validation result based on current settings
-      const reEvaluatedResult = this.reEvaluateValidationResult(result, settings);
+      const resourceType = aspectResults[0].resourceType;
       
-      if (reEvaluatedResult.isValid) {
+      // Aggregate across all aspects: resource is valid only if ALL enabled aspects are valid
+      let hasErrors = false;
+      let hasWarnings = false;
+      let allAspectsValid = true;
+      
+      aspectResults.forEach(aspectResult => {
+        // Check if this aspect is enabled in settings
+        const aspectSettings = settings[aspectResult.aspect as keyof typeof settings];
+        if (!aspectSettings?.enabled) {
+          return; // Skip disabled aspects
+        }
+        
+        if (!aspectResult.isValid) {
+          allAspectsValid = false;
+        }
+        
+        if (aspectResult.errorCount > 0) {
+          hasErrors = true;
+        }
+        
+        if (aspectResult.warningCount > 0) {
+          hasWarnings = true;
+        }
+      });
+      
+      // Determine overall resource status
+      if (allAspectsValid) {
         validResourcesCount++;
-        if (resourceBreakdown[result.resourceType]) {
-          resourceBreakdown[result.resourceType].valid++;
+        if (resourceBreakdown[resourceType]) {
+          resourceBreakdown[resourceType].valid++;
         }
       } else {
-        // Check if it has warnings (but no errors) or errors
-        const hasErrors = reEvaluatedResult.errorCount > 0;
-        const hasWarnings = reEvaluatedResult.warningCount > 0;
-        
         if (hasErrors) {
           errorResourcesCount++;
         } else if (hasWarnings) {
@@ -602,10 +641,11 @@ export class DatabaseStorage implements IStorage {
     });
     
     // Count unvalidated resources separately (don't count them as errors)
-    const validatedResourceIds = new Set(allValidationResults.map(r => r.resourceId));
-    const unvalidatedResourcesCount = resources.filter(resource => 
-      !validatedResourceIds.has(resource.id)
-    ).length;
+    const validatedResourceKeys = new Set(Array.from(resourceValidationMap.keys()));
+    const unvalidatedResourcesCount = resources.filter(resource => {
+      const key = `${resource.resourceType}/${resource.resourceId}`;
+      return !validatedResourceKeys.has(key);
+    }).length;
     
     // Calculate percentages
     Object.keys(resourceBreakdown).forEach(type => {
@@ -615,7 +655,7 @@ export class DatabaseStorage implements IStorage {
     
     const activeProfiles = await db.select().from(validationProfiles).where(eq(validationProfiles.isActive, true));
     
-    // Calculate aspect breakdown from validation results
+    // Calculate aspect breakdown from per-aspect validation results
     const aspectBreakdown: Record<string, {
       enabled: boolean;
       issueCount: number;
@@ -624,37 +664,25 @@ export class DatabaseStorage implements IStorage {
       informationCount: number;
       score: number;
     }> = {
-      structural: { enabled: settings.aspects?.structural?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      profile: { enabled: settings.aspects?.profile?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      terminology: { enabled: settings.aspects?.terminology?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      reference: { enabled: settings.aspects?.reference?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      businessRule: { enabled: settings.aspects?.businessRule?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      metadata: { enabled: settings.aspects?.metadata?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 }
+      structural: { enabled: settings.structural?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      profile: { enabled: settings.profile?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      terminology: { enabled: settings.terminology?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      reference: { enabled: settings.reference?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      businessRule: { enabled: settings.businessRule?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      metadata: { enabled: settings.metadata?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 }
     };
 
-    // Aggregate issues by aspect from all validation results
+    // Aggregate issues by aspect from per-aspect validation results
     allValidationResults.forEach(result => {
-      const issues = (result.issues as any[]) || [];
-      issues.forEach((issue: any) => {
-        const aspect = issue.aspect || issue.category || 'structural';
-        if (aspectBreakdown[aspect]) {
-          aspectBreakdown[aspect].issueCount++;
-          
-          // Count by severity
-          const severity = issue.severity || 'error';
-          switch (severity.toLowerCase()) {
-            case 'error':
-              aspectBreakdown[aspect].errorCount++;
-              break;
-            case 'warning':
-              aspectBreakdown[aspect].warningCount++;
-              break;
-            case 'info':
-              aspectBreakdown[aspect].informationCount++;
-              break;
-          }
-        }
-      });
+      const aspect = result.aspect;
+      if (aspectBreakdown[aspect]) {
+        // Count total issues
+        const totalIssues = result.errorCount + result.warningCount + result.informationCount;
+        aspectBreakdown[aspect].issueCount += totalIssues;
+        aspectBreakdown[aspect].errorCount += result.errorCount;
+        aspectBreakdown[aspect].warningCount += result.warningCount;
+        aspectBreakdown[aspect].informationCount += result.informationCount;
+      }
     });
 
     // Calculate scores for each aspect (100 - penalties)

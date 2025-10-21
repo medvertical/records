@@ -1855,6 +1855,31 @@ try {
   }
 }
 
+// Warm up resource count cache before starting server (production)
+if (!isServerless && fhirClient) {
+  console.log('[Server] Starting cache warmup (priority types)...');
+  try {
+    const { getActiveServerId } = await import('./server/utils/server-scoping.js');
+    const { resourceCountCache } = await import('./server/services/cache/resource-count-cache.js');
+    
+    const serverId = await getActiveServerId();
+    if (serverId) {
+      console.log(`[Server] 🔥 Warming up resource count cache for server ${serverId}...`);
+      
+      // Set timeout for warmup (30 seconds max)
+      const warmupPromise = resourceCountCache.refresh(serverId, fhirClient);
+      const timeoutPromise = new Promise<void>((_, reject) => 
+        setTimeout(() => reject(new Error('Cache warmup timeout')), 30000)
+      );
+      
+      await Promise.race([warmupPromise, timeoutPromise]);
+      console.log('[Server] ✅ Cache warmup complete (priority types loaded, remaining types loading in background)');
+    }
+  } catch (error) {
+    console.warn('[Server] ⚠️  Cache warmup failed or timed out (will serve data on first request):', error);
+  }
+}
+
 // Only start the server if not in Vercel/serverless environment
 if (!isServerless) {
   server.listen({
