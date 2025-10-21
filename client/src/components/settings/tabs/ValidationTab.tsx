@@ -15,6 +15,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -25,8 +26,9 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Loader2, CheckCircle, XCircle, Info, Globe, HardDrive, Database, Server, AlertTriangle, HelpCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useActiveServer } from '@/hooks/use-active-server';
-import { SettingSection, SectionTitle, TabHeader } from '../shared';
+import { SettingSection, SectionTitle, TabHeader, AspectCard } from '../shared';
 import type { ValidationSettings, FHIRVersion } from '@shared/validation-settings';
+import { DEFAULT_VALIDATION_SETTINGS_R4 } from '@shared/validation-settings';
 
 interface ValidationTabProps {
   onDirtyChange?: (isDirty: boolean) => void;
@@ -184,6 +186,20 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
     setIsDirty(true);
   };
 
+  const handleResetAspects = () => {
+    if (!settings) return;
+    const defaults = DEFAULT_VALIDATION_SETTINGS_R4.aspects;
+    setSettings({
+      ...settings,
+      aspects: JSON.parse(JSON.stringify(defaults)) // Deep copy
+    });
+    setIsDirty(true);
+    toast({
+      title: 'Aspects Reset',
+      description: 'All validation aspects restored to default configuration'
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -248,6 +264,7 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
   const currentMode = settings.mode || 'online';
   const currentProfileSources = settings.profileSources || 'both';
   const currentEngine = (settings as any).engine || 'auto';
+  const isServerEngine = currentEngine === 'server';
 
   return (
     <div className="space-y-6">
@@ -372,70 +389,27 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
             const currentSeverity = aspectSettings?.severity ?? 'error';
 
             return (
-              <Card key={aspect.key} className="p-4">
-                <div className="space-y-3">
-                  {/* Toggle at top */}
-                  <div className="flex items-center justify-between">
-                    <Switch
-                      checked={isEnabled}
-                      onCheckedChange={(checked) => updateAspect(aspect.key, 'enabled', checked)}
-                    />
-                    {isEnabled ? (
-                      <Badge variant="default" className="h-5 text-xs">Enabled</Badge>
-                    ) : (
-                      <Badge variant="secondary" className="h-5 text-xs">Disabled</Badge>
-                    )}
-                  </div>
-                  
-                  {/* Title with description */}
-                  <div>
-                    <h4 className="text-sm font-semibold">{aspect.label}</h4>
-                    <p className="text-xs text-muted-foreground mt-1">{aspect.description}</p>
-                  </div>
-                  
-                  {/* Severity dropdown */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Severity</Label>
-                    <Select
-                      value={currentSeverity}
-                      onValueChange={(value) => updateAspect(aspect.key, 'severity', value as any)}
-                      disabled={!isEnabled}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="error" className="text-xs">Error</SelectItem>
-                        <SelectItem value="warning" className="text-xs">Warning</SelectItem>
-                        <SelectItem value="info" className="text-xs">Info</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  {/* Engine selector */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Engine</Label>
-                    <Select
-                      value={currentEngine}
-                      onValueChange={(value) => updateAspect(aspect.key, 'engine', value)}
-                      disabled={!isEnabled}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {aspect.engines.map((engine) => (
-                          <SelectItem key={engine} value={engine} className="text-xs">
-                            {engine.charAt(0).toUpperCase() + engine.slice(1)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </Card>
+              <AspectCard
+                key={aspect.key}
+                title={aspect.label}
+                description={aspect.description}
+                enabled={isEnabled}
+                severity={currentSeverity}
+                engine={currentEngine}
+                availableEngines={aspect.engines}
+                onToggle={(checked) => updateAspect(aspect.key, 'enabled', checked)}
+                onSeverityChange={(value) => updateAspect(aspect.key, 'severity', value)}
+                onEngineChange={(value) => updateAspect(aspect.key, 'engine', value)}
+              />
             );
           })}
+        </div>
+        
+        {/* Reset Defaults Button */}
+        <div className="flex justify-end mt-4">
+          <Button variant="outline" size="sm" onClick={handleResetAspects}>
+            Reset Aspect Defaults
+          </Button>
         </div>
       </div>
 
@@ -445,6 +419,17 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
           title="Performance & Concurrency" 
           helpText="Tune validation throughput. Max Concurrent controls how many resources validate in parallel. Batch Size sets how many resources are grouped together. Higher values = faster but more memory usage."
         />
+        
+        {isServerEngine && (
+          <Alert className="mb-3">
+            <Info className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              Performance settings are not applicable when using server-side validation.
+              The FHIR server controls concurrency and batching.
+            </AlertDescription>
+          </Alert>
+        )}
+        
         <div className="space-y-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -457,6 +442,7 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
               step={1}
               value={[settings.performance.maxConcurrent]}
               onValueChange={(value) => updatePerformance('maxConcurrent', value[0])}
+              disabled={isServerEngine}
             />
             <p className="text-xs text-muted-foreground">Recommended: 4-8</p>
           </div>
@@ -472,6 +458,7 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
               step={10}
               value={[settings.performance.batchSize]}
               onValueChange={(value) => updatePerformance('batchSize', value[0])}
+              disabled={isServerEngine}
             />
             <p className="text-xs text-muted-foreground">Recommended: 25-50</p>
           </div>
@@ -484,6 +471,7 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
             <Switch
               checked={(settings as any).cacheEnabled ?? true}
               onCheckedChange={(checked) => updateAdvanced('cacheEnabled', checked)}
+              disabled={isServerEngine}
             />
           </div>
         </div>
@@ -558,7 +546,7 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
       </div>
 
       {/* 7. Advanced Settings */}
-      <Accordion type="single" collapsible className="pb-3">
+      <Accordion type="single" collapsible>
         <AccordionItem value="advanced" className="border-none">
           <AccordionTrigger className="py-2 hover:no-underline">
             <div className="flex items-center gap-2">
@@ -605,15 +593,6 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
           </AccordionContent>
         </AccordionItem>
       </Accordion>
-
-      {isDirty && (
-        <Alert className="py-2">
-          <Info className="h-3 w-3" />
-          <AlertDescription className="text-xs">
-            Unsaved changes - click Save to apply
-          </AlertDescription>
-        </Alert>
-      )}
       </div>
     </div>
   );
