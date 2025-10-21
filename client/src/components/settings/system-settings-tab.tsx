@@ -1,56 +1,84 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useToast } from '@/hooks/use-toast';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { 
-  Settings, 
-  CheckCircle, 
-  XCircle, 
-  AlertTriangle,
-  Loader2,
-  Save,
-  RefreshCw,
-  Database,
-  BarChart3,
-  Shield,
-  Download,
-  Upload,
-  Trash2,
-  Info,
-  Activity,
-  Bell,
-  Globe,
-  HardDrive,
-  Monitor,
-  Palette
-} from 'lucide-react';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2, AlertTriangle } from 'lucide-react';
+import { SettingSection } from './shared';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 interface SystemSettings {
-  logLevel: 'debug' | 'info' | 'warn' | 'error';
-  enableAnalytics: boolean;
-  enableCrashReporting: boolean;
-  enableSSE: boolean;
-  dataRetentionDays: number;
-  maxLogFileSize: number;
-  enableAutoUpdates: boolean;
   theme: 'light' | 'dark' | 'system';
-  cardLayout: 'grid' | 'list';
+  layout: 'grid' | 'list';
+  logging: {
+    level: 'error' | 'warn' | 'info' | 'debug';
+    maxFileSize: number;
+  };
+  privacy: {
+    telemetry: boolean;
+    crashReporting: boolean;
+    errorStackTrace?: boolean;
+  };
+  dataRetentionDays: number;
+  features: {
+    sse: boolean;
+    autoUpdate: boolean;
+    experimental?: boolean;
+  };
+  advanced: {
+    debugMode: boolean;
+    performanceTracing?: boolean;
+  };
 }
 
 interface SystemSettingsTabProps {
   onSettingsChange?: (settings: SystemSettings) => void;
 }
+
+// ============================================================================
+// Default Settings
+// ============================================================================
+
+const DEFAULT_SETTINGS: SystemSettings = {
+  theme: 'system',
+  layout: 'grid',
+  logging: {
+    level: 'info',
+    maxFileSize: 100,
+  },
+  privacy: {
+    telemetry: false,
+    crashReporting: true,
+    errorStackTrace: false,
+  },
+  dataRetentionDays: 30,
+  features: {
+    sse: true,
+    autoUpdate: true,
+    experimental: false,
+  },
+  advanced: {
+    debugMode: false,
+    performanceTracing: false,
+  },
+};
 
 // ============================================================================
 // Component
@@ -60,51 +88,63 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
   const { toast } = useToast();
   
   // State management
-  const [systemSettings, setSystemSettings] = useState<SystemSettings>({
-    logLevel: 'info',
-    enableAnalytics: false,
-    enableCrashReporting: true,
-    enableSSE: true,
-    dataRetentionDays: 30,
-    maxLogFileSize: 100,
-    enableAutoUpdates: true,
-    theme: 'system',
-    cardLayout: 'grid'
-  });
-
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showClearCacheDialog, setShowClearCacheDialog] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
 
   // Load settings on mount
   useEffect(() => {
-    loadSystemSettings();
+    loadSettings();
   }, []);
 
   // Notify parent of changes
   useEffect(() => {
-    onSettingsChange?.(systemSettings);
-  }, [systemSettings, onSettingsChange]);
+    onSettingsChange?.(settings);
+  }, [settings, onSettingsChange]);
 
   // ========================================================================
   // Data Loading
   // ========================================================================
 
-  const loadSystemSettings = async () => {
-    setIsLoading(true);
+  const loadSettings = async () => {
     try {
+      setIsLoading(true);
       const response = await fetch('/api/system-settings');
       if (response.ok) {
         const data = await response.json();
-        setSystemSettings(data);
+        // Merge with defaults to ensure all properties exist
+        const mergedSettings: SystemSettings = {
+          theme: data.theme ?? DEFAULT_SETTINGS.theme,
+          layout: data.layout ?? DEFAULT_SETTINGS.layout,
+          logging: {
+            level: data.logging?.level ?? DEFAULT_SETTINGS.logging.level,
+            maxFileSize: data.logging?.maxFileSize ?? DEFAULT_SETTINGS.logging.maxFileSize,
+          },
+          privacy: {
+            telemetry: data.privacy?.telemetry ?? DEFAULT_SETTINGS.privacy.telemetry,
+            crashReporting: data.privacy?.crashReporting ?? DEFAULT_SETTINGS.privacy.crashReporting,
+            errorStackTrace: data.privacy?.errorStackTrace ?? DEFAULT_SETTINGS.privacy.errorStackTrace,
+          },
+          dataRetentionDays: data.dataRetentionDays ?? DEFAULT_SETTINGS.dataRetentionDays,
+          features: {
+            sse: data.features?.sse ?? DEFAULT_SETTINGS.features.sse,
+            autoUpdate: data.features?.autoUpdate ?? DEFAULT_SETTINGS.features.autoUpdate,
+            experimental: data.features?.experimental ?? DEFAULT_SETTINGS.features.experimental,
+          },
+          advanced: {
+            debugMode: data.advanced?.debugMode ?? DEFAULT_SETTINGS.advanced.debugMode,
+            performanceTracing: data.advanced?.performanceTracing ?? DEFAULT_SETTINGS.advanced.performanceTracing,
+          },
+        };
+        setSettings(mergedSettings);
       }
     } catch (error) {
       console.error('Failed to load system settings:', error);
       toast({
-        title: "Error",
-        description: "Failed to load system settings",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to load system settings',
+        variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
@@ -115,70 +155,23 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
   // Settings Updates
   // ========================================================================
 
-  const updateSetting = (field: keyof SystemSettings, value: any) => {
-    setSystemSettings(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  const saveSystemSettings = async () => {
-    setIsSaving(true);
-    try {
-      console.log('[SystemSettings] Saving settings:', {
-        settings: systemSettings,
-        timestamp: new Date().toISOString()
-      });
-      
-      const response = await fetch('/api/system-settings', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(systemSettings),
-      });
-
-      console.log('[SystemSettings] Response received:', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('[SystemSettings] Save successful:', result);
-        toast({
-          title: "Success",
-          description: "System settings saved successfully",
-        });
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('[SystemSettings] Save failed:', errorData);
-        throw new Error(errorData.message || 'Failed to save settings');
+  // Helper to update nested settings using dot notation (e.g., "logging.level")
+  const update = (path: string, value: any) => {
+    setSettings((prev) => {
+      const keys = path.split('.');
+      if (keys.length === 1) {
+        return { ...prev, [keys[0]]: value };
       }
-    } catch (error) {
-      console.error('[SystemSettings] Error saving settings:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save system settings",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const resetToDefaults = () => {
-    setSystemSettings({
-      logLevel: 'info',
-      enableAnalytics: false,
-      enableCrashReporting: true,
-      enableSSE: true,
-      dataRetentionDays: 30,
-      maxLogFileSize: 100,
-      enableAutoUpdates: true,
-      theme: 'system',
-      cardLayout: 'grid'
+      
+      // Handle nested updates
+      const [parent, child] = keys;
+      return {
+        ...prev,
+        [parent]: {
+          ...(prev[parent as keyof SystemSettings] as any),
+          [child]: value,
+        },
+      };
     });
   };
 
@@ -186,145 +179,75 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
   // Data Management
   // ========================================================================
 
-  const exportSettings = async () => {
+  const exportSettings = () => {
     setIsExporting(true);
     try {
-      const response = await fetch('/api/system-settings/export');
-      if (response.ok) {
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'system-settings.json';
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        
-        toast({
-          title: "Success",
-          description: "Settings exported successfully",
-        });
-      } else {
-        throw new Error('Export failed');
-      }
+      const dataStr = JSON.stringify(settings, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `system-settings-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast({
+        title: 'Success',
+        description: 'Settings exported successfully',
+      });
     } catch (error) {
       console.error('Failed to export settings:', error);
       toast({
-        title: "Error",
-        description: "Failed to export settings",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to export settings',
+        variant: 'destructive',
       });
     } finally {
       setIsExporting(false);
     }
   };
 
-  const importSettings = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsImporting(true);
+  const clearCache = () => {
     try {
-      const text = await file.text();
-      const importedSettings = JSON.parse(text);
-      
-      setSystemSettings(importedSettings);
-      
-      toast({
-        title: "Success",
-        description: "Settings imported successfully",
-      });
-    } catch (error) {
-      console.error('Failed to import settings:', error);
-      toast({
-        title: "Error",
-        description: "Failed to import settings",
-        variant: "destructive",
-      });
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
-  const clearData = async () => {
-    if (!confirm('Are you sure you want to clear all data? This action cannot be undone.')) {
-      return;
-    }
-
-    try {
-      const response = await fetch('/api/system/clear-data', {
-        method: 'POST',
+      // Clear localStorage
+      const keysToKeep = ['theme', 'system-settings'];
+      const allKeys = Object.keys(localStorage);
+      allKeys.forEach((key) => {
+        if (!keysToKeep.includes(key)) {
+          localStorage.removeItem(key);
+        }
       });
 
-      if (response.ok) {
-        toast({
-          title: "Success",
-          description: "All data cleared successfully",
+      // Clear sessionStorage
+      sessionStorage.clear();
+
+      // Clear IndexedDB (if using it)
+      if (window.indexedDB) {
+        window.indexedDB.databases?.().then((dbs) => {
+          dbs.forEach((db) => {
+            if (db.name && db.name.includes('cache')) {
+              window.indexedDB.deleteDatabase(db.name);
+            }
+          });
         });
-      } else {
-        throw new Error('Clear data failed');
       }
-    } catch (error) {
-      console.error('Failed to clear data:', error);
+
+      setShowClearCacheDialog(false);
       toast({
-        title: "Error",
-        description: "Failed to clear data",
-        variant: "destructive",
+        title: 'Success',
+        description: 'Local cache cleared successfully',
+      });
+    } catch (error) {
+      console.error('Failed to clear cache:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to clear cache',
+        variant: 'destructive',
       });
     }
   };
-
-  // ========================================================================
-  // Render Helpers
-  // ========================================================================
-
-  const getLogLevelIcon = (level: string) => {
-    switch (level) {
-      case 'debug': return <Info className="h-4 w-4 text-blue-500" />;
-      case 'info': return <Info className="h-4 w-4 text-green-500" />;
-      case 'warn': return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-      case 'error': return <XCircle className="h-4 w-4 text-red-500" />;
-      default: return <Info className="h-4 w-4 text-gray-500" />;
-    }
-  };
-
-  const getLogLevelBadge = (level: string) => {
-    const variants = {
-      debug: 'outline' as const,
-      info: 'default' as const,
-      warn: 'secondary' as const,
-      error: 'destructive' as const
-    };
-    
-    return (
-      <Badge variant={variants[level as keyof typeof variants] || 'outline'}>
-        {level.toUpperCase()}
-      </Badge>
-    );
-  };
-
-  const renderToggleSetting = (
-    field: keyof SystemSettings,
-    label: string,
-    description: string,
-    icon: React.ReactNode
-  ) => (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-3">
-        {icon}
-        <div className="space-y-1">
-          <Label htmlFor={field}>{label}</Label>
-          <p className="text-sm text-muted-foreground">{description}</p>
-        </div>
-      </div>
-      <Switch
-        id={field}
-        checked={systemSettings[field] as boolean}
-        onCheckedChange={(checked) => updateSetting(field, checked)}
-      />
-    </div>
-  );
 
   // ========================================================================
   // Render
@@ -341,310 +264,247 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h2 className="text-2xl font-bold">System Settings</h2>
-          <p className="text-muted-foreground mt-1">
-            Configure logging, analytics, data retention, and system preferences
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={resetToDefaults}
-            disabled={isSaving}
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Reset Defaults
-          </Button>
-          <Button
-            onClick={saveSystemSettings}
-            disabled={isSaving}
-          >
-            {isSaving ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4 mr-2" />
-            )}
-            Save Settings
-          </Button>
-        </div>
+      {/* User Preferences Divider */}
+      <div className="space-y-1">
+        <h3 className="text-lg font-semibold text-foreground">User Preferences</h3>
+        <Separator />
       </div>
 
-      {/* Display Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Monitor className="h-5 w-5" />
-            Display Settings
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Theme */}
-          <div className="space-y-2">
-            <Label htmlFor="theme">Theme</Label>
-            <Select
-              value={systemSettings.theme}
-              onValueChange={(value) => updateSetting('theme', value)}
+      {/* Section 1: Display Settings */}
+      <SettingSection
+        title="Display Settings"
+        description="Customize Records appearance and layout preferences."
+      >
+        <div className="space-y-2">
+          <Label htmlFor="theme">Theme</Label>
+          <Select
+            value={settings.theme}
+            onValueChange={(v) => update('theme', v)}
+          >
+            <SelectTrigger id="theme">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="light">Light</SelectItem>
+              <SelectItem value="dark">Dark</SelectItem>
+              <SelectItem value="system">System Default</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="card-layout">Card Layout</Label>
+          <Select
+            value={settings.layout}
+            onValueChange={(v) => update('layout', v)}
+          >
+            <SelectTrigger id="card-layout">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="grid">Grid</SelectItem>
+              <SelectItem value="list">List</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </SettingSection>
+
+      {/* Section 2: Logging & Debugging */}
+      <SettingSection
+        title="Logging & Debugging"
+        description="Control the level of detail written to application logs."
+      >
+        <div className="space-y-2">
+          <Label htmlFor="log-level">Log Level</Label>
+          <Select
+            value={settings.logging.level}
+            onValueChange={(v) => update('logging.level', v)}
+          >
+            <SelectTrigger id="log-level">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="error">Error</SelectItem>
+              <SelectItem value="warn">Warning</SelectItem>
+              <SelectItem value="info">Info</SelectItem>
+              <SelectItem value="debug">Debug</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="max-log-size">Max Log File Size (MB)</Label>
+          <Input
+            id="max-log-size"
+            type="number"
+            value={settings.logging.maxFileSize}
+            onChange={(e) => update('logging.maxFileSize', parseInt(e.target.value) || 100)}
+            min="1"
+            max="1000"
+          />
+        </div>
+      </SettingSection>
+
+      {/* Section 3: Privacy & Analytics */}
+      <SettingSection
+        title="Privacy & Analytics"
+        description="Manage telemetry and crash-reporting options."
+      >
+        <div className="flex items-center justify-between">
+          <Label htmlFor="telemetry">Enable usage analytics</Label>
+          <Switch
+            id="telemetry"
+            checked={settings.privacy.telemetry}
+            onCheckedChange={(checked) => update('privacy.telemetry', checked)}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <Label htmlFor="crash-reporting">Enable crash reporting</Label>
+          <Switch
+            id="crash-reporting"
+            checked={settings.privacy.crashReporting}
+            onCheckedChange={(checked) => update('privacy.crashReporting', checked)}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <Label htmlFor="error-stack">Include error stack traces in bug reports</Label>
+          <Switch
+            id="error-stack"
+            checked={settings.privacy.errorStackTrace ?? false}
+            onCheckedChange={(checked) => update('privacy.errorStackTrace', checked)}
+          />
+        </div>
+      </SettingSection>
+
+      {/* System Controls Divider */}
+      <div className="space-y-1 pt-4">
+        <h3 className="text-lg font-semibold text-foreground">System Controls</h3>
+        <Separator />
+      </div>
+
+      {/* Section 4: Data Management */}
+      <SettingSection
+        title="Data Management"
+        description="Control local data retention and cache handling."
+      >
+        <div className="space-y-2">
+          <Label htmlFor="data-retention">Data Retention (days)</Label>
+          <Input
+            id="data-retention"
+            type="number"
+            value={settings.dataRetentionDays}
+            onChange={(e) => update('dataRetentionDays', parseInt(e.target.value) || 30)}
+            min="1"
+            max="365"
+          />
+        </div>
+
+        <div className="flex gap-3 mt-3">
+          <Button 
+            variant="outline" 
+            onClick={exportSettings}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : null}
+            Export Settings
+          </Button>
+          <Button 
+            variant="destructive" 
+            onClick={() => setShowClearCacheDialog(true)}
+          >
+            Clear Local Cache
+          </Button>
+        </div>
+      </SettingSection>
+
+      {/* Section 5: System Features */}
+      <SettingSection
+        title="System Features"
+        description="Toggle optional platform capabilities."
+      >
+        <div className="flex items-center justify-between">
+          <Label htmlFor="sse">Enable Server-Sent Events (live updates)</Label>
+          <Switch
+            id="sse"
+            checked={settings.features.sse}
+            onCheckedChange={(checked) => update('features.sse', checked)}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <Label htmlFor="auto-update">Enable Auto-Updates</Label>
+          <Switch
+            id="auto-update"
+            checked={settings.features.autoUpdate}
+            onCheckedChange={(checked) => update('features.autoUpdate', checked)}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <Label htmlFor="experimental">Enable Experimental Features</Label>
+          <Switch
+            id="experimental"
+            checked={settings.features.experimental ?? false}
+            onCheckedChange={(checked) => update('features.experimental', checked)}
+          />
+        </div>
+      </SettingSection>
+
+      {/* Section 6: Advanced Options */}
+      <Accordion type="single" collapsible className="w-full">
+        <AccordionItem value="advanced">
+          <AccordionTrigger>Advanced Options</AccordionTrigger>
+          <AccordionContent>
+            <SettingSection
+              title="Advanced Options"
+              description="Developer-only configuration. Changes here may affect system stability."
+              className="border-0 pb-0 mb-0"
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="light">
-                  <div className="flex items-center gap-2">
-                    <Monitor className="h-4 w-4" />
-                    Light
-                  </div>
-                </SelectItem>
-                <SelectItem value="dark">
-                  <div className="flex items-center gap-2">
-                    <Monitor className="h-4 w-4" />
-                    Dark
-                  </div>
-                </SelectItem>
-                <SelectItem value="system">
-                  <div className="flex items-center gap-2">
-                    <Monitor className="h-4 w-4" />
-                    System
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Choose your preferred color theme
-            </p>
-          </div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="debug-mode">Enable Debug Mode</Label>
+                <Switch
+                  id="debug-mode"
+                  checked={settings.advanced.debugMode}
+                  onCheckedChange={(checked) => update('advanced.debugMode', checked)}
+                />
+              </div>
 
-          {/* Card Layout */}
-          <div className="space-y-2">
-            <Label htmlFor="card-layout">Card Layout</Label>
-            <Select
-              value={systemSettings.cardLayout}
-              onValueChange={(value) => updateSetting('cardLayout', value)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="grid">
-                  <div className="flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4" />
-                    Grid Layout
-                  </div>
-                </SelectItem>
-                <SelectItem value="list">
-                  <div className="flex items-center gap-2">
-                    <Activity className="h-4 w-4" />
-                    List Layout
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Choose how dashboard cards are displayed
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="performance-tracing">Enable Performance Tracing</Label>
+                <Switch
+                  id="performance-tracing"
+                  checked={settings.advanced.performanceTracing ?? false}
+                  onCheckedChange={(checked) => update('advanced.performanceTracing', checked)}
+                />
+              </div>
+            </SettingSection>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
 
-      {/* Logging Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Activity className="h-5 w-5" />
-            Logging Settings
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="log-level">Log Level</Label>
-            <Select
-              value={systemSettings.logLevel}
-              onValueChange={(value) => updateSetting('logLevel', value)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="debug">
-                  <div className="flex items-center gap-2">
-                    {getLogLevelIcon('debug')}
-                    Debug
-                  </div>
-                </SelectItem>
-                <SelectItem value="info">
-                  <div className="flex items-center gap-2">
-                    {getLogLevelIcon('info')}
-                    Info
-                  </div>
-                </SelectItem>
-                <SelectItem value="warn">
-                  <div className="flex items-center gap-2">
-                    {getLogLevelIcon('warn')}
-                    Warning
-                  </div>
-                </SelectItem>
-                <SelectItem value="error">
-                  <div className="flex items-center gap-2">
-                    {getLogLevelIcon('error')}
-                    Error
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="text-sm text-muted-foreground">
-              Current level: {getLogLevelBadge(systemSettings.logLevel)}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="max-log-size">Max Log File Size (MB)</Label>
-            <Input
-              id="max-log-size"
-              type="number"
-              value={systemSettings.maxLogFileSize}
-              onChange={(e) => updateSetting('maxLogFileSize', parseInt(e.target.value))}
-              min="1"
-              max="1000"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Privacy & Analytics */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            Privacy & Analytics
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {renderToggleSetting(
-            'enableAnalytics',
-            'Enable Analytics',
-            'Collect anonymous usage statistics to help improve the application',
-            <BarChart3 className="h-5 w-5" />
-          )}
-
-          {renderToggleSetting(
-            'enableCrashReporting',
-            'Enable Crash Reporting',
-            'Automatically report crashes and errors to help improve stability',
-            <AlertTriangle className="h-5 w-5" />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Data Management */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
-            Data Management
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="data-retention">Data Retention (days)</Label>
-            <Input
-              id="data-retention"
-              type="number"
-              value={systemSettings.dataRetentionDays}
-              onChange={(e) => updateSetting('dataRetentionDays', parseInt(e.target.value))}
-              min="1"
-              max="365"
-            />
-            <p className="text-sm text-muted-foreground">
-              How long to keep validation results and logs
-            </p>
-          </div>
-
-          <Separator />
-
-          <div className="space-y-4">
-            <h4 className="font-medium">Data Operations</h4>
-            
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={exportSettings}
-                disabled={isExporting}
-              >
-                {isExporting ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Download className="h-4 w-4 mr-2" />
-                )}
-                Export Settings
-              </Button>
-              
-              <Button
-                variant="outline"
-                onClick={() => document.getElementById('import-settings')?.click()}
-                disabled={isImporting}
-              >
-                {isImporting ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4 mr-2" />
-                )}
-                Import Settings
-              </Button>
-              
-              <input
-                id="import-settings"
-                type="file"
-                accept=".json"
-                onChange={importSettings}
-                className="hidden"
-              />
-            </div>
-            
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                <strong>Warning:</strong> The clear data operation will permanently delete all validation results, logs, and cached data. This action cannot be undone.
-              </AlertDescription>
-            </Alert>
-            
-            <Button
-              variant="destructive"
-              onClick={clearData}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Clear All Data
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* System Features */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            System Features
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {renderToggleSetting(
-            'enableSSE',
-            'Enable Server-Sent Events',
-            'Enable real-time updates using Server-Sent Events',
-            <Globe className="h-5 w-5" />
-          )}
-
-          {renderToggleSetting(
-            'enableAutoUpdates',
-            'Enable Auto-Updates',
-            'Automatically check for and install application updates',
-            <Download className="h-5 w-5" />
-          )}
-        </CardContent>
-      </Card>
+      {/* Clear Cache Confirmation Dialog */}
+      <AlertDialog open={showClearCacheDialog} onOpenChange={setShowClearCacheDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              Clear Local Cache
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all cached data from your browser including validation results, 
+              temporary files, and session data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={clearCache}>Confirm</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
