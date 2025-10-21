@@ -110,12 +110,13 @@ export const MobileNavigationDrawer: React.FC<MobileNavigationProps> = ({
   
   // Use user's custom quick access items if available, otherwise fall back to props or defaults
   const userQuickAccessItems = userQuickAccess?.quickAccessItems || [];
+  const counts = quickAccessCounts?.counts || {};
   const quickItems = userQuickAccessItems.length > 0 
     ? userQuickAccessItems.map(resourceType => ({
         id: resourceType.toLowerCase(),
         label: resourceType,
         resourceType,
-        count: quickAccessCounts?.[resourceType] ?? 0,
+        count: counts[resourceType] ?? 0,
         href: `/resources?type=${resourceType}`
       }))
     : quickAccessItems.length > 0 ? quickAccessItems : defaultQuickAccessItems;

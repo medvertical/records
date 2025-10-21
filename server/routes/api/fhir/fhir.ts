@@ -642,45 +642,23 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
       const resourceDef = capability.rest[0].resource.find((r: any) => r.type === resourceType);
       const params: any[] = resourceDef?.searchParam || [];
 
-      // Map FHIR search param types to supported operators (simplified)
+      // Map FHIR search param types to supported operators based on FHIR R4 standard
+      // We trust what the server declares in its CapabilityStatement
       const operatorMap: Record<string, string[]> = {
-        string: ["contains", "exact"],
-        token: ["equals", "notEquals"],
-        date: ["eq", "gt", "lt", "ge", "le"],
-        number: ["eq", "gt", "lt", "ge", "le"],
-        quantity: ["eq", "gt", "lt", "ge", "le"],
-        reference: ["equals"],
-        uri: ["equals", "contains"],
+        string: ["contains", "exact", "missing"], // String params support contains, exact, and missing modifiers
+        token: ["equals", "notEquals", "missing"], // Token params support equals, not, and missing modifiers
+        date: ["eq", "gt", "lt", "ge", "le", "missing"], // Date params support comparisons and missing
+        number: ["eq", "gt", "lt", "ge", "le", "missing"], // Number params support comparisons and missing
+        quantity: ["eq", "gt", "lt", "ge", "le", "missing"], // Quantity params support comparisons and missing
+        reference: ["equals", "missing"], // Reference params support equals and missing
+        uri: ["equals", "contains", "missing"], // URI params support equals, contains, and missing
+        composite: ["equals"], // Composite params typically only support equals
+        special: ["equals"], // Special params (like _text, _filter) have custom handling
       };
 
-      // Get detected server capabilities to determine which modifiers are supported
-      const { ServerCapabilitiesCache } = await import('../../../services/fhir/server-capabilities-cache.js');
-      const activeServer = await storage.getActiveFhirServer();
-      let serverCapabilities = null;
-      
-      if (activeServer) {
-        try {
-          serverCapabilities = await ServerCapabilitiesCache.getCapabilities(activeServer.id, currentFhirClient, activeServer.url);
-        } catch (error) {
-          console.warn('[FHIR API] Could not get server capabilities, using defaults:', error);
-        }
-      }
-
-      // Parameters that typically support existence modifiers
-      const existenceCheckableParams = ['_profile', '_security', '_tag', '_source', 'identifier', 'active', 'deceased', 'gender', 'language'];
-
       const searchParameters = params.map((p: any) => {
-        let operators = operatorMap[p.type] || ["eq"];
-        
-        // Add existence modifiers based on detected server capabilities
-        if (existenceCheckableParams.includes(p.name) && serverCapabilities) {
-          if (serverCapabilities.searchModifiers.missing) {
-            operators = [...operators, "missing"];
-          }
-          if (serverCapabilities.searchModifiers.exists) {
-            operators = [...operators, "exists"];
-          }
-        }
+        // Get base operators for this type, default to ["equals", "missing"] if type unknown
+        const operators = operatorMap[p.type] || ["equals", "missing"];
         
         return {
           name: p.name,
@@ -971,12 +949,10 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
             const modifierSupported = capabilities.searchModifiers[existsModifier];
             
             if (modifierSupported) {
-              console.log(`[FHIR API] Server supports :${existsModifier} modifier - using server-side filtering`);
-              // Try server-side filtering first
-              // TODO: Implement server-side filtering using the supported modifier
-              useClientSideFiltering = true; // For now, fallback to client-side
+              console.log(`[FHIR API] Server supports :${existsModifier} modifier - using SERVER-SIDE filtering`);
+              useClientSideFiltering = false; // Let the server do the work!
             } else {
-              console.log(`[FHIR API] Server does NOT support :${existsModifier} modifier - using client-side filtering`);
+              console.log(`[FHIR API] Server does NOT support :${existsModifier} modifier - using CLIENT-SIDE filtering`);
               useClientSideFiltering = true;
             }
           }
@@ -986,7 +962,106 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         }
       }
       
-      // If we have _profile with existence modifier, use appropriate filtering strategy
+      // SERVER-SIDE filtering (when server supports the modifier)
+      if (profileExistsValue !== null && !useClientSideFiltering && currentFhirClient) {
+        console.log(`[FHIR API] Using SERVER-SIDE filtering for :${existsModifier}`);
+        
+        try {
+          // Build search parameters with the modifier
+          const searchParams: Record<string, any> = {
+            _count: filterOptions.pagination.limit || 50,
+            _skip: filterOptions.pagination.offset || 0,
+            _total: 'accurate'
+          };
+          
+          // Add the profile existence filter
+          if (existsModifier === 'missing') {
+            searchParams['_profile:missing'] = profileExistsValue ? 'false' : 'true';
+          } else if (existsModifier === 'exists') {
+            searchParams['_profile:exists'] = profileExistsValue ? 'true' : 'false';
+          }
+          
+          console.log(`[FHIR API] Server-side search params:`, searchParams);
+          
+          // Let the FHIR server do the filtering!
+          const searchResourceTypes = resourceTypesArray.length > 0 
+            ? resourceTypesArray 
+            : ['Patient', 'Observation', 'Condition', 'Procedure', 'Encounter'];
+            
+          const results = await Promise.all(
+            searchResourceTypes.map(async (resourceType) => {
+              try {
+                const bundle = await currentFhirClient.searchResources(resourceType, searchParams);
+                console.log(`[FHIR API] Server-side ${resourceType} returned ${bundle.entry?.length || 0} results`);
+                return {
+                  resourceType,
+                  resources: bundle.entry?.map(e => e.resource) || [],
+                  total: bundle.total || 0
+                };
+              } catch (error: any) {
+                console.warn(`[FHIR API] Server-side search failed for ${resourceType}:`, error.message);
+                return {
+                  resourceType,
+                  resources: [],
+                  total: 0
+                };
+              }
+            })
+          );
+          
+          const allResources = results.flatMap(r => r.resources);
+          const totalCount = results.reduce((sum, r) => sum + r.total, 0);
+          
+          console.log(`[FHIR API] Server-side filtering complete: ${allResources.length} resources found`);
+          
+          // Enhance resources with validation data
+          const enhanced = await enhanceResourcesWithValidationData(allResources);
+          
+          return res.json({
+            success: true,
+            data: {
+              resources: enhanced,
+              totalCount: totalCount > 0 ? totalCount : enhanced.length,
+              returnedCount: enhanced.length,
+              hasMore: enhanced.length >= (filterOptions.pagination.limit || 50),
+              pagination: {
+                limit: filterOptions.pagination.limit || 50,
+                offset: filterOptions.pagination.offset || 0,
+                hasMore: enhanced.length >= (filterOptions.pagination.limit || 50)
+              },
+              searchMethod: 'server_side_filter',
+              filteringStrategy: {
+                method: 'server-side',
+                modifierUsed: existsModifier,
+                parameterUsed: existsModifier === 'missing' ? '_profile:missing' : '_profile:exists',
+                serverSupported: true
+              },
+              filterSummary: {
+                resourceTypes: searchResourceTypes,
+                totalMatching: totalCount > 0 ? totalCount : enhanced.length
+              },
+              appliedFilters: {
+                resourceTypes: searchResourceTypes,
+                serverId: filterOptions.serverId,
+                pagination: filterOptions.pagination,
+                sorting: filterOptions.sorting,
+                profileExists: profileExistsValue
+              }
+            },
+            message: `Found ${enhanced.length} resources ${profileExistsValue ? 'with' : 'without'} profiles using server-side filtering`
+          });
+        } catch (error: any) {
+          console.error('[FHIR API] Server-side filtering failed:', error.message);
+          // Don't fallback, just return error
+          return res.status(500).json({
+            success: false,
+            error: 'Server-side filtering failed',
+            message: error.message
+          });
+        }
+      }
+      
+      // CLIENT-SIDE filtering (fallback when server doesn't support the modifier)
       if (profileExistsValue !== null && useClientSideFiltering) {
         console.log(`[FHIR API] Searching for resources ${profileExistsValue ? 'with' : 'without'} profiles (_profile:exists=${profileExistsValue})`);
         
@@ -1001,8 +1076,8 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
             // Simple approach: Just fill the page quickly, don't worry about total count
             let allFoundResources: any[] = [];
             let totalProcessed = 0;
-            const MAX_BATCHES_PER_TYPE = 10; // Max 10 batches (1000 resources) per type
-            const MAX_TOTAL_PROCESSED = 5000; // Hard limit on total resources processed across all types
+            const MAX_BATCHES_PER_TYPE = 50; // Max 50 batches (5000 resources) per type
+            const MAX_TOTAL_PROCESSED = 10000; // Hard limit on total resources processed across all types
             
             console.log(`[FHIR API] Fast page-filling approach: Get ${userPageSize} results as quickly as possible`);
             
@@ -1071,8 +1146,8 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
                   
                   console.log(`[FHIR API] ${resourceType} batch ${batchCount}: Found ${filteredResources.length} resources ${profileExistsValue ? 'with' : 'without'} profiles (${allFoundResources.length}/${userPageSize} for page, ${totalProcessed} total processed)`);
                   
-                  // Bail out if we've had 3 consecutive batches with no matching resources
-                  if (consecutiveEmptyBatches >= 3) {
+                  // Bail out if we've had 10 consecutive batches with no matching resources
+                  if (consecutiveEmptyBatches >= 10) {
                     console.log(`[FHIR API] No matches found in ${consecutiveEmptyBatches} consecutive batches, giving up on ${resourceType}`);
                     break;
                   }
@@ -1132,12 +1207,12 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
                   method: 'client_side',
                   reason: `Server does not support :${existsModifier} modifier`,
                   modifierUsed: existsModifier,
-                  limitations: {
-                    maxResourcesPerType: 1000,
-                    maxTotalProcessed: 5000,
-                    actualProcessed: totalProcessed
-                  }
-                },
+                limitations: {
+                  maxResourcesPerType: 5000,
+                  maxTotalProcessed: 10000,
+                  actualProcessed: totalProcessed
+                }
+              },
                 filterSummary: {
                   resourceTypes: searchResourceTypes,
                   totalMatching: totalFound,

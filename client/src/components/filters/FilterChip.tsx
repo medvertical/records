@@ -32,6 +32,7 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
   const [open, setOpen] = useState(false);
   const [localValue, setLocalValue] = useState<string>(Array.isArray(value) ? value.join(',') : (value ?? ''));
   const [localOp, setLocalOp] = useState<string>(operator || (operators?.[0] || 'eq'));
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const valueInputRef = useRef<HTMLInputElement>(null);
 
 
@@ -72,6 +73,13 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
   };
 
   const valueType = getOperatorValueType(typeHint, localOp);
+
+  // Filter resource types based on search query
+  const filteredResourceTypes = useMemo(() => {
+    if (!searchQuery.trim()) return availableResourceTypes;
+    const query = searchQuery.toLowerCase();
+    return availableResourceTypes.filter(rt => rt.toLowerCase().includes(query));
+  }, [availableResourceTypes, searchQuery]);
 
   // Get icon for operator
   const getOperatorIcon = (op: string) => {
@@ -175,6 +183,13 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
     }
   }, [valueType, localValue]);
 
+  // Clear search query when popover closes
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery('');
+    }
+  }, [open]);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -212,28 +227,54 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
           <div className="space-y-1">
             <div className="text-xs text-gray-500">Value</div>
             {kind === 'resourceType' ? (
-              <Select 
-                value={localValue} 
-                onValueChange={(v) => setLocalValue(v)} 
-                disabled={disabled}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select resource type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableResourceTypes.map(rt => {
-                    const Icon = getResourceTypeIcon(rt);
-                    return (
-                      <SelectItem key={rt} value={rt}>
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4" />
-                          <span>{rt}</span>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                {/* Search field */}
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search resource types..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    disabled={disabled}
+                    className="pl-8"
+                  />
+                </div>
+                {/* Scrollable list */}
+                <div className="border rounded-md max-h-60 overflow-y-auto">
+                  {filteredResourceTypes.length === 0 ? (
+                    <div className="p-3 text-sm text-gray-500 text-center">
+                      No resource types found
+                    </div>
+                  ) : (
+                    filteredResourceTypes.map(rt => {
+                      const Icon = getResourceTypeIcon(rt);
+                      const isSelected = localValue === rt;
+                      return (
+                        <button
+                          key={rt}
+                          type="button"
+                          onClick={() => setLocalValue(rt)}
+                          disabled={disabled}
+                          className={`w-full flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-100 transition-colors ${
+                            isSelected ? 'bg-blue-50 hover:bg-blue-100' : ''
+                          } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-4 w-4 text-gray-600" />
+                            <span className={isSelected ? 'font-medium text-blue-700' : ''}>
+                              {rt}
+                            </span>
+                          </div>
+                          {isSelected && (
+                            <CheckCircle className="h-4 w-4 text-blue-600" />
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             ) : valueType === 'boolean' ? (
               <BooleanInput 
                 value={localValue}

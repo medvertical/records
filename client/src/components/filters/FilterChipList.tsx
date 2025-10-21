@@ -74,8 +74,9 @@ export function FilterChipList({ filterOptions, availableResourceTypes, onFilter
     // FHIR param chips
     if (filterOptions.fhirSearchParams) {
       Object.entries(filterOptions.fhirSearchParams).forEach(([name, cfg]) => {
-        // Exclude sorting parameters from being displayed as chips
-        if (name === '_sort' || name === 'sort') {
+        // Exclude UI parameters and sorting parameters from being displayed as chips
+        const excludedChipParams = ['_sort', 'sort', 'resourceType', 'type', 'Type', 'search', 'page', 'pageSize'];
+        if (excludedChipParams.includes(name)) {
           return;
         }
         
@@ -162,9 +163,9 @@ export function FilterChipList({ filterOptions, availableResourceTypes, onFilter
                       setSearch('');
                     }}
                   >
-                    <div className="flex flex-col">
+                    <div className="flex items-center justify-between w-full gap-2">
                       <span className="text-sm font-medium">{p.name}</span>
-                      <span className="text-xs text-gray-500">{p.type} {p.resourceType !== 'any' ? `(${p.resourceType})` : ''}</span>
+                      <span className="text-xs text-gray-500 flex-shrink-0">{p.type} {p.resourceType !== 'any' ? `(${p.resourceType})` : ''}</span>
                     </div>
                   </CommandItem>
                 ))}

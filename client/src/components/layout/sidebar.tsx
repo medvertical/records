@@ -237,14 +237,16 @@ function SidebarContent({
   // Memoize the quick access items to show
   const itemsToShow = useMemo(() => {
     const userQuickAccessItems = userQuickAccess?.quickAccessItems || [];
+    const counts = quickAccessCounts?.counts || {};
     return userQuickAccessItems.length > 0 
       ? userQuickAccessItems.map(resourceType => ({
           href: `/resources?type=${resourceType}`,
           label: resourceType,
-          resourceType
+          resourceType,
+          count: counts[resourceType] ?? 0
         }))
       : quickAccessItems;
-  }, [userQuickAccess?.quickAccessItems, quickAccessItems]);
+  }, [userQuickAccess?.quickAccessItems, quickAccessItems, quickAccessCounts]);
 
   // Determine connection state for UI gating
   // Show "Checking..." only during initial connection test, otherwise show actual status
@@ -508,14 +510,14 @@ function SidebarContent({
                         <span title="Loading count">
                           <Loader2 className="h-3 w-3 animate-spin text-gray-400" />
                         </span>
-                      ) : quickAccessCounts && quickAccessCounts[item.resourceType] !== undefined ? (
+                      ) : quickAccessCounts?.counts && quickAccessCounts.counts[item.resourceType] !== undefined ? (
                         <span className={cn(
                           "text-xs font-medium",
                           isSelected 
                             ? "text-blue-600 dark:text-blue-400" 
                             : "text-gray-400 dark:text-gray-500"
                         )}>
-                          {formatCount(quickAccessCounts[item.resourceType])}
+                          {formatCount(quickAccessCounts.counts[item.resourceType])}
                         </span>
                       ) : (
                         <span className="text-xs text-gray-400" title="Count not available">

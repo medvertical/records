@@ -123,6 +123,16 @@ export default function ResourceSearch({
     setSort(defaultSort);
   }, [defaultQuery, defaultResourceType, defaultSort]);
 
+  // Sync fhirSearchParams with filters prop (important for URL-driven changes like Quick Access navigation)
+  useEffect(() => {
+    if (filters.fhirSearchParams !== undefined) {
+      setFhirSearchParams(filters.fhirSearchParams);
+    } else {
+      // Clear FHIR search params when filters are cleared (e.g., switching resource types)
+      setFhirSearchParams({});
+    }
+  }, [filters.fhirSearchParams]);
+
   // Load search history from localStorage
   useEffect(() => {
     const savedHistory = localStorage.getItem('fhir-search-history');

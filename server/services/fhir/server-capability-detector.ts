@@ -90,29 +90,31 @@ export class ServerCapabilityDetector {
 
   /**
    * Test if server supports :missing modifier (FHIR R4 standard)
-   * Example: Patient?gender:missing=true
+   * Example: Patient?_profile:missing=true
    * 
    * We test by comparing results with :missing=true vs :missing=false
+   * IMPORTANT: Test with _profile specifically, as some servers (like HAPI) support
+   * :missing for some fields (gender) but not others (_profile)
    */
   private async testMissingModifier(): Promise<boolean> {
     try {
-      logger.debug('[CapabilityDetector] Testing :missing modifier');
+      logger.debug('[CapabilityDetector] Testing :missing modifier on _profile parameter');
       
       // Small delay to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Test with :missing=true (should return resources without gender)
+      // Test with _profile:missing=true (should return resources without profile)
       const resultTrue = await this.fhirClient.searchResources('Patient', {
-        'gender:missing': 'true',
-        _count: 5,
+        '_profile:missing': 'true',
+        _count: 10,
       });
       
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Test with :missing=false (should return resources with gender)
+      // Test with _profile:missing=false (should return resources with profile)
       const resultFalse = await this.fhirClient.searchResources('Patient', {
-        'gender:missing': 'false',
-        _count: 5,
+        '_profile:missing': 'false',
+        _count: 10,
       });
       
       const hasResultsTrue = resultTrue?.entry && resultTrue.entry.length > 0;
@@ -126,21 +128,27 @@ export class ServerCapabilityDetector {
       }
       
       // Verify that the results are actually filtered
-      // missing=true should return resources WITHOUT the field
-      // missing=false should return resources WITH the field
+      // missing=true should return resources WITHOUT _profile
+      // missing=false should return resources WITH _profile
       if (hasResultsTrue && hasResultsFalse) {
         // Check if results are actually different
-        const resourcesWithFieldTrue = resultTrue.entry.filter((e: any) => e.resource?.gender != null).length;
-        const resourcesWithFieldFalse = resultFalse.entry.filter((e: any) => e.resource?.gender != null).length;
+        const resourcesWithProfileTrue = resultTrue.entry.filter((e: any) => 
+          e.resource?.meta?.profile && Array.isArray(e.resource.meta.profile) && e.resource.meta.profile.length > 0
+        ).length;
+        const resourcesWithProfileFalse = resultFalse.entry.filter((e: any) => 
+          e.resource?.meta?.profile && Array.isArray(e.resource.meta.profile) && e.resource.meta.profile.length > 0
+        ).length;
         
-        // For missing=true, most resources should NOT have the field
-        // For missing=false, most resources SHOULD have the field
-        const trueRatioWithField = hasResultsTrue ? resourcesWithFieldTrue / resultTrue.entry.length : 0;
-        const falseRatioWithField = hasResultsFalse ? resourcesWithFieldFalse / resultFalse.entry.length : 0;
+        // For missing=true, most resources should NOT have profiles
+        // For missing=false, most resources SHOULD have profiles
+        const trueRatioWithProfile = hasResultsTrue ? resourcesWithProfileTrue / resultTrue.entry.length : 0;
+        const falseRatioWithProfile = hasResultsFalse ? resourcesWithProfileFalse / resultFalse.entry.length : 0;
+        
+        logger.debug(`[CapabilityDetector] :missing=true profile ratio: ${trueRatioWithProfile.toFixed(2)}, :missing=false profile ratio: ${falseRatioWithProfile.toFixed(2)}`);
         
         // If both queries return similar ratios, the filtering isn't working
-        if (Math.abs(trueRatioWithField - falseRatioWithField) < 0.3) {
-          logger.info('[CapabilityDetector] :missing modifier not filtering correctly (same field presence in both queries) ✗');
+        if (Math.abs(trueRatioWithProfile - falseRatioWithProfile) < 0.3) {
+          logger.info(`[CapabilityDetector] :missing modifier not filtering correctly (profiles in both: true=${trueRatioWithProfile.toFixed(2)}, false=${falseRatioWithProfile.toFixed(2)}) ✗`);
           return false;
         }
       }
@@ -154,44 +162,47 @@ export class ServerCapabilityDetector {
         return false;
       }
       
-      // Rate limiting - try to assume HAPI standards (most R4 servers support :missing)
+      // Rate limiting or errors - be conservative and assume NOT supported for _profile
+      // While :missing is a FHIR R4 standard, not all servers implement it correctly for all fields
       if (error.response?.status === 429) {
-        logger.warn('[CapabilityDetector] :missing modifier test hit rate limit, assuming supported (FHIR R4 standard)');
-        return true; // Default to true for standard FHIR R4 modifier
+        logger.warn('[CapabilityDetector] :missing modifier test hit rate limit, assuming NOT supported to be safe');
+        return false; // Conservative: don't assume it works if we can't test it
       }
       
-      // Other errors (500, network) - assume supported for standard modifier
-      logger.warn('[CapabilityDetector] :missing modifier test inconclusive, assuming supported (FHIR R4 standard)');
-      return true; // Default to true for standard FHIR R4 modifier
+      // Other errors (500, network) - be conservative
+      logger.warn('[CapabilityDetector] :missing modifier test inconclusive, assuming NOT supported to be safe');
+      return false; // Conservative: don't assume it works if we can't test it
     }
   }
 
   /**
    * Test if server supports :exists modifier (Fire.ly extension)
-   * Example: Patient?gender:exists=true
+   * Example: Patient?_profile:exists=true
    * 
    * Note: HAPI FHIR accepts :exists without error but doesn't filter correctly.
    * We test by comparing results with :exists=true vs :exists=false
+   * IMPORTANT: Test with _profile specifically, as some servers support
+   * :exists for some fields but not others
    */
   private async testExistsModifier(): Promise<boolean> {
     try {
-      logger.debug('[CapabilityDetector] Testing :exists modifier');
+      logger.debug('[CapabilityDetector] Testing :exists modifier on _profile parameter');
       
       // Small delay to avoid rate limiting
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Test with :exists=true (should return resources with gender)
+      // Test with _profile:exists=true (should return resources with profile)
       const resultTrue = await this.fhirClient.searchResources('Patient', {
-        'gender:exists': 'true',
-        _count: 5,
+        '_profile:exists': 'true',
+        _count: 10,
       });
       
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Test with :exists=false (should return resources without gender)
+      // Test with _profile:exists=false (should return resources without profile)
       const resultFalse = await this.fhirClient.searchResources('Patient', {
-        'gender:exists': 'false',
-        _count: 5,
+        '_profile:exists': 'false',
+        _count: 10,
       });
       
       const hasResultsTrue = resultTrue?.entry && resultTrue.entry.length > 0;
@@ -204,21 +215,27 @@ export class ServerCapabilityDetector {
       }
       
       // Verify that the results are actually filtered
-      // exists=true should return resources WITH the field
-      // exists=false should return resources WITHOUT the field
+      // exists=true should return resources WITH _profile
+      // exists=false should return resources WITHOUT _profile
       if (hasResultsTrue && hasResultsFalse) {
         // Check if results are actually different
-        const resourcesWithFieldTrue = resultTrue.entry.filter((e: any) => e.resource?.gender != null).length;
-        const resourcesWithFieldFalse = resultFalse.entry.filter((e: any) => e.resource?.gender != null).length;
+        const resourcesWithProfileTrue = resultTrue.entry.filter((e: any) => 
+          e.resource?.meta?.profile && Array.isArray(e.resource.meta.profile) && e.resource.meta.profile.length > 0
+        ).length;
+        const resourcesWithProfileFalse = resultFalse.entry.filter((e: any) => 
+          e.resource?.meta?.profile && Array.isArray(e.resource.meta.profile) && e.resource.meta.profile.length > 0
+        ).length;
         
-        // For exists=true, most resources SHOULD have the field
-        // For exists=false, most resources should NOT have the field
-        const trueRatioWithField = hasResultsTrue ? resourcesWithFieldTrue / resultTrue.entry.length : 0;
-        const falseRatioWithField = hasResultsFalse ? resourcesWithFieldFalse / resultFalse.entry.length : 0;
+        // For exists=true, most resources SHOULD have profiles
+        // For exists=false, most resources should NOT have profiles
+        const trueRatioWithProfile = hasResultsTrue ? resourcesWithProfileTrue / resultTrue.entry.length : 0;
+        const falseRatioWithProfile = hasResultsFalse ? resourcesWithProfileFalse / resultFalse.entry.length : 0;
+        
+        logger.debug(`[CapabilityDetector] :exists=true profile ratio: ${trueRatioWithProfile.toFixed(2)}, :exists=false profile ratio: ${falseRatioWithProfile.toFixed(2)}`);
         
         // If both queries return similar ratios, the filtering isn't working
-        if (Math.abs(trueRatioWithField - falseRatioWithField) < 0.3) {
-          logger.info('[CapabilityDetector] :exists modifier not filtering correctly (same field presence in both queries) ✗');
+        if (Math.abs(trueRatioWithProfile - falseRatioWithProfile) < 0.3) {
+          logger.info(`[CapabilityDetector] :exists modifier not filtering correctly (profiles in both: true=${trueRatioWithProfile.toFixed(2)}, false=${falseRatioWithProfile.toFixed(2)}) ✗`);
           return false;
         }
       }
