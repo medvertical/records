@@ -15,6 +15,12 @@ export interface HapiValidationOptions {
   /** Terminology server URL (auto-selected based on mode if not provided) */
   terminologyServer?: string;
   
+  /** 
+   * Priority-ordered list of terminology servers from ValidationSettings
+   * If provided, first enabled server will be used. Falls back to terminologyServer or tx.fhir.org
+   */
+  terminologyServers?: string[];
+  
   /** IG packages to load (e.g., ['hl7.fhir.r4.core@4.0.1']) */
   igPackages?: string[];
   

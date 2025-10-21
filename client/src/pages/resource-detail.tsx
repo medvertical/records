@@ -303,14 +303,39 @@ export default function ResourceDetail() {
       const response = await fetch(url);
       if (!response.ok) {
         console.error('Resource fetch failed:', response.status, response.statusText);
-        throw new Error(`Failed to fetch resource: ${response.status}`);
+        
+        // Try to parse error details from response
+        let errorDetails;
+        try {
+          errorDetails = await response.json();
+        } catch (e) {
+          errorDetails = { message: response.statusText };
+        }
+        
+        // Create detailed error message
+        const errorMessage = errorDetails.message || `Failed to fetch resource: ${response.status}`;
+        const error: any = new Error(errorMessage);
+        error.status = response.status;
+        error.details = errorDetails;
+        throw error;
       }
       const data = await response.json();
       console.log('Resource fetched successfully:', data);
       return data;
     },
     enabled: !!id,
-    retry: 1,
+    retry: (failureCount, error: any) => {
+      // Don't retry on 404 (not found) or 403 (forbidden)
+      if (error?.status === 404 || error?.status === 403) {
+        return false;
+      }
+      // Retry up to 3 times on 500 errors
+      return failureCount < 3;
+    },
+    retryDelay: (attemptIndex) => {
+      // Exponential backoff: 300ms, 600ms, 1200ms
+      return Math.min(300 * Math.pow(2, attemptIndex), 3000);
+    },
   });
   
   // Fetch version data for this resource

@@ -104,8 +104,13 @@ export function ResourceDetailError({
   onBack,
 }: ResourceDetailErrorProps) {
   const errorMessage = error instanceof Error ? error.message : error;
+  const errorDetails = (error as any)?.details;
+  const errorStatus = (error as any)?.status;
+  
   const isNotFound = errorMessage.toLowerCase().includes('not found') || 
-                     errorMessage.includes('404');
+                     errorMessage.includes('404') ||
+                     errorStatus === 404;
+  const isServerError = errorStatus >= 500 && errorStatus < 600;
 
   return (
     <div className="p-6 h-full overflow-y-auto" role="alert" aria-live="assertive">
@@ -131,8 +136,24 @@ export function ResourceDetailError({
             <Alert variant={isNotFound ? 'default' : 'destructive'} className="mb-6 text-left">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Error Details</AlertTitle>
-              <AlertDescription className="mt-2">
-                {errorMessage}
+              <AlertDescription className="mt-2 space-y-2">
+                <p>{errorMessage}</p>
+                {isServerError && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                    The system automatically retried this request. If the error persists, 
+                    please check the server logs for detailed error information.
+                  </p>
+                )}
+                {errorDetails?.requestId && (
+                  <p className="text-xs text-gray-500 font-mono mt-2">
+                    Request ID: {errorDetails.requestId}
+                  </p>
+                )}
+                {errorDetails?.duration && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Duration: {errorDetails.duration}ms
+                  </p>
+                )}
               </AlertDescription>
             </Alert>
 

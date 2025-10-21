@@ -352,10 +352,29 @@ export class HapiValidatorClient {
     const corePackage = getCorePackage(options.fhirVersion);
     const versionConfig = getVersionConfig(options.fhirVersion);
     
-    // Determine mode and terminology server
-    // Always use tx.fhir.org - fast and reliable
-    // Don't use getTerminologyServerUrl as it may return localhost
-    const terminologyServer = `https://tx.fhir.org/${options.fhirVersion.toLowerCase()}`;
+    // Determine terminology server from options (priority order):
+    // 1. terminologyServers array (from ValidationSettings) - use first
+    // 2. terminologyServer single URL (legacy/override)
+    // 3. Default to tx.fhir.org for this version
+    let terminologyServer: string;
+    
+    if (options.terminologyServers && options.terminologyServers.length > 0) {
+      terminologyServer = options.terminologyServers[0];
+      console.log(
+        `[HapiValidatorClient] Using terminology server from settings (priority 1 of ${options.terminologyServers.length}): ${terminologyServer}`
+      );
+      if (options.terminologyServers.length > 1) {
+        console.log(
+          `[HapiValidatorClient] Additional fallback servers available: ${options.terminologyServers.slice(1).join(', ')}`
+        );
+      }
+    } else if (options.terminologyServer) {
+      terminologyServer = options.terminologyServer;
+      console.log(`[HapiValidatorClient] Using terminology server from explicit option: ${terminologyServer}`);
+    } else {
+      terminologyServer = `https://tx.fhir.org/${options.fhirVersion.toLowerCase()}`;
+      console.log(`[HapiValidatorClient] Using default terminology server: ${terminologyServer}`);
+    }
 
     // Base arguments
     // Use output file instead of stdout - HAPI mixes OperationOutcome with other text on stdout
@@ -398,10 +417,9 @@ export class HapiValidatorClient {
     args.push('-txCache', cacheDir);
     console.log(`[HapiValidatorClient] Using package cache: ${cacheDir}`);
 
-    // Add terminology server to enable package downloads from Simplifier
-    // This allows HAPI to download German profiles and other IGs
+    // Add terminology server to enable CodeSystem lookups and package downloads
     args.push('-tx', terminologyServer);
-    console.log(`[HapiValidatorClient] Using terminology server for package downloads: ${terminologyServer}`);
+    console.log(`[HapiValidatorClient] Configuring HAPI with terminology server (-tx flag): ${terminologyServer}`);
 
     // Log limitations for non-stable versions
     const limitations = versionConfig.limitations || [];

@@ -358,6 +358,11 @@ export class CodeExtractor {
       return 'http://hl7.org/fhir/narrative-status';
     }
     
+    // identifier.use appears in MANY resource types (Patient, Practitioner, Organization, Location, Encounter, Device, etc.)
+    if (normalizedPath === 'identifier.use') {
+      return 'http://hl7.org/fhir/identifier-use';
+    }
+    
     return null;
   }
 
@@ -507,6 +512,11 @@ export class CodeExtractor {
           system: 'http://hl7.org/fhir/observation-status',
           valueSet: 'http://hl7.org/fhir/ValueSet/observation-status',
           type: 'code',
+        },
+        {
+          path: 'category',
+          valueSet: 'http://hl7.org/fhir/ValueSet/observation-category',
+          type: 'CodeableConcept',
         },
         {
           path: 'code',

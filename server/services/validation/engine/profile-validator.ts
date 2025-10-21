@@ -257,6 +257,18 @@ export class ProfileValidator {
         // Continue with validation even if resolution fails - HAPI may have cached profile
       }
 
+      // Extract terminology servers from settings (priority order)
+      const terminologyServers = this.extractTerminologyServers(settings, fhirVersion);
+      
+      if (terminologyServers.length > 0) {
+        console.log(
+          `[ProfileValidator] Using ${terminologyServers.length} terminology server(s) from settings: ` +
+          terminologyServers.join(', ')
+        );
+      } else {
+        console.log(`[ProfileValidator] No terminology servers configured in settings, will use default tx.fhir.org`);
+      }
+
       // Load version-specific IG packages (Task 2.8)
       const igPackages = this.getIgPackagesForProfile(profileUrl, fhirVersion);
       
@@ -282,11 +294,12 @@ export class ProfileValidator {
 
       console.log(`[ProfileValidator] Profile sources: ${profileSources}, mode: ${mode}`);
 
-      // Build validation options with profile and IG packages
+      // Build validation options with profile, IG packages, and terminology servers
       const options: HapiValidationOptions = {
         fhirVersion,
         profile: profileUrl,
         mode,
+        terminologyServers: terminologyServers.length > 0 ? terminologyServers : undefined,
         igPackages: igPackages.length > 0 ? igPackages : undefined,
         cacheDirectory: settings?.offlineConfig?.profileCachePath || './server/cache/fhir-packages',
         timeout: 60000, // 60 seconds for profile validation (HAPI can be slow with profile loading)
@@ -402,6 +415,63 @@ export class ProfileValidator {
       console.warn(`[ProfileValidator] Profile resolution failed (continuing with validation):`, error);
       // Don't throw - let validation proceed even if resolution fails
     }
+  }
+
+  /**
+   * Extract enabled terminology servers from settings
+   * Filters by FHIR version compatibility, enabled status, and circuit breaker state
+   * Returns servers in priority order (as defined in settings array)
+   * 
+   * @param settings - Validation settings with terminology servers configuration
+   * @param fhirVersion - FHIR version to filter servers for
+   * @returns Array of terminology server URLs in priority order
+   */
+  private extractTerminologyServers(settings: ValidationSettings | undefined, fhirVersion: 'R4' | 'R5' | 'R6'): string[] {
+    if (!settings?.terminologyServers || settings.terminologyServers.length === 0) {
+      console.log(`[ProfileValidator] No terminology servers found in settings`);
+      return [];
+    }
+
+    const allServers = settings.terminologyServers;
+    console.log(`[ProfileValidator] Found ${allServers.length} terminology server(s) in settings`);
+
+    // Filter servers by enabled status, circuit breaker state, and FHIR version compatibility
+    const compatibleServers = allServers.filter(server => {
+      const isEnabled = server.enabled === true;
+      const isCircuitOpen = server.circuitOpen === true;
+      const supportsVersion = server.fhirVersions && server.fhirVersions.includes(fhirVersion);
+
+      if (!isEnabled) {
+        console.log(`[ProfileValidator] Skipping disabled server: ${server.name} (${server.url})`);
+        return false;
+      }
+
+      if (isCircuitOpen) {
+        console.log(`[ProfileValidator] Skipping server with open circuit: ${server.name} (${server.url})`);
+        return false;
+      }
+
+      if (!supportsVersion) {
+        console.log(
+          `[ProfileValidator] Skipping incompatible server: ${server.name} (${server.url}) - ` +
+          `supports ${server.fhirVersions?.join(', ') || 'unknown'}, need ${fhirVersion}`
+        );
+        return false;
+      }
+
+      console.log(`[ProfileValidator] ✓ Server compatible: ${server.name} (${server.url})`);
+      return true;
+    });
+
+    // Extract URLs while maintaining priority order
+    const serverUrls = compatibleServers.map(s => s.url);
+
+    console.log(
+      `[ProfileValidator] Filtered to ${serverUrls.length} compatible server(s) for ${fhirVersion}: ` +
+      (serverUrls.length > 0 ? serverUrls.join(', ') : 'none')
+    );
+
+    return serverUrls;
   }
 
   /**
