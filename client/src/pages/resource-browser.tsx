@@ -183,7 +183,7 @@ export default function ResourceBrowser() {
     // Update URL to reflect the search parameters
     const searchParams = new URLSearchParams();
     if (type && type !== "all") {
-      searchParams.set('type', type);
+      searchParams.set('resourceType', type);
     }
     if (query) {
       searchParams.set('search', query);
@@ -268,7 +268,8 @@ export default function ResourceBrowser() {
   // Parse URL parameters and update state when location changes
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const typeParam = urlParams.get('type');
+    // Support 'resourceType' (new), 'type' (legacy lowercase), and 'Type' (legacy uppercase) for backwards compatibility
+    const typeParam = urlParams.get('resourceType') || urlParams.get('type') || urlParams.get('Type');
     const searchParam = urlParams.get('search');
     const aspectsParam = urlParams.get('aspects');
     const severitiesParam = urlParams.get('severities');
@@ -282,7 +283,7 @@ export default function ResourceBrowser() {
     urlParams.forEach((value, key) => {
       // Skip known UI params and FHIR system params
       const excludedParams = [
-        'type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize', 'sort',
+        'resourceType', 'type', 'Type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize', 'sort',
         '_count', '_skip', '_sort', '_total', '_summary', '_elements', '_include', '_revinclude'
       ];
       if (!excludedParams.includes(key) && !excludedParams.includes(key.split(':')[0])) {
@@ -333,7 +334,8 @@ export default function ResourceBrowser() {
   useEffect(() => {
     const handleUrlChange = () => {
       const urlParams = new URLSearchParams(window.location.search);
-      const typeParam = urlParams.get('type');
+      // Support 'resourceType' (new), 'type' (legacy lowercase), and 'Type' (legacy uppercase) for backwards compatibility
+      const typeParam = urlParams.get('resourceType') || urlParams.get('type') || urlParams.get('Type');
       const searchParam = urlParams.get('search');
       const pageParam = parseInt(urlParams.get('page') || '1');
       const pageSizeParam = parseInt(urlParams.get('pageSize') || '20');
@@ -342,7 +344,7 @@ export default function ResourceBrowser() {
       // Parse FHIR params
       const fhirParams: Record<string, { value: string | string[]; operator?: string }> = {};
       const excludedParams = [
-        'type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize', 'sort',
+        'resourceType', 'type', 'Type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize', 'sort',
         '_count', '_skip', '_sort', '_total', '_summary', '_elements', '_include', '_revinclude'
       ];
       urlParams.forEach((value, key) => {
@@ -449,7 +451,7 @@ export default function ResourceBrowser() {
   // Also check URL directly for FHIR search parameters as a fallback
   const urlParams = new URLSearchParams(window.location.search);
   const hasFhirParamsInUrl = Array.from(urlParams.keys()).some(key => 
-    !['type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize', 'limit'].includes(key)
+    !['resourceType', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize', 'limit'].includes(key)
   );
   
   // Check if there's a text search query
@@ -711,10 +713,11 @@ export default function ResourceBrowser() {
           duration: 3000,
         });
 
-        // Soft refetch after 3 seconds to get updated validation results
+        // Invalidate validation messages after 3 seconds to get updated validation results
+        // Don't refetch resource list to avoid changing which resources are displayed
         setTimeout(() => {
-          queryClient.refetchQueries({
-            queryKey: ['resources'],
+          queryClient.invalidateQueries({
+            queryKey: ['validation-messages'],
           });
         }, 3000);
       }
@@ -1362,17 +1365,19 @@ export default function ResourceBrowser() {
         });
       });
 
-      // Refetch immediately - validation is already complete and stored in DB
-      queryClient.invalidateQueries({ queryKey: ['resources'] });
+      // Invalidate only validation-specific queries, not the resource list
+      // This updates validation badges without changing which resources are displayed
+      console.log('[Background Validation] Invalidating validation messages...');
+      await queryClient.invalidateQueries({ 
+        queryKey: ['validation-messages']
+      });
+      console.log('[Background Validation] Validation messages invalidated');
       
       // Clear progress after showing completion briefly
       setTimeout(() => {
         setValidationProgress(new Map());
         // Remove from activity context
         resourceIds.forEach(id => removeResourceValidation(id));
-        
-        // One more refetch to catch any async DB writes
-        queryClient.invalidateQueries({ queryKey: ['resources'] });
       }, 500);
 
       // Mark this page as validated only after successful validation
@@ -1432,7 +1437,7 @@ export default function ResourceBrowser() {
     // Update URL with new filters
     const urlParams = new URLSearchParams(window.location.search);
     if (resourceType && resourceType !== "all") {
-      urlParams.set('type', resourceType);
+      urlParams.set('resourceType', resourceType);
     }
     if (searchQuery) {
       urlParams.set('search', searchQuery);
@@ -1501,7 +1506,7 @@ export default function ResourceBrowser() {
       // Remove all FHIR search parameters if none are set
       const keysToRemove: string[] = [];
       urlParams.forEach((value, key) => {
-        if (!['type', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize', 'limit'].includes(key)) {
+        if (!['resourceType', 'search', 'aspects', 'severities', 'hasIssues', 'page', 'pageSize', 'limit'].includes(key)) {
           keysToRemove.push(key);
         }
       });
@@ -1666,8 +1671,13 @@ export default function ResourceBrowser() {
         });
       });
 
-      // Validation complete - refetch immediately to show results
-      queryClient.invalidateQueries({ queryKey: ['resources'] });
+      // Invalidate only validation-specific queries to show updated results
+      // Don't refetch resource list to avoid changing which resources are displayed
+      console.log('[Manual Revalidation] Invalidating validation messages...');
+      await queryClient.invalidateQueries({ 
+        queryKey: ['validation-messages']
+      });
+      console.log('[Manual Revalidation] Validation messages invalidated');
       
       toast({
         title: "Revalidation complete",

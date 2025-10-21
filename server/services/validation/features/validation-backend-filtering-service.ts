@@ -309,21 +309,35 @@ class ValidationBackendFilteringService extends EventEmitter {
       }
 
       // Fetch validation results for remaining resources using composite key matching
+      // Use batching to avoid SQL parameter limit issues with large resource sets
       let validationResults: any[] = [];
       if (allResources.length > 0) {
-        // Build conditions to match resources by (serverId, resourceType, fhirId)
-        const resourceConditions = allResources.map(r => 
-          and(
-            eq(validationResultsPerAspect.serverId, serverId),
-            eq(validationResultsPerAspect.resourceType, r.resourceType),
-            eq(validationResultsPerAspect.fhirId, r.resourceId)
-          )
-        );
+        const BATCH_SIZE = 100; // Query 100 resources at a time to avoid SQL parameter limits
         
-        validationResults = await db
-          .select()
-          .from(validationResultsPerAspect)
-          .where(or(...resourceConditions));
+        console.log(`[BackendFiltering] Fetching validation results for ${allResources.length} resources in batches of ${BATCH_SIZE}`);
+        
+        for (let i = 0; i < allResources.length; i += BATCH_SIZE) {
+          const batch = allResources.slice(i, i + BATCH_SIZE);
+          
+          // Build conditions for this batch
+          const resourceConditions = batch.map(r => 
+            and(
+              eq(validationResultsPerAspect.serverId, serverId),
+              eq(validationResultsPerAspect.resourceType, r.resourceType),
+              eq(validationResultsPerAspect.fhirId, r.resourceId)
+            )
+          );
+          
+          // Query validation results for this batch
+          const batchResults = await db
+            .select()
+            .from(validationResultsPerAspect)
+            .where(or(...resourceConditions));
+          
+          validationResults.push(...batchResults);
+        }
+        
+        console.log(`[BackendFiltering] Fetched ${validationResults.length} validation results in ${Math.ceil(allResources.length / BATCH_SIZE)} batches`);
       }
 
       // Attach validation results to resources using composite key lookup
