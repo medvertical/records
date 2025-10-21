@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -49,26 +49,161 @@ export function SettingsModal({
   const [pendingClose, setPendingClose] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [saveCounter, setSaveCounter] = useState(0);
+  const [saveErrors, setSaveErrors] = useState<string[]>([]);
+  const [saveSuccesses, setSaveSuccesses] = useState<number>(0);
+  const [reloadTrigger, setReloadTrigger] = useState(0);
+  
+  // Use refs to track save counts for accurate polling (avoids stale closure)
+  const saveSuccessesRef = useRef(0);
+  const saveErrorsRef = useRef<string[]>([]);
+
+  // Parse initial state from URL hash on mount
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith('#settings')) {
+      // Extract tab if specified (e.g., #settings-system)
+      const parts = hash.split('-');
+      if (parts.length > 1) {
+        const tab = parts.slice(1).join('-'); // Handle multi-part tabs
+        setActiveTab(tab);
+      }
+      // Open modal if not already open
+      if (!open) {
+        onOpenChange(true);
+      }
+    }
+  }, []); // Only run on mount
+
+  // Update URL hash when modal opens/closes or tab changes
+  useEffect(() => {
+    if (open) {
+      const newHash = activeTab ? `#settings-${activeTab}` : '#settings';
+      if (window.location.hash !== newHash) {
+        window.history.replaceState(null, '', newHash);
+      }
+    } else {
+      // Remove hash when modal closes
+      if (window.location.hash.startsWith('#settings')) {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      }
+    }
+  }, [open, activeTab]);
+
+  // Listen for browser back/forward navigation
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+      if (hash.startsWith('#settings')) {
+        // Extract tab if specified
+        const parts = hash.split('-');
+        if (parts.length > 1) {
+          const tab = parts.slice(1).join('-');
+          setActiveTab(tab);
+        }
+        // Open modal if it's closed
+        if (!open) {
+          onOpenChange(true);
+        }
+      } else {
+        // Close modal if hash is removed
+        if (open) {
+          onOpenChange(false);
+        }
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [open, onOpenChange]);
+
+  // Reload settings when modal opens
+  useEffect(() => {
+    console.log('[SettingsModal] Modal open state changed:', open);
+    if (open) {
+      console.log('[SettingsModal] Incrementing reloadTrigger');
+      setReloadTrigger(prev => {
+        const next = prev + 1;
+        console.log('[SettingsModal] ReloadTrigger:', prev, '→', next);
+        return next;
+      });
+    }
+  }, [open]);
+
+  // Reset saveCounter when modal closes
+  useEffect(() => {
+    if (!open) {
+      console.log('[SettingsModal] Modal closed, resetting saveCounter');
+      setSaveCounter(0);
+    }
+  }, [open]);
+
+  const handleSaveComplete = () => {
+    saveSuccessesRef.current += 1;
+    setSaveSuccesses(saveSuccessesRef.current);
+    console.log('[SettingsModal] Save completed, count:', saveSuccessesRef.current);
+  };
+
+  const handleSaveError = (error: string) => {
+    saveErrorsRef.current = [...saveErrorsRef.current, error];
+    setSaveErrors(saveErrorsRef.current);
+    console.log('[SettingsModal] Save error:', error, 'total errors:', saveErrorsRef.current.length);
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
+    setSaveErrors([]);
+    setSaveSuccesses(0);
+    saveErrorsRef.current = [];
+    saveSuccessesRef.current = 0;
+    
     try {
-      // Saving is handled by individual tabs
-      // This is a placeholder for coordinated save
-      
-      // Wait a bit for any pending saves in tabs to complete
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      toast({
-        title: "Settings saved",
-        description: "Your settings have been saved successfully.",
-      });
-      
-      // Increment save counter to notify tabs
+      // Increment saveCounter to trigger saves in tabs
+      console.log('[SettingsModal] Initiating save for all tabs...');
       setSaveCounter(prev => prev + 1);
       
-      // Reset dirty state after successful save
-      setIsDirty(false);
+      // Wait for tabs to complete saves (with timeout)
+      const expectedSaves = 5; // Validation + Servers + Rules + Dashboard + System
+      const timeout = 10000; // 10 second timeout (validation can be slow due to invalidation)
+      console.log('[SettingsModal] Expecting', expectedSaves, 'tab saves');
+      const startTime = Date.now();
+      
+      // Poll using refs to avoid stale closure issues
+      while (saveSuccessesRef.current < expectedSaves && Date.now() - startTime < timeout) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // If we have errors and all responses are in, break early
+        if (saveSuccessesRef.current + saveErrorsRef.current.length >= expectedSaves) {
+          break;
+        }
+      }
+      
+      console.log('[SettingsModal] Save results:', saveSuccessesRef.current, 'successes,', saveErrorsRef.current.length, 'errors');
+      
+      // Use ref values for final toast (most up-to-date)
+      const finalSuccesses = saveSuccessesRef.current;
+      const finalErrors = saveErrorsRef.current;
+      
+      if (finalErrors.length > 0) {
+        toast({
+          title: "Partial save failure",
+          description: `${finalSuccesses}/${expectedSaves} tabs saved. Failed: ${finalErrors.join(', ')}`,
+          variant: "destructive"
+        });
+        // Don't clear dirty state if there were errors
+      } else if (finalSuccesses === expectedSaves) {
+        toast({
+          title: "Settings saved",
+          description: `All ${expectedSaves} tabs saved successfully.`,
+        });
+        // Reset dirty state after successful save
+        setIsDirty(false);
+      } else {
+        toast({
+          title: "Partial save",
+          description: `${finalSuccesses}/${expectedSaves} tabs saved (some tabs may have timed out).`,
+          variant: "default"
+        });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -189,24 +324,69 @@ export function SettingsModal({
             {/* Scrollable content area */}
             <ScrollArea className="flex-1">
               <div className="p-6">
-                <TabsContent value="validation" className="mt-0">
-                  <ValidationTab onDirtyChange={setIsDirty} onLoadingChange={setIsLoading} hideHeader saveCounter={saveCounter} />
+                <TabsContent value="validation" className="mt-0" forceMount>
+                  <div className={activeTab !== 'validation' ? 'hidden' : ''}>
+                    <ValidationTab 
+                      onDirtyChange={setIsDirty} 
+                      onLoadingChange={setIsLoading} 
+                      hideHeader 
+                      saveCounter={saveCounter}
+                      onSaveComplete={handleSaveComplete}
+                      onSaveError={handleSaveError}
+                      reloadTrigger={reloadTrigger}
+                    />
+                  </div>
                 </TabsContent>
                 
-                <TabsContent value="servers" className="mt-0">
-                  <ServersTab onDirtyChange={setIsDirty} hideHeader saveCounter={saveCounter} />
+                <TabsContent value="servers" className="mt-0" forceMount>
+                  <div className={activeTab !== 'servers' ? 'hidden' : ''}>
+                    <ServersTab 
+                      onDirtyChange={setIsDirty} 
+                      hideHeader 
+                      saveCounter={saveCounter}
+                      onSaveComplete={handleSaveComplete}
+                      onSaveError={handleSaveError}
+                      isActive={activeTab === 'servers'}
+                    />
+                  </div>
                 </TabsContent>
                 
-                <TabsContent value="rules" className="mt-0">
-                  <RulesTab onDirtyChange={setIsDirty} hideHeader saveCounter={saveCounter} />
+                <TabsContent value="rules" className="mt-0" forceMount>
+                  <div className={activeTab !== 'rules' ? 'hidden' : ''}>
+                    <RulesTab 
+                      onDirtyChange={setIsDirty} 
+                      hideHeader 
+                      saveCounter={saveCounter}
+                      onSaveComplete={handleSaveComplete}
+                      onSaveError={handleSaveError}
+                    />
+                  </div>
                 </TabsContent>
                 
-                <TabsContent value="dashboard" className="mt-0">
-                  <DashboardTab onDirtyChange={setIsDirty} hideHeader saveCounter={saveCounter} />
+                <TabsContent value="dashboard" className="mt-0" forceMount>
+                  <div className={activeTab !== 'dashboard' ? 'hidden' : ''}>
+                    <DashboardTab 
+                      onDirtyChange={setIsDirty} 
+                      hideHeader 
+                      saveCounter={saveCounter}
+                      onSaveComplete={handleSaveComplete}
+                      onSaveError={handleSaveError}
+                      reloadTrigger={reloadTrigger}
+                    />
+                  </div>
                 </TabsContent>
                 
-                <TabsContent value="system" className="mt-0">
-                  <SystemTab onDirtyChange={setIsDirty} hideHeader saveCounter={saveCounter} />
+                <TabsContent value="system" className="mt-0" forceMount>
+                  <div className={activeTab !== 'system' ? 'hidden' : ''}>
+                    <SystemTab 
+                      onDirtyChange={setIsDirty} 
+                      hideHeader 
+                      saveCounter={saveCounter}
+                      onSaveComplete={handleSaveComplete}
+                      onSaveError={handleSaveError}
+                      reloadTrigger={reloadTrigger}
+                    />
+                  </div>
                 </TabsContent>
               </div>
             </ScrollArea>

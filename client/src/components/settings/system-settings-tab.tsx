@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { 
   AlertDialog,
@@ -42,6 +43,10 @@ interface SystemSettings {
 
 interface SystemSettingsTabProps {
   onSettingsChange?: (settings: SystemSettings) => void;
+  saveCounter?: number;  // Trigger save when this changes
+  onSaveComplete?: () => void;  // Notify parent of save completion
+  onSaveError?: (error: string) => void;  // Notify parent of save error
+  reloadTrigger?: number;  // Trigger reload when this changes
 }
 
 // ============================================================================
@@ -69,24 +74,57 @@ const DEFAULT_SETTINGS: SystemSettings = {
 // Component
 // ============================================================================
 
-export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) {
+export function SystemSettingsTab({ onSettingsChange, saveCounter, onSaveComplete, onSaveError, reloadTrigger }: SystemSettingsTabProps) {
   const { toast } = useToast();
   
   // State management
   const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [showClearCacheDialog, setShowClearCacheDialog] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  // Load settings on mount
+  // Load settings only when reloadTrigger changes (skip initial mount to avoid duplicate load)
   useEffect(() => {
-    loadSettings();
-  }, []);
+    if (reloadTrigger && reloadTrigger > 0) {
+      console.log('[SystemSettings] Reload triggered, reloadTrigger:', reloadTrigger);
+      loadSettings();
+    }
+  }, [reloadTrigger]);
 
-  // Notify parent of changes
+  // Apply theme to document root (but not during initial load)
   useEffect(() => {
-    onSettingsChange?.(settings);
-  }, [settings, onSettingsChange]);
+    // Don't apply theme until settings are actually loaded from API
+    if (isLoading || isInitialLoad) {
+      console.log('[SystemSettings] Skipping theme application during load');
+      return;
+    }
+    
+    console.log('[SystemSettings] Applying theme:', settings.theme);
+    const root = document.documentElement;
+    
+    if (settings.theme === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
+    } else if (settings.theme === 'light') {
+      root.classList.add('light');
+      root.classList.remove('dark');
+    } else {
+      // System theme - check system preference
+      root.classList.remove('dark', 'light');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        root.classList.add('dark');
+      }
+    }
+  }, [settings.theme, isLoading, isInitialLoad]);
+
+  // Notify parent of changes (but not during initial load)
+  useEffect(() => {
+    if (!isInitialLoad) {
+      onSettingsChange?.(settings);
+    }
+  }, [settings, onSettingsChange, isInitialLoad]);
 
   // ========================================================================
   // Data Loading
@@ -95,9 +133,11 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
   const loadSettings = async () => {
     try {
       setIsLoading(true);
+      console.log('[SystemSettings] Loading settings from API...');
       const response = await fetch('/api/system-settings');
       if (response.ok) {
         const data = await response.json();
+        console.log('[SystemSettings] Received data from API:', data);
         // Merge with defaults to ensure all properties exist
         const mergedSettings: SystemSettings = {
           theme: data.theme ?? DEFAULT_SETTINGS.theme,
@@ -115,7 +155,9 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
             autoUpdate: data.features?.autoUpdate ?? DEFAULT_SETTINGS.features.autoUpdate,
           },
         };
+        console.log('[SystemSettings] Merged settings:', mergedSettings);
         setSettings(mergedSettings);
+        setIsInitialLoad(false);
       }
     } catch (error) {
       console.error('Failed to load system settings:', error);
@@ -128,6 +170,41 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
       setIsLoading(false);
     }
   };
+
+  // ========================================================================
+  // Settings Save
+  // ========================================================================
+
+  const saveSettings = async () => {
+    try {
+      console.log('[SystemSettings] Saving settings:', settings);
+      const response = await fetch('/api/system-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save settings');
+      }
+
+      const savedData = await response.json();
+      console.log('[SystemSettings] Save response from API:', savedData);
+
+      onSaveComplete?.();
+    } catch (error) {
+      console.error('Failed to save system settings:', error);
+      onSaveError?.(error instanceof Error ? error.message : 'Unknown error');
+    }
+  };
+
+  // Trigger save when saveCounter changes (but not during load)
+  useEffect(() => {
+    if (saveCounter && saveCounter > 0 && !isLoading) {
+      console.log('[SystemSettings] Save triggered by saveCounter:', saveCounter);
+      saveSettings();
+    }
+  }, [saveCounter, isLoading]);
 
   // ========================================================================
   // Settings Updates
@@ -255,19 +332,29 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
       >
         <div className="space-y-2">
           <Label htmlFor="theme">Theme</Label>
-          <Select
-            value={settings.theme}
-            onValueChange={(v) => update('theme', v)}
-          >
-            <SelectTrigger id="theme">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="light">Light</SelectItem>
-              <SelectItem value="dark">Dark</SelectItem>
-              <SelectItem value="system">System Default</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select
+              value={settings.theme}
+              onValueChange={(v) => update('theme', v)}
+            >
+              <SelectTrigger id="theme" className="flex-1">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="light">Light</SelectItem>
+                <SelectItem value="dark">
+                  <div className="flex items-center gap-2">
+                    <span>Dark</span>
+                    <Badge variant="secondary" className="text-xs">Experimental</Badge>
+                  </div>
+                </SelectItem>
+                <SelectItem value="system">System Default</SelectItem>
+              </SelectContent>
+            </Select>
+            {settings.theme === 'dark' && (
+              <Badge variant="secondary" className="text-xs">Experimental</Badge>
+            )}
+          </div>
         </div>
       </SettingSection>
 

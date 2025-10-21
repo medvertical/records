@@ -20,7 +20,12 @@ export interface ServerStatus {
 // Global refresh trigger for server data
 let globalRefreshTrigger = 0;
 
-export function useServerData() {
+export interface UseServerDataOptions {
+  enableConnectionTest?: boolean;  // Whether to test server connection automatically
+}
+
+export function useServerData(options: UseServerDataOptions = {}) {
+  const { enableConnectionTest = true } = options;
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const queryClient = useQueryClient();
 
@@ -69,7 +74,7 @@ export function useServerData() {
     return serversData.activeServer || servers.find(server => server.isActive) || null;
   }, [serversData, servers]);
   
-  // Connection test query - Auto-connect when there's an active server
+  // Connection test query - Auto-connect when there's an active server AND enabled
   const { data: serverStatus, isLoading: isConnectionLoading } = useQuery<ServerStatus | undefined>({
     queryKey: ["/api/fhir/connection/test", refreshTrigger, activeServer?.id],
     queryFn: async () => {
@@ -100,8 +105,8 @@ export function useServerData() {
     // Keep previous data visible during refetches
     placeholderData: (previousData) => previousData,
     staleTime: 10 * 60 * 1000, // 10 minutes - only refresh manually
-    // Auto-connect when there's an active server
-    enabled: !!activeServer,
+    // Only test connection when explicitly enabled AND there's an active server
+    enabled: !!activeServer && enableConnectionTest,
     retry: 1 // Allow one retry for failed connections
   });
 

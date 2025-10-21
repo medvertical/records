@@ -65,12 +65,31 @@ export class SystemSettingsRepository {
 
       if (result.length > 0) {
         const dbSettings = result[0].settings as any;
-        // Merge with defaults to ensure all fields exist (including new theme/cardLayout)
-        return {
-          ...DEFAULT_SYSTEM_SETTINGS,
-          ...dbSettings,
-        } as SystemSettings;
+        console.log('[SystemSettingsRepository] Raw DB settings:', JSON.stringify(dbSettings, null, 2));
+        
+        // Deep merge to properly handle nested objects
+        // Only extract fields that match our new structure
+        const merged: SystemSettings = {
+          theme: dbSettings.theme ?? DEFAULT_SYSTEM_SETTINGS.theme,
+          logging: {
+            level: dbSettings.logging?.level ?? DEFAULT_SYSTEM_SETTINGS.logging.level,
+            maxFileSize: dbSettings.logging?.maxFileSize ?? DEFAULT_SYSTEM_SETTINGS.logging.maxFileSize,
+          },
+          privacy: {
+            telemetry: dbSettings.privacy?.telemetry ?? DEFAULT_SYSTEM_SETTINGS.privacy.telemetry,
+            crashReporting: dbSettings.privacy?.crashReporting ?? DEFAULT_SYSTEM_SETTINGS.privacy.crashReporting,
+          },
+          dataRetentionDays: dbSettings.dataRetentionDays ?? DEFAULT_SYSTEM_SETTINGS.dataRetentionDays,
+          features: {
+            sse: dbSettings.features?.sse ?? DEFAULT_SYSTEM_SETTINGS.features.sse,
+            autoUpdate: dbSettings.features?.autoUpdate ?? DEFAULT_SYSTEM_SETTINGS.features.autoUpdate,
+          },
+        };
+        
+        console.log('[SystemSettingsRepository] Merged settings:', JSON.stringify(merged, null, 2));
+        return merged;
       }
+      console.log('[SystemSettingsRepository] No settings in DB, returning defaults');
       return DEFAULT_SYSTEM_SETTINGS;
     } catch (error) {
       console.error('[SystemSettingsRepository] Error getting current settings:', error);
@@ -84,8 +103,29 @@ export class SystemSettingsRepository {
    */
   async updateSettings(updates: Partial<SystemSettings>): Promise<SystemSettings> {
     try {
+      console.log('[SystemSettingsRepository] Update request:', JSON.stringify(updates, null, 2));
       const current = await this.getCurrentSettings();
-      const mergedSettings = { ...current, ...updates };
+      console.log('[SystemSettingsRepository] Current settings:', JSON.stringify(current, null, 2));
+      
+      // Deep merge nested objects properly
+      const mergedSettings: SystemSettings = {
+        theme: updates.theme ?? current.theme,
+        logging: {
+          level: updates.logging?.level ?? current.logging.level,
+          maxFileSize: updates.logging?.maxFileSize ?? current.logging.maxFileSize,
+        },
+        privacy: {
+          telemetry: updates.privacy?.telemetry ?? current.privacy.telemetry,
+          crashReporting: updates.privacy?.crashReporting ?? current.privacy.crashReporting,
+        },
+        dataRetentionDays: updates.dataRetentionDays ?? current.dataRetentionDays,
+        features: {
+          sse: updates.features?.sse ?? current.features.sse,
+          autoUpdate: updates.features?.autoUpdate ?? current.features.autoUpdate,
+        },
+      };
+      
+      console.log('[SystemSettingsRepository] Merged settings to save:', JSON.stringify(mergedSettings, null, 2));
 
       const existing = await db.select().from(systemSettings).limit(1);
 
@@ -98,13 +138,16 @@ export class SystemSettingsRepository {
           })
           .where(eq(systemSettings.id, existing[0].id))
           .returning();
-        return updated[0].settings as SystemSettings;
+        
+        // Return only the new structure, stripping old fields
+        return this.getCurrentSettings();
       } else {
-        const created = await db
+        await db
           .insert(systemSettings)
-          .values({ settings: mergedSettings })
-          .returning();
-        return created[0].settings as SystemSettings;
+          .values({ settings: mergedSettings });
+        
+        // Return only the new structure, stripping old fields
+        return this.getCurrentSettings();
       }
     } catch (error) {
       console.error('[SystemSettingsRepository] Error updating settings:', error);

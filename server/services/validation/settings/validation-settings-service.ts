@@ -165,7 +165,7 @@ export class ValidationSettingsService extends EventEmitter {
           ...(update.aspects.profile && {profile: {...currentSettings.aspects.profile, ...update.aspects.profile}}),
           ...(update.aspects.terminology && {terminology: {...currentSettings.aspects.terminology, ...update.aspects.terminology}}),
           ...(update.aspects.reference && {reference: {...currentSettings.aspects.reference, ...update.aspects.reference}}),
-          ...(update.aspects.businessRules && {businessRules: {...currentSettings.aspects.businessRules, ...update.aspects.businessRules}}),
+          ...(update.aspects.businessRule && {businessRule: {...currentSettings.aspects.businessRule, ...update.aspects.businessRule}}),
           ...(update.aspects.metadata && {metadata: {...currentSettings.aspects.metadata, ...update.aspects.metadata}}),
         } : currentSettings.aspects,
         performance: update.performance ? {

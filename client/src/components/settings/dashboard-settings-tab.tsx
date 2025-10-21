@@ -35,6 +35,10 @@ interface DashboardSettings {
 
 interface DashboardSettingsTabProps {
   onSettingsChange?: (settings: DashboardSettings) => void;
+  saveCounter?: number;  // Trigger save when this changes
+  onSaveComplete?: () => void;  // Notify parent of save completion
+  onSaveError?: (error: string) => void;  // Notify parent of save error
+  reloadTrigger?: number;  // Trigger reload when this changes
 }
 
 // ============================================================================
@@ -65,22 +69,25 @@ const DEFAULT_SETTINGS: DashboardSettings = {
 // Component
 // ============================================================================
 
-export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabProps) {
+export function DashboardSettingsTab({ onSettingsChange, saveCounter, onSaveComplete, onSaveError, reloadTrigger }: DashboardSettingsTabProps) {
   const { toast } = useToast();
 
   // State management
   const [settings, setSettings] = useState<DashboardSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-  // Load settings on mount
+  // Load settings on mount and when reloadTrigger changes
   useEffect(() => {
     loadSettings();
-  }, []);
+  }, [reloadTrigger]);
 
-  // Notify parent of changes
+  // Notify parent of changes (but not during initial load)
   useEffect(() => {
-    onSettingsChange?.(settings);
-  }, [settings, onSettingsChange]);
+    if (!isInitialLoad) {
+      onSettingsChange?.(settings);
+    }
+  }, [settings, onSettingsChange, isInitialLoad]);
 
   // ========================================================================
   // Data Loading
@@ -113,6 +120,7 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
           },
         };
         setSettings(mergedSettings);
+        setIsInitialLoad(false);
       }
     } catch (error) {
       console.error('Failed to load dashboard settings:', error);
@@ -125,6 +133,36 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
       setIsLoading(false);
     }
   };
+
+  // ========================================================================
+  // Settings Save
+  // ========================================================================
+
+  const saveSettings = async () => {
+    try {
+      const response = await fetch('/api/dashboard-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save settings');
+      }
+
+      onSaveComplete?.();
+    } catch (error) {
+      console.error('Failed to save dashboard settings:', error);
+      onSaveError?.(error instanceof Error ? error.message : 'Unknown error');
+    }
+  };
+
+  // Trigger save when saveCounter changes (but not during load)
+  useEffect(() => {
+    if (saveCounter && saveCounter > 0 && !isLoading) {
+      saveSettings();
+    }
+  }, [saveCounter, isLoading]);
 
   // ========================================================================
   // Settings Updates

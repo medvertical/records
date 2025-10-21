@@ -11,7 +11,7 @@
  * 7. Advanced Settings - Timeout, memory, caching
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -37,22 +37,36 @@ interface ValidationTabProps {
   onLoadingChange?: (isLoading: boolean) => void;
   hideHeader?: boolean;
   saveCounter?: number;
+  onSaveComplete?: () => void;
+  onSaveError?: (error: string) => void;
+  reloadTrigger?: number;  // Trigger reload when this changes
 }
 
-export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = false, saveCounter = 0 }: ValidationTabProps) {
+export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = false, saveCounter = 0, onSaveComplete, onSaveError, reloadTrigger }: ValidationTabProps) {
   const { toast } = useToast();
   const { activeServer } = useActiveServer();
   const [settings, setSettings] = useState<ValidationSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDirty, setIsDirty] = useState(false);
   const [fhirVersion, setFhirVersion] = useState<FHIRVersion>('R4');
+  const [previousFhirVersion, setPreviousFhirVersion] = useState<FHIRVersion | null>(null);
   const [availableResourceTypes, setAvailableResourceTypes] = useState<string[]>([]);
   const [resourceTypesSource, setResourceTypesSource] = useState<'server' | 'static' | 'filtered' | null>(null);
   const [serverVersion, setServerVersion] = useState<string | null>(null);
 
+  // Track which reloadTrigger value we've already loaded for
+  const loadedTriggerValueRef = useRef<number>(0);
+  // Track which saveCounter value we've already saved for
+  const savedCounterValueRef = useRef<number>(0);
+
+  // Load settings only when reloadTrigger changes to a new value (skip initial mount)
   useEffect(() => {
-    loadSettings();
-  }, [activeServer]);
+    if (reloadTrigger && reloadTrigger > 0 && reloadTrigger !== loadedTriggerValueRef.current) {
+      console.log('[ValidationTab] Loading settings, reloadTrigger:', reloadTrigger);
+      loadedTriggerValueRef.current = reloadTrigger; // Mark this value as loaded BEFORE async call
+      loadSettings();
+    }
+  }, [reloadTrigger]);
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -62,34 +76,54 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
     onLoadingChange?.(loading);
   }, [loading, onLoadingChange]);
 
+  // Only load resource types if FHIR version actually changed (prevents duplicate loads)
   useEffect(() => {
-    if (fhirVersion) {
+    if (fhirVersion && fhirVersion !== previousFhirVersion) {
+      console.log('[ValidationTab] FHIR version changed, loading resource types:', previousFhirVersion, '→', fhirVersion);
       loadResourceTypes(fhirVersion);
+      setPreviousFhirVersion(fhirVersion);
     }
-  }, [fhirVersion]);
+  }, [fhirVersion, previousFhirVersion]);
 
-  // Reset dirty state when settings are saved
+  // Trigger save when saveCounter changes to a new value (but not during load or duplicates)
   useEffect(() => {
-    if (saveCounter > 0) {
-      setIsDirty(false);
+    if (saveCounter && saveCounter > 0 && !loading && saveCounter !== savedCounterValueRef.current) {
+      console.log('[ValidationTab] Save triggered by saveCounter:', saveCounter);
+      savedCounterValueRef.current = saveCounter; // Mark this value as saved BEFORE async call
+      saveSettings();
     }
-  }, [saveCounter]);
+  }, [saveCounter, loading]);
 
   const loadSettings = async () => {
     try {
       setLoading(true);
+      console.log('[ValidationTab] Fetching validation settings...');
       const serverId = activeServer?.id;
       const response = await fetch(`/api/validation/settings${serverId ? `?serverId=${serverId}` : ''}`);
       if (!response.ok) throw new Error('Failed to load settings');
       const data = await response.json();
-      setSettings(data);
+      console.log('[ValidationTab] Settings loaded successfully');
+      
+      // Calculate global engine from aspect engines (for UI display)
+      const aspectEngines = Object.values(data.aspects || {}).map((a: any) => a?.engine).filter(Boolean);
+      const uniqueEngines = [...new Set(aspectEngines)];
+      const calculatedEngine = uniqueEngines.length === 1 ? uniqueEngines[0] : 'auto';
+      
+      console.log('[ValidationTab] Calculated global engine:', calculatedEngine, 'from aspect engines:', aspectEngines);
+      
+      setSettings({
+        ...data,
+        engine: calculatedEngine // Set top-level engine for UI (derived from aspects)
+      });
       
       // Extract FHIR version from settings if available
       if ((data.resourceTypes as any)?.fhirVersion) {
-        setFhirVersion((data.resourceTypes as any).fhirVersion);
+        const newVersion = (data.resourceTypes as any).fhirVersion;
+        console.log('[ValidationTab] Extracted FHIR version from settings:', newVersion);
+        setFhirVersion(newVersion);
       }
     } catch (error) {
-      console.error('Error loading settings:', error);
+      console.error('[ValidationTab] Error loading settings:', error);
       toast({
         title: 'Error',
         description: 'Failed to load validation settings',
@@ -100,22 +134,85 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
     }
   };
 
+  const saveSettings = async () => {
+    if (!settings) {
+      console.log('[ValidationTab] No settings to save');
+      onSaveComplete?.();
+      return;
+    }
+    
+    try {
+      console.log('[ValidationTab] 💾 Saving validation settings...');
+      console.log('[ValidationTab] Current settings state:', JSON.stringify(settings, null, 2));
+      const serverId = activeServer?.id;
+      
+      // Transform full settings to update format expected by API
+      // NOTE: Top-level "engine" field is NOT part of ValidationSettingsUpdate interface
+      // and will be ignored by backend. Only aspect-specific engines are persisted.
+      const updatePayload = {
+        aspects: settings.aspects,
+        performance: settings.performance,
+        resourceTypes: settings.resourceTypes,
+        mode: settings.mode,
+        useFhirValidateOperation: settings.useFhirValidateOperation,
+        terminologyServers: settings.terminologyServers,
+        circuitBreaker: settings.circuitBreaker,
+        terminologyFallback: settings.terminologyFallback,
+        offlineConfig: settings.offlineConfig,
+        profileSources: settings.profileSources,
+        autoRevalidateAfterEdit: settings.autoRevalidateAfterEdit,
+        autoRevalidateOnVersionChange: settings.autoRevalidateOnVersionChange,
+        listViewPollingInterval: settings.listViewPollingInterval,
+        // REMOVED: engine (not supported by ValidationSettingsUpdate)
+      };
+      
+      console.log('[ValidationTab] 📤 Save payload:', JSON.stringify(updatePayload, null, 2));
+      
+      const response = await fetch(`/api/validation/settings${serverId ? `?serverId=${serverId}` : ''}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatePayload),
+      });
+
+      console.log('[ValidationTab] 📥 Response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('[ValidationTab] ❌ Save failed:', errorData);
+        throw new Error(errorData.message || 'Failed to save validation settings');
+      }
+
+      const savedData = await response.json();
+      console.log('[ValidationTab] 📥 Save response data:', savedData);
+      console.log('[ValidationTab] ✅ Validation settings saved successfully');
+      
+      setIsDirty(false);
+      onSaveComplete?.();
+    } catch (error) {
+      console.error('[ValidationTab] ❌ Error saving validation settings:', error);
+      onSaveError?.(error instanceof Error ? error.message : 'Validation save failed');
+    }
+  };
+
   const loadResourceTypes = async (fhirVersion: FHIRVersion) => {
     try {
+      console.log('[ValidationTab] Fetching resource types for FHIR version:', fhirVersion);
       const serverId = activeServer?.id;
       const response = await fetch(`/api/validation/resource-types?fhirVersion=${fhirVersion}${serverId ? `&serverId=${serverId}` : ''}`);
       
       if (response.ok) {
         const data = await response.json();
+        console.log('[ValidationTab] Resource types loaded:', data.resourceTypes?.length || 0, 'types');
         setAvailableResourceTypes(data.resourceTypes || []);
         setResourceTypesSource(data.source || 'static');
         setServerVersion(data.serverVersion || null);
       } else {
+        console.warn('[ValidationTab] Resource types request failed, using static fallback');
         setAvailableResourceTypes([]);
         setResourceTypesSource('static');
       }
     } catch (error) {
-      console.error('Error loading resource types:', error);
+      console.error('[ValidationTab] Error loading resource types:', error);
       setAvailableResourceTypes([]);
       setResourceTypesSource('static');
     }
@@ -195,10 +292,35 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
 
   const updateAdvanced = (field: string, value: any) => {
     if (!settings) return;
-    setSettings({
-      ...settings,
-      [field]: value
-    });
+    
+    // Special handling for global engine selection
+    if (field === 'engine') {
+      console.log('[ValidationTab] Global engine changed to:', value);
+      
+      // Update all aspect engines to match the global selection
+      const updatedAspects = { ...settings.aspects };
+      Object.keys(updatedAspects).forEach(aspectKey => {
+        if (updatedAspects[aspectKey as keyof typeof updatedAspects]) {
+          updatedAspects[aspectKey as keyof typeof updatedAspects] = {
+            ...updatedAspects[aspectKey as keyof typeof updatedAspects],
+            engine: value
+          };
+        }
+      });
+      
+      console.log('[ValidationTab] Updated all aspect engines to:', value);
+      setSettings({
+        ...settings,
+        aspects: updatedAspects,
+        engine: value // Keep top-level for UI display (not persisted to backend)
+      } as ValidationSettings);
+    } else {
+      setSettings({
+        ...settings,
+        [field]: value
+      } as ValidationSettings);
+    }
+    
     setIsDirty(true);
   };
 

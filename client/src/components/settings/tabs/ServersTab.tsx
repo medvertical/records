@@ -28,6 +28,9 @@ interface ServersTabProps {
   onDirtyChange?: (isDirty: boolean) => void;
   hideHeader?: boolean;
   saveCounter?: number;
+  onSaveComplete?: () => void;
+  onSaveError?: (error: string) => void;
+  isActive?: boolean;  // Whether this tab is currently visible
 }
 
 interface FhirServer {
@@ -45,19 +48,34 @@ interface FhirServer {
   tokenUrl?: string;
 }
 
-export function ServersTab({ onDirtyChange, hideHeader = false, saveCounter = 0 }: ServersTabProps) {
+export function ServersTab({ onDirtyChange, hideHeader = false, saveCounter = 0, onSaveComplete, onSaveError, isActive = true }: ServersTabProps) {
   const { toast } = useToast();
   const [terminologyServers, setTerminologyServers] = useState<TerminologyServer[]>([]);
   const [loadingTermServers, setLoadingTermServers] = useState(true);
 
   // FHIR Server Management State
-  const { servers: existingServers, isLoading: isLoadingServers } = useServerData();
+  // Only enable connection testing when tab is active to avoid overwhelming backend
+  const { servers: existingServers, isLoading: isLoadingServers } = useServerData({ 
+    enableConnectionTest: isActive 
+  });
   
   // Debug logging
   useEffect(() => {
     console.log('[ServersTab] existingServers:', existingServers);
     console.log('[ServersTab] isLoadingServers:', isLoadingServers);
   }, [existingServers, isLoadingServers]);
+
+  // Servers use immediate CRUD - acknowledge save immediately (only once per saveCounter change)
+  const [previousSaveCounter, setPreviousSaveCounter] = useState(0);
+  
+  useEffect(() => {
+    if (saveCounter && saveCounter > 0 && saveCounter !== previousSaveCounter) {
+      console.log('[ServersTab] Save acknowledged (servers use immediate CRUD)');
+      setPreviousSaveCounter(saveCounter);
+      // Servers save immediately via CRUD operations, so just acknowledge
+      onSaveComplete?.();
+    }
+  }, [saveCounter, previousSaveCounter, onSaveComplete]);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [editingServer, setEditingServer] = useState<FhirServer | null>(null);
   const [connectingId, setConnectingId] = useState<number | string | null>(null);
