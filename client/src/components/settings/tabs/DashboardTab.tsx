@@ -1,4 +1,5 @@
 import { DashboardSettingsTab } from '../dashboard-settings-tab';
+import { TabHeader } from '../shared';
 
 interface DashboardTabProps {
   onDirtyChange?: (isDirty: boolean) => void;
@@ -7,12 +8,10 @@ interface DashboardTabProps {
 export function DashboardTab({ onDirtyChange }: DashboardTabProps) {
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Dashboard Settings</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Configure dashboard display, auto-refresh, and polling behavior
-        </p>
-      </div>
+      <TabHeader 
+        title="Dashboard Settings"
+        subtitle="Configure dashboard display, auto-refresh, and polling behavior"
+      />
       
       <DashboardSettingsTab onSettingsChange={() => onDirtyChange?.(true)} />
     </div>

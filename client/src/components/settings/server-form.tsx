@@ -35,7 +35,7 @@ interface ServerFormData {
 }
 
 interface FhirServer {
-  id: number;
+  id: number | string;
   name: string;
   url: string;
   fhirVersion?: string;

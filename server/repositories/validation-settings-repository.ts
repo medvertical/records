@@ -81,6 +81,7 @@ export class ValidationSettingsRepository {
           aspects: validationSettings.aspects,
           performance: validationSettings.performance,
           resourceTypes: validationSettings.resourceTypes,
+          terminologyServers: validationSettings.terminologyServers,
           autoRevalidateAfterEdit: validationSettings.autoRevalidateAfterEdit,
           autoRevalidateOnVersionChange: validationSettings.autoRevalidateOnVersionChange,
           listViewPollingInterval: validationSettings.listViewPollingInterval
@@ -107,6 +108,7 @@ export class ValidationSettingsRepository {
         aspects: result[0].aspects,
         performance: mergedPerformance,
         resourceTypes: result[0].resourceTypes,
+        terminologyServers: result[0].terminologyServers as any || [],
         // Default optional fields that aren't stored in DB
         mode: 'online' as const, // Default to online mode
         terminologyFallback: {

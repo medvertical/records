@@ -8,8 +8,7 @@
  * 4. Validation Aspects - 6 aspects with per-aspect engine & severity
  * 5. Performance - Concurrency and batch size settings
  * 6. Resource Filtering - Limit validation to specific resource types
- * 7. Terminology Servers - External terminology server configuration
- * 8. Advanced Settings - Timeout, memory, caching (combined with #5)
+ * 7. Advanced Settings - Timeout, memory, caching
  */
 
 import { useState, useEffect } from 'react';
@@ -20,14 +19,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Slider } from '@/components/ui/slider';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Loader2, CheckCircle, XCircle, Info, Globe, HardDrive, Database, Server, AlertTriangle, HelpCircle, ArrowRight } from 'lucide-react';
+import { Loader2, CheckCircle, XCircle, Info, Globe, HardDrive, Database, Server, AlertTriangle, HelpCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useActiveServer } from '@/hooks/use-active-server';
-import { SettingSection, SectionTitle } from '../shared';
+import { SettingSection, SectionTitle, TabHeader } from '../shared';
 import type { ValidationSettings, FHIRVersion } from '@shared/validation-settings';
 
 interface ValidationTabProps {
@@ -252,13 +250,19 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
   const currentEngine = (settings as any).engine || 'auto';
 
   return (
-    <div className="space-y-3">
-      {/* 1. Validation Engine */}
-      <div className="space-y-2 pb-3 border-b">
-        <SectionTitle 
-          title="Validation Engine" 
-          helpText="Choose how Records performs data validation. Hybrid mode runs lightweight schema checks first, then deep validation on failures. Auto selects the best engine based on context."
-        />
+    <div className="space-y-6">
+      <TabHeader 
+        title="Validation Settings"
+        subtitle="Configure FHIR validation behavior, engines, performance, and resource filtering"
+      />
+      
+      <div className="space-y-3">
+        {/* 1. Validation Engine */}
+        <div className="space-y-2 pb-3 border-b">
+          <SectionTitle 
+            title="Validation Engine" 
+            helpText="Choose how Records performs data validation. Hybrid mode runs lightweight schema checks first, then deep validation on failures. Auto selects the best engine based on context."
+          />
         <RadioGroup value={currentEngine} onValueChange={(v) => updateAdvanced('engine', v)} className="space-y-2">
           <div className="flex items-start space-x-2">
             <RadioGroupItem value="auto" id="auto" className="mt-0.5" />
@@ -553,34 +557,7 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
         </div>
       </div>
 
-      {/* 7. Terminology Servers */}
-      <div className="space-y-2 pb-3 border-b">
-        <SectionTitle 
-          title="Terminology Servers" 
-          helpText="External terminology servers are used for code validation and ValueSet expansion. Manage them in the dedicated Servers tab."
-        />
-        <Alert className="bg-blue-50 border-blue-200">
-          <Info className="h-4 w-4 text-blue-600" />
-          <AlertDescription className="text-sm text-blue-900">
-            <p>Terminology servers are managed in the <strong>Servers tab</strong>.</p>
-            <Button 
-              variant="link" 
-              className="h-auto p-0 text-blue-700 font-medium mt-1"
-              onClick={() => {
-                // This will be implemented when ServersTab is added
-                toast({
-                  title: 'Navigation',
-                  description: 'Servers tab is not yet implemented',
-                });
-              }}
-            >
-              Go to Servers tab <ArrowRight className="h-3 w-3 ml-1 inline" />
-            </Button>
-          </AlertDescription>
-        </Alert>
-      </div>
-
-      {/* 8. Advanced Settings */}
+      {/* 7. Advanced Settings */}
       <Accordion type="single" collapsible className="pb-3">
         <AccordionItem value="advanced" className="border-none">
           <AccordionTrigger className="py-2 hover:no-underline">
@@ -637,6 +614,7 @@ export function ValidationTab({ onDirtyChange }: ValidationTabProps) {
           </AlertDescription>
         </Alert>
       )}
+      </div>
     </div>
   );
 }

@@ -1,21 +1,548 @@
-import { ServerManagementTab } from '../server-management-tab';
+/**
+ * ServersTab Component
+ * 
+ * Manages all backend connections Records uses:
+ * 1. Active FHIR Server - Select and test current server
+ * 2. FHIR Server List - Full CRUD for FHIR servers
+ * 3. Terminology Servers - Code system resolution (moved from ValidationTab)
+ * 4. Server Diagnostics - Connection status and statistics
+ */
+
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Card } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Loader2, CheckCircle, XCircle, AlertTriangle, Server, Activity, Plus } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { useActiveServer } from '@/hooks/use-active-server';
+import { useServerData } from '@/hooks/use-server-data';
+import { useServerOperations } from '@/components/settings/server-operations';
+import { testFhirConnection, handleConnectionTestSuccess, handleConnectionTestError } from '@/components/settings/connection-testing';
+import { SectionTitle, TabHeader } from '../shared';
+import { ServerList } from '../server-list';
+import { ServerForm } from '../server-form';
+import { TerminologyServersSection } from '../terminology-servers-section';
+import type { TerminologyServer } from '@shared/validation-settings';
 
 interface ServersTabProps {
   onDirtyChange?: (isDirty: boolean) => void;
 }
 
+interface FhirServer {
+  id: number | string; // API returns string, but operations expect number
+  name: string;
+  url: string;
+  fhirVersion?: string;
+  isActive: boolean;
+}
+
 export function ServersTab({ onDirtyChange }: ServersTabProps) {
+  const { toast } = useToast();
+  const { activeServer, servers, switchServer, isSwitching, testServer } = useActiveServer();
+  const [testingServerId, setTestingServerId] = useState<string | null>(null);
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [terminologyServers, setTerminologyServers] = useState<TerminologyServer[]>([]);
+  const [loadingTermServers, setLoadingTermServers] = useState(true);
+
+  // FHIR Server Management State
+  const { servers: existingServers, isLoading: isLoadingServers } = useServerData();
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('[ServersTab] existingServers:', existingServers);
+    console.log('[ServersTab] isLoadingServers:', isLoadingServers);
+  }, [existingServers, isLoadingServers]);
+  const [isAddingNew, setIsAddingNew] = useState(false);
+  const [editingServer, setEditingServer] = useState<FhirServer | null>(null);
+  const [connectingId, setConnectingId] = useState<number | string | null>(null);
+  const [disconnectingId, setDisconnectingId] = useState<number | string | null>(null);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [urlValidationStatus, setUrlValidationStatus] = useState<{ isValid: boolean; error?: string }>({ isValid: true });
+
+  // Server operations hook
+  const {
+    createServerMutation,
+    updateServerMutation,
+    deleteServerMutation,
+    connectServerMutation,
+    disconnectServerMutation,
+  } = useServerOperations({ existingServers: existingServers || [] });
+
+  // Load terminology servers
+  useEffect(() => {
+    loadTerminologyServers();
+  }, []);
+
+  const loadTerminologyServers = async () => {
+    try {
+      setLoadingTermServers(true);
+      const response = await fetch('/api/validation/settings');
+      if (response.ok) {
+        const data = await response.json();
+        setTerminologyServers(data.terminologyServers || []);
+      }
+    } catch (error) {
+      console.error('Error loading terminology servers:', error);
+    } finally {
+      setLoadingTermServers(false);
+    }
+  };
+
+  const handleServerChange = async (serverId: string) => {
+    try {
+      await switchServer(serverId);
+      onDirtyChange?.(true);
+    } catch (error) {
+      console.error('Failed to switch server:', error);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    if (!activeServer) return;
+    
+    setTestingServerId(activeServer.id);
+    setTestStatus('testing');
+    
+    try {
+      const success = await testServer(activeServer.id);
+      setTestStatus(success ? 'success' : 'error');
+      
+      if (success) {
+        toast({
+          title: 'Connection Successful',
+          description: `Successfully connected to ${activeServer.name}`,
+        });
+      } else {
+        toast({
+          title: 'Connection Failed',
+          description: `Failed to connect to ${activeServer.name}`,
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      setTestStatus('error');
+      toast({
+        title: 'Connection Error',
+        description: error instanceof Error ? error.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setTestingServerId(null);
+      setTimeout(() => setTestStatus('idle'), 3000);
+    }
+  };
+
+  const handleTerminologyServersChange = async (updatedServers: TerminologyServer[]) => {
+    setTerminologyServers(updatedServers);
+    onDirtyChange?.(true);
+    
+    try {
+      const response = await fetch('/api/validation/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ terminologyServers: updatedServers }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to save terminology servers');
+    } catch (error) {
+      console.error('Error saving terminology servers:', error);
+      toast({
+        title: 'Save Failed',
+        description: 'Failed to save terminology server changes',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleTerminologyServersSave = async () => {
+    // Save is handled in onChange
+  };
+
+  // FHIR Server Management Handlers
+  const handleAddNewServer = () => {
+    setEditingServer(null);
+    setIsAddingNew(true);
+    setUrlValidationStatus({ isValid: true });
+  };
+
+  const handleEditServer = (server: FhirServer) => {
+    setEditingServer(server);
+    setIsAddingNew(false);
+    setUrlValidationStatus({ isValid: true });
+  };
+
+  const handleCancel = () => {
+    setIsAddingNew(false);
+    setEditingServer(null);
+    setUrlValidationStatus({ isValid: true });
+  };
+
+  const handleSubmit = async (data: any) => {
+    try {
+      if (editingServer) {
+        await updateServerMutation.mutateAsync({ id: editingServer.id, data });
+      } else {
+        await createServerMutation.mutateAsync(data);
+      }
+      handleCancel();
+      onDirtyChange?.(true);
+    } catch (error) {
+      console.error('Server operation failed:', error);
+    }
+  };
+
+  const handleConnectServer = (serverId: number | string) => {
+    setConnectingId(serverId);
+    connectServerMutation.mutate(typeof serverId === 'string' ? parseInt(serverId) : serverId, {
+      onSettled: () => {
+        setConnectingId(null);
+        onDirtyChange?.(true);
+      }
+    });
+  };
+
+  const handleDisconnectServer = (serverId: number | string) => {
+    setDisconnectingId(serverId);
+    disconnectServerMutation.mutate(typeof serverId === 'string' ? parseInt(serverId) : serverId, {
+      onSettled: () => {
+        setDisconnectingId(null);
+        onDirtyChange?.(true);
+      }
+    });
+  };
+
+  const handleDeleteServer = (serverId: number | string) => {
+    deleteServerMutation.mutate(typeof serverId === 'string' ? parseInt(serverId) : serverId);
+    onDirtyChange?.(true);
+  };
+
+  const handleTestFhirConnection = async (url: string) => {
+    setIsTestingConnection(true);
+    setUrlValidationStatus({ isValid: true });
+
+    try {
+      const result = await testFhirConnection(url);
+      
+      if (result.success) {
+        setUrlValidationStatus({ isValid: true });
+        handleConnectionTestSuccess(result.serverInfo, () => {}); // Toast will be handled by the form
+      } else {
+        setUrlValidationStatus({ isValid: false, error: result.error });
+        handleConnectionTestError(result.error || 'Connection failed', () => {}); // Toast will be handled by the form
+      }
+    } catch (error: any) {
+      console.error('Test connection error:', error);
+      setUrlValidationStatus({ isValid: false, error: 'Failed to test connection' });
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
+
+  // Check if any operation is pending
+  const isAnyOperationPending = createServerMutation.isPending || 
+                               updateServerMutation.isPending || 
+                               deleteServerMutation.isPending ||
+                               connectingId !== null ||
+                               disconnectingId !== null;
+
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Server Management</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage FHIR servers and terminology server connections
-        </p>
-      </div>
+      <TabHeader 
+        title="Server Configuration"
+        subtitle="Manage FHIR servers, terminology services, and connection settings"
+      />
       
-      <ServerManagementTab onServersChange={() => onDirtyChange?.(true)} />
+      <div className="space-y-3">
+        {/* 1. Active FHIR Server */}
+        <div className="space-y-2 pb-3 border-b">
+          <SectionTitle 
+            title="Active FHIR Server" 
+            helpText="The server used by default for validation and data retrieval. Test the connection to verify it's working properly."
+          />
+        
+        {servers.length === 0 ? (
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              No FHIR servers configured. Add a server below to get started.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <Select
+                  value={activeServer?.id || ''}
+                  onValueChange={handleServerChange}
+                  disabled={isSwitching || servers.length === 0}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Select a server">
+                      {activeServer && (
+                        <div className="flex items-center gap-2">
+                          <Server className="h-4 w-4" />
+                          <span className="font-medium">{activeServer.name}</span>
+                          <span className="text-muted-foreground text-xs">—</span>
+                          <span className="text-xs text-muted-foreground">{activeServer.url}</span>
+                        </div>
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {servers.map((server) => (
+                      <SelectItem key={server.id} value={server.id}>
+                        <div className="flex items-center gap-2">
+                          <span>{server.name}</span>
+                          {server.isActive && (
+                            <Badge variant="default" className="h-5 text-xs">Active</Badge>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Button
+                variant="outline"
+                onClick={handleTestConnection}
+                disabled={!activeServer || testingServerId !== null}
+                className="shrink-0"
+              >
+                {testingServerId ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Testing...
+                  </>
+                ) : (
+                  'Test Connection'
+                )}
+              </Button>
+
+              {testStatus === 'success' && (
+                <Badge variant="default" className="shrink-0">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Connected
+                </Badge>
+              )}
+              {testStatus === 'error' && (
+                <Badge variant="destructive" className="shrink-0">
+                  <XCircle className="h-3 w-3 mr-1" />
+                  Failed
+                </Badge>
+              )}
+            </div>
+
+            {activeServer && (
+              <Card className="p-3 bg-muted/30">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">URL:</span>
+                    <p className="font-mono text-xs mt-0.5">{activeServer.url}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Status:</span>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      {activeServer.isActive ? (
+                        <>
+                          <div className="h-2 w-2 rounded-full bg-green-500" />
+                          <span className="text-xs">Active</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="h-2 w-2 rounded-full bg-gray-400" />
+                          <span className="text-xs">Inactive</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 2. FHIR Server List */}
+      <div className="space-y-2 pb-3 border-b">
+        <div className="flex items-start justify-between">
+          <SectionTitle 
+            title="FHIR Server List" 
+            helpText="Manage all available FHIR server connections. Add, edit, or remove servers. The active server is used for validation and data operations."
+          />
+          <Button 
+            onClick={handleAddNewServer} 
+            disabled={isAnyOperationPending}
+            className="flex items-center gap-2 disabled:opacity-50"
+            size="sm"
+          >
+            {createServerMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            {createServerMutation.isPending ? "Adding..." : "Add Server"}
+          </Button>
+        </div>
+
+        {isLoadingServers ? (
+          <div className="flex items-center justify-center p-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <ServerList
+            servers={existingServers || []}
+            isConnecting={connectingId !== null}
+            isDisconnecting={disconnectingId !== null}
+            isAnyOperationPending={isAnyOperationPending}
+            connectingId={connectingId}
+            disconnectingId={disconnectingId}
+            onEditServer={handleEditServer}
+            onConnectServer={handleConnectServer}
+            onDisconnectServer={handleDisconnectServer}
+            onDeleteServer={handleDeleteServer}
+          />
+        )}
+
+        {/* Server Form Modal */}
+        <Dialog open={isAddingNew || editingServer !== null} onOpenChange={(open) => !open && handleCancel()}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Server className="h-5 w-5" />
+                {editingServer ? 'Edit Server' : 'Add New Server'}
+              </DialogTitle>
+              <DialogDescription>
+                {editingServer ? 'Update server configuration' : 'Configure a new FHIR server connection'}
+              </DialogDescription>
+            </DialogHeader>
+
+            <ServerForm
+              editingServer={editingServer}
+              isSubmitting={createServerMutation.isPending || updateServerMutation.isPending}
+              onSubmit={handleSubmit}
+              onCancel={handleCancel}
+              onTestConnection={handleTestFhirConnection}
+              isTestingConnection={isTestingConnection}
+              urlValidationStatus={urlValidationStatus}
+            />
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* 3. Terminology Servers */}
+      <div className="space-y-2 pb-3 border-b">
+        <SectionTitle 
+          title="Terminology Servers" 
+          helpText="Servers used to resolve CodeSystems and ValueSets during validation. The first server in the list is used as primary; others act as fallback. Drag to reorder."
+        />
+        {loadingTermServers ? (
+          <div className="flex items-center justify-center p-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <TerminologyServersSection
+            servers={terminologyServers}
+            onChange={handleTerminologyServersChange}
+            onSave={handleTerminologyServersSave}
+            hideHeader={true}
+          />
+        )}
+      </div>
+
+      {/* 4. Server Diagnostics (Optional) */}
+      <Accordion type="single" collapsible>
+        <AccordionItem value="diagnostics" className="border-none">
+          <AccordionTrigger className="py-2 hover:no-underline">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              <span className="text-sm font-semibold">Server Diagnostics</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="space-y-3 pt-2">
+            <p className="text-xs text-muted-foreground mb-3">
+              Shows recent response times and connection information for configured servers.
+            </p>
+
+            {/* Active FHIR Server Diagnostics */}
+            {activeServer && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Active FHIR Server</h4>
+                <Card className="p-3">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-xs text-muted-foreground">Name</span>
+                      <p className="font-medium">{activeServer.name}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground">URL</span>
+                      <p className="text-xs font-mono break-all">{activeServer.url}</p>
+                    </div>
+                    {activeServer.status && (
+                      <>
+                        <div>
+                          <span className="text-xs text-muted-foreground">Last Tested</span>
+                          <p className="text-xs">
+                            {new Date(activeServer.status.lastChecked).toLocaleString()}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-muted-foreground">Response Time</span>
+                          <p className="text-xs">{activeServer.status.responseTime}ms</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {/* Terminology Servers Diagnostics */}
+            {terminologyServers.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium">Terminology Servers</h4>
+                <div className="space-y-2">
+                  {terminologyServers.map((server, index) => (
+                    <Card key={server.id} className="p-3">
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              {index === 0 ? 'Primary' : `Fallback ${index}`}
+                            </span>
+                            {index === 0 && (
+                              <Badge variant="default" className="h-4 text-xs">Primary</Badge>
+                            )}
+                          </div>
+                          <p className="font-medium mt-1">{server.name}</p>
+                        </div>
+                        <div>
+                          <span className="text-xs text-muted-foreground">URL</span>
+                          <p className="text-xs font-mono break-all">{server.url}</p>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {!activeServer && terminologyServers.length === 0 && (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  No servers configured. Add servers above to see diagnostics.
+                </AlertDescription>
+              </Alert>
+            )}
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+      </div>
     </div>
   );
 }
-

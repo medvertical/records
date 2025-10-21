@@ -1,4 +1,5 @@
 import { SystemSettingsTab } from '../system-settings-tab';
+import { TabHeader } from '../shared';
 
 interface SystemTabProps {
   onDirtyChange?: (isDirty: boolean) => void;
@@ -7,12 +8,10 @@ interface SystemTabProps {
 export function SystemTab({ onDirtyChange }: SystemTabProps) {
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">System Settings</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Configure theme, logging, analytics, and system features
-        </p>
-      </div>
+      <TabHeader 
+        title="System Settings"
+        subtitle="Configure theme, logging, analytics, and system features"
+      />
       
       <SystemSettingsTab onSettingsChange={() => onDirtyChange?.(true)} />
     </div>

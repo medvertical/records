@@ -167,6 +167,9 @@ export const validationSettings = pgTable("validation_settings", {
     excludedTypes: []
   }),
   
+  // Terminology servers for code validation
+  terminologyServers: jsonb("terminology_servers").default([]),
+  
   // Auto-revalidation settings
   autoRevalidateAfterEdit: boolean("auto_revalidate_after_edit").default(false),
   autoRevalidateOnVersionChange: boolean("auto_revalidate_on_version_change").default(true),

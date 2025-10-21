@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 
 interface FhirServer {
-  id: number;
+  id: number | string;
   name: string;
   url: string;
   isActive: boolean;

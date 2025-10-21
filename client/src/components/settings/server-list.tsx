@@ -18,7 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 // ============================================================================
 
 interface FhirServer {
-  id: number;
+  id: number | string;
   name: string;
   url: string;
   isActive: boolean;
@@ -29,12 +29,12 @@ interface ServerListProps {
   isConnecting: boolean;
   isDisconnecting: boolean;
   isAnyOperationPending: boolean;
-  connectingId: number | null;
-  disconnectingId: number | null;
+  connectingId: number | string | null;
+  disconnectingId: number | string | null;
   onEditServer: (server: FhirServer) => void;
-  onConnectServer: (serverId: number) => void;
-  onDisconnectServer: (serverId: number) => void;
-  onDeleteServer: (serverId: number) => void;
+  onConnectServer: (serverId: number | string) => void;
+  onDisconnectServer: (serverId: number | string) => void;
+  onDeleteServer: (serverId: number | string) => void;
 }
 
 // ============================================================================
