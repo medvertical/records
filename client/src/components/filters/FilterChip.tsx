@@ -168,6 +168,13 @@ export function FilterChip({ kind, label, value, operator, operators, onChange, 
     }
   }, [isNew]);
 
+  // Normalize value when switching to boolean type
+  useEffect(() => {
+    if (valueType === 'boolean' && localValue !== 'true' && localValue !== 'false') {
+      setLocalValue('false');
+    }
+  }, [valueType, localValue]);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>

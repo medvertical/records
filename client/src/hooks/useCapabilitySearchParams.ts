@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fhirClient } from '@/lib/fhir-client';
+import { useActiveServer } from '@/hooks/use-active-server';
 
 export interface SearchParameterDef {
   name: string;
@@ -16,10 +17,22 @@ interface CacheEntry {
 }
 
 export function useCapabilitySearchParams(resourceTypes: string[]) {
+  const { activeServer } = useActiveServer();
   const cacheRef = useRef<Map<string, CacheEntry>>(new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
+  const prevServerIdRef = useRef<number | null>(null);
+
+  // Clear cache when active server changes
+  useEffect(() => {
+    if (activeServer?.id && activeServer.id !== prevServerIdRef.current) {
+      console.log('[useCapabilitySearchParams] Server changed, clearing cache');
+      cacheRef.current.clear();
+      setDataVersion(v => v + 1);
+      prevServerIdRef.current = activeServer.id;
+    }
+  }, [activeServer?.id]);
 
 
   useEffect(() => {

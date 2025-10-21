@@ -1817,7 +1817,7 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
   // FHIR Resources
   app.get("/api/fhir/resources", async (req, res) => {
     try {
-      const { resourceType, limit = 20, offset = 0, search, ...fhirSearchParams } = req.query;
+      const { resourceType, limit = 20, offset = 0, search, page, pageSize, ...fhirSearchParams } = req.query;
       
     // If no resource type is specified, fetch from ALL resource types on the server
     if (!resourceType) {

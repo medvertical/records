@@ -91,16 +91,59 @@ export class ServerCapabilityDetector {
   /**
    * Test if server supports :missing modifier (FHIR R4 standard)
    * Example: Patient?gender:missing=true
+   * 
+   * We test by comparing results with :missing=true vs :missing=false
    */
   private async testMissingModifier(): Promise<boolean> {
     try {
       logger.debug('[CapabilityDetector] Testing :missing modifier');
       
-      // Test with a simple parameter that most servers have
-      await this.fhirClient.searchResources('Patient', {
+      // Small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Test with :missing=true (should return resources without gender)
+      const resultTrue = await this.fhirClient.searchResources('Patient', {
         'gender:missing': 'true',
-        _count: 1,
+        _count: 5,
       });
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Test with :missing=false (should return resources with gender)
+      const resultFalse = await this.fhirClient.searchResources('Patient', {
+        'gender:missing': 'false',
+        _count: 5,
+      });
+      
+      const hasResultsTrue = resultTrue?.entry && resultTrue.entry.length > 0;
+      const hasResultsFalse = resultFalse?.entry && resultFalse.entry.length > 0;
+      
+      // A working :missing modifier should return results for at least one query
+      // If both return no results, the modifier isn't working
+      if (!hasResultsTrue && !hasResultsFalse) {
+        logger.info('[CapabilityDetector] :missing modifier not working correctly (no results for either query) ✗');
+        return false;
+      }
+      
+      // Verify that the results are actually filtered
+      // missing=true should return resources WITHOUT the field
+      // missing=false should return resources WITH the field
+      if (hasResultsTrue && hasResultsFalse) {
+        // Check if results are actually different
+        const resourcesWithFieldTrue = resultTrue.entry.filter((e: any) => e.resource?.gender != null).length;
+        const resourcesWithFieldFalse = resultFalse.entry.filter((e: any) => e.resource?.gender != null).length;
+        
+        // For missing=true, most resources should NOT have the field
+        // For missing=false, most resources SHOULD have the field
+        const trueRatioWithField = hasResultsTrue ? resourcesWithFieldTrue / resultTrue.entry.length : 0;
+        const falseRatioWithField = hasResultsFalse ? resourcesWithFieldFalse / resultFalse.entry.length : 0;
+        
+        // If both queries return similar ratios, the filtering isn't working
+        if (Math.abs(trueRatioWithField - falseRatioWithField) < 0.3) {
+          logger.info('[CapabilityDetector] :missing modifier not filtering correctly (same field presence in both queries) ✗');
+          return false;
+        }
+      }
       
       logger.info('[CapabilityDetector] :missing modifier supported ✓');
       return true;
@@ -111,24 +154,74 @@ export class ServerCapabilityDetector {
         return false;
       }
       
-      // Other errors (500, network) - assume supported but server issue
-      logger.warn('[CapabilityDetector] :missing modifier test inconclusive (server error)');
-      return false;
+      // Rate limiting - try to assume HAPI standards (most R4 servers support :missing)
+      if (error.response?.status === 429) {
+        logger.warn('[CapabilityDetector] :missing modifier test hit rate limit, assuming supported (FHIR R4 standard)');
+        return true; // Default to true for standard FHIR R4 modifier
+      }
+      
+      // Other errors (500, network) - assume supported for standard modifier
+      logger.warn('[CapabilityDetector] :missing modifier test inconclusive, assuming supported (FHIR R4 standard)');
+      return true; // Default to true for standard FHIR R4 modifier
     }
   }
 
   /**
    * Test if server supports :exists modifier (Fire.ly extension)
    * Example: Patient?gender:exists=true
+   * 
+   * Note: HAPI FHIR accepts :exists without error but doesn't filter correctly.
+   * We test by comparing results with :exists=true vs :exists=false
    */
   private async testExistsModifier(): Promise<boolean> {
     try {
       logger.debug('[CapabilityDetector] Testing :exists modifier');
       
-      await this.fhirClient.searchResources('Patient', {
+      // Small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Test with :exists=true (should return resources with gender)
+      const resultTrue = await this.fhirClient.searchResources('Patient', {
         'gender:exists': 'true',
-        _count: 1,
+        _count: 5,
       });
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Test with :exists=false (should return resources without gender)
+      const resultFalse = await this.fhirClient.searchResources('Patient', {
+        'gender:exists': 'false',
+        _count: 5,
+      });
+      
+      const hasResultsTrue = resultTrue?.entry && resultTrue.entry.length > 0;
+      const hasResultsFalse = resultFalse?.entry && resultFalse.entry.length > 0;
+      
+      // If both return no results, the modifier isn't working
+      if (!hasResultsTrue && !hasResultsFalse) {
+        logger.info('[CapabilityDetector] :exists modifier not working correctly (no results for either query) ✗');
+        return false;
+      }
+      
+      // Verify that the results are actually filtered
+      // exists=true should return resources WITH the field
+      // exists=false should return resources WITHOUT the field
+      if (hasResultsTrue && hasResultsFalse) {
+        // Check if results are actually different
+        const resourcesWithFieldTrue = resultTrue.entry.filter((e: any) => e.resource?.gender != null).length;
+        const resourcesWithFieldFalse = resultFalse.entry.filter((e: any) => e.resource?.gender != null).length;
+        
+        // For exists=true, most resources SHOULD have the field
+        // For exists=false, most resources should NOT have the field
+        const trueRatioWithField = hasResultsTrue ? resourcesWithFieldTrue / resultTrue.entry.length : 0;
+        const falseRatioWithField = hasResultsFalse ? resourcesWithFieldFalse / resultFalse.entry.length : 0;
+        
+        // If both queries return similar ratios, the filtering isn't working
+        if (Math.abs(trueRatioWithField - falseRatioWithField) < 0.3) {
+          logger.info('[CapabilityDetector] :exists modifier not filtering correctly (same field presence in both queries) ✗');
+          return false;
+        }
+      }
       
       logger.info('[CapabilityDetector] :exists modifier supported ✓');
       return true;
@@ -138,7 +231,8 @@ export class ServerCapabilityDetector {
         return false;
       }
       
-      logger.warn('[CapabilityDetector] :exists modifier test inconclusive');
+      // :exists is NOT a standard FHIR modifier, so default to false on errors
+      logger.warn('[CapabilityDetector] :exists modifier test inconclusive, assuming not supported (non-standard)');
       return false;
     }
   }
