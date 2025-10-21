@@ -602,12 +602,16 @@ export class DatabaseStorage implements IStorage {
       let hasWarnings = false;
       let allAspectsValid = true;
       
+      let enabledAspectsCount = 0;
       aspectResults.forEach(aspectResult => {
         // Check if this aspect is enabled in settings
+        // Treat null/undefined as enabled (default), only skip if explicitly disabled
         const aspectSettings = settings[aspectResult.aspect as keyof typeof settings];
-        if (!aspectSettings?.enabled) {
-          return; // Skip disabled aspects
+        if (aspectSettings?.enabled === false) {
+          return; // Skip explicitly disabled aspects
         }
+        
+        enabledAspectsCount++;
         
         if (!aspectResult.isValid) {
           allAspectsValid = false;
@@ -622,6 +626,11 @@ export class DatabaseStorage implements IStorage {
         }
       });
       
+      // If no enabled aspects were checked, skip this resource
+      if (enabledAspectsCount === 0) {
+        return;
+      }
+      
       // Determine overall resource status
       if (allAspectsValid) {
         validResourcesCount++;
@@ -629,6 +638,7 @@ export class DatabaseStorage implements IStorage {
           resourceBreakdown[resourceType].valid++;
         }
       } else {
+        // Resource has validation issues
         if (hasErrors) {
           errorResourcesCount++;
         } else if (hasWarnings) {
@@ -656,6 +666,7 @@ export class DatabaseStorage implements IStorage {
     const activeProfiles = await db.select().from(validationProfiles).where(eq(validationProfiles.isActive, true));
     
     // Calculate aspect breakdown from per-aspect validation results
+    // Treat null/undefined as enabled (default), only mark as disabled if explicitly false
     const aspectBreakdown: Record<string, {
       enabled: boolean;
       issueCount: number;
@@ -664,12 +675,12 @@ export class DatabaseStorage implements IStorage {
       informationCount: number;
       score: number;
     }> = {
-      structural: { enabled: settings.structural?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      profile: { enabled: settings.profile?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      terminology: { enabled: settings.terminology?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      reference: { enabled: settings.reference?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      businessRule: { enabled: settings.businessRule?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      metadata: { enabled: settings.metadata?.enabled === true, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 }
+      structural: { enabled: settings.structural?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      profile: { enabled: settings.profile?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      terminology: { enabled: settings.terminology?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      reference: { enabled: settings.reference?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      businessRule: { enabled: settings.businessRule?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      metadata: { enabled: settings.metadata?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 }
     };
 
     // Aggregate issues by aspect from per-aspect validation results

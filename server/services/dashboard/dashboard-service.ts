@@ -167,9 +167,10 @@ export class DashboardService {
       const fhirResourceCounts = await this.getFhirResourceCounts();
       const fhirTotalResources = Object.values(fhirResourceCounts).reduce((sum, count) => sum + count, 0);
       
-      // Calculate validation coverage (percentage of validated resources that are valid)
-      const validationCoverage = dbStats.totalResources > 0 
-        ? Math.min(100, Math.max(0, (dbStats.validResources / dbStats.totalResources) * 100))
+      // Calculate validation coverage (percentage of FHIR server resources that have been validated)
+      const totalValidated = dbStats.validResources + dbStats.errorResources + (dbStats.warningResources || 0);
+      const validationCoverage = fhirTotalResources > 0 
+        ? Math.min(100, Math.max(0, (totalValidated / fhirTotalResources) * 100))
         : 0;
       
       // Calculate validation progress (percentage of total server resources that have been validated)
@@ -226,7 +227,7 @@ export class DashboardService {
       });
 
       const rawStats: ValidationStats = {
-        totalValidated: dbStats.validResources + dbStats.errorResources,
+        totalValidated: dbStats.validResources + dbStats.errorResources + (dbStats.warningResources || 0),
         validResources: dbStats.validResources,
         errorResources: dbStats.errorResources,
         warningResources: dbStats.warningResources || 0,

@@ -90,15 +90,17 @@ export function validateValidationStatsConsistency(stats: any): {
 } {
   const errors: string[] = [];
   
-  // Check basic consistency
-  if (stats.totalValidated !== stats.validResources + stats.errorResources) {
-    errors.push(`Total validated (${stats.totalValidated}) doesn't match valid + error resources (${stats.validResources + stats.errorResources})`);
+  // Check basic consistency (include warning resources)
+  const expectedTotal = stats.validResources + stats.errorResources + (stats.warningResources || 0);
+  if (stats.totalValidated !== expectedTotal) {
+    errors.push(`Total validated (${stats.totalValidated}) doesn't match valid + error + warning resources (${expectedTotal})`);
   }
   
   // Check resource type breakdown consistency
   Object.entries(stats.resourceTypeBreakdown || {}).forEach(([type, breakdown]: [string, any]) => {
-    if (breakdown.validated !== breakdown.valid + breakdown.errors) {
-      errors.push(`Resource type ${type}: validated (${breakdown.validated}) doesn't match valid + errors (${breakdown.valid + breakdown.errors})`);
+    const expectedValidated = breakdown.valid + breakdown.errors + (breakdown.warnings || 0);
+    if (breakdown.validated !== expectedValidated) {
+      errors.push(`Resource type ${type}: validated (${breakdown.validated}) doesn't match valid + errors + warnings (${expectedValidated})`);
     }
     
     if (breakdown.total !== breakdown.validated + breakdown.unvalidated) {
