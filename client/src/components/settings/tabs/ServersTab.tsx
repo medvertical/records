@@ -26,6 +26,8 @@ import type { TerminologyServer } from '@shared/validation-settings';
 
 interface ServersTabProps {
   onDirtyChange?: (isDirty: boolean) => void;
+  hideHeader?: boolean;
+  saveCounter?: number;
 }
 
 interface FhirServer {
@@ -34,9 +36,16 @@ interface FhirServer {
   url: string;
   fhirVersion?: string;
   isActive: boolean;
+  authType?: 'none' | 'basic' | 'bearer' | 'oauth';
+  username?: string;
+  password?: string;
+  token?: string;
+  clientId?: string;
+  clientSecret?: string;
+  tokenUrl?: string;
 }
 
-export function ServersTab({ onDirtyChange }: ServersTabProps) {
+export function ServersTab({ onDirtyChange, hideHeader = false, saveCounter = 0 }: ServersTabProps) {
   const { toast } = useToast();
   const [terminologyServers, setTerminologyServers] = useState<TerminologyServer[]>([]);
   const [loadingTermServers, setLoadingTermServers] = useState(true);
@@ -200,15 +209,17 @@ export function ServersTab({ onDirtyChange }: ServersTabProps) {
                                disconnectingId !== null;
 
   return (
-    <div className="space-y-6">
-      <TabHeader 
-        title="Server Configuration"
-        subtitle="Manage FHIR servers, terminology services, and connection settings"
-      />
+    <div className={hideHeader ? "space-y-8" : "space-y-6"}>
+      {!hideHeader && (
+        <TabHeader 
+          title="Server Configuration"
+          subtitle="Manage FHIR servers, terminology services, and connection settings"
+        />
+      )}
       
-      <div className="space-y-3">
+      <div className="space-y-8">
         {/* 1. FHIR Server List */}
-      <div className="space-y-2 pb-3 border-b">
+      <div className="space-y-3">
         <div className="flex items-start justify-between">
           <SectionTitle 
             title="FHIR Server List" 
@@ -251,12 +262,11 @@ export function ServersTab({ onDirtyChange }: ServersTabProps) {
         <Dialog open={isAddingNew || editingServer !== null} onOpenChange={(open) => !open && handleCancel()}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Server className="h-5 w-5" />
-                {editingServer ? 'Edit Server' : 'Add New Server'}
+              <DialogTitle>
+                {editingServer ? 'Edit FHIR Server' : 'Add FHIR Server'}
               </DialogTitle>
               <DialogDescription>
-                {editingServer ? 'Update server configuration' : 'Configure a new FHIR server connection'}
+                {editingServer ? 'Update FHIR server configuration' : 'Configure a new FHIR server connection'}
               </DialogDescription>
             </DialogHeader>
 
@@ -274,7 +284,7 @@ export function ServersTab({ onDirtyChange }: ServersTabProps) {
       </div>
 
       {/* 2. Terminology Servers */}
-      <div className="space-y-2 pb-3 border-b">
+      <div className="space-y-3">
         <div className="flex items-start justify-between">
           <SectionTitle 
             title="Terminology Servers" 

@@ -3,15 +3,19 @@ import { TabHeader } from '../shared';
 
 interface RulesTabProps {
   onDirtyChange?: (isDirty: boolean) => void;
+  hideHeader?: boolean;
+  saveCounter?: number;
 }
 
-export function RulesTab({ onDirtyChange }: RulesTabProps) {
+export function RulesTab({ onDirtyChange, hideHeader = false, saveCounter = 0 }: RulesTabProps) {
   return (
-    <div className="space-y-6">
-      <TabHeader 
-        title="Business Rules"
-        subtitle="Manage custom validation rules and FHIRPath expressions"
-      />
+    <div className={hideHeader ? "" : "space-y-6"}>
+      {!hideHeader && (
+        <TabHeader 
+          title="Business Rules"
+          subtitle="Manage custom validation rules and FHIRPath expressions"
+        />
+      )}
       
       <BusinessRulesTab />
     </div>

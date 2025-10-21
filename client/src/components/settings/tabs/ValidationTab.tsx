@@ -23,9 +23,11 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Slider } from '@/components/ui/slider';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Loader2, CheckCircle, XCircle, Info, Globe, HardDrive, Database, Server, AlertTriangle, HelpCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useActiveServer } from '@/hooks/use-active-server';
+import { cn } from '@/lib/utils';
 import { SettingSection, SectionTitle, TabHeader, AspectCard } from '../shared';
 import type { ValidationSettings, FHIRVersion } from '@shared/validation-settings';
 import { DEFAULT_VALIDATION_SETTINGS_R4 } from '@shared/validation-settings';
@@ -33,9 +35,11 @@ import { DEFAULT_VALIDATION_SETTINGS_R4 } from '@shared/validation-settings';
 interface ValidationTabProps {
   onDirtyChange?: (isDirty: boolean) => void;
   onLoadingChange?: (isLoading: boolean) => void;
+  hideHeader?: boolean;
+  saveCounter?: number;
 }
 
-export function ValidationTab({ onDirtyChange, onLoadingChange }: ValidationTabProps) {
+export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = false, saveCounter = 0 }: ValidationTabProps) {
   const { toast } = useToast();
   const { activeServer } = useActiveServer();
   const [settings, setSettings] = useState<ValidationSettings | null>(null);
@@ -63,6 +67,13 @@ export function ValidationTab({ onDirtyChange, onLoadingChange }: ValidationTabP
       loadResourceTypes(fhirVersion);
     }
   }, [fhirVersion]);
+
+  // Reset dirty state when settings are saved
+  useEffect(() => {
+    if (saveCounter > 0) {
+      setIsDirty(false);
+    }
+  }, [saveCounter]);
 
   const loadSettings = async () => {
     try {
@@ -272,71 +283,123 @@ export function ValidationTab({ onDirtyChange, onLoadingChange }: ValidationTabP
   const isServerEngine = currentEngine === 'server';
 
   return (
-    <div className="space-y-6">
-      <TabHeader 
-        title="Validation Settings"
-        subtitle="Configure FHIR validation behavior, engines, performance, and resource filtering"
-      />
+    <div className={hideHeader ? "space-y-8" : "space-y-6"}>
+      {!hideHeader && (
+        <TabHeader 
+          title="Validation Settings"
+          subtitle="Configure FHIR validation behavior, engines, performance, and resource filtering"
+        />
+      )}
       
-      <div className="space-y-3">
+      <div className="space-y-8">
         {/* 1. Validation Engine */}
-        <div className="space-y-2 pb-3 border-b">
+        <div className="space-y-3">
           <SectionTitle 
             title="Validation Engine" 
             helpText="Choose how Records performs data validation. Hybrid mode runs lightweight schema checks first, then deep validation on failures. Auto selects the best engine based on context."
           />
-        <RadioGroup value={currentEngine} onValueChange={(v) => updateAdvanced('engine', v)} className="space-y-2">
-          <div className="flex items-start space-x-2">
+        <RadioGroup value={currentEngine} onValueChange={(v) => updateAdvanced('engine', v)} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Label htmlFor="auto" className={cn("flex items-start space-x-2 rounded-lg p-3 hover:bg-accent/50 transition-colors cursor-pointer relative group", currentEngine === 'auto' ? "border-2 border-primary" : "border")}>
             <RadioGroupItem value="auto" id="auto" className="mt-0.5" />
             <div className="flex-1">
-              <Label htmlFor="auto" className="font-medium cursor-pointer text-sm">
-                Auto (Recommended)
-              </Label>
-              <p className="text-xs text-muted-foreground">Automatically selects best engine</p>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">Auto (Recommended)</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-xs">Intelligently switches between validation engines based on resource type, profile availability, and server capabilities. Best for general use.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Automatically selects best engine</p>
             </div>
-          </div>
-          <div className="flex items-start space-x-2">
+          </Label>
+          <Label htmlFor="server" className={cn("flex items-start space-x-2 rounded-lg p-3 hover:bg-accent/50 transition-colors cursor-pointer relative group", currentEngine === 'server' ? "border-2 border-primary" : "border")}>
             <RadioGroupItem value="server" id="server" className="mt-0.5" />
             <div className="flex-1">
-              <Label htmlFor="server" className="font-medium cursor-pointer text-sm">
-                Server ($validate)
-              </Label>
-              <p className="text-xs text-muted-foreground">Uses FHIR server's $validate operation</p>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">Server ($validate)</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-xs">Delegates validation to the FHIR server using the $validate operation. Ensures consistency with server-side validation rules but requires network connectivity.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Uses FHIR server's $validate operation</p>
             </div>
-          </div>
-          <div className="flex items-start space-x-2">
+          </Label>
+          <Label htmlFor="local-engine" className={cn("flex items-start space-x-2 rounded-lg p-3 hover:bg-accent/50 transition-colors cursor-pointer relative group", currentEngine === 'local' ? "border-2 border-primary" : "border")}>
             <RadioGroupItem value="local" id="local-engine" className="mt-0.5" />
             <div className="flex-1">
-              <Label htmlFor="local-engine" className="font-medium cursor-pointer text-sm">
-                Local (HAPI Validator)
-              </Label>
-              <p className="text-xs text-muted-foreground">Java-based local validation</p>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">Local (HAPI Validator)</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-xs">Uses the official HAPI FHIR Validator library for comprehensive validation including profiles, terminology, and business rules. Most thorough option but slower.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Java-based local validation</p>
             </div>
-          </div>
-          <div className="flex items-start space-x-2">
+          </Label>
+          <Label htmlFor="schema" className={cn("flex items-start space-x-2 rounded-lg p-3 hover:bg-accent/50 transition-colors cursor-pointer relative group", currentEngine === 'schema' ? "border-2 border-primary" : "border")}>
             <RadioGroupItem value="schema" id="schema" className="mt-0.5" />
             <div className="flex-1">
-              <Label htmlFor="schema" className="font-medium cursor-pointer text-sm">
-                Schema (Structural only)
-              </Label>
-              <p className="text-xs text-muted-foreground">Fast schema validation only</p>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">Schema (Structural only)</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-xs">Fast JSON schema validation checking only structural correctness and required fields. Does not validate profiles, terminology, or business rules.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Fast schema validation only</p>
             </div>
-          </div>
-          <div className="flex items-start space-x-2">
+          </Label>
+          <Label htmlFor="hybrid" className={cn("flex items-start space-x-2 rounded-lg p-3 hover:bg-accent/50 transition-colors cursor-pointer relative group", currentEngine === 'hybrid' ? "border-2 border-primary" : "border")}>
             <RadioGroupItem value="hybrid" id="hybrid" className="mt-0.5" />
             <div className="flex-1">
-              <Label htmlFor="hybrid" className="font-medium cursor-pointer text-sm">
-                Hybrid (Fast + Deep)
-              </Label>
-              <p className="text-xs text-muted-foreground">Schema first, then full validation on errors</p>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-sm">Hybrid (Fast + Deep)</span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="text-xs">Two-stage validation: fast schema check first, then full HAPI validation only on resources with errors. Balances speed and thoroughness.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Schema first, then full validation on errors</p>
             </div>
-          </div>
+          </Label>
         </RadioGroup>
       </div>
 
       {/* 2 & 3. Mode & Profile Sources - Combined in one row */}
-      <div className="grid grid-cols-2 gap-4 pb-3 border-b">
-        <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-3">
           <SectionTitle 
             title="Terminology Mode" 
             helpText="Online mode uses remote terminology servers (tx.fhir.org) for code validation. Offline mode uses cached ValueSets and local Ontoserver for validation without internet connectivity."
@@ -362,7 +425,7 @@ export function ValidationTab({ onDirtyChange, onLoadingChange }: ValidationTabP
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-3">
           <SectionTitle 
             title="Profile Sources" 
             helpText="Select where Records loads FHIR profiles and implementation guides from. Local uses cached profiles, Simplifier fetches from simplifier.net, Both (recommended) uses both sources."
@@ -381,12 +444,12 @@ export function ValidationTab({ onDirtyChange, onLoadingChange }: ValidationTabP
       </div>
 
       {/* 4. Validation Aspects - Per-Aspect Validation Method */}
-      <div className="space-y-3 pb-3 border-b">
+      <div className="space-y-3">
         <SectionTitle 
           title="Validation Aspects" 
           helpText="Configure individual validation scopes. Each aspect checks different parts of FHIR resources: structural (schema), profile (conformance), terminology (codes), references (links), business rules (custom logic), and metadata (resource info)."
         />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 auto-rows-fr">
           {aspectConfig.map((aspect) => {
             const aspectSettings = settings.aspects[aspect.key];
             const isEnabled = aspectSettings?.enabled ?? true;
@@ -419,7 +482,7 @@ export function ValidationTab({ onDirtyChange, onLoadingChange }: ValidationTabP
       </div>
 
       {/* 5. Performance & Concurrency */}
-      <div className="space-y-3 pb-3 border-b">
+      <div className="space-y-3">
         <SectionTitle 
           title="Performance & Concurrency" 
           helpText="Tune validation throughput. Max Concurrent controls how many resources validate in parallel. Batch Size sets how many resources are grouped together. Higher values = faster but more memory usage."
@@ -483,7 +546,7 @@ export function ValidationTab({ onDirtyChange, onLoadingChange }: ValidationTabP
       </div>
 
       {/* 6. Resource Type Filtering */}
-      <div className="space-y-3 pb-3 border-b">
+      <div className="space-y-3">
         <SectionTitle 
           title="Resource Filtering" 
           helpText="Restrict which FHIR resource types are validated. Enable filtering, then click badges to select/deselect types. Only selected types will be validated. Improves performance when working with specific resource subsets."

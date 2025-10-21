@@ -27,9 +27,13 @@ import {
   AlertCircle,
   Search,
   Copy,
+  XCircle,
+  AlertTriangle,
+  Info,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { getResourceTypeIcon } from '@/lib/resource-type-icons';
 import { SettingSection } from './shared';
 import { RuleEditorModal } from './RuleEditorModal';
 
@@ -336,11 +340,26 @@ export function BusinessRulesTab() {
   const getSeverityBadge = (severity: string) => {
     switch (severity) {
       case 'error':
-        return <Badge variant="destructive">Error</Badge>;
+        return (
+          <Badge variant="destructive" className="flex items-center gap-1">
+            <XCircle className="h-3 w-3" />
+            Error
+          </Badge>
+        );
       case 'warning':
-        return <Badge className="bg-yellow-500 hover:bg-yellow-600">Warning</Badge>;
+        return (
+          <Badge className="bg-orange-500 hover:bg-orange-600 text-white flex items-center gap-1">
+            <AlertTriangle className="h-3 w-3" />
+            Warning
+          </Badge>
+        );
       case 'information':
-        return <Badge variant="secondary">Info</Badge>;
+        return (
+          <Badge variant="secondary" className="flex items-center gap-1">
+            <Info className="h-3 w-3" />
+            Info
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{severity}</Badge>;
     }
@@ -348,174 +367,221 @@ export function BusinessRulesTab() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-2">Loading business rules...</span>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Section 1: Rule List */}
-      <SettingSection
-        title="Business Rules"
-        description="Define custom validation rules using FHIRPath expressions. Rules can check for domain-specific conditions beyond standard FHIR validation."
-      >
-        <div className="space-y-4">
-          {/* Search and Filter Bar */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search rules..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+      {/* Search and Filter Bar */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search rules..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
         </div>
-            <Select value={severityFilter} onValueChange={setSeverityFilter}>
-              <SelectTrigger className="w-full sm:w-[150px]">
-                <SelectValue placeholder="All Severities" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Severities</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-                <SelectItem value="warning">Warning</SelectItem>
-                <SelectItem value="information">Info</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={resourceTypeFilter} onValueChange={setResourceTypeFilter}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="All Resources" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Resources</SelectItem>
-                {FHIR_RESOURCE_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={enabledFilter} onValueChange={setEnabledFilter}>
-              <SelectTrigger className="w-full sm:w-[140px]">
-                <SelectValue placeholder="All Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="enabled">Enabled Only</SelectItem>
-                <SelectItem value="disabled">Disabled Only</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button onClick={() => openRuleEditor(null)} className="whitespace-nowrap">
-              <Plus className="mr-2 h-4 w-4" />
+        <Select value={severityFilter} onValueChange={setSeverityFilter}>
+          <SelectTrigger className="w-full sm:w-[150px]">
+            <SelectValue placeholder="All Severities">
+              {severityFilter === 'all' && 'All Severities'}
+              {severityFilter === 'error' && (
+                <div className="flex items-center gap-2">
+                  <XCircle className="h-3.5 w-3.5 text-red-600" />
+                  <span>Error</span>
+                </div>
+              )}
+              {severityFilter === 'warning' && (
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
+                  <span>Warning</span>
+                </div>
+              )}
+              {severityFilter === 'information' && (
+                <div className="flex items-center gap-2">
+                  <Info className="h-3.5 w-3.5 text-blue-500" />
+                  <span>Info</span>
+                </div>
+              )}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Severities</SelectItem>
+            <SelectItem value="error">
+              <div className="flex items-center gap-2">
+                <XCircle className="h-3.5 w-3.5 text-red-600" />
+                <span>Error</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="warning">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
+                <span>Warning</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="information">
+              <div className="flex items-center gap-2">
+                <Info className="h-3.5 w-3.5 text-blue-500" />
+                <span>Info</span>
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={resourceTypeFilter} onValueChange={setResourceTypeFilter}>
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <SelectValue placeholder="All Resources">
+              {resourceTypeFilter !== 'all' && (() => {
+                const ResourceIcon = getResourceTypeIcon(resourceTypeFilter);
+                return (
+                  <div className="flex items-center gap-2">
+                    <ResourceIcon className="h-3.5 w-3.5" />
+                    <span>{resourceTypeFilter}</span>
+                  </div>
+                );
+              })()}
+              {resourceTypeFilter === 'all' && 'All Resources'}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Resources</SelectItem>
+            {FHIR_RESOURCE_TYPES.map((type) => {
+              const ResourceIcon = getResourceTypeIcon(type);
+              return (
+                <SelectItem key={type} value={type}>
+                  <div className="flex items-center gap-2">
+                    <ResourceIcon className="h-3.5 w-3.5" />
+                    <span>{type}</span>
+                  </div>
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
+        <Select value={enabledFilter} onValueChange={setEnabledFilter}>
+          <SelectTrigger className="w-full sm:w-[140px]">
+            <SelectValue placeholder="All Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="enabled">Enabled Only</SelectItem>
+            <SelectItem value="disabled">Disabled Only</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button onClick={() => openRuleEditor(null)} className="whitespace-nowrap">
+          <Plus className="mr-2 h-4 w-4" />
           Add Rule
         </Button>
       </div>
 
-          {/* Rules List */}
-          {filteredRules.length === 0 ? (
-      <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <FileCode className="h-16 w-16 text-muted-foreground mb-4" />
-                <p className="text-lg font-medium text-muted-foreground mb-2">
-                  {searchTerm || severityFilter !== 'all' || resourceTypeFilter !== 'all'
-                    ? 'No rules match your filters'
-                    : 'No business rules defined'}
-                </p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {searchTerm || severityFilter !== 'all' || resourceTypeFilter !== 'all'
-                    ? 'Try adjusting your search or filters'
-                    : 'Create your first rule to get started'}
-                </p>
-                {!searchTerm && severityFilter === 'all' && resourceTypeFilter === 'all' && (
-                  <Button onClick={() => openRuleEditor(null)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Your First Rule
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {filteredRules.map((rule) => (
-                <div
-                  key={rule.id}
-                  className={cn(
-                    'border rounded-lg p-4 space-y-3 transition-colors',
-                    rule.enabled 
-                      ? 'bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
-                      : 'bg-gray-50 dark:bg-gray-900/30 border-gray-300 dark:border-gray-800 opacity-60'
+      {/* Rules List */}
+      {filteredRules.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <FileCode className="h-16 w-16 text-muted-foreground mb-4" />
+            <p className="text-lg font-medium text-muted-foreground mb-2">
+              {searchTerm || severityFilter !== 'all' || resourceTypeFilter !== 'all'
+                ? 'No rules match your filters'
+                : 'No business rules defined'}
+            </p>
+            <p className="text-sm text-muted-foreground mb-4">
+              {searchTerm || severityFilter !== 'all' || resourceTypeFilter !== 'all'
+                ? 'Try adjusting your search or filters'
+                : 'Create your first rule to get started'}
+            </p>
+            {!searchTerm && severityFilter === 'all' && resourceTypeFilter === 'all' && (
+              <Button onClick={() => openRuleEditor(null)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Your First Rule
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {filteredRules.map((rule) => (
+            <div
+              key={rule.id}
+              className={cn(
+                'border rounded-lg p-4 space-y-3 transition-colors',
+                rule.enabled 
+                  ? 'bg-white dark:bg-gray-800/50 border-gray-200 dark:border-gray-700'
+                  : 'bg-gray-50 dark:bg-gray-900/30 border-gray-300 dark:border-gray-800 opacity-60'
+              )}
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1 flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-semibold text-sm">{rule.name}</h4>
+                    {getSeverityBadge(rule.severity)}
+                    {rule.resourceTypes && rule.resourceTypes.length > 0 && (() => {
+                      const ResourceIcon = getResourceTypeIcon(rule.resourceTypes[0]);
+                      return (
+                        <Badge variant="outline" className="text-xs flex items-center gap-1">
+                          <ResourceIcon className="h-3 w-3" />
+                          {rule.resourceTypes[0]}
+                        </Badge>
+                      );
+                    })()}
+                  </div>
+                  {rule.description && (
+                    <p className="text-xs text-muted-foreground">{rule.description}</p>
                   )}
-                >
-                  {/* Header */}
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1 flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="font-semibold text-sm">{rule.name}</h4>
-                        {getSeverityBadge(rule.severity)}
-                        {rule.resourceTypes && rule.resourceTypes.length > 0 && (
-                          <Badge variant="outline" className="text-xs">
-                            {rule.resourceTypes[0]}
-                          </Badge>
-                        )}
-                      </div>
-                      {rule.description && (
-                        <p className="text-xs text-muted-foreground">{rule.description}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Switch
-                        checked={rule.enabled}
-                        onCheckedChange={(checked) => handleToggleRule(rule.id, checked)}
-                        aria-label={`Toggle ${rule.name}`}
-                      />
-                    </div>
-                  </div>
-
-                  {/* FHIRPath Expression */}
-                  <div className="bg-gray-100 dark:bg-gray-900 rounded p-3 font-mono text-xs overflow-x-auto">
-                    <code className="text-blue-600 dark:text-blue-400">{rule.expression}</code>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 pt-2 border-t dark:border-gray-700 flex-wrap">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openRuleEditor(rule)}
-                    >
-                      <Edit className="h-3 w-3 mr-1" />
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleDuplicateRule(rule.id)}
-                    >
-                      <Copy className="h-3 w-3 mr-1" />
-                      Duplicate
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => confirmDelete(rule.id)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                    >
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      Delete
-                    </Button>
-                    <div className="ml-auto text-xs text-muted-foreground">
-                      Updated: {new Date(rule.updatedAt).toLocaleDateString()}
-                    </div>
-                  </div>
                 </div>
-              ))}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Switch
+                    checked={rule.enabled}
+                    onCheckedChange={(checked) => handleToggleRule(rule.id, checked)}
+                    aria-label={`Toggle ${rule.name}`}
+                  />
+                </div>
+              </div>
+
+              {/* FHIRPath Expression */}
+              <div className="bg-gray-100 dark:bg-gray-900 rounded p-3 font-mono text-xs overflow-x-auto">
+                <code className="text-blue-600 dark:text-blue-400">{rule.expression}</code>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 pt-2 border-t dark:border-gray-700 flex-wrap">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => openRuleEditor(rule)}
+                >
+                  <Edit className="h-3 w-3 mr-1" />
+                  Edit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleDuplicateRule(rule.id)}
+                >
+                  <Copy className="h-3 w-3 mr-1" />
+                  Duplicate
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => confirmDelete(rule.id)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                >
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  Delete
+                </Button>
+                <div className="ml-auto text-xs text-muted-foreground">
+                  Updated: {new Date(rule.updatedAt).toLocaleDateString()}
+                </div>
+              </div>
             </div>
-          )}
+          ))}
         </div>
-      </SettingSection>
+      )}
 
       {/* Section 2: Import/Export */}
       <SettingSection

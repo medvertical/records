@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { Play, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Play, Loader2, CheckCircle, AlertCircle, XCircle, AlertTriangle, Info } from 'lucide-react';
 
 interface Rule {
   id: number;
@@ -282,29 +282,36 @@ export function RuleEditorModal({ open, onClose, rule, onSave }: RuleEditorModal
             </Label>
             <Select value={severity} onValueChange={(v) => setSeverity(v as any)}>
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue>
+                  <div className="flex items-center gap-2">
+                    {severity === 'error' && <XCircle className="h-3.5 w-3.5 text-red-600" />}
+                    {severity === 'warning' && <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />}
+                    {severity === 'information' && <Info className="h-3.5 w-3.5 text-blue-500" />}
+                    <span>{severity === 'error' ? 'Error' : severity === 'warning' ? 'Warning' : 'Info'}</span>
+                  </div>
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="error">
                   <div className="flex items-center gap-2">
-                    <Badge variant="destructive">Error</Badge>
+                    <XCircle className="h-3.5 w-3.5 text-red-600" />
+                    <span>Error</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="warning">
                   <div className="flex items-center gap-2">
-                    <Badge className="bg-yellow-500">Warning</Badge>
+                    <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
+                    <span>Warning</span>
                   </div>
                 </SelectItem>
                 <SelectItem value="information">
                   <div className="flex items-center gap-2">
-                    <Badge variant="secondary">Info</Badge>
+                    <Info className="h-3.5 w-3.5 text-blue-500" />
+                    <span>Info</span>
                   </div>
                 </SelectItem>
               </SelectContent>
             </Select>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              Current: {getSeverityBadge(severity)}
-            </div>
           </div>
 
           {/* FHIRPath Expression */}

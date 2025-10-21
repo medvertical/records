@@ -4,7 +4,6 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { 
   AlertDialog,
@@ -18,7 +17,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, AlertTriangle } from 'lucide-react';
-import { SettingSection } from './shared';
+import { SettingSection, SectionTitle } from './shared';
 
 // ============================================================================
 // Types
@@ -255,20 +254,20 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-2">Loading system settings...</span>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* User Preferences Divider */}
-      <div className="space-y-1">
-        <h3 className="text-lg font-semibold text-foreground">User Preferences</h3>
-        <Separator />
-      </div>
+    <div className="space-y-8">
+      {/* User Preferences */}
+      <div className="space-y-6">
+        <SectionTitle 
+          title="User Preferences" 
+          helpText="Customize application appearance, logging, and privacy settings to match your preferences."
+        />
 
       {/* Section 1: Display Settings */}
       <SettingSection
@@ -378,11 +377,14 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
         </div>
       </SettingSection>
 
-      {/* System Controls Divider */}
-      <div className="space-y-1 pt-4">
-        <h3 className="text-lg font-semibold text-foreground">System Controls</h3>
-        <Separator />
       </div>
+
+      {/* System Controls */}
+      <div className="space-y-6">
+        <SectionTitle 
+          title="System Controls" 
+          helpText="Manage data retention, cache, system features, and advanced developer options."
+        />
 
       {/* Section 4: Data Management */}
       <SettingSection
@@ -454,6 +456,8 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
         </div>
       </SettingSection>
 
+      </div>
+
       {/* Section 6: Advanced Options */}
       <Accordion type="single" collapsible className="w-full">
         <AccordionItem value="advanced">
@@ -462,7 +466,6 @@ export function SystemSettingsTab({ onSettingsChange }: SystemSettingsTabProps) 
             <SettingSection
               title="Advanced Options"
               description="Developer-only configuration. Changes here may affect system stability."
-              className="border-0 pb-0 mb-0"
             >
               <div className="flex items-center justify-between">
                 <Label htmlFor="debug-mode">Enable Debug Mode</Label>

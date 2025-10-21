@@ -6,7 +6,7 @@ import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import { SettingSection } from './shared';
+import { SettingSection, SectionTitle } from './shared';
 
 // ============================================================================
 // Types
@@ -134,20 +134,26 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <span className="ml-2">Loading dashboard settings...</span>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Section 1: Auto-Refresh */}
-      <SettingSection
-        title="Auto Refresh"
-        description="Automatically refresh dashboard data at a defined interval."
-      >
+    <div className="space-y-8">
+      {/* Display & Refresh Settings */}
+      <div className="space-y-6">
+        <SectionTitle 
+          title="Display & Refresh" 
+          helpText="Configure how the dashboard displays data and when it refreshes. Control widget visibility, auto-refresh intervals, and validation triggers."
+        />
+
+        {/* Auto-Refresh */}
+        <SettingSection
+          title="Auto Refresh"
+          description="Automatically refresh dashboard data at a defined interval."
+        >
         <div className="flex items-center justify-between">
           <Label htmlFor="auto-refresh">Enable Auto-Refresh</Label>
           <Switch
@@ -181,7 +187,7 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
         )}
       </SettingSection>
 
-      {/* Section 2: Dashboard Components */}
+      {/* Dashboard Components */}
       <SettingSection
         title="Dashboard Components"
         description="Choose which dashboard widgets are visible."
@@ -233,7 +239,7 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
         </div>
       </SettingSection>
 
-      {/* Section 3: Validation Behavior */}
+      {/* Validation Behavior */}
       <SettingSection
         title="Validation Behavior"
         description="Control when automatic validation occurs on dashboard load or data change."
@@ -254,12 +260,20 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
           />
         </div>
       </SettingSection>
+      </div>
 
-      {/* Section 4: Polling Configuration */}
-      <SettingSection
-        title="Polling Configuration"
-        description="Define how often Records polls for new data and how it behaves during idle or background states."
-      >
+      {/* Real-time Updates */}
+      <div className="space-y-6">
+        <SectionTitle 
+          title="Real-time Updates" 
+          helpText="Configure polling behavior for live data updates. Set different intervals for active and idle states, and control background polling behavior."
+        />
+
+        {/* Polling Configuration */}
+        <SettingSection
+          title="Polling Configuration"
+          description="Define how often Records polls for new data and how it behaves during idle or background states."
+        >
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <Label htmlFor="polling-enabled">Enable Polling</Label>
@@ -311,6 +325,7 @@ export function DashboardSettingsTab({ onSettingsChange }: DashboardSettingsTabP
           </div>
         </div>
       </SettingSection>
+      </div>
     </div>
   );
 }

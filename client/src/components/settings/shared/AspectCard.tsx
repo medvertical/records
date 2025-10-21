@@ -2,6 +2,7 @@ import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { XCircle, AlertTriangle, Info } from 'lucide-react';
 
 interface AspectCardProps {
   title: string;
@@ -27,51 +28,76 @@ export function AspectCard({
   onEngineChange
 }: AspectCardProps) {
   return (
-    <Card className="p-4">
-      <div className="space-y-3">
+    <Card className="p-4 flex flex-col h-full">
+      <div className="flex flex-col h-full">
         {/* Title with toggle on the right */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-3">
           <h4 className="text-sm font-semibold">{title}</h4>
           <Switch checked={enabled} onCheckedChange={onToggle} />
         </div>
         
         {/* Description */}
-        <p className="text-xs text-muted-foreground">{description}</p>
+        <p className="text-xs text-muted-foreground mb-3">{description}</p>
         
-        {/* Severity selector */}
-        <div className="space-y-1.5">
-          <Label className="text-xs font-medium">Severity</Label>
-          <Select 
-            value={severity} 
-            onValueChange={(value) => onSeverityChange(value as 'info' | 'warning' | 'error')} 
-            disabled={!enabled}
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="error" className="text-xs">Error</SelectItem>
-              <SelectItem value="warning" className="text-xs">Warning</SelectItem>
-              <SelectItem value="info" className="text-xs">Info</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        
-        {/* Engine selector */}
-        <div className="space-y-1.5">
-          <Label className="text-xs font-medium">Engine</Label>
-          <Select value={engine} onValueChange={onEngineChange} disabled={!enabled}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {availableEngines.map((eng) => (
-                <SelectItem key={eng} value={eng} className="text-xs">
-                  {eng.charAt(0).toUpperCase() + eng.slice(1)}
+        {/* Engine and Severity in a row - pushed to bottom */}
+        <div className="grid grid-cols-2 gap-3 mt-auto items-end">
+          {/* Engine selector */}
+          <div className="flex flex-col">
+            <Label className="text-sm font-medium mb-1.5">Engine</Label>
+            <Select value={engine} onValueChange={onEngineChange} disabled={!enabled}>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableEngines.map((eng) => (
+                  <SelectItem key={eng} value={eng}>
+                    {eng.charAt(0).toUpperCase() + eng.slice(1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {/* Severity selector */}
+          <div className="flex flex-col">
+            <Label className="text-sm font-medium mb-1.5">Severity</Label>
+            <Select 
+              value={severity} 
+              onValueChange={(value) => onSeverityChange(value as 'info' | 'warning' | 'error')} 
+              disabled={!enabled}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue>
+                  <div className="flex items-center gap-2">
+                    {severity === 'error' && <XCircle className="h-3.5 w-3.5 text-red-600" />}
+                    {severity === 'warning' && <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />}
+                    {severity === 'info' && <Info className="h-3.5 w-3.5 text-blue-500" />}
+                    <span>{severity === 'error' ? 'Error' : severity === 'warning' ? 'Warning' : 'Info'}</span>
+                  </div>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="error">
+                  <div className="flex items-center gap-2">
+                    <XCircle className="h-3.5 w-3.5 text-red-600" />
+                    <span>Error</span>
+                  </div>
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                <SelectItem value="warning">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 text-orange-500" />
+                    <span>Warning</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="info">
+                  <div className="flex items-center gap-2">
+                    <Info className="h-3.5 w-3.5 text-blue-500" />
+                    <span>Info</span>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
     </Card>

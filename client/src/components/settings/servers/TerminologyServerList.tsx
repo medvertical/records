@@ -5,7 +5,7 @@
  * Handles drag-and-drop reordering, testing, enable/disable, and CRUD operations.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Globe, Loader2 } from 'lucide-react';
 import type { TerminologyServer } from '@shared/validation-settings';
 import { ServerListContainer } from './ServerListContainer';
@@ -49,18 +49,36 @@ export function TerminologyServerList({
   const [formData, setFormData] = useState({
     name: '',
     url: '',
-    enabled: true
+    enabled: true,
+    fhirVersions: [] as ('R4' | 'R5' | 'R6')[]
   });
+
+  /**
+   * Add new server
+   */
+  const handleAddServer = useCallback(() => {
+    setEditingServer(null);
+    setFormData({
+      name: '',
+      url: '',
+      enabled: true,
+      fhirVersions: []
+    });
+    setDialogOpen(true);
+  }, []);
 
   // Expose handleAddServer via callback when button is clicked
   React.useEffect(() => {
-    if (onAddServerProp) {
-      const button = document.getElementById('add-terminology-server-button');
-      if (button) {
-        button.onclick = handleAddServer;
-      }
+    const button = document.getElementById('add-terminology-server-button');
+    if (button) {
+      button.onclick = handleAddServer;
     }
-  }, [onAddServerProp]);
+    return () => {
+      if (button) {
+        button.onclick = null;
+      }
+    };
+  }, [handleAddServer]);
 
   // Update local state when props change
   useEffect(() => {
@@ -107,7 +125,8 @@ export function TerminologyServerList({
       setFormData({
         name: server.name,
         url: server.url,
-        enabled: server.enabled
+        enabled: server.enabled,
+        fhirVersions: server.fhirVersions || []
       });
       setDialogOpen(true);
     }
@@ -124,19 +143,6 @@ export function TerminologyServerList({
   };
 
   /**
-   * Add new server
-   */
-  const handleAddServer = () => {
-    setEditingServer(null);
-    setFormData({
-      name: '',
-      url: '',
-      enabled: true
-    });
-    setDialogOpen(true);
-  };
-
-  /**
    * Save server from dialog
    */
   const handleSaveServer = () => {
@@ -148,7 +154,13 @@ export function TerminologyServerList({
       // Update existing server
       const updated = localServers.map(s =>
         s.id === editingServer.id
-          ? { ...s, name: formData.name, url: formData.url, enabled: formData.enabled }
+          ? { 
+              ...s, 
+              name: formData.name, 
+              url: formData.url, 
+              enabled: formData.enabled,
+              fhirVersions: formData.fhirVersions
+            }
           : s
       );
       setLocalServers(updated);
@@ -160,7 +172,7 @@ export function TerminologyServerList({
         name: formData.name,
         url: formData.url,
         enabled: formData.enabled,
-        fhirVersions: ['R4'], // Default, will be auto-detected
+        fhirVersions: formData.fhirVersions,
         status: 'unknown',
         failureCount: 0,
         lastFailureTime: null,
@@ -177,7 +189,7 @@ export function TerminologyServerList({
   };
 
   /**
-   * Test URL in dialog
+   * Test URL in dialog and detect supported FHIR versions
    */
   const handleTestUrl = async () => {
     if (!formData.url.trim()) {
@@ -194,18 +206,59 @@ export function TerminologyServerList({
     try {
       // Import the test function dynamically
       const { testFhirConnection } = await import('../connection-testing');
-      const result = await testFhirConnection(formData.url);
       
-      if (result.success) {
+      const detectedVersions: ('R4' | 'R5' | 'R6')[] = [];
+      const baseUrl = formData.url.trim().replace(/\/$/, '');
+      
+      // Test base URL first
+      const baseResult = await testFhirConnection(baseUrl);
+      if (baseResult.success && baseResult.serverInfo?.fhirVersion) {
+        const version = baseResult.serverInfo.fhirVersion;
+        if (version === 'R4' || version === 'R5' || version === 'R6') {
+          detectedVersions.push(version);
+        }
+      }
+      
+      // Test version-specific endpoints (/r4, /r5, /r6)
+      const versionTests = [
+        { path: '/r4', version: 'R4' as const },
+        { path: '/r5', version: 'R5' as const },
+        { path: '/r6', version: 'R6' as const }
+      ];
+      
+      for (const { path, version } of versionTests) {
+        if (!detectedVersions.includes(version)) {
+          const versionUrl = `${baseUrl}${path}`;
+          try {
+            const result = await testFhirConnection(versionUrl);
+            if (result.success) {
+              detectedVersions.push(version);
+            }
+          } catch {
+            // Silently skip if version endpoint doesn't exist
+          }
+        }
+      }
+      
+      // Update form data with detected versions
+      setFormData(prev => ({ ...prev, fhirVersions: detectedVersions }));
+      
+      if (detectedVersions.length > 0) {
         toast({
           title: "✅ Connection Successful",
-          description: `Successfully connected to ${result.serverInfo?.name || formData.url} (${result.serverInfo?.version || 'Unknown version'})`,
+          description: `Server supports: ${detectedVersions.join(', ')}`,
+          variant: "default",
+        });
+      } else if (baseResult.success) {
+        toast({
+          title: "✅ Connection Successful",
+          description: `Successfully connected (version could not be determined)`,
           variant: "default",
         });
       } else {
         toast({
           title: "❌ Connection Failed",
-          description: result.error || "Failed to connect to the server",
+          description: baseResult.error || "Failed to connect to the server",
           variant: "destructive",
         });
       }
@@ -227,7 +280,7 @@ export function TerminologyServerList({
   const handleCancelDialog = () => {
     setDialogOpen(false);
     setEditingServer(null);
-    setFormData({ name: '', url: '', enabled: true });
+    setFormData({ name: '', url: '', enabled: true, fhirVersions: [] });
   };
 
   /**

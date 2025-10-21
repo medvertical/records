@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
-  Settings, 
+  Zap, 
   Server, 
   BarChart3, 
   Database,
@@ -117,7 +117,7 @@ export default function SettingsPage() {
         <Tabs defaultValue="validation" className="space-y-6">
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="validation" className="flex items-center gap-2">
-              <Settings className="h-4 w-4" />
+              <Zap className="h-4 w-4" />
               Validation
             </TabsTrigger>
             <TabsTrigger value="servers" className="flex items-center gap-2">

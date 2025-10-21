@@ -1,14 +1,14 @@
 /**
  * ServerForm Component
  * 
- * Simplified FHIR server add/edit form
- * Analog to Terminology Server modal - keep it simple!
+ * FHIR server add/edit form with simplified layout
  */
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Globe } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -16,10 +16,19 @@ import { useToast } from '@/hooks/use-toast';
 // Types
 // ============================================================================
 
+type AuthType = 'none' | 'basic' | 'bearer' | 'oauth';
+
 interface ServerFormData {
   name: string;
   url: string;
   fhirVersion?: 'R4' | 'R5' | 'R6';
+  authType?: AuthType;
+  username?: string;
+  password?: string;
+  token?: string;
+  clientId?: string;
+  clientSecret?: string;
+  tokenUrl?: string;
 }
 
 interface FhirServer {
@@ -28,6 +37,13 @@ interface FhirServer {
   url: string;
   fhirVersion?: string;
   isActive: boolean;
+  authType?: AuthType;
+  username?: string;
+  password?: string;
+  token?: string;
+  clientId?: string;
+  clientSecret?: string;
+  tokenUrl?: string;
 }
 
 interface ServerFormProps {
@@ -54,10 +70,17 @@ export function ServerForm({
   urlValidationStatus
 }: ServerFormProps) {
   const { toast } = useToast();
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ServerFormData>({
     name: editingServer?.name || '',
     url: editingServer?.url || '',
-    fhirVersion: editingServer?.fhirVersion as 'R4' | 'R5' | 'R6' | undefined
+    fhirVersion: editingServer?.fhirVersion as 'R4' | 'R5' | 'R6' | undefined,
+    authType: (editingServer?.authType as AuthType) || 'none',
+    username: editingServer?.username || '',
+    password: editingServer?.password || '',
+    token: editingServer?.token || '',
+    clientId: editingServer?.clientId || '',
+    clientSecret: editingServer?.clientSecret || '',
+    tokenUrl: editingServer?.tokenUrl || ''
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -80,6 +103,36 @@ export function ServerForm({
         variant: "destructive",
       });
       return;
+    }
+
+    // Validate auth-specific fields
+    if (formData.authType === 'basic') {
+      if (!formData.username?.trim() || !formData.password?.trim()) {
+        toast({
+          title: "Missing Credentials",
+          description: "Please enter both username and password for Basic Auth.",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else if (formData.authType === 'bearer') {
+      if (!formData.token?.trim()) {
+        toast({
+          title: "Missing Token",
+          description: "Please enter a bearer token.",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else if (formData.authType === 'oauth') {
+      if (!formData.clientId?.trim() || !formData.clientSecret?.trim() || !formData.tokenUrl?.trim()) {
+        toast({
+          title: "Missing OAuth Configuration",
+          description: "Please enter Client ID, Client Secret, and Token URL.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     onSubmit(formData);
@@ -148,6 +201,124 @@ export function ServerForm({
           <p className="text-xs text-yellow-600">{urlValidationStatus.warning}</p>
         )}
       </div>
+
+      {/* FHIR Version */}
+      <div className="space-y-2">
+        <Label htmlFor="fhir-version">FHIR Version</Label>
+        <Select
+          value={formData.fhirVersion || 'auto'}
+          onValueChange={(value) => setFormData({ ...formData, fhirVersion: value === 'auto' ? undefined : value as 'R4' | 'R5' | 'R6' })}
+          disabled={isSubmitting}
+        >
+          <SelectTrigger id="fhir-version">
+            <SelectValue placeholder="Auto-detect" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">Auto-detect</SelectItem>
+            <SelectItem value="R4">R4</SelectItem>
+            <SelectItem value="R5">R5</SelectItem>
+            <SelectItem value="R6">R6</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Authentication Type */}
+      <div className="space-y-2">
+        <Label htmlFor="auth-type">Authentication</Label>
+        <Select
+          value={formData.authType || 'none'}
+          onValueChange={(value) => setFormData({ ...formData, authType: value as AuthType })}
+          disabled={isSubmitting}
+        >
+          <SelectTrigger id="auth-type">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">None</SelectItem>
+            <SelectItem value="basic">Basic Auth</SelectItem>
+            <SelectItem value="bearer">Bearer Token</SelectItem>
+            <SelectItem value="oauth">OAuth 2.0</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Basic Auth Fields */}
+      {formData.authType === 'basic' && (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="username">Username</Label>
+            <Input
+              id="username"
+              type="text"
+              value={formData.username || ''}
+              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              disabled={isSubmitting}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              id="password"
+              type="password"
+              value={formData.password || ''}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              disabled={isSubmitting}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Bearer Token Field */}
+      {formData.authType === 'bearer' && (
+        <div className="space-y-2">
+          <Label htmlFor="token">Bearer Token</Label>
+          <Input
+            id="token"
+            type="password"
+            placeholder="Enter your API token"
+            value={formData.token || ''}
+            onChange={(e) => setFormData({ ...formData, token: e.target.value })}
+            disabled={isSubmitting}
+          />
+        </div>
+      )}
+
+      {/* OAuth Fields */}
+      {formData.authType === 'oauth' && (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="client-id">Client ID</Label>
+            <Input
+              id="client-id"
+              type="text"
+              value={formData.clientId || ''}
+              onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+              disabled={isSubmitting}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="client-secret">Client Secret</Label>
+            <Input
+              id="client-secret"
+              type="password"
+              value={formData.clientSecret || ''}
+              onChange={(e) => setFormData({ ...formData, clientSecret: e.target.value })}
+              disabled={isSubmitting}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="token-url">Token URL</Label>
+            <Input
+              id="token-url"
+              type="url"
+              placeholder="https://auth.example.com/token"
+              value={formData.tokenUrl || ''}
+              onChange={(e) => setFormData({ ...formData, tokenUrl: e.target.value })}
+              disabled={isSubmitting}
+            />
+          </div>
+        </>
+      )}
 
       {/* Form Actions */}
       <div className="flex justify-end gap-2 pt-4">
