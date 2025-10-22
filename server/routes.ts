@@ -33,9 +33,10 @@ async function initializeServices(): Promise<void> {
     }
     
     const serverUrl = activeServer.url;
+    const serverId = activeServer.id;
     console.log(`[Routes] Using FHIR server from database: ${serverUrl}`);
     console.log(`[Routes] Active server from DB:`, activeServer);
-    fhirClient = new FhirClient(serverUrl);
+    fhirClient = new FhirClient(serverUrl, undefined, serverId);
     
     // Make FHIR client available globally
     global.fhirClient = fhirClient;

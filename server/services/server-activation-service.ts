@@ -8,6 +8,7 @@
 import { EventEmitter } from 'events';
 import { FhirClient } from '../services/fhir/fhir-client';
 import { storage } from '../storage';
+import { getFhirCache } from '../services/fhir/fhir-cache';
 
 // Global server activation emitter
 let serverActivationEmitter: EventEmitter;
@@ -49,8 +50,17 @@ export class ServerActivationService {
       if (this.fhirClient && event.server.url) {
         console.log(`[ServerActivationService] Updating FHIR client to use server: ${event.server.url}`);
         
-        // Create new FHIR client with the new server URL
-        const newFhirClient = new FhirClient(event.server.url);
+        // Clear cache for the previous server to prevent stale data
+        const oldServerId = (this.fhirClient as any).serverId;
+        if (oldServerId !== undefined) {
+          console.log(`[ServerActivationService] Invalidating cache for previous server ${oldServerId}`);
+          const cache = getFhirCache();
+          cache.invalidateServer(oldServerId);
+        }
+        
+        // Create new FHIR client with the new server URL and serverId
+        const newServerId = parseInt(event.serverId);
+        const newFhirClient = new FhirClient(event.server.url, undefined, newServerId);
         
         // Test the connection to ensure it's valid
         const connectionResult = await newFhirClient.testConnection();
