@@ -2196,9 +2196,9 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
     }
   });
 
-  // FHIR Resource Counts
+  // FHIR Resource Counts - Simplified version without caching
   app.get("/api/fhir/resource-counts", async (req, res) => {
-    console.log(`[Resource Counts] 📥 Request received: force=${req.query.force}, types=${req.query.types}`);
+    console.log(`[Resource Counts] Request received: types=${req.query.types}, all=${req.query.all}`);
     
     try {
       // Get the current FHIR client (may have been updated due to server activation)
@@ -2207,224 +2207,50 @@ export function setupFhirRoutes(app: Express, fhirClient: FhirClient | null) {
         return res.status(503).json({ message: "FHIR client not initialized" });
       }
       
-      // Get active server ID for cache key
-      const { getActiveServerId } = await import('../../../utils/server-scoping.js');
-      const serverId = await getActiveServerId();
+      // Get requested types from query param, or fetch all types
+      let typesToFetch: string[] = [];
       
-      if (!serverId) {
-        return res.status(503).json({ message: "No active FHIR server" });
-      }
-      
-      console.log(`[Resource Counts] 🔍 Active server ID: ${serverId}`);
-      
-      // Import cache service
-      const { resourceCountCache } = await import('../../../services/cache/resource-count-cache.js');
-      
-      // Check if caller wants ALL resource types (bypass settings filter)
-      const getAllTypes = req.query.all === 'true';
-      const forceRefresh = req.query.force === 'true';
-      
-      console.log(`[Resource Counts] Query params: force=${req.query.force}, forceRefresh=${forceRefresh}, types=${req.query.types}`);
-      
-      // Check if specific resource types are requested via query param
-      const requestedTypes = req.query.types 
-        ? (req.query.types as string).split(',').map(t => t.trim())
-        : undefined;
-      
-      let resourceTypesToQuery: string[] | undefined = undefined;
-      
-      if (getAllTypes) {
-        // Explicitly bypass validation settings - get ALL types from server
-        resourceTypesToQuery = undefined;
-        console.log('[Resource Counts] Getting ALL resource types from server (bypassing validation settings)');
-      } else if (requestedTypes && requestedTypes.length > 0) {
-        // Use requested types if provided
-        resourceTypesToQuery = requestedTypes;
-        console.log(`[Resource Counts] Using requested types: ${requestedTypes.join(', ')}`);
+      if (req.query.types) {
+        // Case 1: Specific types requested (Quick Access)
+        typesToFetch = (req.query.types as string).split(',').map(t => t.trim());
+        console.log(`[Resource Counts] Fetching ${typesToFetch.length} specific types: ${typesToFetch.join(', ')}`);
       } else {
-        // Fall back to validation settings logic
-        const { ValidationSettingsService } = await import('../../../services/validation/settings/validation-settings-service');
-        const settingsService = new ValidationSettingsService();
-        await settingsService.initialize();
-        const settings = await settingsService.getCurrentSettings();
-        
-        // Check if resource type filtering is enabled
-        // When enabled=false, it means "Validate All" - ignore includedTypes
-        if (settings?.resourceTypes?.enabled === true) {
-          const includedTypes = settings.resourceTypes.includedTypes || [];
-          resourceTypesToQuery = includedTypes.length > 0 ? includedTypes : undefined;
-          console.log(`[Resource Counts] Filtering enabled: ${includedTypes.length} types included`);
-        } else {
-          console.log('[Resource Counts] Filtering disabled (Validate All) - using all server types from CapabilityStatement');
-          resourceTypesToQuery = undefined; // Will use getAllResourceTypes() from CapabilityStatement
-        }
+        // Case 2: No types specified - fetch ALL types (Dashboard, Batch validation)
+        // The 'all=true' param is just for clarity, but behavior is the same
+        typesToFetch = await currentFhirClient.getAllResourceTypes();
+        console.log(`[Resource Counts] Fetching all ${typesToFetch.length} resource types from server`);
       }
       
-      // If force refresh, check if refresh is already in progress
-      if (forceRefresh) {
-        console.log('[Resource Counts] 🔄 Force refresh requested for server', serverId);
-        console.log('[Resource Counts] Passing types to refresh:', requestedTypes || resourceTypesToQuery);
-        
-        // Check if refresh is already in progress
-        const isRefreshing = await resourceCountCache.isRefreshInProgress(serverId);
-        if (isRefreshing) {
-          console.log('[Resource Counts] Refresh already in progress, returning current cache state...');
-          // Don't delete cache - let the ongoing refresh complete
-          // Return current partial data if available, otherwise empty
-          const cached = await resourceCountCache.get(serverId);
-          if (cached) {
-            // Return existing partial data
-            const resourceTypesArray = Object.entries(cached.counts)
-              .filter(([type]) => !requestedTypes || requestedTypes.includes(type))
-              .map(([resourceType, count]) => ({ resourceType, count }));
-            
-            return res.json({
-              resourceTypes: resourceTypesArray,
-              totalResources: resourceTypesArray.reduce((sum, item) => sum + item.count, 0),
-              isPartial: cached.isPartial,
-              loadedTypes: cached.loadedTypes,
-              pendingTypes: cached.pendingTypes
-            });
-          }
-        } else {
-          // No refresh in progress - safe to delete cache and start fresh
-          console.log('[Resource Counts] No refresh in progress, clearing cache...');
-          await resourceCountCache.delete(serverId);
-        }
-        
-        // Trigger priority-based refresh in background (don't await full completion)
-        resourceCountCache.refresh(serverId, currentFhirClient, requestedTypes || resourceTypesToQuery).catch(err => {
-          console.error('[Resource Counts] Background refresh failed:', err);
-        });
-        
-        // Return empty partial response immediately - frontend will poll for updates
-        // Incremental updates will populate the cache as each type is fetched
-        console.log('[Resource Counts] Returning empty partial response, fetching in background...');
-        res.json({
-          resourceTypes: [],
-          totalResources: 0,
-          isPartial: true,
-          loadedTypes: [],
-          pendingTypes: requestedTypes || []
-        });
-        
-        return;
+      if (typesToFetch.length === 0) {
+        return res.json({ resourceTypes: [], totalResources: 0 });
       }
       
-      // Try to get from cache first
-      const cached = await resourceCountCache.get(serverId);
+      // Fetch all types in parallel
+      console.log(`[Resource Counts] Starting parallel fetch...`);
+      const startTime = Date.now();
       
-      if (cached) {
-        const age = Math.round((Date.now() - cached.lastUpdated.getTime()) / 1000);
-        const statusLabel = cached.isStale ? 'STALE' : (cached.isPartial ? 'PARTIAL' : 'FRESH');
-        console.log(`[Resource Counts] ⚡ Returning cached data (${statusLabel}, age: ${age}s)`);
-        
-        // Transform cached counts to expected format
-        let resourceTypes = Object.entries(cached.counts)
-          .map(([resourceType, count]) => ({
-            resourceType,
-            count
-          }));
-        
-        // If specific types were requested, return ONLY those types
-        let isPartialForRequest = cached.isPartial || false;
-        
-        if (requestedTypes && requestedTypes.length > 0) {
-          const countsMap = new Map(resourceTypes.map(rt => [rt.resourceType, rt.count]));
-          const pendingTypesSet = new Set(cached.pendingTypes || []);
-          
-          // Check if ANY of the requested types are still pending
-          const requestedTypesStillPending = requestedTypes.filter(type => pendingTypesSet.has(type));
-          
-          // Build response with only requested types, in requested order
-          resourceTypes = requestedTypes.map(requestedType => {
-            // If cache is partial and this type is still pending, don't include it
-            // (let frontend show loading indicator)
-            if (cached.isPartial && pendingTypesSet.has(requestedType)) {
-              return null;
-            }
-            
-            // Otherwise, return the count (0 if type doesn't exist on server)
-            return {
-              resourceType: requestedType,
-              count: countsMap.get(requestedType) ?? 0
-            };
-          }).filter(rt => rt !== null) as { resourceType: string; count: number }[];
-          
-          // For specific type requests, isPartial should only reflect the REQUESTED types
-          // not the entire backend cache
-          isPartialForRequest = requestedTypesStillPending.length > 0;
-          
-          console.log(`[Resource Counts] Requested ${requestedTypes.length} types, ${requestedTypesStillPending.length} still pending: ${requestedTypesStillPending.join(', ')}`);
+      const countPromises = typesToFetch.map(async (type) => {
+        try {
+          const count = await currentFhirClient.getResourceCount(type);
+          return { resourceType: type, count: count ?? 0 };
+        } catch (err) {
+          console.warn(`[Resource Counts] Failed to get count for ${type}:`, err instanceof Error ? err.message : err);
+          return { resourceType: type, count: 0 };
         }
-        
-        // Return cached data immediately with partial flag
-        res.json({
-          resourceTypes,
-          totalResources: cached.totalResources,
-          isPartial: isPartialForRequest,
-          loadedTypes: cached.loadedTypes || Object.keys(cached.counts),
-          pendingTypes: cached.pendingTypes || []
-        });
-        
-        // If specific types were requested and some are still pending, trigger priority refresh
-        if (requestedTypes && requestedTypes.length > 0) {
-          const pendingTypesSet = new Set(cached.pendingTypes || []);
-          const requestedTypesStillPending = requestedTypes.filter(type => pendingTypesSet.has(type));
-          
-          if (requestedTypesStillPending.length > 0 && cached.isPartial) {
-            console.log(`[Resource Counts] ${requestedTypesStillPending.length} requested types still pending, triggering priority refresh: ${requestedTypesStillPending.join(', ')}`);
-            resourceCountCache.refresh(serverId, currentFhirClient, requestedTypes).catch(err => {
-              console.error('[Resource Counts] Priority refresh failed:', err);
-            });
-          }
-        }
-        
-        // If stale, trigger background refresh (don't await)
-        if (cached.isStale) {
-          console.log('[Resource Counts] 🔄 Triggering background refresh for stale cache');
-          resourceCountCache.refresh(serverId, currentFhirClient, resourceTypesToQuery).catch(err => {
-            console.error('[Resource Counts] Background refresh failed:', err);
-          });
-        }
-        
-        return;
-      }
+      });
       
-      // No cache - start background fetch and return empty partial response
-      console.log('[Resource Counts] ❌ Cache miss - starting background fetch...');
+      const resourceTypes = await Promise.all(countPromises);
+      const totalResources = resourceTypes.reduce((sum, rt) => sum + rt.count, 0);
       
-      try {
-        // Trigger priority-based refresh in background (don't await)
-        resourceCountCache.refresh(serverId, currentFhirClient, requestedTypes || resourceTypesToQuery).catch(err => {
-          console.error('[Resource Counts] Background refresh failed:', err);
-        });
-        
-        // Return empty partial response immediately - frontend will poll for updates
-        console.log('[Resource Counts] Returning empty partial response, fetch in progress...');
-          res.json({
-            resourceTypes: [],
-            totalResources: 0,
-          isPartial: true,
-            loadedTypes: [],
-          pendingTypes: requestedTypes || []
-          });
-      } catch (error: any) {
-        console.error('[Resource Counts] Failed to start cache refresh:', error);
-        res.status(500).json({
-          message: "Failed to start resource count refresh",
-          resourceTypes: [],
-          totalResources: 0,
-          isPartial: false,
-          loadedTypes: [],
-          pendingTypes: []
-        });
-      }
+      const duration = Date.now() - startTime;
+      console.log(`[Resource Counts] Completed in ${duration}ms - ${resourceTypes.length} types, ${totalResources} total resources`);
+      
+      res.json({ resourceTypes, totalResources });
     } catch (error: any) {
-      console.error('[Resource Counts] Unexpected error:', error);
-      res.status(500).json({ 
-        message: 'Failed to get resource counts',
-        error: error.message 
+      console.error('[Resource Counts] Error:', error);
+      res.status(500).json({
+        message: "Failed to fetch resource counts",
+        error: error.message
       });
     }
   });
