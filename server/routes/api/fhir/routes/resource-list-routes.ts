@@ -173,7 +173,7 @@ export function setupResourceListRoutes(app: Express, fhirClient: FhirClient | n
     }
   });
 
-  // GET /api/fhir/resource-counts - Get resource counts
+  // GET /api/fhir/resource-counts - Get resource counts with batching and retry
   app.get("/api/fhir/resource-counts", async (req, res) => {
     try {
       const currentFhirClient = getCurrentFhirClient(fhirClient);
@@ -182,34 +182,30 @@ export function setupResourceListRoutes(app: Express, fhirClient: FhirClient | n
       }
       
       // Get requested types from query param, or fetch all types
-      let typesToFetch: string[] = [];
+      let typesToFetch: string[] | undefined;
       
       if (req.query.types) {
         typesToFetch = (req.query.types as string).split(',').map(t => t.trim());
         console.log(`[Resource Counts] Fetching ${typesToFetch.length} specific types: ${typesToFetch.join(', ')}`);
       } else {
-        typesToFetch = await currentFhirClient.getAllResourceTypes();
-        console.log(`[Resource Counts] Fetching all ${typesToFetch.length} resource types from server`);
+        console.log(`[Resource Counts] Fetching all resource types from server`);
+        typesToFetch = undefined; // Let the batched method fetch all types
       }
       
-      if (typesToFetch.length === 0) {
-        return res.json({ resourceTypes: [], totalResources: 0 });
-      }
-      
-      // Fetch all types in parallel
+      // Use the new batched method with queue, retry, and caching
       const startTime = Date.now();
-      
-      const countPromises = typesToFetch.map(async (type) => {
-        try {
-          const count = await currentFhirClient.getResourceCount(type);
-          return { resourceType: type, count: count ?? 0 };
-        } catch (err) {
-          console.warn(`[Resource Counts] Failed to get count for ${type}:`, err instanceof Error ? err.message : err);
-          return { resourceType: type, count: 0 };
-        }
+      const counts = await (currentFhirClient as any).getResourceCountsBatched(typesToFetch, {
+        batchSize: 8,
+        batchDelay: 100,
+        useCache: true,
       });
       
-      const resourceTypes = await Promise.all(countPromises);
+      // Convert counts object to array format
+      const resourceTypes = Object.entries(counts).map(([resourceType, count]) => ({
+        resourceType,
+        count: count as number,
+      }));
+      
       const totalResources = resourceTypes.reduce((sum, rt) => sum + rt.count, 0);
       
       const duration = Date.now() - startTime;

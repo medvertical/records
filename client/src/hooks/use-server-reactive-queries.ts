@@ -28,37 +28,30 @@ export function useServerReactiveQueries() {
       return;
     }
 
-    // If server changed, invalidate queries (they'll refetch naturally when components need them)
+    // If server changed, invalidate queries with debouncing (they'll refetch naturally when components need them)
     if (isInitializedRef.current && currentServerId !== undefined && previousServerId !== undefined && currentServerId !== previousServerId) {
       console.log(`[ServerReactiveQueries] Active server changed from ${previousServerId} to ${currentServerId}`);
       
-      // Invalidate resource counts when server changes
-      queryClient.invalidateQueries({ queryKey: ['/api/fhir/resource-counts'] });
-      queryClient.invalidateQueries({ queryKey: ['quickAccessCounts'] });
-      
-      // Then invalidate all validation-related queries with predicate
-      // These queries should all have serverId in their queryKey
+      // Batch invalidate all queries at once to prevent cascading refetches
+      // Use a single invalidation call with a broad predicate
       queryClient.invalidateQueries({
         predicate: (query) => {
           const queryKey = query.queryKey;
-          const keyString = JSON.stringify(queryKey);
-          // Check if query key includes validation endpoints or the old server ID
+          // Check if query key includes server-specific or FHIR endpoints
           const shouldInvalidate = (
             queryKey.includes('/api/validation/issues/groups') ||
             queryKey.includes('/api/validation/resources') ||
             queryKey.includes('/api/fhir/resources') ||
             queryKey.includes('/api/fhir/resource-counts') ||
+            queryKey.includes('quickAccessCounts') ||
             queryKey.includes(previousServerId)
           );
-          if (shouldInvalidate) {
-            console.log(`[ServerReactiveQueries] Invalidating query: ${keyString}`);
-          }
           return shouldInvalidate;
         },
-        refetchType: 'active', // Only refetch queries that are currently mounted
+        refetchType: 'none', // Don't refetch immediately - let staleTime and component mounting handle it
       });
 
-      console.log('[ServerReactiveQueries] Cache invalidated for new server - queries will refetch naturally');
+      console.log('[ServerReactiveQueries] Cache invalidated for new server - queries will refetch when needed');
     }
 
     // Update ref for next comparison

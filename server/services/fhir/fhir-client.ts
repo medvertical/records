@@ -2,6 +2,9 @@ import axios, { AxiosResponse } from 'axios';
 import { errorHandler } from '../../utils/error-handler.js';
 import { logger } from '../../utils/logger.js';
 import { getFhirValidateOperation, ValidateOperationOptions, ValidateOperationResult } from './fhir-validate-operation';
+import { getRequestQueue } from './request-queue';
+import { batchExecuteWithRetry } from './retry-handler';
+import { getFhirCache, DEFAULT_TTLS } from './fhir-cache';
 
 export interface FhirBundle {
   resourceType: 'Bundle';
@@ -47,10 +50,12 @@ export class FhirClient {
   private baseUrl: string;
   private headers: Record<string, string>;
   private authConfig?: AuthConfig;
+  private serverId: number;
 
-  constructor(baseUrl: string, authConfig?: AuthConfig) {
+  constructor(baseUrl: string, authConfig?: AuthConfig, serverId: number = 1) {
     this.baseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     this.authConfig = authConfig;
+    this.serverId = serverId;
     this.headers = {
       'Accept': 'application/fhir+json',
       'Content-Type': 'application/fhir+json',
@@ -567,132 +572,7 @@ export class FhirClient {
     ];
   }
 
-  async getResourceCount(resourceType: string): Promise<number> {
-    try {
-      console.log(`[FhirClient] Getting count for ${resourceType}...`);
-      
-      // Try multiple approaches to get accurate counts
-      
-      // Approach 1: Use _summary=count with _total=accurate parameter  
-      try {
-        const countUrl = `${this.baseUrl}/${resourceType}?_summary=count&_total=accurate`;
-        logger.fhir(logger.getLogLevel() >= 3 ? 3 : 2, `Getting count for ${resourceType}`, 'getResourceCount', { url: countUrl });
-        const countResponse = await axios.get(countUrl, { 
-          headers: this.headers,
-          timeout: 15000
-        });
-        
-        logger.fhir(4, `Count response received`, 'getResourceCount', { resourceType, total: countResponse.data.total });
-        
-        if (countResponse.data?.total !== undefined) {
-          logger.fhir(2, `Count for ${resourceType}: ${countResponse.data.total}`, 'getResourceCount', { method: '_summary=count&_total=accurate' });
-          return countResponse.data.total;
-        }
-      } catch (summaryError) {
-        logger.fhir(3, `_summary=count with _total=accurate failed`, 'getResourceCount', { resourceType, error: summaryError.message });
-      }
-      
-      // Approach 1b: Try with _total=true instead
-      try {
-        const countUrl = `${this.baseUrl}/${resourceType}?_summary=count&_total=true`;
-        logger.fhir(3, `Trying count URL with _total=true`, 'getResourceCount', { url: countUrl });
-        const countResponse = await axios.get(countUrl, { 
-          headers: this.headers,
-          timeout: 15000
-        });
-        
-        logger.fhir(4, `Count response with _total=true received`, 'getResourceCount', { resourceType, total: countResponse.data.total });
-        
-        if (countResponse.data?.total !== undefined) {
-          logger.fhir(2, `Count for ${resourceType}: ${countResponse.data.total}`, 'getResourceCount', { method: '_summary=count&_total=true' });
-          return countResponse.data.total;
-        }
-      } catch (summaryError) {
-        logger.fhir(3, `_summary=count with _total=true failed`, 'getResourceCount', { resourceType, error: summaryError.message });
-      }
-      
-      // Approach 2: Use small _count with _total=accurate
-      const response = await this.searchResources(resourceType, { _count: '1', _total: 'accurate' });
-      
-      // If the server provides a total, use it
-      if (response.total !== undefined && response.total !== null) {
-        logger.fhir(2, `Count for ${resourceType}: ${response.total}`, 'getResourceCount', { method: 'search total' });
-        return response.total;
-      }
-
-      // Approach 3: If no total available, try to estimate by fetching larger samples
-      logger.fhir(3, `No total available, attempting sample-based estimation`, 'getResourceCount', { resourceType });
-      
-      try {
-        const largerSample = await this.searchResources(resourceType, { _count: '100', _total: 'accurate' });
-        if (largerSample.entry && largerSample.entry.length > 0) {
-          // If we got exactly 100, there are likely more - try to get better estimate
-          if (largerSample.entry.length === 100) {
-            // Try to get multiple pages to estimate total
-            let totalEstimate = 100;
-            let hasMorePages = true;
-            let pageOffset = 100;
-            
-            // Try to sample up to 5 pages to get better estimate
-            for (let page = 2; page <= 5 && hasMorePages; page++) {
-              try {
-                const nextSample = await this.searchResources(resourceType, { 
-                  _count: '100', 
-                  _skip: pageOffset.toString(),
-                  _total: 'accurate'
-                });
-                
-                if (nextSample.entry && nextSample.entry.length > 0) {
-                  totalEstimate += nextSample.entry.length;
-                  pageOffset += 100;
-                  
-                  // If we got less than 100, we've reached the end
-                  if (nextSample.entry.length < 100) {
-                    hasMorePages = false;
-                  }
-                } else {
-                  hasMorePages = false;
-                }
-              } catch (offsetError) {
-                console.log(`[FhirClient] Offset query failed at page ${page}, stopping estimation`);
-                hasMorePages = false;
-              }
-            }
-            
-            // If we sampled 5 pages and still have 100 per page, extrapolate
-            if (hasMorePages && totalEstimate >= 500) {
-              const averagePerPage = totalEstimate / 5;
-              // Conservative extrapolation: assume at least 10 more pages
-              totalEstimate = Math.round(averagePerPage * 15);
-            }
-            
-            logger.fhir(2, `Estimated count for ${resourceType}: ${totalEstimate}`, 'getResourceCount', { method: 'multi-page sampling' });
-            return totalEstimate;
-          } else {
-            logger.fhir(2, `Count for ${resourceType}: ${largerSample.entry.length}`, 'getResourceCount', { method: 'complete sample' });
-            return largerSample.entry.length;
-          }
-        }
-      } catch (sampleError) {
-        logger.fhir(3, `Sample-based estimation failed`, 'getResourceCount', { resourceType, error: sampleError.message });
-      }
-      
-      // If we have any entries from the original search, return at least 1
-      if (response.entry && response.entry.length > 0) {
-        logger.fhir(2, `Minimum count for ${resourceType}: 1`, 'getResourceCount', { method: 'has entries' });
-        return 1;
-      }
-      
-      logger.fhir(2, `Count for ${resourceType}: 0`, 'getResourceCount', { method: 'no entries found' });
-      return 0;
-      
-    } catch (error) {
-      logger.fhir(1, `Failed to get count`, 'getResourceCount', { resourceType, error: error.message });
-      return 0; // Return 0 instead of hardcoded values when server fails
-    }
-  }
-
-  async validateResource(resource: any, profile?: string): Promise<FhirOperationOutcome> {
+  async validateResourceDirect(resource: any, profile?: string): Promise<FhirOperationOutcome> {
     try {
       const validateUrl = `${this.baseUrl}/${resource.resourceType}/$validate`;
       const params: Record<string, string> = {};
@@ -1038,7 +918,114 @@ export class FhirClient {
   }
 
   /**
+   * Get resource counts with batching, queuing, retry logic, and caching
+   * This is the recommended method for HAPI and other servers that can be overwhelmed
+   * @param resourceTypes Optional array of resource types to query
+   * @param options Configuration options
+   */
+  async getResourceCountsBatched(
+    resourceTypes?: string[],
+    options: {
+      batchSize?: number;
+      batchDelay?: number;
+      useCache?: boolean;
+      cacheTtl?: number;
+    } = {}
+  ): Promise<Record<string, number>> {
+    const {
+      batchSize = 8,
+      batchDelay = 100,
+      useCache = true,
+      cacheTtl = DEFAULT_TTLS.RESOURCE_COUNTS,
+    } = options;
+
+    try {
+      console.log('[FhirClient] Getting resource counts with batching and retry...');
+      
+      // Get resource types to query
+      let typesToQuery: string[];
+      if (resourceTypes && resourceTypes.length > 0) {
+        typesToQuery = resourceTypes;
+        console.log(`[FhirClient] Using provided ${typesToQuery.length} resource types`);
+      } else {
+        typesToQuery = await this.getAllResourceTypes();
+        console.log(`[FhirClient] Using ${typesToQuery.length} resource types from CapabilityStatement`);
+      }
+
+      const cache = getFhirCache();
+      const queue = getRequestQueue();
+      const counts: Record<string, number> = {};
+
+      // Check cache first if enabled
+      if (useCache) {
+        const cacheKey = `resource-counts-all`;
+        const cached = cache.get<Record<string, number>>(this.serverId, cacheKey, cacheTtl);
+        if (cached) {
+          console.log(`[FhirClient] Returning ${Object.keys(cached).length} cached resource counts`);
+          return cached;
+        }
+      }
+
+      // Batch execute with retry
+      const { results, errors } = await batchExecuteWithRetry(
+        typesToQuery,
+        async (resourceType: string) => {
+          // Use request queue for each count request
+          return await queue.enqueue(
+            `count-${this.serverId}-${resourceType}`,
+            async () => {
+              const count = await this.getResourceCount(resourceType);
+              return { resourceType, count };
+            },
+            1 // Priority
+          );
+        },
+        {
+          batchSize,
+          batchDelay,
+          retryOptions: {
+            requestId: `batch-counts-${this.serverId}`,
+            onRetry: (attempt, error) => {
+              console.log(`[FhirClient] Retrying resource count (attempt ${attempt})`);
+            },
+          },
+          onProgress: (completed, total) => {
+            if (completed % 10 === 0 || completed === total) {
+              console.log(`[FhirClient] Progress: ${completed}/${total} resource types`);
+            }
+          },
+        }
+      );
+
+      // Build counts object from successful results
+      results.forEach(({ resourceType, count }) => {
+        counts[resourceType] = count;
+      });
+
+      // For failed types, set count to 0
+      if (errors.size > 0) {
+        console.warn(`[FhirClient] Failed to get counts for ${errors.size} resource types`);
+        errors.forEach((error, resourceType) => {
+          counts[resourceType] = 0;
+        });
+      }
+
+      // Cache the results if enabled
+      if (useCache) {
+        cache.set(this.serverId, `resource-counts-all`, counts);
+      }
+
+      console.log(`[FhirClient] Batched fetch complete: ${results.length} succeeded, ${errors.size} failed`);
+      return counts;
+    } catch (error) {
+      console.error('[FhirClient] Failed to get resource counts with batching:', error);
+      return {};
+    }
+  }
+
+  /**
    * Get count for a single resource type
+   * Throws errors for retryable status codes (429, 503, 504) to allow retry logic
    */
   private async getResourceCount(resourceType: string): Promise<number> {
     try {
@@ -1051,7 +1038,19 @@ export class FhirClient {
         return 0;
       }
     } catch (error: any) {
-      console.warn(`[FhirClient] Error fetching count for ${resourceType}:`, error.message);
+      // Check if this is a retryable error (rate limiting, service unavailable, timeout)
+      const statusCode = error.response?.status || error.statusCode;
+      const isRetryable = statusCode === 429 || statusCode === 503 || statusCode === 504 ||
+                         error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET';
+      
+      if (isRetryable) {
+        // Throw retryable errors so the retry handler can catch them
+        console.warn(`[FhirClient] Retryable error (${statusCode || error.code}) for ${resourceType}, throwing for retry`);
+        throw error;
+      }
+      
+      // For non-retryable errors, log and return 0
+      console.warn(`[FhirClient] Non-retryable error fetching count for ${resourceType}:`, error.message);
       return 0;
     }
   }

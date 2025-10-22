@@ -24,12 +24,15 @@ export function useCapabilitySearchParams(resourceTypes: string[]) {
   const [dataVersion, setDataVersion] = useState(0);
   const prevServerIdRef = useRef<number | null>(null);
 
-  // Clear cache when active server changes
+  // Clear cache when active server changes (debounced to prevent rapid clears)
   useEffect(() => {
     if (activeServer?.id && activeServer.id !== prevServerIdRef.current) {
-      console.log('[useCapabilitySearchParams] Server changed, clearing cache');
-      cacheRef.current.clear();
-      setDataVersion(v => v + 1);
+      // Only clear if server ID actually changed
+      if (prevServerIdRef.current !== null) {
+        console.log('[useCapabilitySearchParams] Server changed, clearing cache');
+        cacheRef.current.clear();
+        setDataVersion(v => v + 1);
+      }
       prevServerIdRef.current = activeServer.id;
     }
   }, [activeServer?.id]);

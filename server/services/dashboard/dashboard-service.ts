@@ -335,131 +335,24 @@ export class DashboardService {
   }
 
   /**
-   * Get FHIR Resource Counts - Version-aware optimized method with smart batching and fallback
-   * Now with per-resource-type caching and manual refresh only
+   * Get FHIR Resource Counts - Using new batched method with queue, retry, and caching
    */
   private async getFhirResourceCounts(): Promise<Record<string, number>> {
-    // Check if we have cached counts for all resource types
-    const allResourceTypes = await this.fhirClient.getAllResourceTypes();
-    const cachedCounts: Record<string, number> = {};
-    let hasAllCached = true;
-    
-    // Check cache for each resource type individually
-    for (const resourceType of allResourceTypes) {
-      const cacheKey = `resource-count-${resourceType}`;
-      const cached = cacheManager.get<number>(cacheKey);
-      if (cached !== null) {
-        cachedCounts[resourceType] = cached;
-      } else {
-        hasAllCached = false;
-        break; // If any resource type is missing from cache, we need to fetch all
-      }
-    }
-    
-    // If we have all cached counts, return them
-    if (hasAllCached && Object.keys(cachedCounts).length > 0) {
-      logger.debug('Using cached FHIR resource counts for all types', { 
-        service: 'dashboard-service', 
-        operation: 'getFhirResourceCounts',
-        cachedTypes: Object.keys(cachedCounts).length
-      });
-      return cachedCounts;
-    }
-
     try {
-      console.log('[DashboardService] Fetching FHIR resource counts with per-resource-type caching...');
+      console.log('[DashboardService] Fetching FHIR resource counts with batched method...');
       
-      // Get version-aware resource types from FHIR client
-      const resourceTypes = await this.fhirClient.getAllResourceTypes();
-      const counts: Record<string, number> = {};
-      
-      // Get FHIR version to determine appropriate priority types
-      const fhirVersion = await this.getFhirVersion();
-      const isR5 = fhirVersion && fhirVersion.startsWith('5.');
-      
-      // Version-specific priority resource types (most commonly used)
-      const priorityTypes = isR5 ? [
-        // FHIR R5 priority types
-        'Patient', 'Observation', 'Encounter', 'Condition', 'Practitioner', 
-        'Organization', 'Medication', 'Procedure', 'DiagnosticReport', 'AllergyIntolerance',
-        'MedicationRequest', 'ServiceRequest', 'ImagingStudy', 'DocumentReference'
-      ] : [
-        // FHIR R4 priority types
-        'Patient', 'Observation', 'Encounter', 'Condition', 'Practitioner', 
-        'Organization', 'Medication', 'Procedure', 'DiagnosticReport', 'AllergyIntolerance',
-        'MedicationRequest', 'ServiceRequest', 'ImagingStudy', 'DocumentReference'
-      ];
-      
-      console.log(`[DashboardService] Fetching priority resource counts for FHIR ${fhirVersion || 'unknown'}...`);
-      const priorityBatch = priorityTypes.filter(type => resourceTypes.includes(type));
-      
-      // Process priority types in parallel with no delays for faster loading
-      const priorityPromises = priorityBatch.map(async (type) => {
-        try {
-          const count = await this.fhirClient.getResourceCount(type);
-          // Cache each resource type individually with long TTL (1 hour)
-          const cacheKey = `resource-count-${type}`;
-          cacheManager.set(cacheKey, count, {
-            ttl: 60 * 60 * 1000, // 1 hour - only invalidated by manual refresh
-            tags: [CACHE_TAGS.FHIR_SERVER, CACHE_TAGS.RESOURCE_COUNTS]
-          });
-          return { type, count };
-        } catch (error) {
-          console.warn(`[DashboardService] Failed to get count for priority type ${type}:`, error);
-          return { type, count: 0 };
-        }
+      // Use the new batched method which includes queue, retry, and caching
+      const counts = await (this.fhirClient as any).getResourceCountsBatched(undefined, {
+        batchSize: 8,
+        batchDelay: 100,
+        useCache: true,
+        cacheTtl: 10 * 60 * 1000, // 10 minutes cache for dashboard
       });
       
-      const priorityResults = await Promise.all(priorityPromises);
-      priorityResults.forEach(({ type, count }) => {
-        if (count > 0) {
-          counts[type] = count;
-        }
-      });
-      
-      // For remaining types, use a more aggressive parallel approach with larger batches
-      const remainingTypes = resourceTypes.filter(type => !priorityTypes.includes(type));
-      const batchSize = 10; // Increased batch size for faster processing
-      
-      console.log(`[DashboardService] Fetching remaining ${remainingTypes.length} resource types in batches of ${batchSize}...`);
-      
-      for (let i = 0; i < remainingTypes.length; i += batchSize) {
-        const batch = remainingTypes.slice(i, i + batchSize);
-        
-        const countPromises = batch.map(async (type) => {
-          try {
-            const count = await this.fhirClient.getResourceCount(type);
-            // Cache each resource type individually with long TTL (1 hour)
-            const cacheKey = `resource-count-${type}`;
-            cacheManager.set(cacheKey, count, {
-              ttl: 60 * 60 * 1000, // 1 hour - only invalidated by manual refresh
-              tags: [CACHE_TAGS.FHIR_SERVER, CACHE_TAGS.RESOURCE_COUNTS]
-            });
-            return { type, count };
-          } catch (error) {
-            console.warn(`[DashboardService] Failed to get count for ${type}:`, error);
-            return { type, count: 0 };
-          }
-        });
-        
-        const results = await Promise.all(countPromises);
-        results.forEach(({ type, count }) => {
-          if (count > 0) {
-            counts[type] = count;
-          }
-        });
-        
-        // Reduced delay between batches for faster loading
-        if (i + batchSize < remainingTypes.length) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-        }
-      }
-      
-      logger.info('FHIR resource counts fetched and cached per resource type', { 
+      logger.info('FHIR resource counts fetched via batched method', { 
         service: 'dashboard-service', 
         operation: 'getFhirResourceCounts', 
-        resourceTypes: Object.keys(counts).length, 
-        fhirVersion 
+        resourceTypes: Object.keys(counts).length,
       });
       
       return counts;
