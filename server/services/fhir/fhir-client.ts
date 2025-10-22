@@ -271,8 +271,8 @@ export class FhirClient {
       const url = `${this.baseUrl}/${resourceType}?${searchParams.toString()}`;
       console.log(`[FhirClient] Calling URL: ${url}`);
       
-      // Use 30s timeout for all queries to accommodate slower FHIR servers like Fire.ly
-      const timeout = 30000; // 30s for all queries
+      // Use 10s timeout for list queries, 30s for single resource reads
+      const timeout = 10000; // 10s for search queries
       
       const response: AxiosResponse<FhirBundle> = await axios.get(
         url,
@@ -575,18 +575,30 @@ export class FhirClient {
   async validateResourceDirect(resource: any, profile?: string): Promise<FhirOperationOutcome> {
     try {
       const validateUrl = `${this.baseUrl}/${resource.resourceType}/$validate`;
-      const params: Record<string, string> = {};
       
+      // Use Parameters resource format for better profile resolution
+      // This helps servers resolve profiles from their package cache
+      const parameters = {
+        resourceType: 'Parameters',
+        parameter: [
+          {
+            name: 'resource',
+            resource: resource
+          }
+        ]
+      };
+      
+      // Add profile parameter if specified
       if (profile) {
-        params.profile = profile;
+        parameters.parameter.push({
+          name: 'profile',
+          valueUri: profile
+        });
       }
 
-      const searchParams = new URLSearchParams(params);
-      const url = searchParams.toString() ? `${validateUrl}?${searchParams}` : validateUrl;
-
       const response: AxiosResponse<FhirOperationOutcome> = await axios.post(
-        url,
-        resource,
+        validateUrl,
+        parameters,
         { headers: this.headers }
       );
 

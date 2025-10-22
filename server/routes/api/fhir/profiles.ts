@@ -4,6 +4,7 @@ import { getProfileResolver } from "../../../services/validation/utils/profile-r
 import { GermanProfileDetector } from "../../../services/validation/utils/german-profile-detector";
 import { ProfileMetadataExtractor } from "../../../services/validation/utils/profile-metadata-extractor";
 import { getProfileNotificationService } from "../../../services/validation/utils/profile-notification-service";
+import { parseProfileSlices, getSliceSummary } from "../../../services/fhir/profile-slice-parser";
 
 export function setupProfileRoutes(app: Express) {
   // Profile Search
@@ -222,6 +223,90 @@ export function setupProfileRoutes(app: Express) {
       res.status(500).json({ 
         success: false,
         message: error.message 
+      });
+    }
+  });
+
+  /**
+   * Get slice definitions from a profile
+   * GET /api/profiles/slices?url=<profileUrl>&version=<version>
+   * 
+   * Returns slice definitions extracted from the profile's StructureDefinition.
+   * Used by the UI to display correct slice names in the tree viewer.
+   */
+  app.get("/api/profiles/slices", async (req, res) => {
+    try {
+      const { url, version } = req.query;
+
+      if (!url) {
+        return res.status(400).json({ 
+          success: false,
+          message: "url query parameter is required" 
+        });
+      }
+
+      console.log(`[ProfileRoutes] ========================================`);
+      console.log(`[ProfileRoutes] Getting slice definitions for: ${url}${version ? `@${version}` : ''}`);
+
+      // Use ProfileResolver to get the StructureDefinition
+      // This leverages all existing caching (in-memory, database, filesystem)
+      const resolver = getProfileResolver();
+      
+      console.log(`[ProfileRoutes] Calling ProfileResolver.resolveProfile...`);
+      const result = await resolver.resolveProfile(
+        url as string,
+        version as string | undefined
+      );
+
+      console.log(`[ProfileRoutes] ProfileResolver result:`, {
+        canonicalUrl: result.canonicalUrl,
+        version: result.version,
+        source: result.source,
+        downloaded: result.downloaded,
+        hasProfile: !!result.profile,
+        profileType: result.profile?.resourceType
+      });
+
+      if (!result.profile) {
+        console.error(`[ProfileRoutes] ✗ Profile not found or could not be resolved`);
+        return res.status(404).json({
+          success: false,
+          message: "Profile not found or could not be resolved",
+          details: {
+            source: result.source,
+            downloaded: result.downloaded
+          }
+        });
+      }
+
+      // Parse slice definitions from the StructureDefinition
+      console.log(`[ProfileRoutes] Parsing slice definitions from StructureDefinition...`);
+      const sliceDefinitions = parseProfileSlices(result.profile);
+      const sliceSummary = getSliceSummary(result.profile);
+
+      console.log(`[ProfileRoutes] ✓ Found ${sliceDefinitions.length} slice definitions`);
+      if (sliceDefinitions.length > 0) {
+        console.log(`[ProfileRoutes] Slices:`, sliceDefinitions.map(s => `${s.path}:${s.sliceName}`).join(', '));
+      }
+      console.log(`[ProfileRoutes] ========================================`);
+
+      res.json({
+        success: true,
+        profileUrl: result.canonicalUrl,
+        version: result.version,
+        source: result.source,
+        sliceDefinitions,
+        summary: sliceSummary,
+        cached: result.source === 'local-cache' || result.source === 'database',
+      });
+
+    } catch (error: any) {
+      console.error('[ProfileRoutes] ✗ Failed to get slice definitions:', error);
+      console.error('[ProfileRoutes] Error stack:', error.stack);
+      res.status(500).json({ 
+        success: false,
+        message: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
       });
     }
   });

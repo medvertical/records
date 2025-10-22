@@ -222,6 +222,18 @@ export class ValidationSettingsService extends EventEmitter {
         timestamp: new Date()
       });
       
+      // Detect significant changes that require cache invalidation
+      const changes = this.detectSignificantChanges(currentSettings, savedSettings);
+      if (changes.hasChanges) {
+        console.log('[ValidationSettings] Significant changes detected:', changes);
+        this.emit('settingsInvalidated', {
+          type: 'engine_change',
+          changedAspects: changes.changedAspects,
+          changedPerformance: changes.changedPerformance,
+          timestamp: new Date()
+        });
+      }
+      
       return this.currentSettings;
     } catch (error) {
       const settingsError = SimpleErrorHandler.handleError(error, 'updateSettings');
@@ -229,6 +241,46 @@ export class ValidationSettingsService extends EventEmitter {
       this.emit('error', settingsError);
       throw settingsError;
     }
+  }
+
+  /**
+   * Detect significant changes that require validation cache invalidation
+   */
+  private detectSignificantChanges(
+    previousSettings: ValidationSettings,
+    newSettings: ValidationSettings
+  ): {
+    hasChanges: boolean;
+    changedAspects: string[];
+    changedPerformance: boolean;
+  } {
+    const changedAspects: string[] = [];
+    
+    // Check each aspect's engine
+    const aspectKeys = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'] as const;
+    for (const aspect of aspectKeys) {
+      const prevEngine = previousSettings.aspects[aspect]?.engine;
+      const newEngine = newSettings.aspects[aspect]?.engine;
+      if (prevEngine !== newEngine) {
+        changedAspects.push(aspect);
+        console.log(`[ValidationSettings] Aspect '${aspect}' engine changed: ${prevEngine} → ${newEngine}`);
+      }
+    }
+    
+    // Check performance settings
+    const changedPerformance = 
+      previousSettings.performance.maxConcurrent !== newSettings.performance.maxConcurrent ||
+      previousSettings.performance.batchSize !== newSettings.performance.batchSize;
+    
+    if (changedPerformance) {
+      console.log('[ValidationSettings] Performance settings changed');
+    }
+    
+    return {
+      hasChanges: changedAspects.length > 0 || changedPerformance,
+      changedAspects,
+      changedPerformance
+    };
   }
 
   async resetToDefaults(serverId?: number, fhirVersion?: FHIRVersion): Promise<ValidationSettings> {

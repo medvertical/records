@@ -243,9 +243,26 @@ export function setupResourceRoutes(app: Express, fhirClient: FhirClient | null)
             return res.status(503).json({ message: "FHIR client not initialized", requestId });
           }
           
-          const resource = await currentFhirClient.getResource(resourceType as string, id);
+          // Race with 3-second timeout for external FHIR server
+          const resource = await Promise.race([
+            currentFhirClient.getResource(resourceType as string, id),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('External FHIR server timeout after 3s')), 3000)
+            )
+          ]);
           
           if (!resource) {
+            // Try database fallback
+            console.log(`[FHIR API] [${requestId}] Not found in external server, trying database`);
+            const { storage } = await import('../../../../storage.js');
+            const dbResource = await storage.getFhirResourceByTypeAndId(resourceType as string, id);
+            
+            if (dbResource) {
+              console.log(`[FHIR API] [${requestId}] Found in database`);
+              const enhancedResources = await enhanceResourcesWithValidationData([dbResource.data]);
+              return res.json(enhancedResources[0]);
+            }
+            
             return res.status(404).json({ 
               message: `Resource ${resourceType}/${id} not found`,
               resourceType, id, requestId
@@ -257,6 +274,22 @@ export function setupResourceRoutes(app: Express, fhirClient: FhirClient | null)
           return;
           
         } catch (error: any) {
+          // Try database fallback on error
+          console.warn(`[FHIR API] [${requestId}] External server failed: ${error.message}, trying database`);
+          
+          try {
+            const { storage } = await import('../../../../storage.js');
+            const dbResource = await storage.getFhirResourceByTypeAndId(resourceType as string, id);
+            
+            if (dbResource) {
+              console.log(`[FHIR API] [${requestId}] Found in database`);
+              const enhancedResources = await enhanceResourcesWithValidationData([dbResource.data]);
+              return res.json(enhancedResources[0]);
+            }
+          } catch (dbError: any) {
+            console.error(`[FHIR API] [${requestId}] Database fallback failed:`, dbError.message);
+          }
+          
           if (error.message?.includes('404') || error.message?.includes('not found') || error.statusCode === 404) {
             return res.status(404).json({ 
               message: `Resource ${resourceType}/${id} not found`,
@@ -267,7 +300,7 @@ export function setupResourceRoutes(app: Express, fhirClient: FhirClient | null)
         }
       }
 
-      // Try common resource types
+      // Try common resource types (with database fallback)
       const commonTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'DiagnosticReport', 
                           'Medication', 'MedicationRequest', 'Procedure', 'AllergyIntolerance', 
                           'Immunization', 'DocumentReference', 'Organization', 'Practitioner', 'AuditEvent'];
@@ -279,12 +312,35 @@ export function setupResourceRoutes(app: Express, fhirClient: FhirClient | null)
             return res.status(503).json({ message: "FHIR client not initialized", requestId });
           }
           
-          const resource = await currentFhirClient.getResource(type, id);
+          // Race with 3-second timeout
+          const resource = await Promise.race([
+            currentFhirClient.getResource(type, id),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Timeout')), 3000)
+            )
+          ]);
           
           if (resource) {
             const enhancedResources = await enhanceResourcesWithValidationData([resource]);
             res.json(enhancedResources[0]);
             return;
+          }
+        } catch (error: any) {
+          // Continue to next type
+        }
+      }
+
+      // Try database as last resort
+      console.log(`[FHIR API] [${requestId}] Trying database for all resource types`);
+      for (const type of commonTypes) {
+        try {
+          const { storage } = await import('../../../../storage.js');
+          const dbResource = await storage.getFhirResourceByTypeAndId(type, id);
+          
+          if (dbResource) {
+            console.log(`[FHIR API] [${requestId}] Found in database as ${type}`);
+            const enhancedResources = await enhanceResourcesWithValidationData([dbResource.data]);
+            return res.json(enhancedResources[0]);
           }
         } catch (error: any) {
           // Continue to next type

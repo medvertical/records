@@ -83,6 +83,8 @@ export function setupResourceListRoutes(app: Express, fhirClient: FhirClient | n
       }
 
       let bundle;
+      let usedDatabaseFallback = false;
+      
       try {
         // Build search parameters
         const searchParams: Record<string, string | number> = {
@@ -108,21 +110,64 @@ export function setupResourceListRoutes(app: Express, fhirClient: FhirClient | n
         if (!currentFhirClient) {
           throw new Error("FHIR client not initialized");
         }
-        bundle = await currentFhirClient.searchResources(
+        
+        // Set a shorter timeout for list queries
+        const fetchPromise = currentFhirClient.searchResources(
           resourceType as string,
           searchParams
         );
+        
+        // Race with a 5-second timeout
+        bundle = await Promise.race([
+          fetchPromise,
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('External FHIR server timeout after 5s')), 5000)
+          )
+        ]) as any;
+        
       } catch (error: any) {
-        // Fallback to mock data ONLY if DEMO_MOCKS is enabled
-        if (FeatureFlags.DEMO_MOCKS) {
-          console.warn(`FHIR server unavailable, using mock data (DEMO_MOCKS=true): ${error.message}`);
-          bundle = createMockBundle(resourceType as string, parseInt(limit as string), parseInt(offset as string));
-        } else {
-          return res.status(503).json({
-            error: 'FHIR Server Unavailable',
-            message: 'Unable to fetch resources from the FHIR server. Please check the server connection.',
-            details: error.message,
+        console.warn(`[Resource List] External FHIR server failed: ${error.message}`);
+        
+        // Fallback to database
+        try {
+          const { storage } = await import('../../../../storage.js');
+          const limitNum = parseInt(limit as string);
+          const offsetNum = parseInt(offset as string);
+          
+          console.log(`[Resource List] Falling back to database for ${resourceType}`);
+          const dbResources = await storage.getFhirResources(
+            undefined, // serverId - will use active server
+            resourceType as string,
+            limitNum,
+            offsetNum
+          );
+          
+          const resources = dbResources.map(r => r.data);
+          const enhancedResources = await enhanceResourcesWithValidationData(resources);
+          
+          usedDatabaseFallback = true;
+          
+          return res.json({
+            resources: enhancedResources,
+            total: dbResources.length,
+            source: 'database',
+            message: 'Loaded from local cache (external server unavailable)'
           });
+          
+        } catch (dbError: any) {
+          console.error(`[Resource List] Database fallback failed:`, dbError.message);
+          
+          // Last resort: mock data if enabled
+          if (FeatureFlags.DEMO_MOCKS) {
+            console.warn(`Using mock data (DEMO_MOCKS=true)`);
+            bundle = createMockBundle(resourceType as string, parseInt(limit as string), parseInt(offset as string));
+          } else {
+            return res.status(503).json({
+              error: 'FHIR Server Unavailable',
+              message: 'Unable to fetch resources from the FHIR server or database.',
+              details: error.message,
+            });
+          }
         }
       }
 

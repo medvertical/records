@@ -1,24 +1,27 @@
 /**
  * Profile Validator (Refactored)
  * 
- * Handles FHIR profile conformance validation using HAPI FHIR Validator.
+ * Handles FHIR profile conformance validation using multiple validation engines.
  * Replaces stub implementation that only checked if meta.profile exists.
  * 
  * Features:
- * - Real profile conformance validation via HAPI
+ * - Server-based validation via FHIR server's $validate operation
+ * - HAPI FHIR Validator for comprehensive profile validation
  * - Support for R4, R5, R6 profiles
  * - StructureDefinition constraint validation
  * - Profile resolution from Simplifier/local cache
- * - Fallback to basic profile checking if HAPI unavailable
+ * - Fallback to basic profile checking if validators unavailable
  * - Task 2.8: Version-specific IG package loading
  * 
  * Architecture:
- * - Primary: Uses HAPI FHIR Validator for comprehensive profile validation
+ * - Primary: Uses FHIR server $validate when profile.engine='server'
+ * - Secondary: Uses HAPI FHIR Validator when profile.engine='hapi'
+ * - Auto mode: Tries server first, falls back to HAPI (profile.engine='auto')
  * - Fallback: Basic profile constraint checking for known profiles
  * - Integrates with ProfileManager for IG package resolution
  * - Version-aware IG package selection via fhir-package-versions.ts
  * 
- * File size: Target <400 lines (global.mdc compliance)
+ * File size: Target <500 lines (global.mdc compliance)
  */
 
 import type { ValidationIssue } from '../types/validation-types';
@@ -37,7 +40,9 @@ import {
   detectInternationalProfile,
   getRecommendedPackage as getInternationalPackage
 } from '../utils/international-profile-detector';
-import { getProfileResolutionTimeout } from '../../../config/validation-timeouts'; // CRITICAL FIX: Import centralized timeout
+import { getProfileResolutionTimeout, getHapiTimeout } from '../../../config/validation-timeouts'; // CRITICAL FIX: Import centralized timeouts
+import { FhirClient, type FhirOperationOutcome } from '../../fhir/fhir-client';
+import { storage } from '../../../storage';
 
 // ============================================================================
 // Profile Validator
@@ -50,6 +55,11 @@ export class ProfileValidator {
     resolvePackageDependencies: true,
     maxPackageDependencyDepth: 3,
   });
+
+  constructor() {
+    // FhirClient will be created dynamically per validation request
+    // using the active FHIR server from the database
+  }
 
   /**
    * Validate resource against FHIR profiles
@@ -205,6 +215,15 @@ export class ProfileValidator {
     fhirVersion: 'R4' | 'R5' | 'R6',
     settings?: ValidationSettings
   ): Promise<ValidationIssue[]> {
+    // Get configured validation engine from settings
+    const engine = settings?.aspects?.profile?.engine || 'hapi';
+    console.log(`[ProfileValidator] ========================================`);
+    console.log(`[ProfileValidator] validateAgainstProfile() called`);
+    console.log(`[ProfileValidator] Profile URL: ${profileUrl}`);
+    console.log(`[ProfileValidator] Settings engine: ${settings?.aspects?.profile?.engine}`);
+    console.log(`[ProfileValidator] Resolved engine: ${engine}`);
+    console.log(`[ProfileValidator] ========================================`);
+
     // Skip HAPI for base FHIR profiles (already validated by structural validation)
     // Base profiles: instant validation
     if (this.isBaseFhirProfile(profileUrl)) {
@@ -212,7 +231,28 @@ export class ProfileValidator {
       return this.validateWithBasicProfileCheck(resource, resourceType, profileUrl);
     }
     
-    // For custom profiles (German KBV/MII, US Core, etc.), use HAPI if available
+    // For custom profiles (German KBV/MII, US Core, etc.), use configured engine
+    // Engine options: 'server', 'hapi', 'auto'
+    
+    // Try server validation first if engine is 'server' or 'auto'
+    if (engine === 'server' || engine === 'auto') {
+      try {
+        console.log(`[ProfileValidator] Using FHIR server $validate operation: ${profileUrl}`);
+        return await this.validateWithServer(resource, profileUrl);
+      } catch (error) {
+        console.warn(`[ProfileValidator] Server validation failed:`, error);
+        
+        // If engine is strictly 'server', throw the error
+        if (engine === 'server') {
+          throw error;
+        }
+        
+        // For 'auto', fall through to HAPI validation
+        console.log(`[ProfileValidator] Falling back to HAPI validation (engine=auto)`);
+      }
+    }
+    
+    // Use HAPI validation
     // Note: First validation may take 10-20s (package loading), subsequent validations faster
     if (this.hapiAvailable) {
       console.log(`[ProfileValidator] Custom profile detected, using HAPI validation (with process pool): ${profileUrl}`);
@@ -295,6 +335,10 @@ export class ProfileValidator {
       console.log(`[ProfileValidator] Profile sources: ${profileSources}, mode: ${mode}`);
 
       // Build validation options with profile, IG packages, and terminology servers
+      // Use centralized HAPI timeout configuration (150s) instead of hardcoded 60s
+      const hapiTimeout = getHapiTimeout();
+      console.log(`[ProfileValidator] Using HAPI timeout from config: ${hapiTimeout}ms (${(hapiTimeout / 1000).toFixed(1)}s)`);
+      
       const options: HapiValidationOptions = {
         fhirVersion,
         profile: profileUrl,
@@ -302,7 +346,7 @@ export class ProfileValidator {
         terminologyServers: terminologyServers.length > 0 ? terminologyServers : undefined,
         igPackages: igPackages.length > 0 ? igPackages : undefined,
         cacheDirectory: settings?.offlineConfig?.profileCachePath || './server/cache/fhir-packages',
-        timeout: 60000, // 60 seconds for profile validation (HAPI can be slow with profile loading)
+        timeout: hapiTimeout, // Use centralized timeout (default: 150s) for complex profile validation
       };
 
       // Call HAPI validator
@@ -342,7 +386,7 @@ export class ProfileValidator {
         return [{
           id: `profile-skipped-${Date.now()}`,
           aspect: 'profile',
-          severity: 'information',
+          severity: 'info',
           code: 'profile-load-skipped',
           message: `Profile validation skipped: Unable to load profile from ${profileUrl}. The profile URL may be unavailable or returning invalid data.`,
           path: '',
@@ -361,6 +405,102 @@ export class ProfileValidator {
         timestamp: new Date(),
       }];
     }
+  }
+
+  /**
+   * Validate using FHIR server's $validate operation
+   * This method calls the FHIR server's $validate endpoint with the profile URL
+   * 
+   * @param resource - FHIR resource to validate
+   * @param profileUrl - Profile URL to validate against
+   * @returns Array of profile validation issues
+   */
+  private async validateWithServer(
+    resource: any,
+    profileUrl: string
+  ): Promise<ValidationIssue[]> {
+    try {
+      // Get the active FHIR server from database
+      const activeServer = await storage.getActiveFhirServer();
+      if (!activeServer) {
+        throw new Error('No active FHIR server configured');
+      }
+      
+      console.log(`[ProfileValidator] Using active FHIR server for $validate: ${activeServer.url}`);
+      console.log(`[ProfileValidator] Validating against profile: ${profileUrl}`);
+      
+      // Create FhirClient with the active server's URL and auth config
+      const authConfig = activeServer.authConfig ? activeServer.authConfig as any : undefined;
+      const fhirClient = new FhirClient(
+        activeServer.url,
+        authConfig,
+        activeServer.id
+      );
+      
+      // Call server's $validate operation with profile parameter
+      const outcome = await fhirClient.validateResourceDirect(resource, profileUrl);
+      
+      console.log(`[ProfileValidator] Server returned OperationOutcome with ${outcome.issue?.length || 0} issues`);
+      
+      // Map OperationOutcome to ValidationIssue[]
+      const issues = this.mapOperationOutcomeToIssues(outcome);
+      
+      console.log(`[ProfileValidator] Mapped to ${issues.length} validation issues`);
+      
+      return issues;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[ProfileValidator] Server validation failed:`, error);
+      
+      throw new Error(`Server validation failed: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Map FHIR OperationOutcome to ValidationIssue[]
+   * Converts the FHIR OperationOutcome structure to our internal ValidationIssue format
+   * 
+   * @param outcome - FHIR OperationOutcome from server
+   * @returns Array of ValidationIssue objects
+   */
+  private mapOperationOutcomeToIssues(outcome: FhirOperationOutcome): ValidationIssue[] {
+    if (!outcome.issue || outcome.issue.length === 0) {
+      return [];
+    }
+
+    return outcome.issue.map((issue, index) => {
+      // Map severity: fatal/error -> error, warning -> warning, info -> info
+      let severity: 'error' | 'warning' | 'info' = 'info';
+      if (issue.severity === 'fatal' || issue.severity === 'error') {
+        severity = 'error';
+      } else if (issue.severity === 'warning') {
+        severity = 'warning';
+      } else {
+        // 'info' or any other value maps to 'info'
+        severity = 'info';
+      }
+
+      // Extract path from expression or location
+      let path = '';
+      if (issue.expression && issue.expression.length > 0) {
+        path = issue.expression[0];
+      } else if (issue.location && issue.location.length > 0) {
+        path = issue.location[0];
+      }
+
+      // Get message from diagnostics or details.text
+      const message = issue.diagnostics || issue.details?.text || 'Validation issue (no details provided)';
+
+      return {
+        id: `server-profile-${Date.now()}-${index}`,
+        aspect: 'profile',
+        severity,
+        code: issue.code || 'unknown',
+        message,
+        path,
+        timestamp: new Date(),
+      };
+    });
   }
 
   /**

@@ -61,7 +61,12 @@ interface SliceDefinitionsResponse {
 async function fetchSliceDefinitions(profileUrl: string): Promise<SliceDefinitionsResponse> {
   console.log(`[ProfileSliceResolver] Fetching slice definitions for: ${profileUrl}`);
   
-  const params = new URLSearchParams({ url: profileUrl });
+  // Split profile URL and version (format: url|version)
+  const [url, version] = profileUrl.split('|');
+  const params = new URLSearchParams({ url });
+  if (version) {
+    params.append('version', version);
+  }
   const apiUrl = `/api/profiles/slices?${params.toString()}`;
   
   console.log(`[ProfileSliceResolver] API URL: ${apiUrl}`);
@@ -151,7 +156,14 @@ export function matchElementToSlice(
   for (const slice of relevantSlices) {
     const matchScore = calculateMatchScore(element, slice);
     
+    console.log(`[ProfileSliceResolver] Testing slice "${slice.sliceName}":`, {
+      discriminators: slice.discriminators,
+      pattern: slice.pattern,
+      matchScore
+    });
+    
     if (matchScore.matches) {
+      console.log(`[ProfileSliceResolver] ✓ MATCH FOUND: ${slice.sliceName}`);
       return {
         sliceName: slice.sliceName,
         confirmed: true,
@@ -160,6 +172,7 @@ export function matchElementToSlice(
     }
   }
 
+  console.log(`[ProfileSliceResolver] ✗ No match found for element in ${relevantSlices.length} slices`);
   return { sliceName: null, confirmed: false, confidence: 'low' };
 }
 
@@ -173,42 +186,32 @@ function calculateMatchScore(
   let totalChecks = 0;
   let passedChecks = 0;
 
+  console.log(`[calculateMatchScore] Testing ${slice.sliceName}`);
+
   // Check discriminators
   for (const discriminator of slice.discriminators) {
     totalChecks++;
     
-    if (checkDiscriminator(element, discriminator, slice)) {
+    const passed = checkDiscriminator(element, discriminator, slice);
+    console.log(`[calculateMatchScore]   Discriminator ${discriminator.type}@${discriminator.path}: ${passed ? 'PASS' : 'FAIL'}`);
+    
+    if (passed) {
       passedChecks++;
     }
   }
 
-  // Check fixed values
-  if (slice.fixed) {
-    for (const [key, value] of Object.entries(slice.fixed)) {
-      totalChecks++;
-      if (deepEqual(element[key], value)) {
-        passedChecks++;
-      }
-    }
-  }
-
-  // Check pattern values
-  if (slice.pattern) {
-    for (const [key, value] of Object.entries(slice.pattern)) {
-      totalChecks++;
-      if (matchesPattern(element[key], value)) {
-        passedChecks++;
-      }
-    }
-  }
+  // NOTE: We only check discriminators. Fixed/pattern values are checked via discriminators.
+  // Don't iterate over slice.fixed or slice.pattern keys directly, as that would double-count!
 
   // If no checks were defined, we can't confirm
   if (totalChecks === 0) {
+    console.log(`[calculateMatchScore]   No discriminators defined!`);
     return { matches: false, confidence: 'low' };
   }
 
   // All checks must pass for a match
   const matches = passedChecks === totalChecks;
+  console.log(`[calculateMatchScore]   Result: ${passedChecks}/${totalChecks} = ${matches ? 'MATCH' : 'NO MATCH'}`);
   
   // Confidence based on number of checks passed
   let confidence: 'high' | 'medium' | 'low' = 'low';
@@ -250,7 +253,23 @@ function checkDiscriminator(
     case 'pattern':
       // Check against pattern values
       if (slice.pattern) {
-        const patternValue = getValueAtPath(slice.pattern, path);
+        let patternValue = getValueAtPath(slice.pattern, path);
+        
+        // Special handling for $this - unwrap pattern if needed
+        // Pattern might be {identifier: {...}} but value is just {...}
+        if (path === '$this' && patternValue && typeof patternValue === 'object') {
+          // If pattern has exactly one key and it's a type name (capitalized), unwrap it
+          const keys = Object.keys(patternValue);
+          if (keys.length === 1 && keys[0].charAt(0) === keys[0].charAt(0).toLowerCase()) {
+            // Check if the single key matches the parent element type
+            // For Patient.identifier slices, pattern will be {identifier: {...}}
+            const potentialWrapper = keys[0];
+            if (typeof patternValue[potentialWrapper] === 'object') {
+              patternValue = patternValue[potentialWrapper];
+            }
+          }
+        }
+        
         return matchesPattern(value, patternValue);
       }
       return false;
@@ -278,6 +297,11 @@ function checkDiscriminator(
 function getValueAtPath(obj: any, path: string): any {
   if (!path || !obj) {
     return undefined;
+  }
+
+  // Handle $this - return the object itself
+  if (path === '$this') {
+    return obj;
   }
 
   const parts = path.split('.');
@@ -344,11 +368,53 @@ function deepEqual(a: any, b: any): boolean {
 
 /**
  * Check if a value matches a pattern
+ * FHIR pattern matching: all properties in pattern must exist in value with same values
+ * Value can have additional properties not in pattern
  */
 function matchesPattern(value: any, pattern: any): boolean {
-  // For now, use deep equality
-  // Could be enhanced to support FHIR pattern matching rules
-  return deepEqual(value, pattern);
+  if (pattern === null || pattern === undefined) {
+    return value === pattern;
+  }
+
+  if (typeof pattern !== 'object') {
+    return value === pattern;
+  }
+
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  // Handle arrays - all pattern elements must match value elements
+  if (Array.isArray(pattern)) {
+    if (!Array.isArray(value)) {
+      return false;
+    }
+    
+    // For FHIR patterns, we check if pattern items exist in value
+    // Pattern can be shorter than value
+    if (pattern.length > value.length) {
+      return false;
+    }
+    
+    return pattern.every((patternItem, i) => matchesPattern(value[i], patternItem));
+  }
+
+  // Handle objects - all pattern properties must exist in value with matching values
+  if (Array.isArray(value)) {
+    return false; // pattern is object, value is array - no match
+  }
+
+  // Check all pattern properties exist in value
+  for (const key of Object.keys(pattern)) {
+    if (!(key in value)) {
+      return false;
+    }
+    if (!matchesPattern(value[key], pattern[key])) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 // ============================================================================

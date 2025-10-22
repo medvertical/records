@@ -48,6 +48,7 @@ export default function ObjectContainer({
   onDeleteNode,
   highlightedPath,
   parentKey,
+  profileUrls = [],
 }: ObjectContainerProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newPropertyName, setNewPropertyName] = useState('');
@@ -149,6 +150,7 @@ export default function ObjectContainer({
             onDeleteNode={onDeleteNode}
             highlightedPath={highlightedPath}
             isGhost={isGhost}
+            profileUrls={profileUrls}
           />
         );
       })}

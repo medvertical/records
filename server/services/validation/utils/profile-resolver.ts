@@ -161,9 +161,19 @@ export class ProfileResolver {
 
     // Step 3: Check in-memory cache
     const cached = this.localCache.get(cacheKey);
-    if (cached) {
-      console.log(`[ProfileResolver] Found in local cache: ${normalized}@${resolvedVersion}`);
-      return cached;
+    if (cached && cached.profile) {
+      // Check if profile is complete (has snapshot or differential elements)
+      const hasElements = cached.profile.snapshot?.element || cached.profile.differential?.element;
+      if (hasElements) {
+        console.log(`[ProfileResolver] Found complete profile in local cache: ${normalized}@${resolvedVersion}`);
+        return cached;
+      } else {
+        console.log(`[ProfileResolver] Cache entry found but profile lacks elements, re-fetching...`);
+        this.localCache.delete(cacheKey);  // Remove incomplete cache entry
+      }
+    } else if (cached) {
+      console.log(`[ProfileResolver] Cache entry found but profile is null, re-fetching...`);
+      this.localCache.delete(cacheKey);  // Remove incomplete cache entry
     }
 
     // Step 4: Search external sources
@@ -567,10 +577,10 @@ export class ProfileResolver {
       console.warn('[ProfileResolver] Database search failed:', error);
     }
 
-    // Step 2: Try Simplifier (most reliable)
+    // Step 2: Try Simplifier (most reliable and gets full StructureDefinitions)
     try {
       const simplifierResult = await this.searchSimplifier(canonicalUrl, version);
-      if (simplifierResult) {
+      if (simplifierResult && simplifierResult.profile) {
         // Cache the result in database
         await this.cacheProfileInDatabase(simplifierResult);
         
@@ -590,22 +600,21 @@ export class ProfileResolver {
       console.warn('[ProfileResolver] Simplifier search failed:', error);
     }
 
-    // Step 3: Try FHIR Package Registry
+    // Step 3: Try FHIR Package Registry (only if Simplifier didn't work)
     try {
       const registryResult = await this.searchFhirRegistry(canonicalUrl, version);
-      if (registryResult) {
+      // Only accept if profile was actually downloaded with full content
+      if (registryResult && registryResult.downloaded && registryResult.profile) {
         // Cache the result in database
         await this.cacheProfileInDatabase(registryResult);
         
         // Notify if profile was downloaded
-        if (registryResult.downloaded) {
-          const notificationService = getProfileNotificationService();
-          notificationService.notifyProfileDownloaded(
-            registryResult.canonicalUrl,
-            registryResult.version,
-            'FHIR Registry'
-          );
-        }
+        const notificationService = getProfileNotificationService();
+        notificationService.notifyProfileDownloaded(
+          registryResult.canonicalUrl,
+          registryResult.version,
+          'FHIR Registry'
+        );
         
         return registryResult;
       }
@@ -646,6 +655,36 @@ export class ProfileResolver {
     console.log(`[ProfileResolver] Searching Simplifier for: ${canonicalUrl}`);
 
     try {
+      // NEW: Try direct fetch first using the new method
+      if (this.config.autoDownload) {
+        console.log(`[ProfileResolver] Attempting direct StructureDefinition fetch`);
+        const directFetch = await simplifierClient.fetchStructureDefinition(canonicalUrl);
+        
+        if (directFetch) {
+          console.log(`[ProfileResolver] ✓ Successfully fetched StructureDefinition directly`);
+          const dependencies = this.extractDependencies(directFetch);
+          const metadata = this.extractMetadata(directFetch);
+          
+          // Recursively resolve dependencies if they exist
+          if (dependencies.length > 0) {
+            await this.resolveDependencies(dependencies);
+          }
+          
+          return {
+            canonicalUrl,
+            profile: directFetch,
+            source: 'simplifier',
+            version: directFetch.version || version || 'unknown',
+            dependencies,
+            resolutionTime: 0,
+            downloaded: true,
+            metadata: metadata || undefined,
+          };
+        }
+        console.log(`[ProfileResolver] Direct fetch failed, falling back to search`);
+      }
+
+      // Fallback: Original search-based approach
       // Extract profile name from URL
       const profileName = this.extractProfileName(canonicalUrl);
       

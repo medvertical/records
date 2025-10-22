@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -20,7 +20,8 @@ import {
 import { getDefaultValueForType } from '@/utils/fhir-validation';
 import TreeNode from './TreeNode';
 import { ArrayContainerProps } from './types';
-import { extractExtensionInfo, detectSliceName, isExtensionObject } from './fhir-helpers';
+import { extractExtensionInfo, detectSliceNameWithProfile, isExtensionObject } from './fhir-helpers';
+import { useMultipleSliceDefinitions } from '@/lib/profile-slice-resolver';
 
 // ============================================================================
 // Array Container Component
@@ -43,9 +44,26 @@ export default function ArrayContainer({
   onDeleteNode,
   highlightedPath,
   parentKey,
+  profileUrls = [],
 }: ArrayContainerProps) {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newItemType, setNewItemType] = useState<string>('string');
+
+  // Fetch slice definitions for all profile URLs
+  const { allSlices, isLoading, isError } = useMultipleSliceDefinitions(profileUrls);
+  
+  // Debug logging
+  useEffect(() => {
+    if (parentKey === 'identifier') {
+      console.log('[ArrayContainer] ========== IDENTIFIER SLICES DEBUG ==========');
+      console.log('[ArrayContainer] Profile URLs:', profileUrls);
+      console.log('[ArrayContainer] Slices loading:', isLoading);
+      console.log('[ArrayContainer] Slices error:', isError);
+      console.log('[ArrayContainer] Number of slices:', allSlices.length);
+      console.log('[ArrayContainer] Slices:', allSlices);
+      console.log('[ArrayContainer] =======================================');
+    }
+  }, [profileUrls, allSlices, isLoading, isError, parentKey]);
 
   const handleAddItem = useCallback(() => {
     if (!onValueChange) return;
@@ -67,9 +85,10 @@ export default function ArrayContainer({
         const isExtension = isExtensionArray && isExtensionObject(item);
         const extensionInfo = isExtension ? extractExtensionInfo(item, isModifierExtension) : undefined;
         
-        // Try to detect slice name for non-extension arrays
-        const sliceName = !isExtension && parentKey 
-          ? detectSliceName(item, parentKey, index)
+        // Try to detect slice name with profile support for non-extension arrays
+        // Only pass slice definitions if they're loaded (not during initial loading)
+        const sliceMatch = !isExtension && parentKey 
+          ? detectSliceNameWithProfile(item, parentKey, index, isLoading ? undefined : allSlices)
           : null;
 
         return (
@@ -93,7 +112,7 @@ export default function ArrayContainer({
             highlightedPath={highlightedPath}
             isExtension={isExtension}
             extensionInfo={extensionInfo || undefined}
-            sliceName={sliceName || undefined}
+            sliceMatch={sliceMatch}
           />
         );
       })}

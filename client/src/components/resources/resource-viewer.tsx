@@ -66,6 +66,7 @@ interface ResourceViewerProps {
   highlightPath?: string;
   onSeverityClick?: (severity: string, path: string) => void;
   validationIssues?: ValidationIssue[];
+  profileUrls?: string[];
 }
 
 // ============================================================================
@@ -152,6 +153,7 @@ export default function ResourceViewer({
   highlightPath,
   onSeverityClick,
   validationIssues: externalValidationIssues,
+  profileUrls = [],
 }: ResourceViewerProps) {
   // Use data if provided, otherwise use resource.data or resource
   // Handle different resource structures: {data: {...}} or direct resource object
@@ -563,6 +565,7 @@ export default function ResourceViewer({
                 expandedPaths={expandedPaths}
                 onExpandedPathsChange={onExpandedPathsChange}
                 highlightedPath={highlightPath}
+                profileUrls={profileUrls}
               />
             </TabsContent>
           )}
@@ -685,6 +688,7 @@ export default function ResourceViewer({
                   expandAllTrigger={expandAllTriggeredRef.current}
                   expandedPaths={expandedPaths}
                   onExpandedPathsChange={onExpandedPathsChange}
+                  profileUrls={profileUrls}
                 />
                 
                 {/* Auto-Revalidate Checkbox */}

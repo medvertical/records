@@ -22,6 +22,7 @@ export default function UnifiedTreeViewer({
   expandedPaths: externalExpandedPaths,
   onExpandedPathsChange: externalOnExpandedPathsChange,
   highlightedPath,
+  profileUrls = [],
 }: UnifiedTreeViewerProps) {
   // Get the resource type for the root node (must be declared before any hooks that use it)
   const rootResourceType = resourceType || resourceData?.resourceType || 'Resource';
@@ -161,6 +162,7 @@ export default function UnifiedTreeViewer({
         onValueChange={handleValueChange}
         onDeleteNode={handleDeleteNode}
         highlightedPath={highlightedPath}
+        profileUrls={profileUrls}
       />
     </div>
   );

@@ -514,6 +514,10 @@ export default function ResourceDetail() {
     })));
   }
 
+  // Extract profile URLs from resource meta
+  const profileUrls = (resource.data?.meta?.profile || resource.meta?.profile || []) as string[];
+  console.log('[ResourceDetail] Profile URLs for slice detection:', profileUrls);
+
   return (
     <div className="p-6">
       <div className="space-y-6">
@@ -588,11 +592,12 @@ export default function ResourceDetail() {
               highlightPath={highlightedPath}
               onSeverityClick={handleSeverityClick}
               validationIssues={validationIssues}
+              profileUrls={profileUrls}
             />
           </div>
           
-          {/* Right: Per-Aspect Validation Messages - Sticky */}
-          <div className="lg:sticky lg:top-6 lg:self-start max-h-[calc(100vh-8rem)] overflow-y-auto">
+          {/* Right: Per-Aspect Validation Messages */}
+          <div>
             <ValidationMessagesPerAspect
               resourceType={resource.resourceType}
               resourceId={resource.resourceId}

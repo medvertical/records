@@ -1,4 +1,7 @@
 import axios, { AxiosResponse } from 'axios';
+import zlib from 'zlib';
+import tarStream from 'tar-stream';
+import { Readable } from 'stream';
 
 export interface SimplifierPackage {
   id: string;
@@ -698,6 +701,170 @@ export class SimplifierClient {
       console.error('Failed to search profiles:', error);
       return [];
     }
+  }
+
+  /**
+   * Fetch a StructureDefinition directly by its canonical URL
+   * Tries multiple strategies:
+   * 1. Direct HTTP GET from canonical URL
+   * 2. FHIR Package Registry
+   * 3. Known package sources (MII, KBV, etc.)
+   */
+  async fetchStructureDefinition(canonicalUrl: string): Promise<any | null> {
+    console.log(`[SimplifierClient] Fetching StructureDefinition: ${canonicalUrl}`);
+
+    // Strategy 1: Try direct HTTP GET from canonical URL
+    try {
+      console.log(`[SimplifierClient] Strategy 1: Direct fetch from ${canonicalUrl}`);
+      const response = await axios.get(canonicalUrl, {
+        headers: {
+          'Accept': 'application/fhir+json, application/json',
+          'User-Agent': 'FHIR-Records-App/1.0'
+        },
+        timeout: 15000,
+        validateStatus: (status) => status === 200
+      });
+
+      if (response.data && response.data.resourceType === 'StructureDefinition') {
+        console.log(`[SimplifierClient] ✓ Successfully fetched from canonical URL`);
+        return response.data;
+      }
+    } catch (error: any) {
+      console.log(`[SimplifierClient] Direct fetch failed: ${error.message}`);
+    }
+
+    // Strategy 2: Try FHIR Package Registry
+    try {
+      console.log(`[SimplifierClient] Strategy 2: Trying FHIR Package Registry`);
+      const profileName = canonicalUrl.split('/').pop();
+      
+      // Try to find the package that contains this profile
+      const packageSearchResponse = await axios.get(
+        `${this.fhirRegistryUrl}`,
+        {
+          headers: this.headers,
+          timeout: 10000
+        }
+      );
+
+      // Search for matching package (simplified - would need better matching logic)
+      console.log(`[SimplifierClient] Package registry search completed`);
+    } catch (error: any) {
+      console.log(`[SimplifierClient] FHIR Package Registry failed: ${error.message}`);
+    }
+
+    // Strategy 3: Try known MII/German profile sources
+    if (canonicalUrl.includes('medizininformatik-initiative.de')) {
+      try {
+        console.log(`[SimplifierClient] Strategy 3: MII profile detected, trying Simplifier packages`);
+        
+        // Determine package ID based on module in URL
+        const urlParts = canonicalUrl.split('/');
+        const resourceName = urlParts[urlParts.length - 1];
+        
+        // Map MII modules to their Simplifier package IDs
+        let packageId = 'de.medizininformatikinitiative.kerndatensatz.person';
+        if (canonicalUrl.includes('modul-person')) {
+          packageId = 'de.medizininformatikinitiative.kerndatensatz.person';
+        } else if (canonicalUrl.includes('modul-labor')) {
+          packageId = 'de.medizininformatikinitiative.kerndatensatz.laborbefund';
+        } else if (canonicalUrl.includes('modul-diagnose')) {
+          packageId = 'de.medizininformatikinitiative.kerndatensatz.diagnose';
+        }
+        
+        console.log(`[SimplifierClient] Attempting to download package: ${packageId}`);
+        
+        // Try to download and extract from package
+        // Use the NPM-style URL for Simplifier packages (version 2025.0.1 for MII)
+        const packageUrl = `https://packages.simplifier.net/${packageId}/-/${packageId}-2025.0.1.tgz`;
+        console.log(`[SimplifierClient] Downloading from: ${packageUrl}`);
+        
+        const response = await axios.get(packageUrl, {
+          responseType: 'arraybuffer',
+          timeout: 30000,
+          headers: {
+            'User-Agent': 'FHIR-Records-App/1.0'
+          }
+        });
+        
+        const packageBuffer = response.data;
+        if (packageBuffer) {
+          // Extract and find the matching StructureDefinition
+          // Note: .tgz files are gzip + tar, not zip format
+          console.log(`[SimplifierClient] Extracting .tgz package...`);
+          
+          return new Promise((resolve, reject) => {
+            const files: Array<{name: string, content: string}> = [];
+            const extract = tarStream.extract();
+            
+            // Handle each entry in the tar archive
+            extract.on('entry', (header: any, stream: any, next: any) => {
+              // Only process StructureDefinition JSON files
+              if (header.name.includes('StructureDefinition') && 
+                  header.name.endsWith('.json')) {
+                
+                const chunks: Buffer[] = [];
+                stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+                stream.on('end', () => {
+                  try {
+                    const content = Buffer.concat(chunks).toString('utf8');
+                    files.push({ name: header.name, content });
+                  } catch (err) {
+                    console.error(`[SimplifierClient] Error processing ${header.name}:`, err);
+                  }
+                  next();
+                });
+                stream.on('error', (err: Error) => {
+                  console.error(`[SimplifierClient] Stream error for ${header.name}:`, err);
+                  next();
+                });
+              } else {
+                // Skip non-StructureDefinition files - must drain the stream!
+                stream.resume();
+                stream.on('end', () => next());
+              }
+            });
+            
+            extract.on('finish', () => {
+              console.log(`[SimplifierClient] Extracted ${files.length} StructureDefinition files`);
+              
+              // Find matching StructureDefinition
+              for (const file of files) {
+                try {
+                  const sd = JSON.parse(file.content);
+                  if (sd.resourceType === 'StructureDefinition' && sd.url === canonicalUrl) {
+                    console.log(`[SimplifierClient] ✓ Found matching StructureDefinition: ${file.name}`);
+                    resolve(sd);
+                    return;
+                  }
+                } catch (parseError) {
+                  // Skip invalid JSON
+                  continue;
+                }
+              }
+              
+              console.log(`[SimplifierClient] ✗ StructureDefinition not found in package`);
+              resolve(null);
+            });
+            
+            extract.on('error', (err: Error) => {
+              console.error(`[SimplifierClient] Error extracting package:`, err);
+              reject(err);
+            });
+            
+            // Create readable stream from buffer and pipe through gunzip to tar extractor
+            Readable.from(packageBuffer)
+              .pipe(zlib.createGunzip())
+              .pipe(extract);
+          });
+        }
+      } catch (error: any) {
+        console.log(`[SimplifierClient] MII package fetch failed: ${error.message}`);
+      }
+    }
+
+    console.log(`[SimplifierClient] ✗ Failed to fetch StructureDefinition from all sources`);
+    return null;
   }
 
   async getPackageVersions(packageId: string): Promise<{

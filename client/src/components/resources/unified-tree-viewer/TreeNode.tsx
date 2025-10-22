@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { ChevronDown, ChevronRight, Trash2, AlertCircle, Puzzle, Tag } from 'lucide-react';
+import { ChevronDown, ChevronRight, Trash2, AlertCircle, Puzzle, Tag, CheckCircle2, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -40,7 +40,8 @@ export default function TreeNode({
   isGhost = false,
   isExtension = false,
   extensionInfo,
-  sliceName,
+  sliceMatch,
+  profileUrls = [],
 }: TreeNodeProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isHighlighted, setIsHighlighted] = useState(false);
@@ -288,6 +289,45 @@ export default function TreeNode({
   // Handle severity/category clicks (view mode)
   const handleSeverityClick = (severity: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    
+    // If node is collapsed and has child issues, find the first matching child issue
+    // and pass its path instead of the parent's path for better navigation
+    if (!isExpanded && childPathIssues.length > 0) {
+      // Filter child issues by the clicked severity
+      const matchingChildIssues = childPathIssues.filter(issue => {
+        const issueSeverity = issue.severity?.toLowerCase() || '';
+        const clickedSeverity = severity.toLowerCase();
+        // Handle both 'info' and 'information'
+        if (clickedSeverity === 'information') {
+          return issueSeverity === 'info' || issueSeverity === 'information';
+        }
+        return issueSeverity === clickedSeverity;
+      });
+      
+      if (matchingChildIssues.length > 0) {
+        // Use the first matching child issue's path
+        const firstChildIssue = matchingChildIssues[0];
+        const childPath = firstChildIssue.path || firstChildIssue.location?.join('.') || pathString;
+        console.log('[TreeNode] Collapsed node clicked - redirecting to child issue:', { 
+          parentPath: pathString, 
+          childPath,
+          severity 
+        });
+        
+        // Expand the node to show the child issues
+        if (onExpandedPathsChange && expandedPaths) {
+          const newExpandedPaths = new Set(expandedPaths);
+          newExpandedPaths.add(pathString);
+          onExpandedPathsChange(newExpandedPaths);
+        }
+        
+        // Pass the child's path instead
+        onSeverityChange?.(severity, childPath);
+        return;
+      }
+    }
+    
+    // Default behavior: use the current node's path
     onSeverityChange?.(severity, pathString);
   };
   
@@ -502,14 +542,33 @@ export default function TreeNode({
                 <span className="text-red-500 ml-1 transition-opacity duration-200">*</span>
               )}
             </span>
-            {sliceName && (
-              <Badge 
-                className="text-xs px-1.5 py-0.5 h-5 bg-gray-200 text-gray-700 rounded-sm flex-shrink-0 flex items-center gap-1 border-0"
-                title={`Slice: ${sliceName}`}
-              >
-                <Tag className="h-2.5 w-2.5" />
-                <span>{sliceName}</span>
-              </Badge>
+            {sliceMatch && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge 
+                    className={`text-xs px-1.5 py-0.5 h-5 rounded-sm flex-shrink-0 flex items-center gap-1 ${
+                      sliceMatch.confirmed 
+                        ? 'bg-gray-200 text-gray-700 border-0' 
+                        : 'bg-gray-100 text-gray-600 border border-dashed border-gray-400'
+                    }`}
+                  >
+                    <Tag className="h-2.5 w-2.5" />
+                    <span>{sliceMatch.sliceName}</span>
+                    {sliceMatch.confirmed ? (
+                      <CheckCircle2 className="h-2.5 w-2.5 text-green-600" />
+                    ) : (
+                      <HelpCircle className="h-2.5 w-2.5 text-gray-500" />
+                    )}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {sliceMatch.confirmed ? (
+                    <span>Slice: {sliceMatch.sliceName} (from profile)</span>
+                  ) : (
+                    <span>Slice: {sliceMatch.sliceName} (heuristic - profile not available)</span>
+                  )}
+                </TooltipContent>
+              </Tooltip>
             )}
             {isEditMode && !isExtension && (
               <span className="text-xs text-gray-400 flex-shrink-0 transition-opacity duration-200 animate-in fade-in">
@@ -629,6 +688,7 @@ export default function TreeNode({
                 onDeleteNode={onDeleteNode}
                 highlightedPath={highlightedPath}
                 parentKey={nodeKey}
+                profileUrls={profileUrls}
               />
             )}
             {(valueType === 'object' || (isGhost && isExpanded)) && (
@@ -649,6 +709,7 @@ export default function TreeNode({
                 onDeleteNode={onDeleteNode}
                 highlightedPath={highlightedPath}
                 parentKey={nodeKey}
+                profileUrls={profileUrls}
               />
             )}
           </div>

@@ -12,6 +12,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -45,6 +46,7 @@ interface ValidationTabProps {
 export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = false, saveCounter = 0, onSaveComplete, onSaveError, reloadTrigger }: ValidationTabProps) {
   const { toast } = useToast();
   const { activeServer } = useActiveServer();
+  const queryClient = useQueryClient();
   const [settings, setSettings] = useState<ValidationSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDirty, setIsDirty] = useState(false);
@@ -58,6 +60,8 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
   const loadedTriggerValueRef = useRef<number>(0);
   // Track which saveCounter value we've already saved for
   const savedCounterValueRef = useRef<number>(0);
+  // Track previous engine values for change detection
+  const previousEnginesRef = useRef<Record<string, string>>({});
 
   // Load settings only when reloadTrigger changes to a new value (skip initial mount)
   useEffect(() => {
@@ -134,6 +138,54 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
     }
   };
 
+  // Smart engine mapping: maps global engine selection to appropriate per-aspect engines
+  const getAspectEnginesForGlobalEngine = (globalEngine: string): Record<string, string> => {
+    const engineMappings: Record<string, Record<string, string>> = {
+      'auto': {
+        structural: 'schema',      // Fast structural check
+        profile: 'auto',           // Smart profile detection
+        terminology: 'server',     // Remote terminology
+        reference: 'internal',     // Internal reference check
+        businessRule: 'fhirpath',  // FHIRPath rules
+        metadata: 'schema'         // Fast metadata check
+      },
+      'server': {
+        structural: 'server',      // Use server for all
+        profile: 'server',
+        terminology: 'server',
+        reference: 'server',
+        businessRule: 'fhirpath',  // FHIRPath can't use server
+        metadata: 'hapi'           // Metadata doesn't support 'server', use hapi
+      },
+      'local': {
+        structural: 'hapi',        // HAPI for comprehensive checks
+        profile: 'hapi',
+        terminology: 'cached',     // Use cached terminology
+        reference: 'internal',
+        businessRule: 'fhirpath',
+        metadata: 'hapi'
+      },
+      'schema': {
+        structural: 'schema',      // Schema-only validation
+        profile: 'hapi',           // Minimal profile check
+        terminology: 'cached',     // Cached codes only
+        reference: 'internal',
+        businessRule: 'fhirpath',
+        metadata: 'schema'
+      },
+      'hybrid': {
+        structural: 'schema',      // Fast first pass
+        profile: 'hapi',           // Deep profile validation
+        terminology: 'server',     // Online terminology
+        reference: 'internal',
+        businessRule: 'fhirpath',
+        metadata: 'hapi'
+      }
+    };
+    
+    return engineMappings[globalEngine] || engineMappings['auto'];
+  };
+
   const saveSettings = async () => {
     if (!settings) {
       console.log('[ValidationTab] No settings to save');
@@ -186,6 +238,38 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
       console.log('[ValidationTab] 📥 Save response data:', savedData);
       console.log('[ValidationTab] ✅ Validation settings saved successfully');
       
+      // Detect engine changes for notification and cache invalidation
+      const currentEngines = Object.keys(settings.aspects).reduce((acc, key) => {
+        acc[key] = (settings.aspects[key as keyof typeof settings.aspects] as any)?.engine || '';
+        return acc;
+      }, {} as Record<string, string>);
+
+      const changedAspects = Object.keys(currentEngines).filter(
+        key => previousEnginesRef.current[key] && 
+               currentEngines[key] !== previousEnginesRef.current[key]
+      );
+
+      if (changedAspects.length > 0) {
+        console.log('[ValidationTab] Engine changes detected:', changedAspects);
+        
+        // Invalidate query caches to trigger revalidation on next resource access
+        queryClient.invalidateQueries({ queryKey: ['/api/fhir/resources'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/validation/'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/dashboard/'] });
+        
+        toast({
+          title: 'Validation Engine Updated',
+          description: `${changedAspects.length} aspect(s) changed. Resources will be revalidated when accessed.`,
+          duration: 5000,
+        });
+      } else {
+        toast({
+          title: 'Settings Saved',
+          description: 'Validation settings updated successfully',
+        });
+      }
+
+      previousEnginesRef.current = currentEngines;
       setIsDirty(false);
       onSaveComplete?.();
     } catch (error) {
@@ -293,22 +377,25 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
   const updateAdvanced = (field: string, value: any) => {
     if (!settings) return;
     
-    // Special handling for global engine selection
+    // Special handling for global engine selection with smart mapping
     if (field === 'engine') {
       console.log('[ValidationTab] Global engine changed to:', value);
       
-      // Update all aspect engines to match the global selection
+      // Get appropriate aspect engines for the global selection
+      const aspectEngines = getAspectEnginesForGlobalEngine(value);
       const updatedAspects = { ...settings.aspects };
+      
+      // Update each aspect with its appropriate engine
       Object.keys(updatedAspects).forEach(aspectKey => {
-        if (updatedAspects[aspectKey as keyof typeof updatedAspects]) {
+        if (updatedAspects[aspectKey as keyof typeof updatedAspects] && aspectEngines[aspectKey]) {
           updatedAspects[aspectKey as keyof typeof updatedAspects] = {
             ...updatedAspects[aspectKey as keyof typeof updatedAspects],
-            engine: value
+            engine: aspectEngines[aspectKey]
           };
         }
       });
       
-      console.log('[ValidationTab] Updated all aspect engines to:', value);
+      console.log('[ValidationTab] Applied smart aspect engines:', aspectEngines);
       setSettings({
         ...settings,
         aspects: updatedAspects,
@@ -519,7 +606,45 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
         </RadioGroup>
       </div>
 
-      {/* 2 & 3. Mode & Profile Sources - Combined in one row */}
+      {/* 2. Validation Aspects - Shows how global engine choice affects each aspect */}
+      <div className="space-y-3">
+        <SectionTitle 
+          title="Validation Aspects" 
+          helpText="Configure individual validation scopes. Each aspect checks different parts of FHIR resources: structural (schema), profile (conformance), terminology (codes), references (links), business rules (custom logic), and metadata (resource info). These are automatically configured based on your global engine selection above, but can be customized."
+          />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 auto-rows-fr">
+          {aspectConfig.map((aspect) => {
+            const aspectSettings = settings.aspects[aspect.key];
+            const isEnabled = aspectSettings?.enabled ?? true;
+            const currentEngine = aspectSettings?.engine ?? aspect.defaultEngine;
+            const currentSeverity = aspectSettings?.severity ?? 'error';
+
+            return (
+              <AspectCard
+                key={aspect.key}
+                title={aspect.label}
+                description={aspect.description}
+                enabled={isEnabled}
+                severity={currentSeverity}
+                engine={currentEngine}
+                availableEngines={aspect.engines}
+                onToggle={(checked) => updateAspect(aspect.key, 'enabled', checked)}
+                onSeverityChange={(value) => updateAspect(aspect.key, 'severity', value)}
+                onEngineChange={(value) => updateAspect(aspect.key, 'engine', value)}
+              />
+            );
+          })}
+        </div>
+        
+        {/* Reset Defaults Button */}
+        <div className="flex justify-end mt-4">
+          <Button variant="outline" size="sm" onClick={handleResetAspects}>
+            Reset Aspect Defaults
+          </Button>
+        </div>
+      </div>
+
+      {/* 3. Terminology Mode & Profile Sources - Combined in one row */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-3">
           <SectionTitle 
@@ -565,45 +690,7 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
         </div>
       </div>
 
-      {/* 4. Validation Aspects - Per-Aspect Validation Method */}
-      <div className="space-y-3">
-        <SectionTitle 
-          title="Validation Aspects" 
-          helpText="Configure individual validation scopes. Each aspect checks different parts of FHIR resources: structural (schema), profile (conformance), terminology (codes), references (links), business rules (custom logic), and metadata (resource info)."
-        />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 auto-rows-fr">
-          {aspectConfig.map((aspect) => {
-            const aspectSettings = settings.aspects[aspect.key];
-            const isEnabled = aspectSettings?.enabled ?? true;
-            const currentEngine = aspectSettings?.engine ?? aspect.defaultEngine;
-            const currentSeverity = aspectSettings?.severity ?? 'error';
-
-            return (
-              <AspectCard
-                key={aspect.key}
-                title={aspect.label}
-                description={aspect.description}
-                enabled={isEnabled}
-                severity={currentSeverity}
-                engine={currentEngine}
-                availableEngines={aspect.engines}
-                onToggle={(checked) => updateAspect(aspect.key, 'enabled', checked)}
-                onSeverityChange={(value) => updateAspect(aspect.key, 'severity', value)}
-                onEngineChange={(value) => updateAspect(aspect.key, 'engine', value)}
-              />
-            );
-          })}
-        </div>
-        
-        {/* Reset Defaults Button */}
-        <div className="flex justify-end mt-4">
-          <Button variant="outline" size="sm" onClick={handleResetAspects}>
-            Reset Aspect Defaults
-          </Button>
-        </div>
-      </div>
-
-      {/* 5. Performance & Concurrency */}
+      {/* 4. Performance & Concurrency */}
       <div className="space-y-3">
         <SectionTitle 
           title="Performance & Concurrency" 
@@ -667,7 +754,7 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
         </div>
       </div>
 
-      {/* 6. Resource Type Filtering */}
+      {/* 5. Resource Type Filtering */}
       <div className="space-y-3">
         <SectionTitle 
           title="Resource Filtering" 
@@ -735,7 +822,7 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
         </div>
       </div>
 
-      {/* 7. Advanced Settings */}
+      {/* 6. Advanced Settings */}
       <Accordion type="single" collapsible>
         <AccordionItem value="advanced" className="border-none">
           <AccordionTrigger className="py-2 hover:no-underline">

@@ -2,6 +2,10 @@
 // FHIR Extension and Slice Detection Utilities
 // ============================================================================
 
+import type { SliceMatch } from './types';
+import type { SliceDefinition } from '@/lib/profile-slice-resolver';
+import { matchElementToSlice as matchToProfile } from '@/lib/profile-slice-resolver';
+
 export interface ExtensionInfo {
   url: string;
   valueType: string;
@@ -173,5 +177,68 @@ export function isExtensionObject(value: any): boolean {
          typeof value === 'object' && 
          'url' in value && 
          typeof value.url === 'string';
+}
+
+/**
+ * Detect slice name with profile support
+ * 
+ * Tries to match element to profile-defined slices first,
+ * falls back to heuristic detection if profile unavailable.
+ * 
+ * @param arrayItem - The array element to match
+ * @param arrayKey - The parent array key (e.g., "identifier")
+ * @param index - Array index
+ * @param sliceDefinitions - Optional slice definitions from profile
+ * @returns SliceMatch object with slice name and confirmation status
+ */
+export function detectSliceNameWithProfile(
+  arrayItem: any,
+  arrayKey: string,
+  index: number,
+  sliceDefinitions?: SliceDefinition[]
+): SliceMatch | null {
+  // Debug logging for identifier slices
+  if (arrayKey === 'identifier') {
+    console.log(`[detectSliceNameWithProfile] Processing identifier[${index}]`);
+    console.log(`[detectSliceNameWithProfile] Has slice definitions:`, !!sliceDefinitions, sliceDefinitions?.length);
+    console.log(`[detectSliceNameWithProfile] Element system:`, arrayItem?.system);
+  }
+
+  // If we have slice definitions from profile, try profile-based matching first
+  if (sliceDefinitions && sliceDefinitions.length > 0) {
+    const match = matchToProfile(arrayItem, sliceDefinitions, arrayKey);
+    
+    if (arrayKey === 'identifier') {
+      console.log(`[detectSliceNameWithProfile] Profile match result:`, match);
+    }
+    
+    if (match.sliceName) {
+      if (arrayKey === 'identifier') {
+        console.log(`[detectSliceNameWithProfile] ✓ Using profile slice name: ${match.sliceName}`);
+      }
+      return {
+        sliceName: match.sliceName,
+        confirmed: true,
+        confidence: match.confidence,
+      };
+    }
+  }
+
+  // Fallback to heuristic detection
+  const heuristicName = detectSliceName(arrayItem, arrayKey, index);
+  
+  if (arrayKey === 'identifier') {
+    console.log(`[detectSliceNameWithProfile] ✗ Falling back to heuristic: ${heuristicName}`);
+  }
+  
+  if (heuristicName) {
+    return {
+      sliceName: heuristicName,
+      confirmed: false,
+      confidence: 'low',
+    };
+  }
+
+  return null;
 }
 

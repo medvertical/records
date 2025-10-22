@@ -22,6 +22,7 @@ import { getValidationEngine } from './validation-engine';
 import { getValidationPipeline } from './validation-pipeline';
 import { getValidationResourceTypeFilteringService } from '../features/validation-resource-type-filtering-service';
 import { getValidationSettingsCacheService } from '../utils/validation-settings-cache-service';
+import { getValidationSettingsService } from '../settings/validation-settings-service';
 import { getValidationResultBuilder, type DetailedValidationResult } from '../utils/validation-result-builder';
 import { getValidationCacheHelper } from '../utils/validation-cache-helper';
 import { getValidationResourcePersistence } from '../utils/validation-resource-persistence';
@@ -79,9 +80,9 @@ export class ConsolidatedValidationService extends EventEmitter {
   // ========================================================================
 
   private setupEventListeners(): void {
-    // Forward settings events
+    // Forward settings cache events
     this.settingsCache.on('settingsInvalidated', (event) => {
-      console.log('[ConsolidatedValidation] Settings invalidated, clearing caches');
+      console.log('[ConsolidatedValidation] Settings invalidated from cache, clearing caches');
       this.clearCaches();
     });
 
@@ -93,6 +94,14 @@ export class ConsolidatedValidationService extends EventEmitter {
     this.settingsCache.on('error', (error) => {
       console.error('[ConsolidatedValidation] Settings error:', error);
       this.emit('settingsError', { error });
+    });
+
+    // Also listen directly to settings service for invalidation events
+    const settingsService = getValidationSettingsService();
+    settingsService.on('settingsInvalidated', (event) => {
+      console.log('[ConsolidatedValidation] Settings invalidated from service:', event);
+      this.clearCaches();
+      this.emit('settingsInvalidated', event);
     });
   }
 

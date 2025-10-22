@@ -25,6 +25,12 @@ export interface SliceInfo {
   discriminator: string;
 }
 
+export interface SliceMatch {
+  sliceName: string;
+  confirmed: boolean; // true if from profile, false if heuristic
+  confidence?: 'high' | 'medium' | 'low';
+}
+
 export interface UnifiedTreeViewerProps {
   resourceData: any;
   resourceType?: string;
@@ -44,6 +50,8 @@ export interface UnifiedTreeViewerProps {
   onExpandedPathsChange?: (expandedPaths: Set<string>) => void;
   // Highlighting
   highlightedPath?: string;
+  // Profile URLs for slice detection
+  profileUrls?: string[];
 }
 
 export interface TreeNodeProps {
@@ -73,7 +81,8 @@ export interface TreeNodeProps {
   // FHIR-specific rendering
   isExtension?: boolean;
   extensionInfo?: ExtensionInfo;
-  sliceName?: string;
+  sliceMatch?: SliceMatch | null;
+  profileUrls?: string[];
 }
 
 export interface ContainerProps {
@@ -83,6 +92,8 @@ export interface ContainerProps {
   resourceType?: string;
   isEditMode?: boolean;
   expandAll?: boolean;
+  expandedPaths?: Set<string>;
+  onExpandedPathsChange?: (expandedPaths: Set<string>) => void;
   validationIssues?: ValidationIssue[];
   onCategoryChange?: (category: string) => void;
   onSeverityChange?: (severity: string, path?: string) => void;
@@ -92,6 +103,7 @@ export interface ContainerProps {
   highlightedPath?: string;
   // FHIR-specific
   parentKey?: string;
+  profileUrls?: string[];
 }
 
 export interface ArrayContainerProps extends ContainerProps {
