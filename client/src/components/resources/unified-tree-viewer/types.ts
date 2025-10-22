@@ -40,6 +40,7 @@ export interface UnifiedTreeViewerProps {
   onCategoryChange?: (category: string) => void;
   onSeverityChange?: (severity: string, path?: string) => void;
   onIssueClick?: (issueId: string) => void;
+  onEdit?: () => void;
   // Edit mode props
   onResourceChange?: (resource: any) => void;
   // Shared
@@ -71,6 +72,7 @@ export interface TreeNodeProps {
   onCategoryChange?: (category: string) => void;
   onSeverityChange?: (severity: string, path?: string) => void;
   onIssueClick?: (issueId: string) => void;
+  onEdit?: () => void;
   // Edit mode props
   onValueChange?: (path: string[], newValue: any) => void;
   onDeleteNode?: (path: string[]) => void;
@@ -78,6 +80,7 @@ export interface TreeNodeProps {
   highlightedPath?: string;
   // Ghost node (validation path that doesn't exist in data)
   isGhost?: boolean;
+  onCreateField?: (path: string[], fieldName: string) => void;
   // FHIR-specific rendering
   isExtension?: boolean;
   extensionInfo?: ExtensionInfo;
@@ -100,6 +103,8 @@ export interface ContainerProps {
   onIssueClick?: (issueId: string) => void;
   onValueChange?: (path: string[], newValue: any) => void;
   onDeleteNode?: (path: string[]) => void;
+  onCreateField?: (path: string[], fieldName: string) => void;
+  onEdit?: () => void;
   highlightedPath?: string;
   // FHIR-specific
   parentKey?: string;

@@ -16,6 +16,7 @@ export default function UnifiedTreeViewer({
   onCategoryChange,
   onSeverityChange,
   onIssueClick,
+  onEdit,
   onResourceChange,
   expandAll = false,
   expandAllTrigger = 0,
@@ -114,6 +115,14 @@ export default function UnifiedTreeViewer({
     const updatedResource = deleteNestedValue(resourceData, path);
     onResourceChange(updatedResource);
   }, [resourceData, onResourceChange]);
+  
+  // Handle ghost field creation - no-op in view mode since dialog handles it via onValueChange
+  // In edit mode, this is handled by ObjectContainer's dialog
+  const handleCreateField = useCallback((path: string[], fieldName: string) => {
+    console.log('[UnifiedTreeViewer] Ghost field creation requested:', { path, fieldName });
+    // This is a pass-through - the actual creation happens in ObjectContainer's dialog
+    // which calls onValueChange after user confirms
+  }, []);
 
   if (!resourceData) {
     return (
@@ -161,6 +170,8 @@ export default function UnifiedTreeViewer({
         onIssueClick={onIssueClick}
         onValueChange={handleValueChange}
         onDeleteNode={handleDeleteNode}
+        onCreateField={handleCreateField}
+        onEdit={onEdit}
         highlightedPath={highlightedPath}
         profileUrls={profileUrls}
       />

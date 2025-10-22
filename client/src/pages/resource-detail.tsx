@@ -585,6 +585,7 @@ export default function ResourceDetail() {
               isEditMode={isEditMode}
               editedResource={editedResource}
               onResourceChange={handleResourceChange}
+              onEdit={handleEdit}
               autoRevalidate={autoRevalidate}
               onAutoRevalidateChange={setAutoRevalidate}
               expandedPaths={getExpandedPaths(resource.resourceId)}

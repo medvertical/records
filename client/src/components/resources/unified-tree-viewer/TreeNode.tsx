@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { ChevronDown, ChevronRight, Trash2, AlertCircle, Puzzle, Tag, CheckCircle2, HelpCircle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Trash2, AlertCircle, Puzzle, Tag, CheckCircle2, HelpCircle, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -34,10 +34,12 @@ export default function TreeNode({
   onCategoryChange,
   onSeverityChange,
   onIssueClick,
+  onEdit,
   onValueChange,
   onDeleteNode,
   highlightedPath,
   isGhost = false,
+  onCreateField,
   isExtension = false,
   extensionInfo,
   sliceMatch,
@@ -398,11 +400,27 @@ export default function TreeNode({
   // Render view value with consistent height
   const renderViewValueWithHeight = (val: any): React.ReactNode => {
     return (
-      <div className="flex items-center h-8">
+      <div className="flex items-center gap-2 h-8">
         {isGhost ? (
-          <span className="text-gray-400 italic font-mono text-xs">
-            (missing field with validation issues)
-          </span>
+          <>
+            <span className="text-gray-400 italic font-mono text-xs">
+              (missing field with validation issues)
+            </span>
+            {onCreateField && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCreateField(path, nodeKey);
+                }}
+                className="h-6 px-2 text-xs bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-100 hover:text-blue-800 flex items-center gap-1"
+              >
+                <Plus className="h-3 w-3" />
+                Create Field
+              </Button>
+            )}
+          </>
         ) : (
           renderViewValue(val)
         )}
@@ -707,6 +725,8 @@ export default function TreeNode({
                 onIssueClick={onIssueClick}
                 onValueChange={onValueChange}
                 onDeleteNode={onDeleteNode}
+                onCreateField={onCreateField}
+                onEdit={onEdit}
                 highlightedPath={highlightedPath}
                 parentKey={nodeKey}
                 profileUrls={profileUrls}

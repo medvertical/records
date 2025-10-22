@@ -42,6 +42,8 @@ export default function ArrayContainer({
   onIssueClick,
   onValueChange,
   onDeleteNode,
+  onCreateField,
+  onEdit,
   highlightedPath,
   parentKey,
   profileUrls = [],
@@ -109,10 +111,13 @@ export default function ArrayContainer({
             onIssueClick={onIssueClick}
             onValueChange={onValueChange}
             onDeleteNode={onDeleteNode}
+            onCreateField={onCreateField}
+            onEdit={onEdit}
             highlightedPath={highlightedPath}
             isExtension={isExtension}
             extensionInfo={extensionInfo || undefined}
             sliceMatch={sliceMatch}
+            profileUrls={profileUrls}
           />
         );
       })}

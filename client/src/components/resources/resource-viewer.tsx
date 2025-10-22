@@ -59,6 +59,7 @@ interface ResourceViewerProps {
   isEditMode?: boolean;
   editedResource?: any | null;
   onResourceChange?: (resource: any) => void;
+  onEdit?: () => void;
   autoRevalidate?: boolean;
   onAutoRevalidateChange?: (value: boolean) => void;
   expandedPaths: Set<string>;
@@ -146,6 +147,7 @@ export default function ResourceViewer({
   isEditMode = false,
   editedResource = null,
   onResourceChange,
+  onEdit,
   autoRevalidate = false,
   onAutoRevalidateChange,
   expandedPaths,
@@ -560,6 +562,7 @@ export default function ResourceViewer({
                 onCategoryChange={setSelectedCategory}
                 onSeverityChange={handleSeverityChange}
                 onIssueClick={setHighlightedIssueId}
+                onEdit={onEdit}
                 expandAll={expandAll}
                 expandAllTrigger={expandAllTriggeredRef.current}
                 expandedPaths={expandedPaths}
@@ -684,6 +687,7 @@ export default function ResourceViewer({
                   resourceType={resourceType}
                   isEditMode={true}
                   onResourceChange={onResourceChange}
+                  validationResults={validationIssues}
                   expandAll={expandAll}
                   expandAllTrigger={expandAllTriggeredRef.current}
                   expandedPaths={expandedPaths}
