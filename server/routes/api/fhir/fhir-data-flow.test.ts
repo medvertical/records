@@ -33,7 +33,7 @@ describe('FHIR Data Flow', () => {
   describe('enhanceResourcesWithValidationData', () => {
     it('should always include validation data when available', async () => {
       // Import the function after mocking
-      const { enhanceResourcesWithValidationData } = await import('./fhir');
+      const { enhanceResourcesWithValidationData } = await import('./helpers/resource-enhancer');
       
       const mockStorage = vi.mocked(require('../../../storage').storage);
       
@@ -123,7 +123,7 @@ describe('FHIR Data Flow', () => {
     });
 
     it('should handle missing validation data gracefully', async () => {
-      const { enhanceResourcesWithValidationData } = await import('./fhir');
+      const { enhanceResourcesWithValidationData } = await import('./helpers/resource-enhancer');
       
       const mockStorage = vi.mocked(require('../../../storage').storage);
       
@@ -154,7 +154,7 @@ describe('FHIR Data Flow', () => {
     });
 
     it('should handle validation data with missing fields gracefully', async () => {
-      const { enhanceResourcesWithValidationData } = await import('./fhir');
+      const { enhanceResourcesWithValidationData } = await import('./helpers/resource-enhancer');
       
       const mockStorage = vi.mocked(require('../../../storage').storage);
       
