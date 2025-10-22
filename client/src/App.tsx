@@ -9,6 +9,7 @@ import { useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useServerData } from "@/hooks/use-server-data";
 import { useServerReactiveQueries } from "@/hooks/use-server-reactive-queries";
+import { useGlobalErrorHandler } from "@/hooks/use-global-error-handler";
 import { cn } from "@/lib/utils";
 import Dashboard from "@/pages/dashboard";
 import ResourceBrowser from "@/pages/resource-browser";
@@ -24,6 +25,14 @@ import { SettingsModal } from "@/components/settings/SettingsModal";
 
 // ConnectionStatus interface is now imported from use-server-data
 import type { ServerStatus as ConnectionStatus } from "@/hooks/use-server-data";
+
+/**
+ * Global error handler component that monitors all queries
+ */
+function GlobalErrorHandler() {
+  useGlobalErrorHandler();
+  return null;
+}
 
 function Router() {
   const isMobile = useIsMobile();
@@ -208,6 +217,7 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <GlobalErrorHandler />
       <TooltipProvider>
         <ValidationActivityProvider>
           <SettingsModalProvider>
