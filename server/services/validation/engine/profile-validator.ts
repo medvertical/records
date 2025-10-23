@@ -28,6 +28,7 @@ import type { ValidationIssue } from '../types/validation-types';
 import type { ValidationSettings } from '@shared/validation-settings';
 import { hapiValidatorClient } from './hapi-validator-client';
 import type { HapiValidationOptions } from './hapi-validator-types';
+import type { HapiValidationCoordinator } from './hapi-validation-coordinator';
 import {
   getPackagesForVersion,
   getGermanPackagesForVersion,
@@ -69,6 +70,7 @@ export class ProfileValidator {
    * @param profileUrl - Optional specific profile URL to validate against
    * @param fhirVersion - FHIR version for validation
    * @param settings - Validation settings including profileSources configuration
+   * @param coordinator - Optional HAPI validation coordinator
    * @returns Array of profile validation issues
    */
   async validate(
@@ -76,7 +78,8 @@ export class ProfileValidator {
     resourceType: string,
     profileUrl?: string,
     fhirVersion?: 'R4' | 'R5' | 'R6', // Task 2.4: Accept FHIR version parameter
-    settings?: ValidationSettings
+    settings?: ValidationSettings,
+    coordinator?: HapiValidationCoordinator
   ): Promise<ValidationIssue[]> {
     const startTime = Date.now();
     const issues: ValidationIssue[] = [];
@@ -86,6 +89,22 @@ export class ProfileValidator {
 
       // Detect FHIR version
       const fhirVersion = this.detectFhirVersion(resource);
+
+      // Check coordinator first
+      if (coordinator) {
+        const resourceId = `${resource.resourceType}/${resource.id}`;
+        const coordinatorIssues = coordinator.getIssuesByAspect(resourceId, 'profile');
+        
+        if (coordinatorIssues.length > 0 || coordinator.hasBeenInitialized(resourceId)) {
+          console.log(`[ProfileValidator] Using ${coordinatorIssues.length} issues from coordinator`);
+          const validationTime = Date.now() - startTime;
+          console.log(
+            `[ProfileValidator] Validated ${resourceType} profile in ${validationTime}ms ` +
+            `(${coordinatorIssues.length} issues, source: coordinator)`
+          );
+          return addR6WarningIfNeeded(coordinatorIssues, fhirVersion, 'profile');
+        }
+      }
 
       // Collect profiles to validate against
       const profilesToValidate = this.collectProfiles(resource, profileUrl);
@@ -347,6 +366,8 @@ export class ProfileValidator {
         igPackages: igPackages.length > 0 ? igPackages : undefined,
         cacheDirectory: settings?.offlineConfig?.profileCachePath || './server/cache/fhir-packages',
         timeout: hapiTimeout, // Use centralized timeout (default: 150s) for complex profile validation
+        enableBestPractice: settings?.enableBestPracticeChecks ?? true,
+        validationLevel: 'hints', // Show all message types
       };
 
       // Call HAPI validator
@@ -354,17 +375,14 @@ export class ProfileValidator {
       
       console.log(`[ProfileValidator] HAPI returned ${allIssues.length} total issues`);
 
-      // Filter to profile-related issues only
-      const profileIssues = this.filterProfileIssues(allIssues);
-      
-      console.log(`[ProfileValidator] After filtering: ${profileIssues.length} profile issues (filtered out ${allIssues.length - profileIssues.length} non-profile issues)`);
-
+      // NOTE: No longer filtering - coordinator distributes issues by aspect
+      // All issues are returned and will be distributed by ValidationEnginePerAspect
       console.log(
-        `[ProfileValidator] HAPI validation complete: ${profileIssues.length} profile issues ` +
-        `(${allIssues.length} total, IG packages: ${igPackages.length})`
+        `[ProfileValidator] HAPI validation complete: ${allIssues.length} issues ` +
+        `(IG packages: ${igPackages.length})`
       );
 
-      return profileIssues;
+      return allIssues;
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -691,43 +709,14 @@ export class ProfileValidator {
 
   /**
    * Filter HAPI validation issues to only profile-related ones
+   * 
+   * NOTE: This method is deprecated and no longer used.
+   * The HapiValidationCoordinator now handles aspect-based distribution of issues.
+   * Keeping method for backward compatibility but it's no longer called.
    */
   private filterProfileIssues(allIssues: ValidationIssue[]): ValidationIssue[] {
-    console.log(`[ProfileValidator] Filtering ${allIssues.length} issues...`);
-    
-    const profileIssues = allIssues.filter(issue => {
-      // Already tagged as profile by hapi-issue-mapper
-      if (issue.aspect === 'profile') {
-        console.log(`[ProfileValidator] ✓ Keeping issue (aspect=profile): ${issue.message?.substring(0, 60)}`);
-        return true;
-      }
-
-      // Additional check: look for profile-related codes
-      const code = issue.code?.toLowerCase() || '';
-      const message = issue.message?.toLowerCase() || '';
-
-      const profileKeywords = [
-        'profile',
-        'constraint',
-        'invariant',
-        'conformance',
-        'structuredefinition',
-      ];
-
-      const hasKeyword = profileKeywords.some(keyword => 
-        code.includes(keyword) || message.includes(keyword)
-      );
-      
-      if (hasKeyword) {
-        console.log(`[ProfileValidator] ✓ Keeping issue (keyword match): ${issue.message?.substring(0, 60)}`);
-      } else {
-        console.log(`[ProfileValidator] ✗ Filtering out (aspect=${issue.aspect}): ${issue.message?.substring(0, 60)}`);
-      }
-      
-      return hasKeyword;
-    });
-    
-    return profileIssues;
+    // This filtering is no longer needed because the coordinator distributes issues by aspect
+    return allIssues.filter(issue => issue.aspect === 'profile');
   }
 
   /**

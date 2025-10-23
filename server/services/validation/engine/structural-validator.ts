@@ -19,6 +19,7 @@
 import type { ValidationIssue } from '../types/validation-types';
 import { hapiStructuralValidator } from './structural-validator-hapi';
 import { schemaStructuralValidator } from './structural-validator-schema';
+import type { HapiValidationCoordinator } from './hapi-validation-coordinator';
 
 // ============================================================================
 // Structural Validator (Facade)
@@ -35,12 +36,16 @@ export class StructuralValidator {
    * 
    * @param resource - FHIR resource to validate
    * @param resourceType - Expected resource type
+   * @param fhirVersion - FHIR version (optional, will be detected if not provided)
+   * @param settings - Optional validation settings for best practice checks
    * @returns Array of structural validation issues
    */
   async validate(
     resource: any, 
     resourceType: string,
-    fhirVersion?: 'R4' | 'R5' | 'R6' // Task 2.4: Accept FHIR version parameter
+    fhirVersion?: 'R4' | 'R5' | 'R6', // Task 2.4: Accept FHIR version parameter
+    settings?: any,
+    coordinator?: HapiValidationCoordinator
   ): Promise<ValidationIssue[]> {
     const startTime = Date.now();
 
@@ -58,6 +63,24 @@ export class StructuralValidator {
         return preValidationIssues;
       }
 
+      // Check coordinator first
+      if (coordinator) {
+        const resourceId = `${resource.resourceType}/${resource.id}`;
+        const coordinatorIssues = coordinator.getIssuesByAspect(resourceId, 'structural');
+        
+        if (coordinatorIssues.length > 0 || coordinator.hasBeenInitialized(resourceId)) {
+          console.log(`[StructuralValidator] Using ${coordinatorIssues.length} issues from coordinator`);
+          // Add any pre-validation issues
+          coordinatorIssues.unshift(...preValidationIssues);
+          const validationTime = Date.now() - startTime;
+          console.log(
+            `[StructuralValidator] Validated ${resourceType} in ${validationTime}ms ` +
+            `(${coordinatorIssues.length} issues, source: coordinator)`
+          );
+          return coordinatorIssues;
+        }
+      }
+
       // Check HAPI availability (cached)
       await this.checkHapiAvailability();
 
@@ -67,7 +90,7 @@ export class StructuralValidator {
         // Use HAPI validator (primary)
         try {
           console.log(`[StructuralValidator] Using HAPI validator...`);
-          issues = await hapiStructuralValidator.validate(resource, resourceType, version);
+          issues = await hapiStructuralValidator.validate(resource, resourceType, version, settings);
         } catch (hapiError) {
           console.warn(`[StructuralValidator] HAPI validation failed, falling back to schema:`, hapiError);
           // Fall back to schema validator
@@ -171,38 +194,28 @@ export class StructuralValidator {
       return;
     }
     
-    // TEMPORARY FIX: Disable HAPI validator to avoid long download times
-    // The HAPI validator tries to download FHIR packages on first run which can take minutes
-    // Use schema validator instead for fast, reliable validation
-    if (this.hapiAvailable === null) {
-      console.log(`[StructuralValidator] HAPI validator disabled (downloads too slow), using schema validator`);
-      this.hapiAvailable = false;
+    // Return cached result if available
+    if (this.hapiAvailable !== null) {
+      return;
     }
-    return;
-    
-    // Original code (commented out):
-    // // Return cached result if available
-    // if (this.hapiAvailable !== null) {
-    //   return;
-    // }
-    //
-    // // Avoid concurrent checks
-    // if (this.hapiCheckInProgress) {
-    //   // Wait a bit and return cached result
-    //   await new Promise(resolve => setTimeout(resolve, 100));
-    //   return;
-    // }
-    //
-    // try {
-    //   this.hapiCheckInProgress = true;
-    //   this.hapiAvailable = await hapiStructuralValidator.isAvailable();
-    //   console.log(`[StructuralValidator] HAPI validator available: ${this.hapiAvailable}`);
-    // } catch (error) {
-    //   console.warn(`[StructuralValidator] Failed to check HAPI availability:`, error);
-    //   this.hapiAvailable = false;
-    // } finally {
-    //   this.hapiCheckInProgress = false;
-    // }
+
+    // Avoid concurrent checks
+    if (this.hapiCheckInProgress) {
+      // Wait a bit and return cached result
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return;
+    }
+
+    try {
+      this.hapiCheckInProgress = true;
+      this.hapiAvailable = await hapiStructuralValidator.isAvailable();
+      console.log(`[StructuralValidator] HAPI validator available: ${this.hapiAvailable}`);
+    } catch (error) {
+      console.warn(`[StructuralValidator] Failed to check HAPI availability:`, error);
+      this.hapiAvailable = false;
+    } finally {
+      this.hapiCheckInProgress = false;
+    }
   }
 
   /**

@@ -421,6 +421,18 @@ export class HapiValidatorClient {
     args.push('-tx', terminologyServer);
     console.log(`[HapiValidatorClient] Configuring HAPI with terminology server (-tx flag): ${terminologyServer}`);
 
+    // Enable all validation levels (errors, warnings, information, hints)
+    const validationLevel = options.validationLevel || 'hints';
+    args.push('-level', validationLevel);
+    console.log(`[HapiValidatorClient] Validation level set to: ${validationLevel}`);
+
+    // Enable best practice recommendations if configured (default: true)
+    const enableBestPractice = options.enableBestPractice ?? true;
+    if (enableBestPractice) {
+      args.push('-best-practice', 'warning');
+      console.log(`[HapiValidatorClient] Best practice recommendations enabled`);
+    }
+
     // Log limitations for non-stable versions
     const limitations = versionConfig.limitations || [];
     if (limitations.length > 0) {

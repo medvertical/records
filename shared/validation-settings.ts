@@ -148,6 +148,10 @@ export interface ValidationSettings {
   autoRevalidateOnVersionChange?: boolean; // Automatically revalidate when versionId changes in list view (default: true)
   listViewPollingInterval?: number; // Polling interval for list view in milliseconds (default: 30000, range: 10000-300000)
 
+  /** Best Practice Validation Settings */
+  enableBestPracticeChecks?: boolean; // Enable FHIR best practice recommendations (default: true)
+  bestPracticeSeverity?: 'warning' | 'info'; // Severity level for best practice issues (default: 'warning')
+
   /** Task 6.6 & 6.7: Recursive Reference Validation Configuration */
   recursiveReferenceValidation?: {
     enabled: boolean;              // Enable recursive validation (default: false)
@@ -527,7 +531,7 @@ export const DEFAULT_CACHE_CONFIG = {
 
 export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
   aspects: {
-    structural: { enabled: true, severity: 'error', engine: 'schema' },
+    structural: { enabled: true, severity: 'error', engine: 'hapi' },
     profile: { enabled: true, severity: 'warning', engine: 'hapi' },
     terminology: { enabled: true, severity: 'warning', engine: 'server' },
     reference: { enabled: true, severity: 'error', engine: 'internal' },
@@ -563,12 +567,12 @@ export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
 
 export const DEFAULT_VALIDATION_SETTINGS_R5: ValidationSettings = {
   aspects: {
-    structural: { enabled: true, severity: 'error' },
-    profile: { enabled: true, severity: 'warning' },
-    terminology: { enabled: true, severity: 'warning' },
-    reference: { enabled: true, severity: 'error' },
-    businessRule: { enabled: true, severity: 'error' },
-    metadata: { enabled: true, severity: 'error' }
+    structural: { enabled: true, severity: 'error', engine: 'hapi' },
+    profile: { enabled: true, severity: 'warning', engine: 'hapi' },
+    terminology: { enabled: true, severity: 'warning', engine: 'server' },
+    reference: { enabled: true, severity: 'error', engine: 'internal' },
+    businessRule: { enabled: true, severity: 'error', engine: 'fhirpath' },
+    metadata: { enabled: true, severity: 'error', engine: 'schema' }
   },
   performance: {
     maxConcurrent: 5,

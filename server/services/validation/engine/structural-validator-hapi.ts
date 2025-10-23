@@ -25,12 +25,14 @@ export class HapiStructuralValidator {
    * @param resource - FHIR resource to validate
    * @param resourceType - Expected resource type
    * @param fhirVersion - FHIR version (R4, R5, or R6)
+   * @param settings - Optional validation settings for best practice checks
    * @returns Array of structural validation issues only
    */
   async validate(
     resource: any,
     resourceType: string,
-    fhirVersion: 'R4' | 'R5' | 'R6'
+    fhirVersion: 'R4' | 'R5' | 'R6',
+    settings?: any
   ): Promise<ValidationIssue[]> {
     const startTime = Date.now();
 
@@ -48,6 +50,8 @@ export class HapiStructuralValidator {
       const options: HapiValidationOptions = {
         fhirVersion,
         mode: 'online', // Use online mode for better coverage
+        enableBestPractice: settings?.enableBestPracticeChecks ?? true,
+        validationLevel: 'hints', // Show all message types
         // No profile specified - structural validation only
       };
 

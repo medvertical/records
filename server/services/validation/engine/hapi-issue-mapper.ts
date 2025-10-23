@@ -103,7 +103,7 @@ export function determineAspectFromCode(code: string): string {
 /**
  * Map HAPI severity to ValidationIssue severity
  */
-export function mapSeverity(hapiSeverity: 'fatal' | 'error' | 'warning' | 'information'): 'error' | 'warning' | 'info' {
+export function mapSeverity(hapiSeverity: 'fatal' | 'error' | 'warning' | 'information' | 'hint'): 'error' | 'warning' | 'info' {
   switch (hapiSeverity) {
     case 'fatal':
     case 'error':
@@ -111,6 +111,7 @@ export function mapSeverity(hapiSeverity: 'fatal' | 'error' | 'warning' | 'infor
     case 'warning':
       return 'warning';
     case 'information':
+    case 'hint':
       return 'info';
     default:
       return 'error';

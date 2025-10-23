@@ -38,47 +38,28 @@ export function useResourceActions({
     setIsRevalidating(true);
 
     try {
-      // Call the validation endpoint to enqueue resource
-      const response = await fetch('/api/validation/queue/enqueue', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          serverId,
-          resourceType,
-          resourceId,
-          priority: 'high', // High priority for manual revalidation
-        }),
+      // Clear existing validation results for this resource
+      await fetch(`/api/validation/resources/${resourceType}/${resourceId}`, {
+        method: 'DELETE',
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to enqueue resource for validation');
-      }
-
-      // Optimistic update: Keep resource visible, only update validation status
+      // Optimistic update: Show revalidating state
       const currentData = queryClient.getQueryData(['/api/fhir/resources', resourceId]);
       if (currentData) {
         queryClient.setQueryData(['/api/fhir/resources', resourceId], {
           ...currentData,
           _isRevalidating: true,
-          _validationSummary: {
-            ...(currentData as any)._validationSummary,
-            status: 'validating',
-          },
         });
       }
 
       toast({
-        title: 'Validation Queued',
-        description: `${resourceType}/${resourceId} has been enqueued for validation`,
+        title: 'Revalidating',
+        description: `${resourceType}/${resourceId} validation cleared. Refetch to see new results.`,
       });
 
       onRevalidateSuccess?.();
 
-      // Soft refetch after 3 seconds to get updated validation results
-      // This won't trigger loading state since we already have data in cache
+      // Soft refetch after 2 seconds to trigger new validation
       setTimeout(() => {
         queryClient.refetchQueries({
           queryKey: ['/api/fhir/resources', resourceId],
@@ -88,13 +69,13 @@ export function useResourceActions({
           queryKey: ['/api/validation/resources', resourceType, resourceId],
           exact: true,
         });
-      }, 3000);
+      }, 2000);
     } catch (error) {
       console.error('Failed to revalidate resource:', error);
       
       toast({
-        title: 'Validation Failed',
-        description: error instanceof Error ? error.message : 'Failed to enqueue resource',
+        title: 'Validation Clear Failed',
+        description: error instanceof Error ? error.message : 'Failed to clear validation results',
         variant: 'destructive',
       });
 

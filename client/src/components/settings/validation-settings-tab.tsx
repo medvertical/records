@@ -1027,6 +1027,37 @@ export function ValidationSettingsTab() {
             )}
           </div>
 
+          {/* Best Practice Recommendations */}
+          <Separator />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label className="text-sm font-semibold">Best Practice Recommendations</Label>
+                <p className="text-sm text-muted-foreground">
+                  Show FHIR best practice recommendations (e.g., narrative text, domain-6 constraints)
+                </p>
+              </div>
+              <Switch
+                checked={settings.enableBestPracticeChecks ?? true}
+                onCheckedChange={(checked) => {
+                  setSettings({
+                    ...settings,
+                    enableBestPracticeChecks: checked
+                  });
+                }}
+              />
+            </div>
+            {settings.enableBestPracticeChecks && (
+              <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="text-blue-900 dark:text-blue-200 text-xs">
+                  When enabled, the validator will check for FHIR best practices like narrative text presence, 
+                  proper metadata, and other recommendations from the FHIR specification. These appear as warnings or info messages.
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+
           {/* $validate Operation Toggle */}
           <Separator />
           <div className="space-y-3">

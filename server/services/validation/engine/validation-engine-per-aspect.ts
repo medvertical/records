@@ -21,6 +21,7 @@ import { ReferenceValidator } from './reference-validator';
 import { BusinessRuleValidator } from './business-rule-validator';
 import { MetadataValidator } from './metadata-validator';
 import { getValidationTimeouts } from '../../../config/validation-timeouts'; // CRITICAL FIX: Import centralized timeout config
+import { getHapiValidationCoordinator, type HapiValidationCoordinator } from './hapi-validation-coordinator';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -180,6 +181,31 @@ export class ValidationEnginePerAspect {
       'metadata'
     ];
     
+    // Check if any aspect uses HAPI engine
+    const needsHapiCoordinator = aspects.some(aspect => {
+      const aspectSettings = settings.aspects[aspect] as any;
+      return aspectSettings?.enabled && aspectSettings?.engine === 'hapi';
+    });
+    
+    // Initialize coordinator once if needed
+    let coordinator: HapiValidationCoordinator | undefined;
+    if (needsHapiCoordinator) {
+      coordinator = getHapiValidationCoordinator();
+      const resourceId = `${resourceType}/${fhirId}`;
+      
+      if (!coordinator.hasBeenInitialized(resourceId)) {
+        console.log('[ValidationEnginePerAspect] Initializing HAPI coordinator');
+        try {
+          await coordinator.initializeForResource(resource, settings as any, profileUrl, this.fhirVersion);
+          console.log('[ValidationEnginePerAspect] HAPI coordinator initialized successfully');
+        } catch (error) {
+          console.warn('[ValidationEnginePerAspect] HAPI coordinator initialization failed:', error);
+          // Continue without coordinator - validators will fall back to individual calls
+          coordinator = undefined;
+        }
+      }
+    }
+    
     for (const aspect of aspects) {
       if (!settings.aspects[aspect]?.enabled) {
         console.log(`Skipping disabled aspect: ${aspect}`);
@@ -187,7 +213,7 @@ export class ValidationEnginePerAspect {
       }
       
       try {
-        const result = await this.validateAspect(aspect, resource, settings, profileUrl);
+        const result = await this.validateAspect(aspect, resource, settings, profileUrl, coordinator);
         results.push(result);
         
         // Persist result
@@ -229,7 +255,8 @@ export class ValidationEnginePerAspect {
     aspect: ValidationAspectType,
     resource: any,
     settings: ValidationSettingsSnapshot,
-    profileUrl?: string
+    profileUrl?: string,
+    coordinator?: HapiValidationCoordinator
   ): Promise<PerAspectValidationResult> {
     const startTime = Date.now();
     const aspectTimeouts = getAspectTimeouts();
@@ -240,7 +267,7 @@ export class ValidationEnginePerAspect {
     try {
       // Wrap validation in timeout promise
       const result = await Promise.race([
-        this.performAspectValidation(aspect, resource, settings, profileUrl),
+        this.performAspectValidation(aspect, resource, settings, profileUrl, coordinator),
         this.timeoutPromise(timeoutMs, aspect),
       ]);
       
@@ -276,7 +303,8 @@ export class ValidationEnginePerAspect {
     aspect: ValidationAspectType,
     resource: any,
     settings: ValidationSettingsSnapshot,
-    profileUrl?: string
+    profileUrl?: string,
+    coordinator?: HapiValidationCoordinator
   ): Promise<Omit<PerAspectValidationResult, 'durationMs'>> {
     const issues: RawValidationIssue[] = [];
     
@@ -292,7 +320,9 @@ export class ValidationEnginePerAspect {
           validationIssues = await this.structuralValidator.validate(
             resource,
             resource.resourceType,
-            this.fhirVersion
+            this.fhirVersion,
+            settings as any,
+            coordinator
           );
           console.log(`[PerAspect] Structural validation found ${validationIssues.length} issues`);
           break;
@@ -303,7 +333,8 @@ export class ValidationEnginePerAspect {
             resource.resourceType,
             profileUrl,
             this.fhirVersion,
-            settings
+            settings,
+            coordinator
           );
           console.log(`[PerAspect] Profile validation found ${validationIssues.length} issues`);
           break;
@@ -342,7 +373,8 @@ export class ValidationEnginePerAspect {
           validationIssues = await this.metadataValidator.validate(
             resource,
             resource.resourceType,
-            this.fhirVersion
+            this.fhirVersion,
+            coordinator
           );
           console.log(`[PerAspect] Metadata validation found ${validationIssues.length} issues`);
           break;

@@ -10,6 +10,7 @@
 
 import type { ValidationIssue } from '../types/validation-types';
 import moment from 'moment';
+import type { HapiValidationCoordinator } from './hapi-validation-coordinator';
 
 /**
  * Task 8.11: Required metadata rules by resource type
@@ -92,7 +93,8 @@ export class MetadataValidator {
   async validate(
     resource: any, 
     resourceType: string,
-    fhirVersion?: 'R4' | 'R5' | 'R6' // Task 2.4: Accept FHIR version parameter
+    fhirVersion?: 'R4' | 'R5' | 'R6', // Task 2.4: Accept FHIR version parameter
+    coordinator?: HapiValidationCoordinator
   ): Promise<ValidationIssue[]> {
     const issues: ValidationIssue[] = [];
     const startTime = Date.now();
@@ -100,6 +102,22 @@ export class MetadataValidator {
     console.log(`[MetadataValidator] Validating ${resourceType} resource metadata...`);
 
     try {
+      // Check coordinator first
+      if (coordinator) {
+        const resourceId = `${resource.resourceType}/${resource.id}`;
+        const coordinatorIssues = coordinator.getIssuesByAspect(resourceId, 'metadata');
+        
+        if (coordinatorIssues.length > 0) {
+          console.log(`[MetadataValidator] Using ${coordinatorIssues.length} issues from coordinator`);
+          const validationTime = Date.now() - startTime;
+          console.log(
+            `[MetadataValidator] Validated ${resourceType} metadata in ${validationTime}ms ` +
+            `(${coordinatorIssues.length} issues, source: coordinator)`
+          );
+          return coordinatorIssues;
+        }
+      }
+
       // Validate meta field existence and structure
       const metaIssues = this.validateMetaField(resource, resourceType);
       issues.push(...metaIssues);

@@ -32,6 +32,12 @@ export interface HapiValidationOptions {
   
   /** Package cache directory (overrides default ~/.fhir/packages) */
   cacheDirectory?: string;
+  
+  /** Enable best-practice checks (default: true) */
+  enableBestPractice?: boolean;
+  
+  /** Validation detail level (default: 'hints' to show all messages) */
+  validationLevel?: 'errors' | 'warnings' | 'hints';
 }
 
 export interface HapiOperationOutcome {
@@ -40,7 +46,7 @@ export interface HapiOperationOutcome {
 }
 
 export interface HapiIssue {
-  severity: 'fatal' | 'error' | 'warning' | 'information';
+  severity: 'fatal' | 'error' | 'warning' | 'information' | 'hint';
   code: string;
   details?: {
     text?: string;

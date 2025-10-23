@@ -507,7 +507,7 @@ export class ValidationEngine extends EventEmitter {
           // Task 2.4: Pass fhirVersion to all validators
           switch (aspect) {
             case 'structural':
-              return await this.structuralValidator.validate(request.resource, request.resourceType, this.fhirVersion);
+              return await this.structuralValidator.validate(request.resource, request.resourceType, this.fhirVersion, settings);
             case 'profile':
               return await this.profileValidator.validate(request.resource, request.resourceType, request.profileUrl, this.fhirVersion, settings);
             case 'terminology':

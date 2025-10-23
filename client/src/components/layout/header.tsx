@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { PanelLeft, AlertTriangle } from "lucide-react";
+import { PanelLeft, AlertTriangle, Database } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import AppIcon from "@/components/ui/app-icon";
@@ -19,6 +19,7 @@ interface HeaderProps {
 export default function Header({ title, subtitle, connectionStatus, onSidebarToggle }: HeaderProps) {
   const { toast } = useToast();
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [confirmCacheDialogOpen, setConfirmCacheDialogOpen] = useState(false);
 
   const handleClearAllValidationResults = async () => {
     console.log('[Header] Starting validation results deletion...');
@@ -64,6 +65,44 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
     }
   };
 
+  const handleClearAllCaches = async () => {
+    console.log('[Header] Starting cache clearing...');
+    
+    try {
+      // Clear all caches (validation, profile, terminology, IG package)
+      const response = await fetch('/api/validation/cache/clear', { 
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('[Header] Caches cleared:', result);
+      
+      // Invalidate all React Query caches to refresh UI
+      await queryClient.invalidateQueries();
+      
+      console.log('[Header] Cache clearing completed');
+      
+      toast({
+        title: "Caches Cleared",
+        description: "All validation, profile, terminology, and IG package caches have been cleared successfully.",
+      });
+    } catch (error) {
+      console.error('[Header] Cache clear error:', error);
+      toast({
+        title: "Clear Failed",
+        description: "Failed to clear caches. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 w-screen fixed top-0 left-0 z-50">
       <div className="flex items-center justify-between px-6 py-4">
@@ -92,19 +131,43 @@ export default function Header({ title, subtitle, connectionStatus, onSidebarTog
           {/* Activity Widget */}
           <ActivityWidget />
           
+          {/* Clear All Caches Button */}
+          <Button 
+            onClick={() => setConfirmCacheDialogOpen(true)}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-1.5 h-9 text-orange-600 hover:text-orange-700 hover:bg-orange-50 border-orange-200 dark:text-orange-400 dark:hover:text-orange-300 dark:hover:bg-orange-950 dark:border-orange-800"
+            aria-label="Clear all caches"
+          >
+            <Database className="h-4 w-4" />
+            <span className="hidden lg:inline">Clear Cache</span>
+          </Button>
+          
           {/* Clear All Validation Results Button */}
           <Button 
             onClick={() => setConfirmDialogOpen(true)}
             variant="outline"
             size="sm"
-            className="flex items-center space-x-1 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+            className="flex items-center gap-1.5 h-9 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950 dark:border-red-800"
             aria-label="Clear all validation results"
           >
             <AlertTriangle className="h-4 w-4" />
             <span className="hidden lg:inline">Clear Results</span>
           </Button>
           
-          {/* Confirmation Dialog */}
+          {/* Cache Clear Confirmation Dialog */}
+          <ConfirmDialog
+            open={confirmCacheDialogOpen}
+            onOpenChange={setConfirmCacheDialogOpen}
+            title="🗄️ Clear All Caches?"
+            description="This will clear all validation, profile, terminology, and IG package caches. This action may temporarily slow down validations until caches are rebuilt."
+            onConfirm={handleClearAllCaches}
+            confirmText="Yes, Clear Caches"
+            cancelText="Cancel"
+            variant="default"
+          />
+          
+          {/* Validation Results Confirmation Dialog */}
           <ConfirmDialog
             open={confirmDialogOpen}
             onOpenChange={setConfirmDialogOpen}
