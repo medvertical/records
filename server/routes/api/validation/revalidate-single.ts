@@ -31,11 +31,14 @@ const router = Router();
  * }
  */
 router.post('/resources/:resourceType/:id/revalidate', async (req: Request, res: Response) => {
+  const startTime = Date.now();
   try {
     const { resourceType, id } = req.params;
     const serverId = parseInt(req.query.serverId as string) || 1;
     const { profileUrls } = req.body || {};
     
+    logger.info(`[Single Revalidate] ========== START ==========`);
+    logger.info(`[Single Revalidate] Timestamp: ${new Date().toISOString()}`);
     logger.info(`[Single Revalidate] Revalidating ${resourceType}/${id} on server ${serverId}`);
     logger.info(`[Single Revalidate] Profile URLs provided:`, profileUrls);
     
@@ -117,7 +120,8 @@ router.post('/resources/:resourceType/:id/revalidate', async (req: Request, res:
         } as any // Type assertion to avoid TypeScript error with dynamic import
       );
       
-      logger.info(`[Single Revalidate] Validation completed successfully for ${resourceType}/${id}`);
+      const duration = Date.now() - startTime;
+      logger.info(`[Single Revalidate] Validation completed successfully for ${resourceType}/${id} in ${duration}ms`);
       logger.info(`[Single Revalidate] ValidationResult:`, JSON.stringify({
         wasRevalidated: validationResult.wasRevalidated,
         isValid: validationResult.detailedResult.isValid,
@@ -129,6 +133,7 @@ router.post('/resources/:resourceType/:id/revalidate', async (req: Request, res:
           issuesCount: a.issues?.length || 0
         }))
       }, null, 2));
+      logger.info(`[Single Revalidate] ========== SUCCESS (${duration}ms) ==========`);
       
       res.json({
         success: true,
@@ -139,11 +144,13 @@ router.post('/resources/:resourceType/:id/revalidate', async (req: Request, res:
       });
       
     } catch (validationError) {
-      logger.error(`[Single Revalidate] Validation failed for ${resourceType}/${id}:`, validationError);
+      const duration = Date.now() - startTime;
+      logger.error(`[Single Revalidate] Validation failed for ${resourceType}/${id} after ${duration}ms:`, validationError);
       logger.error(`[Single Revalidate] Error details:`, {
         message: validationError instanceof Error ? validationError.message : String(validationError),
         stack: validationError instanceof Error ? validationError.stack : undefined,
       });
+      logger.error(`[Single Revalidate] ========== FAILED (${duration}ms) ==========`);
       
       res.status(500).json({
         success: false,
@@ -155,7 +162,9 @@ router.post('/resources/:resourceType/:id/revalidate', async (req: Request, res:
     }
     
   } catch (error) {
-    logger.error('[Single Revalidate] Error processing revalidation:', error);
+    const duration = Date.now() - startTime;
+    logger.error(`[Single Revalidate] Error processing revalidation after ${duration}ms:`, error);
+    logger.error(`[Single Revalidate] ========== ERROR (${duration}ms) ==========`);
     res.status(500).json({
       success: false,
       error: 'Internal server error',

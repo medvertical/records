@@ -364,7 +364,7 @@ export class ProfileValidator {
         mode,
         terminologyServers: terminologyServers.length > 0 ? terminologyServers : undefined,
         igPackages: igPackages.length > 0 ? igPackages : undefined,
-        cacheDirectory: settings?.offlineConfig?.profileCachePath || './server/cache/fhir-packages',
+        cacheDirectory: settings?.offlineConfig?.profileCachePath || '/Users/sheydin/.fhir/packages',
         timeout: hapiTimeout, // Use centralized timeout (default: 150s) for complex profile validation
         enableBestPractice: settings?.enableBestPracticeChecks ?? true,
         validationLevel: 'hints', // Show all message types

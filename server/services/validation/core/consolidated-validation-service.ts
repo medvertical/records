@@ -18,7 +18,7 @@
 
 import { EventEmitter } from 'events';
 import { storage } from '../../../storage';
-import { getValidationEngine } from './validation-engine';
+import { validationEnginePerAspect } from '../engine/validation-engine-per-aspect';
 import { getValidationPipeline } from './validation-pipeline';
 import { getValidationResourceTypeFilteringService } from '../features/validation-resource-type-filtering-service';
 import { getValidationSettingsCacheService } from '../utils/validation-settings-cache-service';
@@ -63,7 +63,7 @@ export interface ValidateResourceOptions {
 
 export class ConsolidatedValidationService extends EventEmitter {
   private pipeline = getValidationPipeline();
-  private validationEngine = getValidationEngine();
+  private validationEngine = validationEnginePerAspect;
   private settingsCache = getValidationSettingsCacheService();
   private resultBuilder = getValidationResultBuilder();
   private cacheHelper = getValidationCacheHelper();

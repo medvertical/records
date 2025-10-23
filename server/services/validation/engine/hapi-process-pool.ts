@@ -168,6 +168,9 @@ export class HapiProcessPool extends EventEmitter {
       processInfo.status = 'idle';
       console.log(`[HapiProcessPool] Process ${processId} warmed up in ${warmupTime}ms and ready`);
       this.emit('processSpawned', { processId, warmupTime });
+      
+      // Process any queued jobs now that process is ready
+      this.processQueue();
 
     } catch (error) {
       console.error(`[HapiProcessPool] Failed to spawn/warmup process ${processId}:`, error);
@@ -333,7 +336,7 @@ export class HapiProcessPool extends EventEmitter {
   /**
    * Execute validation on a specific process
    */
-  private async executeValidation(job: ValidationJob, process: HapiProcess): Promise<void> {
+  private async executeValidation(job: ValidationJob, hapiProcess: HapiProcess): Promise<void> {
     const startTime = Date.now();
 
     try {
@@ -351,9 +354,13 @@ export class HapiProcessPool extends EventEmitter {
       const args = this.buildValidatorArgs(tempFilePath, job.options);
 
       // Execute (simplified - in production would use persistent process)
-      const javaPath = process.env.JAVA_HOME 
-        ? `${process.env.JAVA_HOME}/bin/java`
+      // Get environment variables from global process
+      const baseEnv = process.env || {};
+      const javaPath = baseEnv.JAVA_HOME 
+        ? `${baseEnv.JAVA_HOME}/bin/java`
         : '/opt/homebrew/opt/openjdk@17/bin/java';
+      
+      console.log(`[HapiProcessPool] Using Java at: ${javaPath}`);
       
       // Use centralized timeout configuration
       const defaultTimeout = getHapiTimeout();
@@ -361,8 +368,8 @@ export class HapiProcessPool extends EventEmitter {
       
       // CRITICAL FIX: Set package cache path so HAPI finds cached packages
       const env = {
-        ...process.env,
-        FHIR_PACKAGE_CACHE_PATH: process.env.FHIR_PACKAGE_CACHE_PATH || '/Users/sheydin/.fhir/packages'
+        ...baseEnv,
+        FHIR_PACKAGE_CACHE_PATH: baseEnv.FHIR_PACKAGE_CACHE_PATH || '/Users/sheydin/.fhir/packages'
       };
       
       console.log(`[HapiProcessPool] Spawning Java process with timeout: ${timeoutMs}ms, cache: ${env.FHIR_PACKAGE_CACHE_PATH}`);
@@ -398,7 +405,7 @@ export class HapiProcessPool extends EventEmitter {
           // Update stats
           const validationTime = Date.now() - startTime;
           this.totalValidations++;
-          process.validationCount++;
+          hapiProcess.validationCount++;
           this.validationTimes.push(validationTime);
           if (this.validationTimes.length > 1000) {
             this.validationTimes.shift(); // Keep last 1000
@@ -412,7 +419,7 @@ export class HapiProcessPool extends EventEmitter {
           this.activeJobs.delete(job.id);
 
           // Mark process as idle
-          process.status = 'idle';
+          hapiProcess.status = 'idle';
 
           this.emit('jobCompleted', { jobId: job.id, validationTime });
 
@@ -420,7 +427,7 @@ export class HapiProcessPool extends EventEmitter {
           this.processQueue();
 
         } catch (error) {
-          this.handleJobError(job, process, error as Error);
+          this.handleJobError(job, hapiProcess, error as Error);
         }
       });
 
@@ -430,34 +437,34 @@ export class HapiProcessPool extends EventEmitter {
         } catch (e) {
           // Ignore
         }
-        this.handleJobError(job, process, error);
+        this.handleJobError(job, hapiProcess, error);
       });
 
     } catch (error) {
-      this.handleJobError(job, process, error as Error);
+      this.handleJobError(job, hapiProcess, error as Error);
     }
   }
 
   /**
    * Handle job error
    */
-  private handleJobError(job: ValidationJob, process: HapiProcess, error: Error): void {
+  private handleJobError(job: ValidationJob, hapiProcess: HapiProcess, error: Error): void {
     console.error(`[HapiProcessPool] Job ${job.id} failed:`, error);
 
     this.totalErrors++;
-    process.errorCount++;
+    hapiProcess.errorCount++;
     
     clearTimeout(job.timeout);
     job.reject(error);
     this.activeJobs.delete(job.id);
 
     // Mark process as failed if too many errors
-    if (process.errorCount > 5) {
-      console.warn(`[HapiProcessPool] Process ${process.id} has ${process.errorCount} errors, marking as failed`);
-      process.status = 'failed';
-      this.recycleProcess(process.id);
+    if (hapiProcess.errorCount > 5) {
+      console.warn(`[HapiProcessPool] Process ${hapiProcess.id} has ${hapiProcess.errorCount} errors, marking as failed`);
+      hapiProcess.status = 'failed';
+      this.recycleProcess(hapiProcess.id);
     } else {
-      process.status = 'idle';
+      hapiProcess.status = 'idle';
     }
 
     this.emit('jobFailed', { jobId: job.id, error: error.message });

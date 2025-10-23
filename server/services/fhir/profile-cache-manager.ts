@@ -83,7 +83,7 @@ export class ProfileCacheManager {
 
   /**
    * Get package cache directory path
-   * Format: /opt/fhir/igs/{package-id}/{version}/
+   * Format: /Users/sheydin/.fhir/packages/{package-id}/{version}/
    */
   getPackageCacheDir(packageId: string, version: string): string {
     return path.join(this.config.cacheDirectory, packageId, version);

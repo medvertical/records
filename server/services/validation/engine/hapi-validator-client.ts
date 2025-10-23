@@ -413,7 +413,7 @@ export class HapiValidatorClient {
     }
 
     // Configure package cache directory (use project-local cache)
-    const cacheDir = options.cacheDirectory || './server/cache/fhir-packages';
+    const cacheDir = options.cacheDirectory || '/Users/sheydin/.fhir/packages';
     args.push('-txCache', cacheDir);
     console.log(`[HapiValidatorClient] Using package cache: ${cacheDir}`);
 

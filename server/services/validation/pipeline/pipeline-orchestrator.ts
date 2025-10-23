@@ -5,7 +5,8 @@
  */
 
 import { EventEmitter } from 'events';
-import { getValidationEngine } from '../core/validation-engine';
+import { validationEnginePerAspect } from '../engine/validation-engine-per-aspect';
+import type { PerAspectValidationResult, RawValidationIssue } from '../engine/validation-engine-per-aspect';
 import { getValidationSettingsService } from '../settings/validation-settings-service';
 import type { ValidationRequest, ValidationResult } from '../types/validation-types';
 import type { ValidationSettings } from '@shared/validation-settings';
@@ -16,7 +17,7 @@ import { ValidationPipelineConfig, ValidationPipelineRequest, ValidationPipeline
 // ============================================================================
 
 export class PipelineOrchestrator extends EventEmitter {
-  private engine = getValidationEngine();
+  private engine = validationEnginePerAspect;
   private settingsService = getValidationSettingsService();
   private config: ValidationPipelineConfig;
   private activePipelines = new Map<string, Promise<ValidationPipelineResult>>();
@@ -175,16 +176,29 @@ export class PipelineOrchestrator extends EventEmitter {
         try {
           console.log(`[PipelineOrchestrator] Processing resource: ${resourceRequest.resourceType}/${resourceRequest.resourceId}`);
           
-          // Convert to validation request format
-          const validationRequest: ValidationRequest = {
-            resource: resourceRequest.resource,
-            resourceType: resourceRequest.resourceType,
-            profileUrl: resourceRequest.profileUrl,
-            settings: resourceRequest.settings || settings // Use resource-specific settings if available, fallback to global settings
-          };
+          // Get settings for validation (use resource-specific or global)
+          const validationSettings = resourceRequest.settings || settings;
+          
+          // Get serverId (default to 1 if not available)
+          const serverId = (resourceRequest.resource as any).serverId || 1;
+          
+          // Call the new validation engine with per-aspect support
+          const { success, results: perAspectResults } = await this.engine.validateResource(
+            serverId,
+            resourceRequest.resourceType,
+            resourceRequest.resourceId,
+            resourceRequest.resource,
+            validationSettings,
+            resourceRequest.profileUrl
+          );
 
-          // Validate the resource
-          const result = await this.engine.validateResource(validationRequest);
+          // Transform per-aspect results to ValidationResult format
+          const result = this.transformPerAspectResults(
+            perAspectResults,
+            resourceRequest.resourceType,
+            resourceRequest.resourceId
+          );
+          
           results.push(result);
           
           progressStats.processedResources++;
@@ -398,6 +412,74 @@ export class PipelineOrchestrator extends EventEmitter {
       cacheHitRate,
       memoryUsageMB: 0, // TODO: implement memory tracking
       throughput
+    };
+  }
+
+  /**
+   * Transform PerAspectValidationResult[] to ValidationResult
+   */
+  private transformPerAspectResults(
+    perAspectResults: PerAspectValidationResult[],
+    resourceType: string,
+    resourceId: string
+  ): ValidationResult {
+    const allIssues: any[] = [];
+    let errorCount = 0;
+    let warningCount = 0;
+    let informationCount = 0;
+    
+    for (const aspectResult of perAspectResults) {
+      // Transform RawValidationIssue to ValidationIssue
+      const transformedIssues = aspectResult.issues.map((issue: RawValidationIssue) => ({
+        severity: issue.severity,
+        code: issue.code,
+        path: issue.path,
+        message: issue.diagnostics,
+        expression: issue.expression,
+        details: {}
+      }));
+      allIssues.push(...transformedIssues);
+      
+      errorCount += aspectResult.errorCount;
+      warningCount += aspectResult.warningCount;
+      informationCount += aspectResult.informationCount;
+    }
+    
+    const isValid = perAspectResults.every(r => r.isValid);
+    const totalIssues = errorCount + warningCount + informationCount;
+    const score = totalIssues > 0 ? Math.max(0, 100 - (errorCount * 10 + warningCount * 5)) : 100;
+    
+    return {
+      resourceType,
+      resourceId,
+      isValid,
+      issues: allIssues,
+      summary: {
+        score,
+        totalIssues,
+        errorCount,
+        warningCount,
+        informationCount
+      },
+      aspects: perAspectResults.map(r => ({
+        aspect: r.aspect,
+        isValid: r.isValid,
+        executionTime: r.durationMs,
+        errorCount: r.errorCount,
+        warningCount: r.warningCount,
+        informationCount: r.informationCount,
+        issues: r.issues.map((issue: RawValidationIssue) => ({
+          severity: issue.severity,
+          code: issue.code,
+          path: issue.path,
+          message: issue.diagnostics,
+          expression: issue.expression,
+          details: {}
+        }))
+      })),
+      validatedAt: new Date(),
+      validationTime: perAspectResults.reduce((sum, r) => sum + r.durationMs, 0),
+      fhirVersion: 'R4',
     };
   }
 

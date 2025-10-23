@@ -1200,7 +1200,7 @@ export class ProfileResolver {
     settings?: ValidationSettings
   ): Promise<ProfileResolutionResult | null> {
     try {
-      const cachePath = settings?.offlineConfig?.profileCachePath || '/opt/fhir/igs/';
+      const cachePath = settings?.offlineConfig?.profileCachePath || '/Users/sheydin/.fhir/packages';
       console.log(`[ProfileResolver] Searching filesystem cache at: ${cachePath}`);
 
       // TODO: Implement filesystem search

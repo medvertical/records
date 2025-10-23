@@ -186,6 +186,14 @@ export default function ResourceDetail() {
     try {
       const url = `/api/validation/resources/${resource.resourceType}/${resource.resourceId}/revalidate?serverId=${activeServer?.id || 1}`;
       console.log('[Revalidate] Calling URL:', url);
+      console.log('[Revalidate] Request body:', { profileUrls });
+      
+      // Create AbortController with 30-second timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.error('[Revalidate] Request timeout after 30 seconds');
+        controller.abort();
+      }, 30000);
       
       // Simulate smooth progress during API call (0% -> 30%)
       let queueProgress = 0;
@@ -197,12 +205,16 @@ export default function ResourceDetail() {
         });
       }, 300);
       
+      console.log('[Revalidate] Fetching with timeout...');
       const response = await fetch(url, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileUrls })
+        body: JSON.stringify({ profileUrls }),
+        signal: controller.signal // Add abort signal
       });
-      console.log('[Revalidate] Response status:', response.status);
+      
+      clearTimeout(timeoutId); // Clear timeout if request succeeds
+      console.log('[Revalidate] Response received - status:', response.status);
       console.log('[Revalidate] Response ok:', response.ok);
 
       if (progressInterval) clearInterval(progressInterval);
@@ -319,16 +331,29 @@ export default function ResourceDetail() {
       }, 10000);
       
     } catch (error) {
-      console.error('Revalidation error:', error);
+      console.error('[Revalidate] Error during revalidation:', error);
       
       // Clean up intervals and remove from widget
       if (progressInterval) clearInterval(progressInterval);
       if (validationInterval) clearInterval(validationInterval);
       removeResourceValidation(numericResourceId);
       
+      // Determine error type for better user feedback
+      let errorMessage = 'Unknown error';
+      let errorTitle = 'Revalidation failed';
+      
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorTitle = 'Revalidation timeout';
+          errorMessage = 'The validation request took too long (>30s). The server may be busy or unresponsive. Please try again later.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
-        title: "Revalidation failed",
-        description: error instanceof Error ? error.message : 'Unknown error',
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {

@@ -73,8 +73,11 @@ class HapiValidationCoordinator {
       // Collect IG packages from settings (validators will use their own logic)
       const igPackages = settings.igPackages || [];
       
-      // Get terminology servers from settings
-      const terminologyServers = settings.terminologyServers || ['https://tx.fhir.org/r4'];
+      // Get terminology servers from settings and extract URLs
+      const terminologyServersRaw = settings.terminologyServers || [];
+      const terminologyServerUrls = terminologyServersRaw
+        .filter((server: any) => server && server.enabled)
+        .map((server: any) => server.url || server);
       
       // Build HAPI validation options
       const options: HapiValidationOptions = {
@@ -82,8 +85,8 @@ class HapiValidationCoordinator {
         profile: profiles[0], // Primary profile
         mode: 'profile', // Comprehensive validation
         igPackages: igPackages.length > 0 ? igPackages : undefined,
-        terminologyServers: terminologyServers.length > 0 ? terminologyServers : undefined,
-        cacheDirectory: settings.offlineConfig?.profileCachePath || './server/cache/fhir-packages',
+        terminologyServers: terminologyServerUrls.length > 0 ? terminologyServerUrls : undefined,
+        cacheDirectory: settings.offlineConfig?.profileCachePath || '/Users/sheydin/.fhir/packages',
         timeout: 150000, // 150 seconds for comprehensive validation
         enableBestPractice: settings.enableBestPracticeChecks ?? true,
         validationLevel: 'hints', // Get all messages
