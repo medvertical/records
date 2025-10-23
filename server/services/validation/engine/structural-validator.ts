@@ -159,6 +159,18 @@ export class StructuralValidator {
    * Check HAPI validator availability (cached)
    */
   private async checkHapiAvailability(): Promise<void> {
+    // Check if explicitly disabled via environment variable (e.g., Vercel deployment)
+    const hapiEnabled = process.env.HAPI_ENABLED !== 'false';
+    const isServerless = process.env.VERCEL === '1' || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+    
+    if (!hapiEnabled || isServerless) {
+      if (this.hapiAvailable === null) {
+        console.log(`[StructuralValidator] HAPI validator disabled (${isServerless ? 'serverless environment' : 'HAPI_ENABLED=false'}), using schema validator`);
+        this.hapiAvailable = false;
+      }
+      return;
+    }
+    
     // TEMPORARY FIX: Disable HAPI validator to avoid long download times
     // The HAPI validator tries to download FHIR packages on first run which can take minutes
     // Use schema validator instead for fast, reliable validation

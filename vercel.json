@@ -9,14 +9,17 @@
       }
     },
     {
-      "src": "api/index.js",
-      "use": "@vercel/node"
+      "src": "server.ts",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "api/index.js"
+      "dest": "server.ts"
     },
     {
       "src": "/assets/(.*)",
@@ -24,10 +27,11 @@
     },
     {
       "src": "/(.*)",
-      "dest": "api/index.js"
+      "dest": "server.ts"
     }
   ],
   "env": {
-    "NODE_ENV": "production"
+    "NODE_ENV": "production",
+    "HAPI_ENABLED": "false"
   }
 }

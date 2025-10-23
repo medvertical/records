@@ -33,3 +33,20 @@ json
 *.db
 *.sqlite
 *.sqlite3
+
+# Development documentation (archived - keep only in /docs)
+*_IMPLEMENTATION_*.md
+*_FIX*.md
+*_TEST*.md
+*_STATUS.md
+*_COMPLETE.md
+*_SUMMARY.md
+.cursor/*.md
+
+# Development scripts and test files
+test-*.ts
+test-*.js
+debug-*.js
+fix-*.js
+start-*.sh
+server.test.ts
