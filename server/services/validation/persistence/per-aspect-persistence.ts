@@ -122,14 +122,14 @@ export async function persistEngineResultPerAspect(params: {
     const warningCount = aspectResult.issues.filter(i => i.severity === 'warning').length;
     const informationCount = aspectResult.issues.filter(i => i.severity === 'info').length;
 
-    // Remove existing row for (serverId, resourceType, fhirId, aspect, settingsHash)
+    // Remove existing row for (serverId, resourceType, fhirId, aspect)
+    // Note: We delete regardless of settingsHash to avoid duplicate key violations
     await db.delete(validationResultsPerAspect).where(
       and(
         eq(validationResultsPerAspect.serverId, serverId),
         eq(validationResultsPerAspect.resourceType, resourceType),
         eq(validationResultsPerAspect.fhirId, fhirId),
-        eq(validationResultsPerAspect.aspect, aspect),
-        eq(validationResultsPerAspect.settingsSnapshotHash, settingsHash),
+        eq(validationResultsPerAspect.aspect, aspect)
       )
     );
 

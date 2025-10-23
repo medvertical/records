@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from './use-toast';
+import { useValidationActivity } from '@/contexts/validation-activity-context';
 
 /**
  * Hook for resource actions (revalidate, edit)
@@ -26,6 +27,7 @@ export function useResourceActions({
 }: UseResourceActionsOptions) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { addResourceValidation, updateResourceValidation, removeResourceValidation } = useValidationActivity();
   
   const [isRevalidating, setIsRevalidating] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -36,11 +38,27 @@ export function useResourceActions({
    */
   const revalidateResource = useCallback(async () => {
     setIsRevalidating(true);
+    
+    // Use timestamp as unique ID since resourceId is string
+    const numericResourceId = Date.now();
+    let progressInterval: NodeJS.Timeout | null = null;
+    let validationInterval: NodeJS.Timeout | null = null;
 
     try {
       // Clear existing validation results for this resource
       await fetch(`/api/validation/resources/${resourceType}/${resourceId}`, {
         method: 'DELETE',
+      });
+
+      // Add to activity widget
+      addResourceValidation(numericResourceId, {
+        resourceId: numericResourceId,
+        fhirId: resourceId,
+        resourceType,
+        progress: 0,
+        currentAspect: 'Clearing cache...',
+        completedAspects: [],
+        totalAspects: 6,
       });
 
       // Optimistic update: Show revalidating state
@@ -54,13 +72,30 @@ export function useResourceActions({
 
       toast({
         title: 'Revalidating',
-        description: `${resourceType}/${resourceId} validation cleared. Refetch to see new results.`,
+        description: `${resourceType}/${resourceId} validation queued`,
       });
 
       onRevalidateSuccess?.();
 
+      // Simulate progress during wait time
+      progressInterval = setInterval(() => {
+        updateResourceValidation(numericResourceId, {
+          progress: Math.min(15 + Math.random() * 15, 35), // 15-35%
+          currentAspect: 'Starting validation...',
+        });
+      }, 300);
+
       // Soft refetch after 2 seconds to trigger new validation
       setTimeout(() => {
+        if (progressInterval) clearInterval(progressInterval);
+        
+        // Update to show validation running
+        updateResourceValidation(numericResourceId, {
+          progress: 40,
+          currentAspect: 'Validating structure...',
+        });
+        
+        // Refetch queries
         queryClient.refetchQueries({
           queryKey: ['/api/fhir/resources', resourceId],
           exact: true,
@@ -69,9 +104,38 @@ export function useResourceActions({
           queryKey: ['/api/validation/resources', resourceType, resourceId],
           exact: true,
         });
+        
+        // Continue simulating progress
+        validationInterval = setInterval(() => {
+          const aspects = ['Structural', 'Profile', 'Terminology', 'References', 'Business Rules', 'Metadata'];
+          updateResourceValidation(numericResourceId, {
+            progress: 40 + Math.random() * 50, // 40-90%
+            currentAspect: aspects[Math.floor(Math.random() * aspects.length)],
+          });
+        }, 400);
+        
+        // Complete after estimated validation time (6 seconds)
+        setTimeout(() => {
+          if (validationInterval) clearInterval(validationInterval);
+          
+          updateResourceValidation(numericResourceId, {
+            progress: 100,
+            currentAspect: 'Complete',
+          });
+          
+          // Remove from widget after brief delay
+          setTimeout(() => {
+            removeResourceValidation(numericResourceId);
+          }, 1000);
+        }, 6000);
       }, 2000);
     } catch (error) {
       console.error('Failed to revalidate resource:', error);
+      
+      // Clean up intervals and remove from widget
+      if (progressInterval) clearInterval(progressInterval);
+      if (validationInterval) clearInterval(validationInterval);
+      removeResourceValidation(numericResourceId);
       
       toast({
         title: 'Validation Clear Failed',
@@ -83,7 +147,7 @@ export function useResourceActions({
     } finally {
       setIsRevalidating(false);
     }
-  }, [serverId, resourceType, resourceId, queryClient, toast, onRevalidateSuccess, onError]);
+  }, [serverId, resourceType, resourceId, queryClient, toast, onRevalidateSuccess, onError, addResourceValidation, updateResourceValidation, removeResourceValidation]);
 
   /**
    * Edit a resource

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-polling";
 import { useServerData } from "@/hooks/use-server-data";
 import { useToast } from "@/hooks/use-toast";
+import { useValidationActivity } from "@/contexts/validation-activity-context";
 import ValidationErrors from "@/components/validation/validation-errors";
 import ResourceViewer from "@/components/resources/resource-viewer";
 import { ResourceDetailActions } from "@/components/resources";
@@ -34,6 +35,7 @@ export default function ResourceDetail() {
   const queryClient = useQueryClient();
   const { activeServer } = useServerData();
   const { toast } = useToast();
+  const { addResourceValidation, updateResourceValidation, removeResourceValidation } = useValidationActivity();
   const [isRevalidating, setIsRevalidating] = useState(false);
   
   // Edit mode state
@@ -138,11 +140,62 @@ export default function ResourceDetail() {
     const profileUrls = resource.data?.meta?.profile || resource.meta?.profile || [];
     console.log('[Revalidate] Profile URLs found:', profileUrls);
     
+    // Determine which validation aspects are enabled based on settings
+    const settings = validationSettingsData?.settings;
+    const aspectMapping = [
+      { name: 'Structural', enabled: settings?.aspects?.structural?.enabled ?? true },
+      { name: 'Profile', enabled: settings?.aspects?.profile?.enabled ?? true },
+      { name: 'Terminology', enabled: settings?.aspects?.terminology?.enabled ?? true },
+      { name: 'References', enabled: settings?.aspects?.reference?.enabled ?? true },
+      { name: 'Business Rules', enabled: settings?.aspects?.businessRule?.enabled ?? true },
+      { name: 'Metadata', enabled: settings?.aspects?.metadata?.enabled ?? true },
+    ];
+    const enabledAspects = aspectMapping.filter(a => a.enabled).map(a => a.name);
+    const totalAspects = enabledAspects.length;
+    
+    console.log('[Revalidate] Enabled aspects:', enabledAspects, `(${totalAspects} total)`);
+    
+    // If no aspects are enabled, warn user and skip validation
+    if (totalAspects === 0) {
+      toast({
+        title: "No validation aspects enabled",
+        description: "Please enable at least one validation aspect in settings before revalidating.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsRevalidating(true);
+    
+    // Use timestamp as unique ID for activity tracking
+    const numericResourceId = Date.now();
+    let progressInterval: NodeJS.Timeout | null = null;
+    let validationInterval: NodeJS.Timeout | null = null;
+    
+    // Add to activity widget
+    addResourceValidation(numericResourceId, {
+      resourceId: numericResourceId,
+      fhirId: resource.resourceId,
+      resourceType: resource.resourceType,
+      progress: 0,
+      currentAspect: 'Starting validation...',
+      completedAspects: [],
+      totalAspects,
+    });
     
     try {
       const url = `/api/validation/resources/${resource.resourceType}/${resource.resourceId}/revalidate?serverId=${activeServer?.id || 1}`;
       console.log('[Revalidate] Calling URL:', url);
+      
+      // Simulate smooth progress during API call (0% -> 30%)
+      let queueProgress = 0;
+      progressInterval = setInterval(() => {
+        queueProgress = Math.min(queueProgress + 3, 30); // Increment by 3% each interval, max 30%
+        updateResourceValidation(numericResourceId, {
+          progress: queueProgress,
+          currentAspect: 'Queueing validation...',
+        });
+      }, 300);
       
       const response = await fetch(url, { 
         method: 'POST',
@@ -151,6 +204,8 @@ export default function ResourceDetail() {
       });
       console.log('[Revalidate] Response status:', response.status);
       console.log('[Revalidate] Response ok:', response.ok);
+
+      if (progressInterval) clearInterval(progressInterval);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -163,6 +218,12 @@ export default function ResourceDetail() {
       console.log('[Revalidate] Validation result:', result.validationResult);
       console.log('[Revalidate] Is valid:', result.validationResult?.isValid);
       console.log('[Revalidate] Aspects:', result.validationResult?.aspects);
+
+      // Update progress to show validation running
+      updateResourceValidation(numericResourceId, {
+        progress: 40,
+        currentAspect: 'Validating structure...',
+      });
 
       // Optimistic update: Keep resource visible, only update validation status
       const currentData = queryClient.getQueryData(['/api/fhir/resources', id]);
@@ -181,6 +242,44 @@ export default function ResourceDetail() {
         title: "Revalidation queued",
         description: `Resource has been enqueued for validation. Results will appear shortly.`,
       });
+
+      // Continue simulating progress during validation (using only enabled aspects)
+      let currentProgress = 40;
+      let intervalCount = 0;
+      
+      validationInterval = setInterval(() => {
+        intervalCount++;
+        
+        // Increment progress smoothly (from 40% to 90% over ~12 intervals = ~5 seconds)
+        currentProgress = Math.min(40 + (intervalCount * 4), 90);
+        
+        // Map progress to enabled aspects dynamically
+        // Divide the progress range (40-90%) evenly among enabled aspects
+        const progressRange = 90 - 40; // 50%
+        const progressPerAspect = totalAspects > 0 ? progressRange / totalAspects : progressRange;
+        
+        // Determine which aspect we're currently on
+        let currentAspectIndex = 0;
+        let completedCount = 0;
+        
+        for (let i = 0; i < totalAspects; i++) {
+          const aspectStartProgress = 40 + (i * progressPerAspect);
+          if (currentProgress >= aspectStartProgress) {
+            currentAspectIndex = i;
+            completedCount = i;
+          }
+        }
+        
+        // Build completed aspects array
+        const completedAspects = enabledAspects.slice(0, completedCount);
+        
+        updateResourceValidation(numericResourceId, {
+          progress: currentProgress,
+          currentAspect: enabledAspects[currentAspectIndex] || 'Validating...',
+          completedAspects,
+          totalAspects,
+        });
+      }, 400);
 
       // Poll for updated validation results multiple times
       // Background validation jobs may take several seconds to complete
@@ -204,8 +303,29 @@ export default function ResourceDetail() {
         }, delay);
       });
       
+      // Complete validation after 10 seconds
+      setTimeout(() => {
+        if (validationInterval) clearInterval(validationInterval);
+        
+        updateResourceValidation(numericResourceId, {
+          progress: 100,
+          currentAspect: 'Complete',
+        });
+        
+        // Remove from widget after brief delay
+        setTimeout(() => {
+          removeResourceValidation(numericResourceId);
+        }, 1000);
+      }, 10000);
+      
     } catch (error) {
       console.error('Revalidation error:', error);
+      
+      // Clean up intervals and remove from widget
+      if (progressInterval) clearInterval(progressInterval);
+      if (validationInterval) clearInterval(validationInterval);
+      removeResourceValidation(numericResourceId);
+      
       toast({
         title: "Revalidation failed",
         description: error instanceof Error ? error.message : 'Unknown error',
