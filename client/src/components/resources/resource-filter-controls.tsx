@@ -442,6 +442,8 @@ export function ResourceFilterControls({
         </CollapsibleContent>
             </Collapsible>
           )}
+        </div>
+      </div>
 
       {/* Results Summary */}
       <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 rounded-b-lg">
