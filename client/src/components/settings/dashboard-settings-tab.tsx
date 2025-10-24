@@ -8,6 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { SettingSection, SectionTitle } from './shared';
+import { deepEqual } from '@/lib/deep-compare';
 
 // ============================================================================
 // Types
@@ -74,6 +75,7 @@ export function DashboardSettingsTab({ onSettingsChange, saveCounter, onSaveComp
 
   // State management
   const [settings, setSettings] = useState<DashboardSettings>(DEFAULT_SETTINGS);
+  const [originalSettings, setOriginalSettings] = useState<DashboardSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
@@ -84,10 +86,19 @@ export function DashboardSettingsTab({ onSettingsChange, saveCounter, onSaveComp
 
   // Notify parent of changes (but not during initial load)
   useEffect(() => {
-    if (!isInitialLoad) {
+    if (isInitialLoad) {
+      console.log('[DashboardSettings] Skipping change notification during initial load');
+      return;
+    }
+    
+    // Only notify if settings actually changed from original
+    const hasRealChanges = !deepEqual(settings, originalSettings);
+    console.log('[DashboardSettings] Settings changed, has real changes:', hasRealChanges);
+    
+    if (hasRealChanges) {
       onSettingsChange?.(settings);
     }
-  }, [settings, onSettingsChange, isInitialLoad]);
+  }, [settings, originalSettings, onSettingsChange, isInitialLoad]);
 
   // ========================================================================
   // Data Loading
@@ -120,7 +131,9 @@ export function DashboardSettingsTab({ onSettingsChange, saveCounter, onSaveComp
           },
         };
         setSettings(mergedSettings);
+        setOriginalSettings(JSON.parse(JSON.stringify(mergedSettings))); // Deep copy
         setIsInitialLoad(false);
+        console.log('[DashboardSettings] Initial load complete');
       }
     } catch (error) {
       console.error('Failed to load dashboard settings:', error);

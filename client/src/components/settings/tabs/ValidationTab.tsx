@@ -29,6 +29,7 @@ import { Loader2, CheckCircle, XCircle, Info, Globe, HardDrive, Database, Server
 import { useToast } from '@/hooks/use-toast';
 import { useActiveServer } from '@/hooks/use-active-server';
 import { cn } from '@/lib/utils';
+import { deepEqual } from '@/lib/deep-compare';
 import { SettingSection, SectionTitle, TabHeader, AspectCard } from '../shared';
 import type { ValidationSettings, FHIRVersion } from '@shared/validation-settings';
 import { DEFAULT_VALIDATION_SETTINGS_R4 } from '@shared/validation-settings';
@@ -48,8 +49,10 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
   const { activeServer } = useActiveServer();
   const queryClient = useQueryClient();
   const [settings, setSettings] = useState<ValidationSettings | null>(null);
+  const [originalSettings, setOriginalSettings] = useState<ValidationSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDirty, setIsDirty] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [fhirVersion, setFhirVersion] = useState<FHIRVersion>('R4');
   const [previousFhirVersion, setPreviousFhirVersion] = useState<FHIRVersion | null>(null);
   const [availableResourceTypes, setAvailableResourceTypes] = useState<string[]>([]);
@@ -72,9 +75,23 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
     }
   }, [reloadTrigger]);
 
+  // Auto-calculate isDirty based on deep comparison with original settings
   useEffect(() => {
-    onDirtyChange?.(isDirty);
-  }, [isDirty, onDirtyChange]);
+    if (isInitialLoad || !settings || !originalSettings) return;
+    
+    const hasChanges = !deepEqual(settings, originalSettings);
+    if (hasChanges !== isDirty) {
+      console.log('[ValidationTab] Auto-updating isDirty:', hasChanges);
+      setIsDirty(hasChanges);
+    }
+  }, [settings, originalSettings, isInitialLoad, isDirty]);
+
+  useEffect(() => {
+    // Don't propagate dirty state during initial load
+    if (!isInitialLoad) {
+      onDirtyChange?.(isDirty);
+    }
+  }, [isDirty, onDirtyChange, isInitialLoad]);
 
   useEffect(() => {
     onLoadingChange?.(loading);
@@ -115,10 +132,13 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
       
       console.log('[ValidationTab] Calculated global engine:', calculatedEngine, 'from aspect engines:', aspectEngines);
       
-      setSettings({
+      const loadedSettings = {
         ...data,
         engine: calculatedEngine // Set top-level engine for UI (derived from aspects)
-      });
+      };
+      
+      setSettings(loadedSettings);
+      setOriginalSettings(JSON.parse(JSON.stringify(loadedSettings))); // Deep copy for comparison
       
       // Extract FHIR version from settings if available
       if ((data.resourceTypes as any)?.fhirVersion) {
@@ -126,6 +146,14 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
         console.log('[ValidationTab] Extracted FHIR version from settings:', newVersion);
         setFhirVersion(newVersion);
       }
+      
+      // Mark initial load complete and reset dirty state
+      setIsInitialLoad(false);
+      setIsDirty(false);
+      console.log('[ValidationTab] Initial load complete, isDirty reset to false');
+      
+      // Explicitly notify parent that we're not dirty after load
+      onDirtyChange?.(false);
     } catch (error) {
       console.error('[ValidationTab] Error loading settings:', error);
       toast({
@@ -133,6 +161,7 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
         description: 'Failed to load validation settings',
         variant: 'destructive'
       });
+      setIsInitialLoad(false);
     } finally {
       setLoading(false);
     }
@@ -270,6 +299,9 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
       }
 
       previousEnginesRef.current = currentEngines;
+      
+      // Update original settings after successful save
+      setOriginalSettings(JSON.parse(JSON.stringify(settings)));
       setIsDirty(false);
       onSaveComplete?.();
     } catch (error) {
@@ -308,6 +340,9 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
     value: any
   ) => {
     if (!settings) return;
+    // Don't mark dirty during initial load
+    if (isInitialLoad) return;
+    
     setSettings({
       ...settings,
       aspects: {
@@ -322,7 +357,7 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
   };
 
   const updatePerformance = (field: 'maxConcurrent' | 'batchSize', value: number) => {
-    if (!settings) return;
+    if (!settings || isInitialLoad) return;
     setSettings({
       ...settings,
       performance: {
@@ -334,19 +369,19 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
   };
 
   const updateMode = (mode: 'online' | 'offline') => {
-    if (!settings) return;
+    if (!settings || isInitialLoad) return;
     setSettings({ ...settings, mode });
     setIsDirty(true);
   };
 
   const updateProfileSources = (sources: 'local' | 'simplifier' | 'both') => {
-    if (!settings) return;
+    if (!settings || isInitialLoad) return;
     setSettings({ ...settings, profileSources: sources });
     setIsDirty(true);
   };
 
   const updateResourceTypes = (field: string, value: any) => {
-    if (!settings) return;
+    if (!settings || isInitialLoad) return;
     
     // Handle fhirVersion separately since it's not in the type definition
     if (field === 'fhirVersion') {
@@ -366,7 +401,7 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
   };
 
   const toggleResourceType = (type: string) => {
-    if (!settings) return;
+    if (!settings || isInitialLoad) return;
     const included = settings.resourceTypes.includedTypes || [];
     const newIncluded = included.includes(type)
       ? included.filter(t => t !== type)
@@ -375,7 +410,7 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
   };
 
   const updateAdvanced = (field: string, value: any) => {
-    if (!settings) return;
+    if (!settings || isInitialLoad) return;
     
     // Special handling for global engine selection with smart mapping
     if (field === 'engine') {
@@ -412,7 +447,7 @@ export function ValidationTab({ onDirtyChange, onLoadingChange, hideHeader = fal
   };
 
   const handleResetAspects = () => {
-    if (!settings) return;
+    if (!settings || isInitialLoad) return;
     const defaults = DEFAULT_VALIDATION_SETTINGS_R4.aspects;
     setSettings({
       ...settings,

@@ -19,6 +19,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { SettingSection, SectionTitle } from './shared';
+import { deepEqual } from '@/lib/deep-compare';
 
 // ============================================================================
 // Types
@@ -79,6 +80,7 @@ export function SystemSettingsTab({ onSettingsChange, saveCounter, onSaveComplet
   
   // State management
   const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
+  const [originalSettings, setOriginalSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [showClearCacheDialog, setShowClearCacheDialog] = useState(false);
@@ -121,10 +123,19 @@ export function SystemSettingsTab({ onSettingsChange, saveCounter, onSaveComplet
 
   // Notify parent of changes (but not during initial load)
   useEffect(() => {
-    if (!isInitialLoad) {
+    if (isInitialLoad) {
+      console.log('[SystemSettings] Skipping change notification during initial load');
+      return;
+    }
+    
+    // Only notify if settings actually changed from original
+    const hasRealChanges = !deepEqual(settings, originalSettings);
+    console.log('[SystemSettings] Settings changed, has real changes:', hasRealChanges);
+    
+    if (hasRealChanges) {
       onSettingsChange?.(settings);
     }
-  }, [settings, onSettingsChange, isInitialLoad]);
+  }, [settings, originalSettings, onSettingsChange, isInitialLoad]);
 
   // ========================================================================
   // Data Loading
@@ -157,7 +168,9 @@ export function SystemSettingsTab({ onSettingsChange, saveCounter, onSaveComplet
         };
         console.log('[SystemSettings] Merged settings:', mergedSettings);
         setSettings(mergedSettings);
+        setOriginalSettings(JSON.parse(JSON.stringify(mergedSettings))); // Deep copy
         setIsInitialLoad(false);
+        console.log('[SystemSettings] Initial load complete');
       }
     } catch (error) {
       console.error('Failed to load system settings:', error);
