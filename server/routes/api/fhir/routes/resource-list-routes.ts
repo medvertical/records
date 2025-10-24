@@ -70,8 +70,8 @@ export function setupResourceListRoutes(app: Express, fhirClient: FhirClient | n
           return dateB - dateA;
         });
         
-        // Enhance and paginate
-        const enhancedResources = await enhanceResourcesWithValidationData(allResources);
+        // Enhance and paginate (skip validation for fast loading)
+        const enhancedResources = await enhanceResourcesWithValidationData(allResources, false);
         const paginatedResources = enhancedResources.slice(offsetValue, offsetValue + requestedLimit);
         
         return res.json({
@@ -143,7 +143,7 @@ export function setupResourceListRoutes(app: Express, fhirClient: FhirClient | n
           );
           
           const resources = dbResources.map(r => r.data);
-          const enhancedResources = await enhanceResourcesWithValidationData(resources);
+          const enhancedResources = await enhanceResourcesWithValidationData(resources, false);
           
           usedDatabaseFallback = true;
           
@@ -184,8 +184,8 @@ export function setupResourceListRoutes(app: Express, fhirClient: FhirClient | n
         total = resources.length;
       }
 
-      // Enhance resources with validation data
-      const enhancedResources = await enhanceResourcesWithValidationData(resources);
+      // Enhance resources without validation data (for fast loading)
+      const enhancedResources = await enhanceResourcesWithValidationData(resources, false);
 
       res.json({
         resources: enhancedResources,

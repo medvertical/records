@@ -621,6 +621,49 @@ export default function ResourceBrowser() {
     [resourcesData?.resources]
   );
 
+  // Fetch validation summaries for all resources on current page (bulk request for performance)
+  const { data: validationSummaries, isLoading: isLoadingValidation } = useQuery({
+    queryKey: ['validation-summaries-bulk', resourcesToFetch],
+    enabled: resourcesToFetch.length > 0 && !!stableActiveServer,
+    staleTime: 30000, // Cache for 30 seconds
+    queryFn: async () => {
+      const response = await fetch('/api/validation/summaries/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resources: resourcesToFetch.map(r => ({ 
+            resourceType: r.resourceType, 
+            id: r.resourceId 
+          })),
+          serverId: stableActiveServer?.id || 1
+        })
+      });
+      
+      if (!response.ok) {
+        console.warn('[ResourceBrowser] Failed to fetch validation summaries');
+        return {};
+      }
+      
+      const result = await response.json();
+      return result.success ? result.data : {};
+    }
+  });
+
+  // Merge validation summaries into resources
+  const enrichedResources = useMemo(() => {
+    if (!resourcesData?.resources) return [];
+    
+    return resourcesData.resources.map(resource => {
+      const resourceKey = `${resource.resourceType}/${resource.id}`;
+      const validationSummary = validationSummaries?.[resourceKey];
+      
+      return {
+        ...resource,
+        _validationSummary: validationSummary || resource._validationSummary || null
+      };
+    });
+  }, [resourcesData?.resources, validationSummaries]);
+
   // Fetch validation messages for all resources on current page using shared hook
   // This automatically handles caching with consistent query keys
   const { 
@@ -1341,13 +1384,16 @@ export default function ResourceBrowser() {
       // This prevents "Validating..." badges from showing on the updated resource list
       setValidatingResourceIds(new Set());
 
-      // Invalidate only validation-specific queries, not the resource list
-      // This updates validation badges without changing which resources are displayed
-      console.log('[Background Validation] Invalidating validation messages...');
-      await queryClient.invalidateQueries({ 
-        queryKey: ['validation-messages']
-      });
-      console.log('[Background Validation] Validation messages invalidated');
+      // Mark this page as validated BEFORE invalidating to prevent retrigger
+      setHasValidatedCurrentPage(true);
+
+      // Invalidate validation queries to update badges
+      console.log('[Background Validation] Invalidating validation data...');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['validation-messages'] }),
+        queryClient.invalidateQueries({ queryKey: ['validation-summaries-bulk'] })
+      ]);
+      console.log('[Background Validation] Validation data invalidated');
       
       // Clear activity widget progress after showing completion briefly
       setTimeout(() => {
@@ -1355,9 +1401,6 @@ export default function ResourceBrowser() {
         // Remove from activity context
         resourceIds.forEach(id => removeResourceValidation(id));
       }, 500);
-
-      // Mark this page as validated only after successful validation
-      setHasValidatedCurrentPage(true);
 
     } catch (error) {
       if (progressCleanup) {
@@ -1402,7 +1445,10 @@ export default function ResourceBrowser() {
       
       return () => clearTimeout(timer);
     }
-  }, [resourcesData?.resources?.length, resourceType, page, hasValidatedCurrentPage, isValidating, validateUnvalidatedResources]);
+    // Intentionally exclude resourcesData and validateUnvalidatedResources from deps
+    // to prevent infinite loop when validation invalidates queries
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resourceType, page, hasValidatedCurrentPage, isValidating]);
 
   // Handle filter changes
   const handleFilterChange = useCallback((newFilters: ValidationFilters) => {
@@ -1656,16 +1702,13 @@ export default function ResourceBrowser() {
       setIsValidating(false);
 
       // Invalidate validation queries AND force refetch resources list to show updated validation status
-      console.log('[Manual Revalidation] Invalidating validation messages and refetching resource list...');
-      await queryClient.invalidateQueries({ 
-        queryKey: ['validation-messages']
-      });
-      // Force immediate refetch of resources to show updated validation status
-      await queryClient.refetchQueries({
-        queryKey: ['resources'],
-        type: 'active'
-      });
-      console.log('[Manual Revalidation] Validation messages invalidated and resource list refetched');
+      console.log('[Manual Revalidation] Invalidating validation data and refetching resource list...');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['validation-messages'] }),
+        queryClient.invalidateQueries({ queryKey: ['validation-summaries-bulk'] }),
+        queryClient.refetchQueries({ queryKey: ['resources'], type: 'active' })
+      ]);
+      console.log('[Manual Revalidation] Validation data invalidated and resource list refetched');
       
       toast({
         title: "Revalidation complete",
@@ -1905,7 +1948,7 @@ export default function ResourceBrowser() {
           <ResourceListSkeleton count={pageSize} />
         ) : (
           <ResourceList 
-            resources={resourcesData?.resources || []}
+            resources={enrichedResources}
             total={resourcesData?.total || 0}
             page={page}
             onPageChange={handlePageChange}
@@ -1914,7 +1957,7 @@ export default function ResourceBrowser() {
             validatingResourceIds={validatingResourceIds}
             validationProgress={validationProgress}
             availableResourceTypes={resourcesData?.availableResourceTypes}
-            isLoading={isLoading}
+            isLoading={isLoading || isLoadingValidation}
             noResourceTypeMessage={undefined} // Don't show "Select a Resource Type" for filtered queries
             selectionMode={selectionMode}
             selectedIds={selectedResources}

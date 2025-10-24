@@ -5,7 +5,7 @@ import {
   validationMessages,
   validationResultsPerAspect 
 } from '../../shared/schema-validation-per-aspect';
-import { eq, and, sql, desc, asc, inArray, SQL } from 'drizzle-orm';
+import { eq, and, or, sql, desc, asc, inArray, SQL } from 'drizzle-orm';
 import type { ValidationMessageGroupDTO } from '../../shared/validation-types';
 
 const pool = new Pool({
@@ -414,9 +414,144 @@ export async function getResourceValidationSummary(
   };
 }
 
+/**
+ * Get validation summaries for multiple resources in a single query
+ */
+export async function getResourceValidationSummariesBulk(
+  serverId: number,
+  resources: Array<{ resourceType: string; fhirId: string }>
+): Promise<Map<string, {
+  isValid: boolean;
+  hasErrors: boolean;
+  hasWarnings: boolean;
+  errorCount: number;
+  warningCount: number;
+  informationCount: number;
+  validationScore: number;
+  lastValidated: Date | null;
+  aspectBreakdown: Record<string, {
+    isValid: boolean;
+    errorCount: number;
+    warningCount: number;
+    informationCount: number;
+    score: number;
+  }>;
+}>> {
+  console.log(`[getResourceValidationSummariesBulk] Querying for ${resources.length} resources on serverId=${serverId}`);
+  
+  if (resources.length === 0) {
+    return new Map();
+  }
+  
+  // Build OR conditions for all resources
+  const resourceConditions = resources.map(r => 
+    and(
+      eq(validationResultsPerAspect.resourceType, r.resourceType),
+      eq(validationResultsPerAspect.fhirId, r.fhirId)
+    )
+  );
+  
+  // Get all validation results for these resources
+  const results = await db
+    .select({
+      resourceType: validationResultsPerAspect.resourceType,
+      fhirId: validationResultsPerAspect.fhirId,
+      aspect: validationResultsPerAspect.aspect,
+      isValid: validationResultsPerAspect.isValid,
+      errorCount: validationResultsPerAspect.errorCount,
+      warningCount: validationResultsPerAspect.warningCount,
+      informationCount: validationResultsPerAspect.informationCount,
+      score: validationResultsPerAspect.score,
+      validatedAt: validationResultsPerAspect.validatedAt,
+    })
+    .from(validationResultsPerAspect)
+    .where(
+      and(
+        eq(validationResultsPerAspect.serverId, serverId),
+        or(...resourceConditions)
+      )
+    )
+    .orderBy(desc(validationResultsPerAspect.validatedAt));
+  
+  console.log(`[getResourceValidationSummariesBulk] Found ${results.length} validation results for ${resources.length} resources`);
+  
+  // Group results by resource
+  const summariesMap = new Map<string, any>();
+  
+  for (const result of results) {
+    const resourceKey = `${result.resourceType}/${result.fhirId}`;
+    
+    if (!summariesMap.has(resourceKey)) {
+      summariesMap.set(resourceKey, {
+        errorCount: 0,
+        warningCount: 0,
+        informationCount: 0,
+        latestValidatedAt: null as Date | null,
+        aspectBreakdown: {} as Record<string, any>,
+        seenAspects: new Set<string>(),
+      });
+    }
+    
+    const summary = summariesMap.get(resourceKey);
+    
+    // Skip if we've already processed this aspect (we want the most recent one)
+    if (summary.seenAspects.has(result.aspect)) {
+      continue;
+    }
+    summary.seenAspects.add(result.aspect);
+    
+    summary.errorCount += result.errorCount || 0;
+    summary.warningCount += result.warningCount || 0;
+    summary.informationCount += result.informationCount || 0;
+    
+    if (!summary.latestValidatedAt || (result.validatedAt && new Date(result.validatedAt) > summary.latestValidatedAt)) {
+      summary.latestValidatedAt = result.validatedAt ? new Date(result.validatedAt) : null;
+    }
+    
+    summary.aspectBreakdown[result.aspect] = {
+      isValid: result.isValid || false,
+      errorCount: result.errorCount || 0,
+      warningCount: result.warningCount || 0,
+      informationCount: result.informationCount || 0,
+      score: result.score || 0,
+    };
+  }
+  
+  // Calculate final summaries
+  const finalSummaries = new Map<string, any>();
+  
+  for (const [resourceKey, summary] of summariesMap.entries()) {
+    // Calculate validation score
+    let validationScore = 100;
+    validationScore -= summary.errorCount * 15;
+    validationScore -= summary.warningCount * 5;
+    validationScore -= summary.informationCount * 1;
+    validationScore = Math.max(0, Math.round(validationScore));
+    
+    // Remove helper field
+    delete summary.seenAspects;
+    
+    finalSummaries.set(resourceKey, {
+      isValid: summary.errorCount === 0,
+      hasErrors: summary.errorCount > 0,
+      hasWarnings: summary.warningCount > 0,
+      errorCount: summary.errorCount,
+      warningCount: summary.warningCount,
+      informationCount: summary.informationCount,
+      validationScore,
+      lastValidated: summary.latestValidatedAt,
+      aspectBreakdown: summary.aspectBreakdown,
+    });
+  }
+  
+  console.log(`[getResourceValidationSummariesBulk] Returning ${finalSummaries.size} summaries`);
+  return finalSummaries;
+}
+
 export const ValidationGroupsRepository = {
   getValidationGroups,
   getGroupMembers,
   getResourceMessages,
   getResourceValidationSummary,
+  getResourceValidationSummariesBulk,
 };

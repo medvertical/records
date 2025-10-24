@@ -14,10 +14,15 @@ export interface EnhancedResource {
 /**
  * Enhance resources with validation data from the database
  * Adds validation summary and database IDs to resources
+ * @param resources - Array of FHIR resources to enhance
+ * @param includeValidation - Whether to fetch validation summaries (default: false for fast list loading)
  */
-export async function enhanceResourcesWithValidationData(resources: any[]): Promise<EnhancedResource[]> {
+export async function enhanceResourcesWithValidationData(
+  resources: any[], 
+  includeValidation: boolean = false
+): Promise<EnhancedResource[]> {
   const startTime = Date.now();
-  console.log(`[FHIR API] enhanceResourcesWithValidationData called with ${resources.length} resources`);
+  console.log(`[FHIR API] enhanceResourcesWithValidationData called with ${resources.length} resources, includeValidation=${includeValidation}`);
   const enhancedResources: EnhancedResource[] = [];
   
   // Get active server once for all resources
@@ -91,9 +96,9 @@ export async function enhanceResourcesWithValidationData(resources: any[]): Prom
         }
       }
       
-      // Get validation summary if we have a dbResource
+      // Get validation summary if we have a dbResource and validation is requested
       let validationSummary = null;
-      if (dbResource && activeServer) {
+      if (includeValidation && dbResource && activeServer) {
         try {
           validationSummary = await ValidationGroupsRepository.getResourceValidationSummary(
             activeServer.id,

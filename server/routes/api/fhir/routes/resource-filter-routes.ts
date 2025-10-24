@@ -250,7 +250,7 @@ async function serverSideProfileFilter(fhirClient: FhirClient, resourceTypes: st
   
   const allResources = results.flatMap(r => r.resources);
   const totalCount = results.reduce((sum, r) => sum + r.total, 0);
-  const enhanced = await enhanceResourcesWithValidationData(allResources);
+  const enhanced = await enhanceResourcesWithValidationData(allResources, false);
   
   return {
     success: true,
@@ -409,7 +409,7 @@ async function handleFhirParameterSearch(res: any, fhirClient: FhirClient, resou
     }
   }
 
-  const enhanced = await enhanceResourcesWithValidationData(allResources);
+  const enhanced = await enhanceResourcesWithValidationData(allResources, false);
   const returnedCount = enhanced.length;
   const totalCount = totalFromBundles > 0 ? totalFromBundles : returnedCount;
   const hasMore = hasNextLink || (returnedCount >= filterOptions.pagination.limit);

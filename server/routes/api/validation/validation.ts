@@ -60,6 +60,53 @@ export function setupValidationRoutes(app: Express, consolidatedValidationServic
   app.use("/api/validation/business-rules", businessRulesRouter);
 
   // ========================================================================
+  // Bulk Validation Summaries Endpoint (Performance Optimization)
+  // ========================================================================
+  app.post("/api/validation/summaries/bulk", async (req, res) => {
+    try {
+      const { resources, serverId = 1 } = req.body;
+      
+      if (!resources || !Array.isArray(resources)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid request',
+          message: 'Request body must include a "resources" array with { resourceType, id } objects'
+        });
+      }
+      
+      const { getResourceValidationSummariesBulk } = await import('../../../repositories/validation-groups-repository');
+      
+      // Transform resources array to include fhirId field
+      const resourcesWithFhirId = resources.map(r => ({
+        resourceType: r.resourceType,
+        fhirId: r.id
+      }));
+      
+      const summariesMap = await getResourceValidationSummariesBulk(serverId, resourcesWithFhirId);
+      
+      // Convert Map to object for JSON serialization
+      const summariesObj: Record<string, any> = {};
+      for (const [key, value] of summariesMap.entries()) {
+        summariesObj[key] = value;
+      }
+      
+      res.json({
+        success: true,
+        data: summariesObj,
+        count: summariesMap.size,
+        message: `Retrieved validation summaries for ${summariesMap.size} of ${resources.length} resources`
+      });
+    } catch (error: any) {
+      console.error('[Validation API] Error fetching bulk validation summaries:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch validation summaries',
+        message: error.message
+      });
+    }
+  });
+
+  // ========================================================================
   // Settings Management (Delegated to validation-settings.ts)
   // ========================================================================
 
