@@ -41,6 +41,7 @@ export function useServerReactiveQueries() {
           const shouldInvalidate = (
             queryKey.includes('/api/validation/issues/groups') ||
             queryKey.includes('/api/validation/resources') ||
+            queryKey.includes('validation-messages') ||
             queryKey.includes('/api/fhir/resources') ||
             queryKey.includes('/api/fhir/resource-counts') ||
             queryKey.includes('quickAccessCounts') ||

@@ -101,7 +101,7 @@ export function useResourceActions({
           exact: true,
         });
         queryClient.refetchQueries({
-          queryKey: ['/api/validation/resources', resourceType, resourceId],
+          queryKey: ['validation-messages', resourceType, resourceId, serverId],
           exact: true,
         });
         
@@ -192,7 +192,7 @@ export function useResourceActions({
       });
 
       queryClient.invalidateQueries({
-        queryKey: ['/api/validation/resources', resourceType, resourceId],
+        queryKey: ['validation-messages', resourceType, resourceId, serverId],
       });
 
       toast({

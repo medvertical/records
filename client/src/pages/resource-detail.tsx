@@ -307,10 +307,10 @@ export default function ResourceDetail() {
           // Also refetch validation messages to update the right panel immediately
           const serverKey = activeServer?.id || 1;
           queryClient.invalidateQueries({
-            queryKey: ['/api/validation/resources', resource.resourceType, resource.resourceId, 'messages', serverKey],
+            queryKey: ['validation-messages', resource.resourceType, resource.resourceId, serverKey],
           });
           queryClient.refetchQueries({
-            queryKey: ['/api/validation/resources', resource.resourceType, resource.resourceId, 'messages', serverKey],
+            queryKey: ['validation-messages', resource.resourceType, resource.resourceId, serverKey],
             exact: true,
           });
         }, delay);

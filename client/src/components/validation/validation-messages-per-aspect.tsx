@@ -1,4 +1,3 @@
-import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +10,7 @@ import type { ValidationMessage as ValidationMessageType } from './ValidationMes
 import { getSeverityIcon } from '@/components/resources/unified-tree-viewer/utils';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useValidationMessages } from '@/hooks/use-validation-messages';
 
 interface ValidationMessage {
   severity: string;
@@ -124,19 +124,8 @@ export function ValidationMessagesPerAspect({
     setSelectedSeverities(newSelected);
   };
   
-  const { data, isLoading, error } = useQuery<ResourceMessagesResponse>({
-    queryKey: ['/api/validation/resources', resourceType, resourceId, 'messages', serverId],
-    queryFn: async () => {
-      const response = await fetch(
-        `/api/validation/resources/${resourceType}/${resourceId}/messages?serverId=${serverId}`
-      );
-      if (!response.ok) {
-        throw new Error('Failed to fetch validation messages');
-      }
-      return response.json();
-    },
-    refetchInterval: 30000, // Poll every 30 seconds
-  });
+  // Use shared hook for validation messages - automatically uses cached data from list view
+  const { data, isLoading, error } = useValidationMessages(resourceType, resourceId);
 
   // Group identical messages within each aspect (must be called before any early returns)
   const groupedAspects = useMemo(() => {

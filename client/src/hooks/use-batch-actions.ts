@@ -86,7 +86,7 @@ export function useBatchActions(options: UseBatchActionsOptions = {}) {
       });
 
       queryClient.invalidateQueries({
-        queryKey: ['/api/validation/resources'],
+        queryKey: ['validation-messages'],
       });
 
       // Show success notification

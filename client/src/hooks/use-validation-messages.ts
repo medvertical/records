@@ -15,6 +15,7 @@ export function useValidationMessages(
   options?: { enabled?: boolean }
 ) {
   const { activeServer } = useServerData();
+  const queryClient = useQueryClient();
   
   return useQuery({
     queryKey: ['validation-messages', resourceType, resourceId, activeServer?.id],
@@ -31,6 +32,10 @@ export function useValidationMessages(
       }
       
       return response.json();
+    },
+    // Check cache first for instant display when navigating from list view
+    initialData: () => {
+      return queryClient.getQueryData(['validation-messages', resourceType, resourceId, activeServer?.id]);
     },
     enabled: options?.enabled ?? (!!resourceType && !!resourceId && !!activeServer),
     staleTime: 30000, // 30 seconds
@@ -96,9 +101,15 @@ export function useValidationMessagesForResources(
           };
           
           // Populate individual cache for detail view (crucial for instant display!)
+          // Store the full response structure that components expect
           queryClient.setQueryData(
             ['validation-messages', resource.resourceType, resource.resourceId, activeServer?.id],
-            { aspects: data.aspects || [] }
+            {
+              serverId: activeServer?.id,
+              resourceType: resource.resourceType,
+              fhirId: resource.resourceId,
+              aspects: data.aspects || []
+            }
           );
           
           return result;
