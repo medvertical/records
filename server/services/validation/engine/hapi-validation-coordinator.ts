@@ -20,6 +20,7 @@ import type { ValidationAspectType } from '../../../../shared/schema-validation-
 import { hapiValidatorClient } from './hapi-validator-client';
 import { mapOperationOutcomeToIssues } from './hapi-issue-mapper';
 import type { HapiValidationOptions } from './hapi-validator-types';
+import { ProfileValidator } from './profile-validator';
 
 interface CoordinatorCacheEntry {
   issues: Map<ValidationAspectType, ValidationIssue[]>;
@@ -34,6 +35,11 @@ interface CoordinatorCacheEntry {
 class HapiValidationCoordinator {
   private cache = new Map<string, CoordinatorCacheEntry>();
   private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private profileValidator: ProfileValidator;
+  
+  constructor() {
+    this.profileValidator = new ProfileValidator();
+  }
   
   /**
    * Initialize coordinator for a resource
@@ -70,8 +76,19 @@ class HapiValidationCoordinator {
         return;
       }
       
-      // Collect IG packages from settings (validators will use their own logic)
-      const igPackages = settings.igPackages || [];
+      // Get IG packages from ProfileValidator (uses profile-packages.json mapping)
+      const igPackages: string[] = [];
+      if (profiles.length > 0) {
+        for (const profile of profiles) {
+          const packages = this.profileValidator.getAvailableIgPackages(profile, fhirVersion);
+          igPackages.push(...packages);
+        }
+      }
+      
+      // Deduplicate packages
+      const uniquePackages = [...new Set(igPackages)];
+      
+      console.log(`[HapiValidationCoordinator] Resolved ${uniquePackages.length} IG packages from ${profiles.length} profiles:`, uniquePackages);
       
       // Get terminology servers from settings and extract URLs
       const terminologyServersRaw = settings.terminologyServers || [];
@@ -84,7 +101,7 @@ class HapiValidationCoordinator {
         fhirVersion,
         profile: profiles[0], // Primary profile
         mode: 'profile', // Comprehensive validation
-        igPackages: igPackages.length > 0 ? igPackages : undefined,
+        igPackages: uniquePackages.length > 0 ? uniquePackages : undefined,
         terminologyServers: terminologyServerUrls.length > 0 ? terminologyServerUrls : undefined,
         cacheDirectory: settings.offlineConfig?.profileCachePath || '/Users/sheydin/.fhir/packages',
         timeout: 150000, // 150 seconds for comprehensive validation
@@ -92,7 +109,7 @@ class HapiValidationCoordinator {
         validationLevel: 'hints', // Get all messages
       };
       
-      console.log(`[HapiValidationCoordinator] Calling HAPI with ${profiles.length} profiles, ${igPackages.length} IG packages`);
+      console.log(`[HapiValidationCoordinator] Calling HAPI with ${profiles.length} profiles, ${uniquePackages.length} IG packages`);
       console.log(`[HapiValidationCoordinator] Options: bestPractice=${options.enableBestPractice}, level=${options.validationLevel}`);
       
       // Call HAPI validator

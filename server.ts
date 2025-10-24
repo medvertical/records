@@ -1865,6 +1865,24 @@ if (!isServerless) {
     reusePort: true,
   }, () => {
     log(`Server serving on port ${port}`);
+    
+    // Pre-warm HAPI validation pool in background
+    // This improves first validation time from 18-42s to 6-8s
+    import('./server/services/validation/engine/hapi-process-pool.js').then(({ getHapiProcessPool }) => {
+      const pool = getHapiProcessPool();
+      console.log('[Server] Initializing HAPI validation pool...');
+      
+      pool.preWarmProcesses()
+        .then(() => {
+          console.log('[Server] HAPI validation pool ready');
+        })
+        .catch(err => {
+          console.error('[Server] Failed to pre-warm HAPI pool:', err);
+          console.error('[Server] First validations may be slower until pool warms up');
+        });
+    }).catch(err => {
+      console.error('[Server] Failed to import HAPI pool:', err);
+    });
   });
 }
 

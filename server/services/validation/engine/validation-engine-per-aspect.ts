@@ -54,7 +54,7 @@ function getAspectTimeouts(): Record<ValidationAspectType, number> {
     profile: timeouts.validationEngine.profile,
     terminology: timeouts.validationEngine.terminology,
     reference: timeouts.validationEngine.reference,
-    businessRules: timeouts.validationEngine.businessRules,
+    businessRule: timeouts.validationEngine.businessRule,
     metadata: timeouts.validationEngine.metadata,
   });
   
@@ -63,7 +63,7 @@ function getAspectTimeouts(): Record<ValidationAspectType, number> {
     profile: timeouts.validationEngine.profile,
     terminology: timeouts.validationEngine.terminology,
     reference: timeouts.validationEngine.reference,
-    businessRule: timeouts.validationEngine.businessRules,
+    businessRule: timeouts.validationEngine.businessRule,
     metadata: timeouts.validationEngine.metadata,
   };
 }

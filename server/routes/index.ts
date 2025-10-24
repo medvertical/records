@@ -17,7 +17,8 @@ import {
   analyticsCacheRoutes,
   cacheManagementRoutes,
   connectivityRoutes,
-  businessRulesRoutes
+  businessRulesRoutes,
+  poolStatusRoutes
 } from "./api/validation";
 import { setupFhirRoutes, setupProfileRoutes } from "./api/fhir";
 import { setupDashboardRoutes } from "./api/dashboard";
@@ -57,6 +58,7 @@ export function setupAllRoutes(app: Express, fhirClient: FhirClient | null, cons
   app.use('/api/validation/analytics', analyticsCacheRoutes);
   app.use('/api/validation/connectivity', connectivityRoutes);
   app.use('/api/validation/business-rules', businessRulesRoutes);
+  app.use('/api/validation', poolStatusRoutes);
   
   // Streaming validation routes (Task 10.11)
   app.use('/api/validate', validationStreamingRoutes);

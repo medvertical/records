@@ -711,13 +711,18 @@ export default function ResourceBrowser() {
           duration: 3000,
         });
 
-        // Invalidate validation messages after 3 seconds to get updated validation results
-        // Don't refetch resource list to avoid changing which resources are displayed
+        // Invalidate validation messages and force refetch resources list after 2 seconds
+        // This ensures validation status badges update immediately
         setTimeout(() => {
           queryClient.invalidateQueries({
             queryKey: ['validation-messages'],
           });
-        }, 3000);
+          // Force immediate refetch of active resources queries
+          queryClient.refetchQueries({
+            queryKey: ['resources'],
+            type: 'active'
+          });
+        }, 2000);
       }
     } catch (error) {
       console.error('[ResourceBrowser] Error during auto-revalidation:', error);
@@ -1363,6 +1368,14 @@ export default function ResourceBrowser() {
         });
       });
 
+      // Wait a brief moment for database transaction to commit
+      // This prevents race condition where queries run before data is written
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Clear validating state before invalidating queries
+      // This prevents "Validating..." badges from showing on the updated resource list
+      setValidatingResourceIds(new Set());
+
       // Invalidate only validation-specific queries, not the resource list
       // This updates validation badges without changing which resources are displayed
       console.log('[Background Validation] Invalidating validation messages...');
@@ -1371,7 +1384,7 @@ export default function ResourceBrowser() {
       });
       console.log('[Background Validation] Validation messages invalidated');
       
-      // Clear progress after showing completion briefly
+      // Clear activity widget progress after showing completion briefly
       setTimeout(() => {
         setValidationProgress(new Map());
         // Remove from activity context
@@ -1386,11 +1399,10 @@ export default function ResourceBrowser() {
         progressCleanup();
       }
       setValidationProgress(new Map());
+      setValidatingResourceIds(new Set()); // Clear validating state on error
       // Remove from activity context on error
       resourceIds.forEach(id => removeResourceValidation(id));
       // Don't show error to user for background validation
-    } finally {
-      setValidatingResourceIds(new Set()); // Clear validating state
     }
   }, [resourcesData, queryClient, simulateValidationProgress, removeResourceValidation, updateResourceValidation]);
 
@@ -1669,28 +1681,39 @@ export default function ResourceBrowser() {
         });
       });
 
-      // Invalidate only validation-specific queries to show updated results
-      // Don't refetch resource list to avoid changing which resources are displayed
-      console.log('[Manual Revalidation] Invalidating validation messages...');
+      // Wait a brief moment for database transaction to commit
+      // This prevents race condition where refetch happens before data is written
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Clear validating state before refetching
+      // This prevents "Validating..." badges from showing on the updated resource list
+      setValidatingResourceIds(new Set());
+      setIsValidating(false);
+
+      // Invalidate validation queries AND force refetch resources list to show updated validation status
+      console.log('[Manual Revalidation] Invalidating validation messages and refetching resource list...');
       await queryClient.invalidateQueries({ 
         queryKey: ['validation-messages']
       });
-      console.log('[Manual Revalidation] Validation messages invalidated');
+      // Force immediate refetch of resources to show updated validation status
+      await queryClient.refetchQueries({
+        queryKey: ['resources'],
+        type: 'active'
+      });
+      console.log('[Manual Revalidation] Validation messages invalidated and resource list refetched');
       
       toast({
         title: "Revalidation complete",
         description: `Successfully revalidated ${allResults.length} resources.`,
       });
 
-      // Clear progress after showing completion briefly
+      // Clear activity widget progress after showing completion briefly
       setTimeout(() => {
         if (progressCleanup) {
           progressCleanup();
         }
         setValidationProgress(new Map());
         resourceIds.forEach(id => removeResourceValidation(id));
-        setIsValidating(false);
-        setValidatingResourceIds(new Set());
       }, 500);
 
     } catch (error) {

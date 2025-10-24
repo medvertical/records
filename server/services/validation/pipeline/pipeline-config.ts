@@ -23,7 +23,7 @@ export class PipelineConfig extends EventEmitter {
     
     this.defaultConfig = {
       enableParallelProcessing: true,
-      maxConcurrentValidations: 10,
+      maxConcurrentValidations: 100, // Increased from 10 to prevent rejections
       defaultTimeoutMs: 300000, // 5 minutes
       enableProgressTracking: true,
       enableResultCaching: true,

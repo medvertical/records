@@ -29,7 +29,7 @@ export class PipelineOrchestrator extends EventEmitter {
     
     this.config = {
       enableParallelProcessing: true,
-      maxConcurrentValidations: 10,
+      maxConcurrentValidations: 100, // Increased from 10 to prevent rejections
       defaultTimeoutMs: 300000, // 5 minutes
       enableProgressTracking: true,
       enableResultCaching: true,
@@ -183,6 +183,8 @@ export class PipelineOrchestrator extends EventEmitter {
           const serverId = (resourceRequest.resource as any).serverId || 1;
           
           // Call the new validation engine with per-aspect support
+          // Note: Individual validators have their own timeouts (e.g., HAPI: 150s)
+          // No need for orchestrator-level timeout which was causing premature failures
           const { success, results: perAspectResults } = await this.engine.validateResource(
             serverId,
             resourceRequest.resourceType,

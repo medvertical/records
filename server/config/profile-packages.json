@@ -13,10 +13,10 @@
         {
           "id": "de.medizininformatikinitiative.kerndatensatz.person",
           "name": "MII KDS Person",
-          "version": "2024.0.0",
+          "version": "2025.0.1",
           "fhirVersion": "R4",
           "canonical": "https://www.medizininformatik-initiative.de/fhir/core/modul-person",
-          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.person/2024.0.0",
+          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.person/2025.0.1",
           "status": "active",
           "priority": "high",
           "description": "Person module containing Patient, Practitioner, Organization profiles"
@@ -24,10 +24,10 @@
         {
           "id": "de.medizininformatikinitiative.kerndatensatz.laborbefund",
           "name": "MII KDS Laborbefund",
-          "version": "2024.0.0",
+          "version": "2025.0.1",
           "fhirVersion": "R4",
           "canonical": "https://www.medizininformatik-initiative.de/fhir/core/modul-labor",
-          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.laborbefund/2024.0.0",
+          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.laborbefund/2025.0.1",
           "status": "active",
           "priority": "high",
           "description": "Laboratory findings profiles for diagnostics and lab results"
@@ -35,10 +35,10 @@
         {
           "id": "de.medizininformatikinitiative.kerndatensatz.diagnose",
           "name": "MII KDS Diagnose",
-          "version": "2024.0.0",
+          "version": "2025.0.1",
           "fhirVersion": "R4",
           "canonical": "https://www.medizininformatik-initiative.de/fhir/core/modul-diagnose",
-          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.diagnose/2024.0.0",
+          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.diagnose/2025.0.1",
           "status": "active",
           "priority": "high",
           "description": "Diagnosis profiles based on ICD-10-GM"
@@ -46,10 +46,10 @@
         {
           "id": "de.medizininformatikinitiative.kerndatensatz.medikation",
           "name": "MII KDS Medikation",
-          "version": "2024.0.0",
+          "version": "2025.0.1",
           "fhirVersion": "R4",
           "canonical": "https://www.medizininformatik-initiative.de/fhir/core/modul-medikation",
-          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.medikation/2024.0.0",
+          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.medikation/2025.0.1",
           "status": "active",
           "priority": "medium",
           "description": "Medication profiles for prescriptions and administration"
@@ -57,10 +57,10 @@
         {
           "id": "de.medizininformatikinitiative.kerndatensatz.prozedur",
           "name": "MII KDS Prozedur",
-          "version": "2024.0.0",
+          "version": "2025.0.1",
           "fhirVersion": "R4",
           "canonical": "https://www.medizininformatik-initiative.de/fhir/core/modul-prozedur",
-          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.prozedur/2024.0.0",
+          "downloadUrl": "https://packages.simplifier.net/de.medizininformatikinitiative.kerndatensatz.prozedur/2025.0.1",
           "status": "active",
           "priority": "medium",
           "description": "Procedure profiles based on OPS codes"

@@ -30,3 +30,6 @@ export { default as connectivityRoutes } from './connectivity';
 
 // Export business rules routes
 export { default as businessRulesRoutes } from './business-rules';
+
+// Export pool status routes
+export { default as poolStatusRoutes } from './pool-status';
