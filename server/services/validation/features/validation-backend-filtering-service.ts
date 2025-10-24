@@ -141,11 +141,7 @@ class ValidationBackendFilteringService extends EventEmitter {
     try {
       // Get all resources
       const allResources = await storage.getFhirResources();
-      console.log(`[BackendFiltering] Found ${allResources.length} resources`);
-      console.log(`[BackendFiltering] First resource has data field:`, !!allResources[0]?.data);
-      if (allResources[0]?.data) {
-        console.log(`[BackendFiltering] First resource data keys:`, Object.keys(allResources[0].data).slice(0, 10));
-      }
+      console.log(`[BackendFiltering] Found ${allResources.length} resources (metadata only)`);
 
       // Apply resource type filtering
       let filteredResources = allResources;
@@ -237,8 +233,9 @@ class ValidationBackendFilteringService extends EventEmitter {
           id: fhirResources.id,
           resourceType: fhirResources.resourceType,
           resourceId: fhirResources.resourceId,
-          data: fhirResources.data,
           lastValidated: fhirResources.lastValidated,
+          versionId: fhirResources.versionId,
+          resourceHash: fhirResources.resourceHash,
         })
         .from(fhirResources)
         .where(eq(fhirResources.serverId, serverId))
@@ -472,7 +469,18 @@ class ValidationBackendFilteringService extends EventEmitter {
     const searchLower = search.toLowerCase();
     
     return resources.filter(resource => {
-      // Search in resource data
+      // Note: We no longer store resource.data in the database, so content-based search is not available
+      // Search is now limited to metadata fields only (resourceId, resourceType)
+      
+      // Search in resource metadata (resourceId, resourceType)
+      if (resource.resourceId?.toLowerCase().includes(searchLower) ||
+          resource.resourceType?.toLowerCase().includes(searchLower)) {
+        return true;
+      }
+      
+      return false;
+      
+      /* OLD CODE - resource.data no longer stored in database
       const resourceData = resource.data;
       if (resourceData) {
         // Handle dot notation searches (e.g., "meta.profile") FIRST
@@ -520,6 +528,7 @@ class ValidationBackendFilteringService extends EventEmitter {
       }
 
       return false;
+      */
     });
   }
 
@@ -613,22 +622,27 @@ class ValidationBackendFilteringService extends EventEmitter {
           hasWarnings: false
         };
 
-        // Enhance resource with validation data
-        // Use _validationSummary for consistency with the rest of the app
+        // Note: We no longer store resource.data in database, so we only return metadata + validation summary
+        // Frontend should fetch actual resource from FHIR server if needed
         const enhancedResource = {
-          ...resource.data,
-          resourceId: resource.resourceId, // Map FHIR id to resourceId for consistency
+          resourceType: resource.resourceType,
+          resourceId: resource.resourceId, // FHIR id
+          id: resource.resourceId, // For compatibility
           _validationSummary: formattedSummary,
-          _dbId: resource.id
+          _dbId: resource.id,
+          _needsFetch: true // Indicates that full resource should be fetched from FHIR server
         };
 
         enhancedResources.push(enhancedResource);
       } catch (error) {
         console.error(`[BackendFiltering] Error enhancing resource ${resource.id}:`, error);
-        // Include resource without validation data
+        // Include resource metadata without validation data
         enhancedResources.push({
-          ...resource.data,
+          resourceType: resource.resourceType,
           resourceId: resource.resourceId,
+          id: resource.resourceId,
+          _dbId: resource.id,
+          _needsFetch: true,
           _validationSummary: {
             resourceId: resource.resourceId,
             resourceType: resource.resourceType,
@@ -639,8 +653,7 @@ class ValidationBackendFilteringService extends EventEmitter {
             validationScore: 0,
             lastValidated: null,
             hasValidationData: false
-          },
-          _dbId: resource.id
+          }
         });
       }
     }

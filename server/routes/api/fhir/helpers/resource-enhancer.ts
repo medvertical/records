@@ -40,7 +40,8 @@ export async function enhanceResourcesWithValidationData(
     const resourceStartTime = Date.now();
     
     try {
-      // Try to find the resource in our database
+      // Try to find the resource metadata in our database (for validation results)
+      // Note: We no longer store the resource data itself, only metadata created during validation
       let dbResource;
       try {
         dbResource = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
@@ -51,49 +52,7 @@ export async function enhanceResourcesWithValidationData(
           code: lookupError.code,
           duration: Date.now() - resourceStartTime
         });
-        // Continue without dbResource
-      }
-      
-      // If resource doesn't exist in database, create it
-      if (!dbResource && activeServer) {
-        try {
-          // Check for duplicate insert race condition with a quick re-check
-          dbResource = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
-          
-          if (!dbResource) {
-            const resourceData = {
-              serverId: activeServer.id,
-              resourceType: resource.resourceType,
-              resourceId: resource.id,
-              versionId: resource.meta?.versionId || '1',
-              data: resource,
-              resourceHash: null, // Will be calculated during validation
-              lastValidated: null
-            };
-            
-            dbResource = await storage.createFhirResource(resourceData);
-            console.log(`[FHIR API] Created DB entry for ${resourceKey} (ID: ${dbResource.id}) (${Date.now() - resourceStartTime}ms)`);
-          } else {
-            console.log(`[FHIR API] ${resourceKey} created by concurrent request, using existing (${Date.now() - resourceStartTime}ms)`);
-          }
-        } catch (createError: any) {
-          // Handle duplicate key errors gracefully (race condition)
-          if (createError.code === '23505' || createError.message?.includes('duplicate')) {
-            console.log(`[FHIR API] Duplicate key for ${resourceKey}, attempting to fetch existing (${Date.now() - resourceStartTime}ms)`);
-            try {
-              dbResource = await storage.getFhirResourceByTypeAndId(resource.resourceType, resource.id);
-            } catch (refetchError: any) {
-              console.error(`[FHIR API] Failed to refetch after duplicate for ${resourceKey}:`, refetchError.message);
-            }
-          } else {
-            console.error(`[FHIR API] Failed to create DB entry for ${resourceKey}:`, {
-              error: createError.message,
-              code: createError.code,
-              detail: createError.detail,
-              duration: Date.now() - resourceStartTime
-            });
-          }
-        }
+        // Continue without dbResource - it will be created during validation if needed
       }
       
       // Get validation summary if we have a dbResource and validation is requested

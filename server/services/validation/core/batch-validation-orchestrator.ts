@@ -240,9 +240,9 @@ export class BatchValidationOrchestrator {
       resourceType: resource.resourceType,
       resourceId: resource.id,
       versionId: resource.meta?.versionId,
-      data: resource,
       resourceHash,
       serverId: 1,
+      lastValidated: new Date(),
     };
 
     let dbResource = await storage.getFhirResourceByTypeAndId(
@@ -251,7 +251,16 @@ export class BatchValidationOrchestrator {
     );
 
     if (dbResource) {
-      await storage.updateFhirResource(dbResource.id, resource);
+      await storage.updateFhirResource(dbResource.id, {
+        resourceHash,
+        versionId: resource.meta?.versionId,
+        lastValidated: new Date()
+      });
+      // Refetch to get updated resource
+      dbResource = await storage.getFhirResourceByTypeAndId(
+        resource.resourceType,
+        resource.id
+      );
     } else {
       dbResource = await storage.createFhirResource(resourceData);
     }

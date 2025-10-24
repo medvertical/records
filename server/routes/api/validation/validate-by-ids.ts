@@ -131,6 +131,21 @@ router.post('/validate-by-ids', async (req: Request, res: Response) => {
     
     logger.info(`[Validate By IDs] Starting parallel validation with concurrency limit: ${concurrencyLimit}`);
     
+    // Get FHIR client for fetching resources
+    const { FhirClient } = await import('../../../services/fhir/fhir-client');
+    const { storage } = await import('../../../storage');
+    
+    const activeServer = await storage.getActiveFhirServer();
+    if (!activeServer) {
+      logger.error('[Validate By IDs] No active FHIR server found');
+      return res.status(503).json({
+        success: false,
+        error: 'No active FHIR server configured',
+      });
+    }
+    
+    const fhirClient = new FhirClient(activeServer.url, undefined, activeServer.id);
+    
     // Validate resource function with progress tracking
     const validateResource = async (resource: typeof dbResources[0]) => {
       const resourceIdentifier = `${resource.resourceType}/${resource.resourceId}`;
@@ -149,9 +164,16 @@ router.post('/validate-by-ids', async (req: Request, res: Response) => {
         
         logger.debug(`[Validate By IDs] Starting validation for ${resourceIdentifier}`);
         
+        // Fetch resource from FHIR server (we no longer store resource data in DB)
+        const fhirResource = await fhirClient.getResource(resource.resourceType, resource.resourceId);
+        
+        if (!fhirResource) {
+          throw new Error(`Resource ${resourceIdentifier} not found on FHIR server`);
+        }
+        
         // Validate resource using consolidated validation service with settings override
         const result = await validationService.validateResource(
-          resource.data,
+          fhirResource,
           false, // skipUnchanged
           true,  // forceRevalidation
           0,     // retryAttempt

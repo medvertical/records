@@ -1391,9 +1391,10 @@ export default function ResourceBrowser() {
       console.log('[Background Validation] Invalidating validation data...');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['validation-messages'] }),
-        queryClient.invalidateQueries({ queryKey: ['validation-summaries-bulk'] })
+        queryClient.invalidateQueries({ queryKey: ['validation-summaries-bulk'] }),
+        queryClient.refetchQueries({ queryKey: ['resources'], type: 'active' })
       ]);
-      console.log('[Background Validation] Validation data invalidated');
+      console.log('[Background Validation] Validation data invalidated and resources list refetched');
       
       // Clear activity widget progress after showing completion briefly
       setTimeout(() => {

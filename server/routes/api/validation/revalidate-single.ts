@@ -101,16 +101,40 @@ router.post('/resources/:resourceType/:id/revalidate', async (req: Request, res:
     
     logger.info('[Single Revalidate] Settings override:', JSON.stringify(settingsOverride, null, 2));
     
+    // Fetch the actual resource from FHIR server (we no longer store resource data in DB)
+    const { FhirClient } = await import('../../../services/fhir/fhir-client');
+    const { storage } = await import('../../../storage');
+    
+    const activeServer = await storage.getActiveFhirServer();
+    if (!activeServer) {
+      logger.error('[Single Revalidate] No active FHIR server found');
+      return res.status(503).json({
+        success: false,
+        error: 'No active FHIR server configured',
+      });
+    }
+    
+    const fhirClient = new FhirClient(activeServer.url, undefined, activeServer.id);
+    const fhirResource = await fhirClient.getResource(resourceType, id);
+    
+    if (!fhirResource) {
+      logger.error(`[Single Revalidate] Resource ${resourceType}/${id} not found on FHIR server`);
+      return res.status(404).json({
+        success: false,
+        error: 'Resource not found on FHIR server',
+      });
+    }
+    
     // Trigger validation using ConsolidatedValidationService (same as list view)
     try {
       logger.info(`[Single Revalidate] Calling ConsolidatedValidationService.validateResource...`);
       logger.info(`[Single Revalidate] ServerId: ${serverId}`);
       logger.info(`[Single Revalidate] Resource type: ${resource.resourceType}`);
       logger.info(`[Single Revalidate] Resource id: ${resource.resourceId}`);
-      logger.info(`[Single Revalidate] Resource FHIR id: ${(resource.data as any).id}`);
+      logger.info(`[Single Revalidate] Resource FHIR id: ${fhirResource.id}`);
       
       const validationResult = await validationService.validateResource(
-        resource.data,
+        fhirResource,
         false, // skipUnchanged
         true,  // forceRevalidation
         0,     // retryAttempt

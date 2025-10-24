@@ -92,14 +92,54 @@ router.post('/batch-revalidate', async (req: Request, res: Response) => {
       logger.info(`[Batch Revalidate] Invalidated validation results for ${resources.length} resources`);
     }
     
+    // Fetch actual resources from FHIR server (we no longer store resource data in DB)
+    const { FhirClient } = await import('../../../services/fhir/fhir-client');
+    const { storage } = await import('../../../storage');
+    
+    const activeServer = await storage.getActiveFhirServer();
+    if (!activeServer) {
+      logger.error('[Batch Revalidate] No active FHIR server found');
+      return res.status(503).json({
+        success: false,
+        error: 'No active FHIR server configured',
+      });
+    }
+    
+    const fhirClient = new FhirClient(activeServer.url, undefined, activeServer.id);
+    
+    // Fetch all resources from FHIR server
+    const fetchedResources = await Promise.all(
+      resources.map(async (dbResource) => {
+        try {
+          const fhirResource = await fhirClient.getResource(dbResource.resourceType, dbResource.resourceId);
+          return fhirResource ? { dbResource, fhirResource } : null;
+        } catch (error) {
+          logger.warn(`[Batch Revalidate] Failed to fetch ${dbResource.resourceType}/${dbResource.resourceId}:`, error);
+          return null;
+        }
+      })
+    );
+    
+    const validResources = fetchedResources.filter(r => r !== null) as Array<{ dbResource: any, fhirResource: any }>;
+    
+    if (validResources.length === 0) {
+      logger.warn('[Batch Revalidate] No resources could be fetched from FHIR server');
+      return res.status(404).json({
+        success: false,
+        error: 'No resources found on FHIR server',
+      });
+    }
+    
+    logger.info(`[Batch Revalidate] Fetched ${validResources.length}/${resources.length} resources from FHIR server`);
+    
     // Queue resources for validation
     const { ValidationQueueService, ValidationPriority } = await import('../../../services/validation/performance/validation-queue-service');
     const queueService = ValidationQueueService.getInstance();
     
-    const validationRequests = resources.map(resource => ({
-      resource: resource.data,
-      resourceType: resource.resourceType,
-      resourceId: resource.resourceId,
+    const validationRequests = validResources.map(({ dbResource, fhirResource }) => ({
+      resource: fhirResource,
+      resourceType: dbResource.resourceType,
+      resourceId: dbResource.resourceId,
       profileUrl: undefined,
     }));
     

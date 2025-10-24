@@ -83,7 +83,6 @@ export function setupResourceListRoutes(app: Express, fhirClient: FhirClient | n
       }
 
       let bundle;
-      let usedDatabaseFallback = false;
       
       try {
         // Build search parameters
@@ -117,57 +116,28 @@ export function setupResourceListRoutes(app: Express, fhirClient: FhirClient | n
           searchParams
         );
         
-        // Race with a 5-second timeout
+        // Race with a 30-second timeout (FHIR servers can be slow for large queries)
         bundle = await Promise.race([
           fetchPromise,
           new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('External FHIR server timeout after 5s')), 5000)
+            setTimeout(() => reject(new Error('External FHIR server timeout after 30s')), 30000)
           )
         ]) as any;
         
       } catch (error: any) {
-        console.warn(`[Resource List] External FHIR server failed: ${error.message}`);
+        console.error(`[Resource List] FHIR server request failed: ${error.message}`);
         
-        // Fallback to database
-        try {
-          const { storage } = await import('../../../../storage.js');
-          const limitNum = parseInt(limit as string);
-          const offsetNum = parseInt(offset as string);
-          
-          console.log(`[Resource List] Falling back to database for ${resourceType}`);
-          const dbResources = await storage.getFhirResources(
-            undefined, // serverId - will use active server
-            resourceType as string,
-            limitNum,
-            offsetNum
-          );
-          
-          const resources = dbResources.map(r => r.data);
-          const enhancedResources = await enhanceResourcesWithValidationData(resources, false);
-          
-          usedDatabaseFallback = true;
-          
-          return res.json({
-            resources: enhancedResources,
-            total: dbResources.length,
-            source: 'database',
-            message: 'Loaded from local cache (external server unavailable)'
+        // No database fallback - resources are only stored in FHIR server
+        // Last resort: mock data if enabled
+        if (FeatureFlags.DEMO_MOCKS) {
+          console.warn(`Using mock data (DEMO_MOCKS=true)`);
+          bundle = createMockBundle(resourceType as string, parseInt(limit as string), parseInt(offset as string));
+        } else {
+          return res.status(503).json({
+            error: 'FHIR Server Unavailable',
+            message: 'Unable to fetch resources from the FHIR server.',
+            details: error.message,
           });
-          
-        } catch (dbError: any) {
-          console.error(`[Resource List] Database fallback failed:`, dbError.message);
-          
-          // Last resort: mock data if enabled
-          if (FeatureFlags.DEMO_MOCKS) {
-            console.warn(`Using mock data (DEMO_MOCKS=true)`);
-            bundle = createMockBundle(resourceType as string, parseInt(limit as string), parseInt(offset as string));
-          } else {
-            return res.status(503).json({
-              error: 'FHIR Server Unavailable',
-              message: 'Unable to fetch resources from the FHIR server or database.',
-              details: error.message,
-            });
-          }
         }
       }
 

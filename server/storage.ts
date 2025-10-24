@@ -45,7 +45,7 @@ export interface IStorage {
   getFhirResourceById(id: number): Promise<FhirResourceWithValidation | undefined>;
   getFhirResourceByTypeAndId(resourceType: string, resourceId: string): Promise<FhirResource | undefined>;
   createFhirResource(resource: InsertFhirResource): Promise<FhirResource>;
-  updateFhirResource(id: number, data: any): Promise<void>;
+  updateFhirResource(id: number, updates: Partial<Pick<FhirResource, 'resourceHash' | 'versionId' | 'lastValidated'>>): Promise<void>;
   updateFhirResourceLastValidated(id: number, validatedAt: string): Promise<void>;
   searchFhirResources(query: string, resourceType?: string): Promise<FhirResource[]>;
 
@@ -275,9 +275,9 @@ export class DatabaseStorage implements IStorage {
     return newResource;
   }
 
-  async updateFhirResource(id: number, data: any): Promise<void> {
+  async updateFhirResource(id: number, updates: Partial<Pick<FhirResource, 'resourceHash' | 'versionId' | 'lastValidated'>>): Promise<void> {
     await db.update(fhirResources)
-      .set({ data, lastModified: new Date() })
+      .set({ ...updates, lastModified: new Date() })
       .where(eq(fhirResources.id, id));
   }
 
@@ -288,14 +288,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async searchFhirResources(query: string, resourceType?: string): Promise<FhirResource[]> {
-    // Note: This is a simplified search. In a production system, you'd want to use 
-    // full-text search capabilities or index specific fields
+    // Note: Search is now limited to metadata only (resourceId, resourceType) since
+    // we no longer store the full resource data in the database
     const allResources = await this.getFhirResources(undefined, resourceType, 1000, 0);
     
     return allResources.filter(resource => {
-      const dataStr = JSON.stringify(resource.data).toLowerCase();
-      return dataStr.includes(query.toLowerCase()) || 
-             resource.resourceId.toLowerCase().includes(query.toLowerCase());
+      return resource.resourceId.toLowerCase().includes(query.toLowerCase()) ||
+             resource.resourceType.toLowerCase().includes(query.toLowerCase());
     });
   }
 
@@ -550,7 +549,7 @@ export class DatabaseStorage implements IStorage {
     // Only include actual validation aspects, not other settings properties
     const validAspects = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'];
     const enabledAspects = validAspects.filter(aspect => {
-      const aspectSettings = settings[aspect as keyof typeof settings];
+      const aspectSettings = (settings.aspects as any)?.[aspect];
       return aspectSettings?.enabled !== false;
     });
     
@@ -702,12 +701,12 @@ export class DatabaseStorage implements IStorage {
       informationCount: number;
       score: number;
     }> = {
-      structural: { enabled: settings.structural?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      profile: { enabled: settings.profile?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      terminology: { enabled: settings.terminology?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      reference: { enabled: settings.reference?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      businessRule: { enabled: settings.businessRule?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
-      metadata: { enabled: settings.metadata?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 }
+      structural: { enabled: (settings.aspects as any)?.structural?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      profile: { enabled: (settings.aspects as any)?.profile?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      terminology: { enabled: (settings.aspects as any)?.terminology?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      reference: { enabled: (settings.aspects as any)?.reference?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      businessRule: { enabled: (settings.aspects as any)?.businessRule?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 },
+      metadata: { enabled: (settings.aspects as any)?.metadata?.enabled !== false, issueCount: 0, errorCount: 0, warningCount: 0, informationCount: 0, score: 100 }
     };
 
     // Fetch aspect-level data for aspect breakdown (separate query, lighter than full aggregation)

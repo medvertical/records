@@ -53,19 +53,23 @@ export class ValidationResourcePersistence {
         }
       }
 
-      // Create or update resource
+      // Create or update resource metadata (not the resource data itself)
       if (resource.id) {
         const resourceData: InsertFhirResource = {
           resourceType: resource.resourceType,
           resourceId: resource.id,
           versionId: resource.meta?.versionId,
-          data: resource,
           resourceHash,
           serverId: 1, // TODO: inject active server
+          lastValidated: new Date(),
         };
 
         if (dbResourceId) {
-          await storage.updateFhirResource(dbResourceId, resource);
+          await storage.updateFhirResource(dbResourceId, {
+            resourceHash,
+            versionId: resource.meta?.versionId,
+            lastValidated: new Date()
+          });
         } else {
           const created = await storage.createFhirResource(resourceData);
           dbResourceId = created.id;

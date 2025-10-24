@@ -252,19 +252,6 @@ export function setupResourceRoutes(app: Express, fhirClient: FhirClient | null)
           ]);
           
           if (!resource) {
-            // Try database fallback
-            console.log(`[FHIR API] [${requestId}] Not found in external server, trying database`);
-            const { storage } = await import('../../../../storage.js');
-            const dbResource = await storage.getFhirResourceByTypeAndId(resourceType as string, id);
-            
-            if (dbResource) {
-              console.log(`[FHIR API] [${requestId}] Found in database`);
-              const enhancedResources = await enhanceResourcesWithValidationData([dbResource.data]);
-              const totalDuration = Date.now() - startTime;
-              console.log(`[FHIR API] [${requestId}] Completed from database (${totalDuration}ms)`);
-              return res.json(enhancedResources[0]);
-            }
-            
             return res.status(404).json({ 
               message: `Resource ${resourceType}/${id} not found`,
               resourceType, id, requestId
@@ -278,33 +265,23 @@ export function setupResourceRoutes(app: Express, fhirClient: FhirClient | null)
           return;
           
         } catch (error: any) {
-          // Try database fallback on error
-          console.warn(`[FHIR API] [${requestId}] External server failed: ${error.message}, trying database`);
-          
-          try {
-            const { storage } = await import('../../../../storage.js');
-            const dbResource = await storage.getFhirResourceByTypeAndId(resourceType as string, id);
-            
-            if (dbResource) {
-              console.log(`[FHIR API] [${requestId}] Found in database`);
-              const enhancedResources = await enhanceResourcesWithValidationData([dbResource.data]);
-              return res.json(enhancedResources[0]);
-            }
-          } catch (dbError: any) {
-            console.error(`[FHIR API] [${requestId}] Database fallback failed:`, dbError.message);
-          }
-          
           if (error.message?.includes('404') || error.message?.includes('not found') || error.statusCode === 404) {
             return res.status(404).json({ 
               message: `Resource ${resourceType}/${id} not found`,
               resourceType, id, requestId
             });
           }
-          throw error;
+          // FHIR server error - return 503 Service Unavailable
+          console.error(`[FHIR API] [${requestId}] FHIR server error: ${error.message}`);
+          return res.status(503).json({
+            message: 'FHIR server is currently unavailable',
+            error: error.message,
+            resourceType, id, requestId
+          });
         }
       }
 
-      // Try common resource types (with database fallback)
+      // Try common resource types to auto-detect resource type from ID
       const commonTypes = ['Patient', 'Observation', 'Encounter', 'Condition', 'DiagnosticReport', 
                           'Medication', 'MedicationRequest', 'Procedure', 'AllergyIntolerance', 
                           'Immunization', 'DocumentReference', 'Organization', 'Practitioner', 'AuditEvent'];
@@ -328,23 +305,6 @@ export function setupResourceRoutes(app: Express, fhirClient: FhirClient | null)
             const enhancedResources = await enhanceResourcesWithValidationData([resource]);
             res.json(enhancedResources[0]);
             return;
-          }
-        } catch (error: any) {
-          // Continue to next type
-        }
-      }
-
-      // Try database as last resort
-      console.log(`[FHIR API] [${requestId}] Trying database for all resource types`);
-      for (const type of commonTypes) {
-        try {
-          const { storage } = await import('../../../../storage.js');
-          const dbResource = await storage.getFhirResourceByTypeAndId(type, id);
-          
-          if (dbResource) {
-            console.log(`[FHIR API] [${requestId}] Found in database as ${type}`);
-            const enhancedResources = await enhanceResourcesWithValidationData([dbResource.data]);
-            return res.json(enhancedResources[0]);
           }
         } catch (error: any) {
           // Continue to next type
