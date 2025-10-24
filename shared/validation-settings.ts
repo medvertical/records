@@ -24,8 +24,11 @@ export interface ValidationAspectConfig {
   /** Whether this validation aspect is enabled */
   enabled: boolean;
   
-  /** Severity level for issues found by this aspect */
-  severity: 'error' | 'warning' | 'info';
+  /** Severity level for issues found by this aspect
+   * - 'inherit': Use the original severity from validation messages (default)
+   * - 'error'/'warning'/'info': Override all messages from this aspect to this severity
+   */
+  severity: 'inherit' | 'error' | 'warning' | 'info';
   
   /** Validation engine to use for this aspect (optional - defaults per aspect type) */
   engine?: string;
@@ -531,12 +534,12 @@ export const DEFAULT_CACHE_CONFIG = {
 
 export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
   aspects: {
-    structural: { enabled: true, severity: 'error', engine: 'hapi' },
-    profile: { enabled: true, severity: 'warning', engine: 'hapi' },
-    terminology: { enabled: true, severity: 'warning', engine: 'server' },
-    reference: { enabled: true, severity: 'error', engine: 'internal' },
-    businessRule: { enabled: true, severity: 'error', engine: 'fhirpath' },
-    metadata: { enabled: true, severity: 'error', engine: 'schema' }
+    structural: { enabled: true, severity: 'inherit', engine: 'hapi' },
+    profile: { enabled: true, severity: 'inherit', engine: 'hapi' },
+    terminology: { enabled: true, severity: 'inherit', engine: 'server' },
+    reference: { enabled: true, severity: 'inherit', engine: 'internal' },
+    businessRule: { enabled: true, severity: 'inherit', engine: 'fhirpath' },
+    metadata: { enabled: true, severity: 'inherit', engine: 'schema' }
   },
   performance: {
     maxConcurrent: 5,
@@ -567,12 +570,12 @@ export const DEFAULT_VALIDATION_SETTINGS_R4: ValidationSettings = {
 
 export const DEFAULT_VALIDATION_SETTINGS_R5: ValidationSettings = {
   aspects: {
-    structural: { enabled: true, severity: 'error', engine: 'hapi' },
-    profile: { enabled: true, severity: 'warning', engine: 'hapi' },
-    terminology: { enabled: true, severity: 'warning', engine: 'server' },
-    reference: { enabled: true, severity: 'error', engine: 'internal' },
-    businessRule: { enabled: true, severity: 'error', engine: 'fhirpath' },
-    metadata: { enabled: true, severity: 'error', engine: 'schema' }
+    structural: { enabled: true, severity: 'inherit', engine: 'hapi' },
+    profile: { enabled: true, severity: 'inherit', engine: 'hapi' },
+    terminology: { enabled: true, severity: 'inherit', engine: 'server' },
+    reference: { enabled: true, severity: 'inherit', engine: 'internal' },
+    businessRule: { enabled: true, severity: 'inherit', engine: 'fhirpath' },
+    metadata: { enabled: true, severity: 'inherit', engine: 'schema' }
   },
   performance: {
     maxConcurrent: 5,

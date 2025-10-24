@@ -906,7 +906,7 @@ export function ValidationSettingsTab() {
                 {aspect.enabled && (
                   <Select
                     value={aspect.severity}
-                    onValueChange={(value: 'error' | 'warning' | 'info') => 
+                    onValueChange={(value: 'inherit' | 'error' | 'warning' | 'info') => 
                       updateAspect(aspectKey as keyof ValidationSettings['aspects'], 'severity', value)
                     }
                   >
@@ -914,6 +914,12 @@ export function ValidationSettingsTab() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="inherit">
+                        <div className="flex items-center gap-2">
+                          <RefreshCw className="h-4 w-4 text-gray-500" />
+                          <span>Inherit</span>
+                        </div>
+                      </SelectItem>
                       <SelectItem value="error">
                         <div className="flex items-center gap-2">
                           <XCircle className="h-4 w-4 text-red-500" />

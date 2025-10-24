@@ -7,6 +7,7 @@ import {
 } from '../../shared/schema-validation-per-aspect';
 import { eq, and, or, sql, desc, asc, inArray, SQL } from 'drizzle-orm';
 import type { ValidationMessageGroupDTO } from '../../shared/validation-types';
+import { getValidationSettingsService } from '../services/validation/settings/validation-settings-service';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -213,6 +214,23 @@ export async function getResourceMessages(
 ): Promise<any> {
   console.log(`[getResourceMessages] Querying for serverId=${serverId}, resourceType=${resourceType}, fhirId=${fhirId}`);
   
+  // Load validation settings to check for severity overrides
+  let aspectSeverityOverrides: Record<string, 'inherit' | 'error' | 'warning' | 'info'> = {};
+  try {
+    const settingsService = getValidationSettingsService();
+    const settings = await settingsService.getCurrentSettings(serverId);
+    
+    // Extract severity settings for each aspect
+    if (settings && settings.aspects) {
+      Object.entries(settings.aspects).forEach(([aspect, config]: [string, any]) => {
+        aspectSeverityOverrides[aspect] = config.severity || 'inherit';
+      });
+    }
+    console.log(`[getResourceMessages] Loaded severity overrides:`, aspectSeverityOverrides);
+  } catch (error) {
+    console.error(`[getResourceMessages] Failed to load settings, using inherit for all aspects:`, error);
+  }
+  
   // Get all validation results for this resource
   const allResults = await db
     .select({
@@ -254,6 +272,18 @@ export async function getResourceMessages(
   const results = Array.from(latestByAspect.values());
   console.log(`[getResourceMessages] Filtered to ${results.length} latest validation results (one per aspect)`);
   
+  // Helper function to apply severity override
+  const applySeverityOverride = (severity: string, aspect: string): string => {
+    const aspectSeverity = aspectSeverityOverrides[aspect];
+    if (!aspectSeverity || aspectSeverity === 'inherit') {
+      // Use original severity
+      return severity;
+    }
+    
+    // Override severity: map 'info' to 'information' for database storage format
+    return aspectSeverity === 'info' ? 'information' : aspectSeverity;
+  };
+  
   // For each result, get its messages
   const aspects = await Promise.all(
     results.map(async (result) => {
@@ -272,17 +302,12 @@ export async function getResourceMessages(
         .from(validationMessages)
         .where(eq(validationMessages.validationResultId, result.id));
       
-      return {
-        aspect: result.aspect,
-        isValid: result.isValid,
-        errorCount: result.errorCount,
-        warningCount: result.warningCount,
-        informationCount: result.informationCount,
-        score: result.score,
-        validatedAt: result.validatedAt,
-        messages: messages.map(msg => ({
+      // Apply severity overrides to messages
+      const messagesWithOverrides = messages.map(msg => {
+        const overriddenSeverity = applySeverityOverride(msg.severity, result.aspect);
+        return {
           id: msg.id,
-          severity: msg.severity,
+          severity: overriddenSeverity,
           code: msg.code || undefined,
           canonicalPath: msg.canonicalPath,
           text: msg.text,
@@ -290,7 +315,23 @@ export async function getResourceMessages(
           createdAt: msg.createdAt,
           resourceType: msg.resourceType,
           resourceId: msg.fhirId,
-        })),
+        };
+      });
+      
+      // Recalculate counts based on overridden severities
+      const errorCount = messagesWithOverrides.filter(m => m.severity === 'error').length;
+      const warningCount = messagesWithOverrides.filter(m => m.severity === 'warning').length;
+      const informationCount = messagesWithOverrides.filter(m => m.severity === 'information').length;
+      
+      return {
+        aspect: result.aspect,
+        isValid: result.isValid,
+        errorCount,
+        warningCount,
+        informationCount,
+        score: result.score,
+        validatedAt: result.validatedAt,
+        messages: messagesWithOverrides,
       };
     })
   );
@@ -329,6 +370,22 @@ export async function getResourceValidationSummary(
   }>;
 } | null> {
   console.log(`[getResourceValidationSummary] Querying for serverId=${serverId}, resourceType=${resourceType}, fhirId=${fhirId}`);
+  
+  // Load validation settings to check for severity overrides
+  let aspectSeverityOverrides: Record<string, 'inherit' | 'error' | 'warning' | 'info'> = {};
+  try {
+    const settingsService = getValidationSettingsService();
+    const settings = await settingsService.getCurrentSettings(serverId);
+    
+    // Extract severity settings for each aspect
+    if (settings && settings.aspects) {
+      Object.entries(settings.aspects).forEach(([aspect, config]: [string, any]) => {
+        aspectSeverityOverrides[aspect] = config.severity || 'inherit';
+      });
+    }
+  } catch (error) {
+    console.error(`[getResourceValidationSummary] Failed to load settings, using inherit for all aspects:`, error);
+  }
   
   // Get all validation results for this resource
   const results = await db
@@ -376,9 +433,31 @@ export async function getResourceValidationSummary(
     }
     seenAspects.add(result.aspect);
     
-    totalErrorCount += result.errorCount || 0;
-    totalWarningCount += result.warningCount || 0;
-    totalInformationCount += result.informationCount || 0;
+    // Apply severity override if configured
+    const aspectSeverity = aspectSeverityOverrides[result.aspect];
+    let aspectErrorCount = result.errorCount || 0;
+    let aspectWarningCount = result.warningCount || 0;
+    let aspectInformationCount = result.informationCount || 0;
+    
+    if (aspectSeverity && aspectSeverity !== 'inherit') {
+      // Override: treat all messages as the configured severity
+      const totalMessages = aspectErrorCount + aspectWarningCount + aspectInformationCount;
+      aspectErrorCount = 0;
+      aspectWarningCount = 0;
+      aspectInformationCount = 0;
+      
+      if (aspectSeverity === 'error') {
+        aspectErrorCount = totalMessages;
+      } else if (aspectSeverity === 'warning') {
+        aspectWarningCount = totalMessages;
+      } else if (aspectSeverity === 'info') {
+        aspectInformationCount = totalMessages;
+      }
+    }
+    
+    totalErrorCount += aspectErrorCount;
+    totalWarningCount += aspectWarningCount;
+    totalInformationCount += aspectInformationCount;
     
     if (!latestValidatedAt || (result.validatedAt && new Date(result.validatedAt) > latestValidatedAt)) {
       latestValidatedAt = result.validatedAt ? new Date(result.validatedAt) : null;
@@ -386,9 +465,9 @@ export async function getResourceValidationSummary(
     
     aspectBreakdown[result.aspect] = {
       isValid: result.isValid || false,
-      errorCount: result.errorCount || 0,
-      warningCount: result.warningCount || 0,
-      informationCount: result.informationCount || 0,
+      errorCount: aspectErrorCount,
+      warningCount: aspectWarningCount,
+      informationCount: aspectInformationCount,
       score: result.score || 0,
     };
   }
@@ -441,6 +520,28 @@ export async function getResourceValidationSummariesBulk(
   
   if (resources.length === 0) {
     return new Map();
+  }
+  
+  // Load validation settings to check for severity overrides
+  let aspectSeverityOverrides: Record<string, 'inherit' | 'error' | 'warning' | 'info'> = {};
+  let hasOverrides = false;
+  try {
+    const settingsService = getValidationSettingsService();
+    const settings = await settingsService.getCurrentSettings(serverId);
+    
+    // Extract severity settings for each aspect
+    if (settings && settings.aspects) {
+      Object.entries(settings.aspects).forEach(([aspect, config]: [string, any]) => {
+        const severity = config.severity || 'inherit';
+        aspectSeverityOverrides[aspect] = severity;
+        if (severity !== 'inherit') {
+          hasOverrides = true;
+        }
+      });
+    }
+    console.log(`[getResourceValidationSummariesBulk] Loaded severity overrides (has overrides: ${hasOverrides}):`, aspectSeverityOverrides);
+  } catch (error) {
+    console.error(`[getResourceValidationSummariesBulk] Failed to load settings, using inherit for all aspects:`, error);
   }
   
   // Build OR conditions for all resources
@@ -500,9 +601,31 @@ export async function getResourceValidationSummariesBulk(
     }
     summary.seenAspects.add(result.aspect);
     
-    summary.errorCount += result.errorCount || 0;
-    summary.warningCount += result.warningCount || 0;
-    summary.informationCount += result.informationCount || 0;
+    // Apply severity override if configured
+    const aspectSeverity = aspectSeverityOverrides[result.aspect];
+    let aspectErrorCount = result.errorCount || 0;
+    let aspectWarningCount = result.warningCount || 0;
+    let aspectInformationCount = result.informationCount || 0;
+    
+    if (aspectSeverity && aspectSeverity !== 'inherit') {
+      // Override: treat all messages as the configured severity
+      const totalMessages = aspectErrorCount + aspectWarningCount + aspectInformationCount;
+      aspectErrorCount = 0;
+      aspectWarningCount = 0;
+      aspectInformationCount = 0;
+      
+      if (aspectSeverity === 'error') {
+        aspectErrorCount = totalMessages;
+      } else if (aspectSeverity === 'warning') {
+        aspectWarningCount = totalMessages;
+      } else if (aspectSeverity === 'info') {
+        aspectInformationCount = totalMessages;
+      }
+    }
+    
+    summary.errorCount += aspectErrorCount;
+    summary.warningCount += aspectWarningCount;
+    summary.informationCount += aspectInformationCount;
     
     if (!summary.latestValidatedAt || (result.validatedAt && new Date(result.validatedAt) > summary.latestValidatedAt)) {
       summary.latestValidatedAt = result.validatedAt ? new Date(result.validatedAt) : null;
@@ -510,9 +633,9 @@ export async function getResourceValidationSummariesBulk(
     
     summary.aspectBreakdown[result.aspect] = {
       isValid: result.isValid || false,
-      errorCount: result.errorCount || 0,
-      warningCount: result.warningCount || 0,
-      informationCount: result.informationCount || 0,
+      errorCount: aspectErrorCount,
+      warningCount: aspectWarningCount,
+      informationCount: aspectInformationCount,
       score: result.score || 0,
     };
   }
