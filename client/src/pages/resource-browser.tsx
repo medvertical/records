@@ -5,6 +5,7 @@ import { useLocation } from "wouter";
 import { useServerData } from "@/hooks/use-server-data";
 import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-polling";
 import { useResourceVersionTracker, type ResourceVersionInfo } from "@/hooks/use-resource-version-tracker";
+import { useValidationMessagesForResources } from "@/hooks/use-validation-messages";
 import ResourceSearch, { type ValidationFilters } from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
 import { ValidationOverview, type ValidationSummary } from "@/components/resources/validation-overview";
@@ -611,61 +612,25 @@ export default function ResourceBrowser() {
     }
   });
 
-  // Fetch validation messages for all resources on current page
-  const { data: validationMessagesData, isLoading: isLoadingMessages, error: validationMessagesError } = useQuery({
-    queryKey: ['validation-messages', resourcesData?.resources?.map(r => `${r.resourceType}/${r.resourceId}`)],
-    enabled: !!resourcesData?.resources && resourcesData.resources.length > 0 && !!stableActiveServer,
-    queryFn: async () => {
-      if (!resourcesData?.resources) return [];
-      
-      // Fetch messages for all resources on current page in parallel
-      const messagePromises = resourcesData.resources.map(async (resource) => {
-        try {
-          const response = await fetch(
-            `/api/validation/resources/${resource.resourceType}/${resource.resourceId}/messages?serverId=${stableActiveServer?.id || 1}`
-          );
-          if (!response.ok) {
-            return null;
-          }
-          const data = await response.json();
-          
-          // Flatten messages and add resource context
-          const flatMessages: any[] = [];
-          if (data.aspects) {
-            data.aspects.forEach((aspect: any) => {
-              if (aspect.messages) {
-                aspect.messages.forEach((message: any) => {
-                  flatMessages.push({
-                    ...message,
-                    resourceType: resource.resourceType,
-                    resourceId: resource.resourceId,
-                    aspect: aspect.aspect
-                  });
-                });
-              }
-            });
-          }
-          
-          return {
-            resourceType: resource.resourceType,
-            resourceId: resource.resourceId,
-            messages: flatMessages,
-            aspects: data.aspects || []
-          };
-        } catch (error) {
-          return null;
-        }
-      });
-      
-      const results = await Promise.all(messagePromises);
-      const filteredResults = results.filter(result => result !== null);
-      
-      
-      return filteredResults;
-    },
-    staleTime: 30 * 1000, // 30 seconds
-    refetchInterval: false,
-  });
+  // Memoize the resources array to prevent infinite loops from creating new array references
+  const resourcesToFetch = useMemo(() => 
+    resourcesData?.resources?.map(r => ({
+      resourceType: r.resourceType,
+      resourceId: r.resourceId
+    })) || [],
+    [resourcesData?.resources]
+  );
+
+  // Fetch validation messages for all resources on current page using shared hook
+  // This automatically handles caching with consistent query keys
+  const { 
+    data: validationMessagesData, 
+    isLoading: isLoadingMessages, 
+    isError: validationMessagesError 
+  } = useValidationMessagesForResources(
+    resourcesToFetch,
+    { enabled: resourcesToFetch.length > 0 }
+  );
 
   // Track resource version changes and auto-revalidate when versionId changes
   const handleVersionChange = useCallback(async (changedResources: ResourceVersionInfo[]) => {

@@ -5,6 +5,7 @@ import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-po
 import { useServerData } from "@/hooks/use-server-data";
 import { useToast } from "@/hooks/use-toast";
 import { useValidationActivity } from "@/contexts/validation-activity-context";
+import { useValidationMessages } from "@/hooks/use-validation-messages";
 import ValidationErrors from "@/components/validation/validation-errors";
 import ResourceViewer from "@/components/resources/resource-viewer";
 import { ResourceDetailActions } from "@/components/resources";
@@ -439,7 +440,28 @@ export default function ResourceDetail() {
     setHasChanges(true);
   }, []);
 
-  const { data: resource, isLoading, error } = useQuery<FhirResourceWithValidation>({
+  // Try to get cached resource data from list view for instant display
+  const getCachedResourceFromList = useCallback(() => {
+    // Try to find the resource in any of the cached list queries
+    const queryCache = queryClient.getQueryCache();
+    const resourcesQueries = queryCache.findAll({ queryKey: ['resources'] });
+    
+    for (const query of resourcesQueries) {
+      const data = query.state.data as any;
+      if (data?.resources) {
+        const cachedResource = data.resources.find(
+          (r: any) => r.resourceType === type && r.resourceId === id
+        );
+        if (cachedResource) {
+          console.log('[ResourceDetail] Using cached resource from list view');
+          return cachedResource;
+        }
+      }
+    }
+    return undefined;
+  }, [queryClient, type, id]);
+
+  const { data: resource, isLoading, error, isFetching } = useQuery<FhirResourceWithValidation>({
     queryKey: ["/api/fhir/resources", id, resourceType],
     queryFn: async ({ queryKey }) => {
       const [baseUrl, resourceId, type] = queryKey;
@@ -469,6 +491,8 @@ export default function ResourceDetail() {
       return data;
     },
     enabled: !!id,
+    // Use cached data from list view as initial data for instant display
+    initialData: getCachedResourceFromList,
     retry: (failureCount, error: any) => {
       // Don't retry on 404 (not found) or 403 (forbidden)
       if (error?.status === 404 || error?.status === 403) {
@@ -489,20 +513,12 @@ export default function ResourceDetail() {
     resource?.resourceId
   );
   
-  // Fetch validation messages to pass to ResourceViewer for tree badges
-  const { data: validationMessages } = useQuery({
-    queryKey: ['/api/validation/resources', resource?.resourceType, resource?.resourceId, 'messages', activeServer?.id],
-    queryFn: async () => {
-      if (!resource) return null;
-      const response = await fetch(
-        `/api/validation/resources/${resource.resourceType}/${resource.resourceId}/messages?serverId=${activeServer?.id || 1}`
-      );
-      if (!response.ok) return null;
-      return response.json();
-    },
-    enabled: !!resource?.resourceType && !!resource?.resourceId,
-    refetchInterval: 30000,
-  });
+  // Fetch validation messages using shared hook
+  // This automatically uses cached data from list view if available
+  const { data: validationMessages, isLoading: isLoadingMessages } = useValidationMessages(
+    type || '',
+    id || ''
+  );
 
   // Handle path clicks from validation messages
   const handlePathClick = useCallback((path: string) => {
@@ -577,7 +593,9 @@ export default function ResourceDetail() {
     navigateToResourceDetail(resourceType, resourceId);
   }, [navigateToResourceDetail]);
 
-  if (isLoading) {
+  // Only show skeleton when we have no data at all (not even cached)
+  // If we have cached data, show it even while fetching fresh data
+  if (isLoading && !resource) {
     return <ResourceDetailSkeleton />;
   }
 

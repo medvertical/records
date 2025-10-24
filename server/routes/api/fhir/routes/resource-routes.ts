@@ -243,11 +243,11 @@ export function setupResourceRoutes(app: Express, fhirClient: FhirClient | null)
             return res.status(503).json({ message: "FHIR client not initialized", requestId });
           }
           
-          // Race with 3-second timeout for external FHIR server
+          // Race with 1.5-second timeout for external FHIR server (reduced from 3s when resourceType is known)
           const resource = await Promise.race([
             currentFhirClient.getResource(resourceType as string, id),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('External FHIR server timeout after 3s')), 3000)
+              setTimeout(() => reject(new Error('External FHIR server timeout after 1.5s')), 1500)
             )
           ]);
           
@@ -260,6 +260,8 @@ export function setupResourceRoutes(app: Express, fhirClient: FhirClient | null)
             if (dbResource) {
               console.log(`[FHIR API] [${requestId}] Found in database`);
               const enhancedResources = await enhanceResourcesWithValidationData([dbResource.data]);
+              const totalDuration = Date.now() - startTime;
+              console.log(`[FHIR API] [${requestId}] Completed from database (${totalDuration}ms)`);
               return res.json(enhancedResources[0]);
             }
             
@@ -270,6 +272,8 @@ export function setupResourceRoutes(app: Express, fhirClient: FhirClient | null)
           }
 
           const enhancedResources = await enhanceResourcesWithValidationData([resource]);
+          const totalDuration = Date.now() - startTime;
+          console.log(`[FHIR API] [${requestId}] Completed from FHIR server (${totalDuration}ms)`);
           res.json(enhancedResources[0]);
           return;
           
@@ -312,11 +316,11 @@ export function setupResourceRoutes(app: Express, fhirClient: FhirClient | null)
             return res.status(503).json({ message: "FHIR client not initialized", requestId });
           }
           
-          // Race with 3-second timeout
+          // Race with 1-second timeout per type (reduced from 3s to speed up detection)
           const resource = await Promise.race([
             currentFhirClient.getResource(type, id),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Timeout')), 3000)
+              setTimeout(() => reject(new Error('Timeout')), 1000)
             )
           ]);
           
