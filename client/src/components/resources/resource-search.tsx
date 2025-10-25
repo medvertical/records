@@ -342,14 +342,13 @@ export default function ResourceSearch({
     onSearch(query, searchResourceType, fhirSearchParams, newSort);
   }, [query, resourceType, fhirSearchParams, onSearch]);
 
-  // Auto-expand filters when there are active filters, but respect manual collapse
+  // Auto-expand filters when there are active filters (excluding resource type), but respect manual collapse
   useEffect(() => {
     const hasActiveFilters = 
-      (resourceType && resourceType !== 'all') || 
       (query && query.trim() !== '') || 
       Object.keys(fhirSearchParams).filter(key => key !== '_sort' && key !== 'sort').length > 0;
     
-    // Auto-expand if there are active filters and user hasn't manually collapsed
+    // Auto-expand if there are active filters (other than resource type) and user hasn't manually collapsed
     if (hasActiveFilters && !isManuallyCollapsed) {
       setIsFilterExpanded(true);
     }
@@ -357,7 +356,7 @@ export default function ResourceSearch({
     else if (!hasActiveFilters && !isFilterExpanded) {
       setIsManuallyCollapsed(false);
     }
-  }, [resourceType, query, fhirSearchParams, isManuallyCollapsed, isFilterExpanded]);
+  }, [query, fhirSearchParams, isManuallyCollapsed, isFilterExpanded]);
 
   // Note: Auto-search removed to prevent infinite loops
   // The query will re-run automatically when validationFilters.fhirSearchParams changes

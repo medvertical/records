@@ -258,7 +258,7 @@ export function setupResourceRoutes(app: Express, fhirClient: FhirClient | null)
             });
           }
 
-          const enhancedResources = await enhanceResourcesWithValidationData([resource]);
+          const enhancedResources = await enhanceResourcesWithValidationData([resource], true);
           const totalDuration = Date.now() - startTime;
           console.log(`[FHIR API] [${requestId}] Completed from FHIR server (${totalDuration}ms)`);
           res.json(enhancedResources[0]);
@@ -302,7 +302,7 @@ export function setupResourceRoutes(app: Express, fhirClient: FhirClient | null)
           ]);
           
           if (resource) {
-            const enhancedResources = await enhanceResourcesWithValidationData([resource]);
+            const enhancedResources = await enhanceResourcesWithValidationData([resource], true);
             res.json(enhancedResources[0]);
             return;
           }
