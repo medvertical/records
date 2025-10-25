@@ -1,96 +1,71 @@
 import { useParams, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-polling";
 import { useServerData } from "@/hooks/use-server-data";
-import { useToast } from "@/hooks/use-toast";
-import { useValidationActivity } from "@/contexts/validation-activity-context";
 import { useValidationMessages } from "@/hooks/use-validation-messages";
-import ValidationErrors from "@/components/validation/validation-errors";
 import ResourceViewer from "@/components/resources/resource-viewer";
 import { ResourceDetailActions } from "@/components/resources";
 import { ValidationMessagesPerAspect } from "@/components/validation/validation-messages-per-aspect";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FhirResourceWithValidation } from "@shared/schema";
 import { ResourceDetailSkeleton } from "@/components/resources/resource-detail-skeleton";
 import { ArrowLeft, XCircle } from "lucide-react";
 import { CircularProgress } from "@/components/ui/circular-progress";
-import { Progress } from "@/components/ui/progress";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import ProfileBadge from "@/components/resources/ProfileBadge";
 import { getShortId } from "@/lib/resource-utils";
 import { ResourceVersionCount } from "@/components/resources/resource-version-count";
 import { useResourceVersions } from "@/hooks/use-resource-versions";
-import { useGroupNavigation } from "@/hooks/use-group-navigation";
 
-// Helper function to check if a string is a UUID
-const isUUID = (str: string): boolean => {
-  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidPattern.test(str);
-};
+// Extracted hooks
+import { useResourceDetailState } from "@/hooks/use-resource-detail-state";
+import { useResourceRevalidation } from "@/hooks/use-resource-revalidation";
+import { useResourceEditor } from "@/hooks/use-resource-editor";
+import { useResourceNavigation } from "@/hooks/use-resource-navigation";
+
+// Extracted utilities
+import {
+  isUUID,
+  calculateValidationScore,
+  extractValidationIssues,
+  getValidationSummary,
+  extractProfileUrls,
+} from "@/lib/resource-detail-utils";
+
+// Extracted handlers
+import {
+  createPathClickHandler,
+  createSeverityClickHandler,
+} from "@/pages/resource-detail-handlers";
 
 export default function ResourceDetail() {
   const { type, id } = useParams<{ type: string; id: string }>();
   const [location] = useLocation();
   const queryClient = useQueryClient();
   const { activeServer } = useServerData();
-  const { toast } = useToast();
-  const { addResourceValidation, updateResourceValidation, removeResourceValidation } = useValidationActivity();
-  const [isRevalidating, setIsRevalidating] = useState(false);
-  const [revalidationTimers, setRevalidationTimers] = useState<number[]>([]);
   
-  // Edit mode state
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [editedResource, setEditedResource] = useState<any>(null);
-  const [autoRevalidate, setAutoRevalidate] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
-  
-  // Path highlighting state
-  const [highlightedPath, setHighlightedPath] = useState<string | undefined>(undefined);
-  // Message highlighting state for tree → messages navigation
-  const [highlightedMessageSignatures, setHighlightedMessageSignatures] = useState<string[]>([]);
-  
-  // Per-resource expanded paths state - keyed by resourceId
-  const [expandedPathsMap, setExpandedPathsMap] = useState<Map<string, Set<string>>>(new Map());
-  
-  // Get expanded paths for current resource
-  const getExpandedPaths = (resourceId: string) => {
-    return expandedPathsMap.get(resourceId) || new Set<string>();
-  };
-  
-  // Set expanded paths for current resource
-  const setExpandedPaths = useCallback((resourceId: string, expandedPaths: Set<string>) => {
-    setExpandedPathsMap(prev => {
-      const currentPaths = prev.get(resourceId);
-      
-      // Check if the paths have actually changed
-      if (currentPaths) {
-        // Early return if sizes differ
-        if (currentPaths.size === expandedPaths.size) {
-          const allSame = Array.from(expandedPaths).every(path => currentPaths.has(path));
-          if (allSame) {
-            // No change, don't update state
-            return prev;
-          }
-        }
-      }
-      
-      // Only log when actually updating (helps debug render loops)
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[ResourceDetail] setExpandedPaths - paths changed:', {
-          resourceId,
-          pathCount: expandedPaths.size,
-          paths: Array.from(expandedPaths)
-        });
-      }
-      
-      const newMap = new Map(prev);
-      newMap.set(resourceId, expandedPaths);
-      return newMap;
-    });
-  }, []);
+  // Extracted state management hook
+  const {
+    isRevalidating,
+    setIsRevalidating,
+    revalidationTimers,
+    setRevalidationTimers,
+    isEditMode,
+    setIsEditMode,
+    editedResource,
+    setEditedResource,
+    autoRevalidate,
+    setAutoRevalidate,
+    hasChanges,
+    setHasChanges,
+    highlightedPath,
+    setHighlightedPath,
+    highlightedMessageSignatures,
+    setHighlightedMessageSignatures,
+    getExpandedPaths,
+    setExpandedPaths,
+  } = useResourceDetailState();
   
   // Parse query parameters
   const searchParams = new URLSearchParams(window.location.search);
@@ -156,328 +131,6 @@ export default function ResourceDetail() {
     };
   }, [revalidationTimers]);
 
-  // Handle revalidation
-  const handleRevalidate = async () => {
-    if (!resource) return;
-
-    // Clear any existing revalidation timers first
-    revalidationTimers.forEach(timerId => clearTimeout(timerId));
-    setRevalidationTimers([]);
-
-    console.log('[Revalidate] Button clicked, resource:', resource);
-    console.log('[Revalidate] Resource type:', resource.resourceType);
-    console.log('[Revalidate] Resource ID:', resource.resourceId);
-    
-    // Extract profile URLs from resource meta
-    const profileUrls = resource.data?.meta?.profile || resource.meta?.profile || [];
-    console.log('[Revalidate] Profile URLs found:', profileUrls);
-    
-    // Determine which validation aspects are enabled based on settings
-    const settings = validationSettingsData?.settings;
-    const aspectMapping = [
-      { name: 'Structural', enabled: settings?.aspects?.structural?.enabled ?? true },
-      { name: 'Profile', enabled: settings?.aspects?.profile?.enabled ?? true },
-      { name: 'Terminology', enabled: settings?.aspects?.terminology?.enabled ?? true },
-      { name: 'References', enabled: settings?.aspects?.reference?.enabled ?? true },
-      { name: 'Business Rules', enabled: settings?.aspects?.businessRule?.enabled ?? true },
-      { name: 'Metadata', enabled: settings?.aspects?.metadata?.enabled ?? true },
-    ];
-    const enabledAspects = aspectMapping.filter(a => a.enabled).map(a => a.name);
-    const totalAspects = enabledAspects.length;
-    
-    console.log('[Revalidate] Enabled aspects:', enabledAspects, `(${totalAspects} total)`);
-    
-    // If no aspects are enabled, warn user and skip validation
-    if (totalAspects === 0) {
-      toast({
-        title: "No validation aspects enabled",
-        description: "Please enable at least one validation aspect in settings before revalidating.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    setIsRevalidating(true);
-    
-    // Use timestamp as unique ID for activity tracking
-    const numericResourceId = Date.now();
-    let progressInterval: NodeJS.Timeout | null = null;
-    let validationInterval: NodeJS.Timeout | null = null;
-    
-    // Add to activity widget
-    addResourceValidation(numericResourceId, {
-      resourceId: numericResourceId,
-      fhirId: resource.resourceId,
-      resourceType: resource.resourceType,
-      progress: 0,
-      currentAspect: 'Starting validation...',
-      completedAspects: [],
-      totalAspects,
-    });
-    
-    try {
-      const url = `/api/validation/resources/${resource.resourceType}/${resource.resourceId}/revalidate?serverId=${activeServer?.id || 1}`;
-      console.log('[Revalidate] Calling URL:', url);
-      console.log('[Revalidate] Request body:', { profileUrls });
-      
-      // Create AbortController with 30-second timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => {
-        console.error('[Revalidate] Request timeout after 30 seconds');
-        controller.abort();
-      }, 30000);
-      
-      // Simulate smooth progress during API call (0% -> 30%)
-      let queueProgress = 0;
-      progressInterval = setInterval(() => {
-        queueProgress = Math.min(queueProgress + 3, 30); // Increment by 3% each interval, max 30%
-        updateResourceValidation(numericResourceId, {
-          progress: queueProgress,
-          currentAspect: 'Queueing validation...',
-        });
-      }, 300);
-      
-      console.log('[Revalidate] Fetching with timeout...');
-      const response = await fetch(url, { 
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileUrls }),
-        signal: controller.signal // Add abort signal
-      });
-      
-      clearTimeout(timeoutId); // Clear timeout if request succeeds
-      console.log('[Revalidate] Response received - status:', response.status);
-      console.log('[Revalidate] Response ok:', response.ok);
-
-      if (progressInterval) clearInterval(progressInterval);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[Revalidate] Error response:', errorText);
-        throw new Error('Revalidation failed');
-      }
-
-      const result = await response.json();
-      console.log('[Revalidate] Full response data:', result);
-      console.log('[Revalidate] Validation result:', result.validationResult);
-      console.log('[Revalidate] Is valid:', result.validationResult?.isValid);
-      console.log('[Revalidate] Aspects:', result.validationResult?.aspects);
-
-      // Update progress to show validation running
-      updateResourceValidation(numericResourceId, {
-        progress: 40,
-        currentAspect: 'Validating structure...',
-      });
-
-      // Optimistic update: Keep resource visible, only update validation status
-      const currentData = queryClient.getQueryData(['/api/fhir/resources', id]);
-      if (currentData) {
-        queryClient.setQueryData(['/api/fhir/resources', id], {
-          ...currentData,
-          _isRevalidating: true,
-          _validationSummary: {
-            ...(currentData as any)._validationSummary,
-            status: 'validating',
-          },
-        });
-      }
-
-      toast({
-        title: "Revalidation queued",
-        description: `Resource has been enqueued for validation. Results will appear shortly.`,
-      });
-
-      // Continue simulating progress during validation (using only enabled aspects)
-      let currentProgress = 40;
-      let intervalCount = 0;
-      
-      validationInterval = setInterval(() => {
-        intervalCount++;
-        
-        // Increment progress smoothly (from 40% to 90% over ~12 intervals = ~5 seconds)
-        currentProgress = Math.min(40 + (intervalCount * 4), 90);
-        
-        // Map progress to enabled aspects dynamically
-        // Divide the progress range (40-90%) evenly among enabled aspects
-        const progressRange = 90 - 40; // 50%
-        const progressPerAspect = totalAspects > 0 ? progressRange / totalAspects : progressRange;
-        
-        // Determine which aspect we're currently on
-        let currentAspectIndex = 0;
-        let completedCount = 0;
-        
-        for (let i = 0; i < totalAspects; i++) {
-          const aspectStartProgress = 40 + (i * progressPerAspect);
-          if (currentProgress >= aspectStartProgress) {
-            currentAspectIndex = i;
-            completedCount = i;
-          }
-        }
-        
-        // Build completed aspects array
-        const completedAspects = enabledAspects.slice(0, completedCount);
-        
-        updateResourceValidation(numericResourceId, {
-          progress: currentProgress,
-          currentAspect: enabledAspects[currentAspectIndex] || 'Validating...',
-          completedAspects,
-          totalAspects,
-        });
-      }, 400);
-
-      // Poll for updated validation results multiple times
-      // Background validation jobs may take several seconds to complete
-      const refetchDelays = [2000, 4000, 6000, 10000]; // 2s, 4s, 6s, 10s
-      const newTimers: number[] = [];
-      
-      refetchDelays.forEach((delay) => {
-        const timerId = window.setTimeout(() => {
-          // Refetch resource data
-          queryClient.refetchQueries({
-            queryKey: ['/api/fhir/resources', id],
-            exact: true,
-          });
-          // Also refetch validation messages to update the right panel immediately
-          const serverKey = activeServer?.id || 1;
-          queryClient.invalidateQueries({
-            queryKey: ['validation-messages', resource.resourceType, resource.resourceId, serverKey],
-          });
-          queryClient.refetchQueries({
-            queryKey: ['validation-messages', resource.resourceType, resource.resourceId, serverKey],
-            exact: true,
-          });
-        }, delay);
-        newTimers.push(timerId);
-      });
-      
-      // Complete validation after 10 seconds
-      const completionTimerId = window.setTimeout(() => {
-        if (validationInterval) clearInterval(validationInterval);
-        
-        updateResourceValidation(numericResourceId, {
-          progress: 100,
-          currentAspect: 'Complete',
-        });
-        
-        // Remove from widget after brief delay
-        const removalTimerId = window.setTimeout(() => {
-          removeResourceValidation(numericResourceId);
-        }, 1000);
-        newTimers.push(removalTimerId);
-      }, 10000);
-      newTimers.push(completionTimerId);
-      
-      // Save all timer IDs to state for cleanup
-      setRevalidationTimers(newTimers);
-      
-    } catch (error) {
-      console.error('[Revalidate] Error during revalidation:', error);
-      
-      // Clean up intervals and remove from widget
-      if (progressInterval) clearInterval(progressInterval);
-      if (validationInterval) clearInterval(validationInterval);
-      removeResourceValidation(numericResourceId);
-      
-      // Determine error type for better user feedback
-      let errorMessage = 'Unknown error';
-      let errorTitle = 'Revalidation failed';
-      
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          errorTitle = 'Revalidation timeout';
-          errorMessage = 'The validation request took too long (>30s). The server may be busy or unresponsive. Please try again later.';
-        } else {
-          errorMessage = error.message;
-        }
-      }
-      
-      toast({
-        title: errorTitle,
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setIsRevalidating(false);
-    }
-  };
-
-  // Handle entering edit mode
-  const handleEdit = () => {
-    if (!resource) return;
-    // Store the current resource data for editing
-    const resourceData = resource.data || resource;
-    setEditedResource(resourceData);
-    setIsEditMode(true);
-    setHasChanges(false);
-  };
-
-  // Handle saving edits
-  const handleSave = async () => {
-    if (!editedResource || !resource) return;
-
-    try {
-      const response = await fetch(
-        `/api/fhir/resources/${resource.resourceType}/${resource.resourceId}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(editedResource),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to save resource');
-      }
-
-      const updatedResource = await response.json();
-
-      toast({
-        title: "Resource saved",
-        description: "Your changes have been saved successfully.",
-      });
-
-      // Refetch resource data
-      queryClient.invalidateQueries({
-        queryKey: ['/api/fhir/resources', id],
-      });
-
-      // Exit edit mode
-      setIsEditMode(false);
-      setEditedResource(null);
-      setHasChanges(false);
-
-      // Auto-revalidate if enabled
-      if (autoRevalidate) {
-        setTimeout(() => handleRevalidate(), 500);
-      }
-    } catch (error) {
-      console.error('Save error:', error);
-      toast({
-        title: "Save failed",
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Handle canceling edit mode
-  const handleView = () => {
-    if (hasChanges) {
-      const confirmed = window.confirm(
-        'You have unsaved changes. Are you sure you want to discard them?'
-      );
-      if (!confirmed) return;
-    }
-    setIsEditMode(false);
-    setEditedResource(null);
-    setHasChanges(false);
-  };
-
-  // Handle resource changes in edit mode
-  const handleResourceChange = useCallback((updatedResource: any) => {
-    setEditedResource(updatedResource);
-    setHasChanges(true);
-  }, []);
 
   // Try to get cached resource data from list view for instant display
   const getCachedResourceFromList = useCallback(() => {
@@ -500,7 +153,7 @@ export default function ResourceDetail() {
     return undefined;
   }, [queryClient, type, id]);
 
-  const { data: resource, isLoading, error, isFetching } = useQuery<FhirResourceWithValidation>({
+  const { data: resource, isLoading, error, isFetching } = useQuery<any>({
     queryKey: ["/api/fhir/resources", id, resourceType],
     queryFn: async ({ queryKey }) => {
       const [baseUrl, resourceId, type] = queryKey;
@@ -551,6 +204,35 @@ export default function ResourceDetail() {
     resource?.resourceType,
     resource?.resourceId
   );
+
+  // Extracted hooks that depend on resource (must be after resource is fetched)
+  const { handleRevalidate } = useResourceRevalidation({
+    resource,
+    resourceId: id || '',
+    activeServerId: typeof activeServer?.id === 'number' ? activeServer.id : undefined,
+    validationSettingsData,
+    revalidationTimers,
+    setRevalidationTimers,
+    setIsRevalidating,
+  });
+
+  const {
+    handleEdit,
+    handleSave,
+    handleView,
+    handleResourceChange,
+  } = useResourceEditor({
+    resource,
+    resourceId: id || '',
+    isEditMode,
+    setIsEditMode,
+    editedResource,
+    setEditedResource,
+    hasChanges,
+    setHasChanges,
+    autoRevalidate,
+    onRevalidate: handleRevalidate,
+  });
   
   // Fetch validation messages using shared hook
   // This automatically uses cached data from list view if available
@@ -560,77 +242,19 @@ export default function ResourceDetail() {
   );
 
   // Handle path clicks from validation messages
-  const handlePathClick = useCallback((path: string) => {
-    console.log('[ResourceDetail] Path clicked:', path);
-    if (!resource?.resourceId) return;
-    
-    // Remove resource type prefix if present (e.g., "patient.status" -> "status" or "Patient.status" -> "status")
-    const parts = path.split('.');
-    // Check if first part is a resource type (starts with letter, case-insensitive)
-    const treePath = parts.length > 0 && /^[a-zA-Z]/.test(parts[0]) && resource?.resourceType?.toLowerCase() === parts[0].toLowerCase()
-      ? parts.slice(1).join('.')
-      : path;
-    console.log('[ResourceDetail] Converted to tree path:', treePath);
-    
-    // Generate all parent paths that need to be expanded
-    // For a path like "identifier.[0].assigner.identifier.system", we need to expand:
-    // - resourceType (root)
-    // - resourceType.identifier
-    // - resourceType.identifier.[0]
-    // - resourceType.identifier.[0].assigner
-    // - resourceType.identifier.[0].assigner.identifier
-    const pathsToExpand = new Set<string>();
-    const resourceType = resource.resourceType || 'Resource';
-    
-    // Always expand the root
-    pathsToExpand.add(resourceType);
-    
-    if (treePath) {
-      const segments = treePath.split('.');
-      let currentPath = resourceType;
-      
-      for (let i = 0; i < segments.length; i++) {
-        currentPath += '.' + segments[i];
-        pathsToExpand.add(currentPath);
-      }
-    }
-    
-    // Merge with existing expanded paths
-    const currentExpandedPaths = getExpandedPaths(resource.resourceId);
-    const newExpandedPaths = new Set([...currentExpandedPaths, ...pathsToExpand]);
-    
-    console.log('[ResourceDetail] Expanding paths:', Array.from(pathsToExpand));
-    setExpandedPaths(resource.resourceId, newExpandedPaths);
-    
-    // Set highlighted path after a small delay to allow expansion to happen first
-    setTimeout(() => {
-      setHighlightedPath(treePath);
-      // Clear the highlight after enough time to see it
-      setTimeout(() => {
-        console.log('[ResourceDetail] Clearing highlighted path');
-        setHighlightedPath(undefined);
-      }, 3500);
-    }, 100);
-  }, [resource?.resourceType, resource?.resourceId, getExpandedPaths, setExpandedPaths]);
-  
-  // Handle severity clicks from tree nodes
-  const handleSeverityClick = useCallback((severity: string, path: string) => {
-    console.log('[ResourceDetail] Severity clicked:', { severity, path });
-    // This will be used to highlight messages based on path and severity
-    // We'll pass this through ResourceViewer to the tree
-    // For now, we'll trigger a custom event that ValidationMessagesPerAspect can listen to
-    const event = new CustomEvent('highlight-messages', {
-      detail: { severity, path }
-    });
-    window.dispatchEvent(event);
-  }, []);
+  // Extracted navigation hook
+  const { handleResourceClick } = useResourceNavigation();
 
-  // Handle resource clicks from validation messages
-  const { navigateToResourceDetail } = useGroupNavigation();
-  const handleResourceClick = useCallback((resourceType: string, resourceId: string) => {
-    console.log('[ResourceDetail] Resource clicked:', { resourceType, resourceId });
-    navigateToResourceDetail(resourceType, resourceId);
-  }, [navigateToResourceDetail]);
+  // Create handlers using factory functions
+  const handlePathClick = useCallback(
+    createPathClickHandler(resource, getExpandedPaths, setExpandedPaths, setHighlightedPath),
+    [resource, getExpandedPaths, setExpandedPaths, setHighlightedPath]
+  );
+  
+  const handleSeverityClick = useCallback(
+    createSeverityClickHandler(),
+    []
+  );
 
   // Only show skeleton when we have no data at all (not even cached)
   // If we have cached data, show it even while fetching fresh data
@@ -664,57 +288,25 @@ export default function ResourceDetail() {
     );
   }
 
-  // Use enhanced validation if available, otherwise fallback to legacy
+  // Use extracted utility functions for validation
   const enhancedValidation = (resource as any)._enhancedValidationSummary;
   const legacyValidation = (resource as any)._validationSummary;
-  const validationSummary = enhancedValidation || legacyValidation;
+  const validationSummary = getValidationSummary(resource);
   const currentSettings = validationSettingsData?.settings;
   
-  // Calculate validation score (matching resource list logic)
-  const validationScore = enhancedValidation?.overallScore ?? validationSummary?.validationScore ?? 0;
+  // Calculate validation score using utility function
+  const validationScore = calculateValidationScore(enhancedValidation, legacyValidation);
   
   console.log('[ResourceDetail] Validation score calculation:', {
     hasEnhanced: !!enhancedValidation,
     hasLegacy: !!legacyValidation,
     enhancedScore: enhancedValidation?.overallScore,
-    legacyScore: validationSummary?.validationScore,
+    legacyScore: legacyValidation?.validationScore,
     finalScore: validationScore
   });
   
-  // Check if resource has validation data
-  const hasValidationData = validationSummary && validationSummary.lastValidated;
-  const hasErrors = hasValidationData && !validationSummary.isValid;
-  
-  // Calculate total issues from the summary counts
-  const totalIssues = validationSummary ? (
-    (validationSummary.errorCount || 0) + 
-    (validationSummary.warningCount || 0) + 
-    (validationSummary.informationCount || 0)
-  ) : 0;
-
-  // Convert validation messages to the format ResourceViewer expects
-  const validationIssues = validationMessages?.aspects?.flatMap((aspect: any) =>
-    aspect.messages.map((msg: any) => {
-      // Strip resource type prefix from path (e.g., "patient.meta.profile" -> "meta.profile" or "Patient.meta.profile" -> "meta.profile")
-      const pathParts = msg.canonicalPath.split('.');
-      // Check if first part is a resource type (case-insensitive match)
-      const pathWithoutResourceType = pathParts.length > 0 && 
-        /^[a-zA-Z]/.test(pathParts[0]) && 
-        resource?.resourceType?.toLowerCase() === pathParts[0].toLowerCase()
-        ? pathParts.slice(1).join('.') 
-        : msg.canonicalPath;
-      
-      return {
-        id: msg.signature,
-        code: msg.code,
-        message: msg.text,
-        severity: msg.severity,
-        category: aspect.aspect,
-        path: pathWithoutResourceType,
-        location: [pathWithoutResourceType],
-      };
-    })
-  ) || [];
+  // Convert validation messages using utility function
+  const validationIssues = extractValidationIssues(validationMessages, resource?.resourceType || '');
   
   console.log('[ResourceDetail] Passing', validationIssues.length, 'validation issues to ResourceViewer');
   if (validationIssues.length > 0) {
@@ -729,8 +321,8 @@ export default function ResourceDetail() {
     })));
   }
 
-  // Extract profile URLs from resource meta
-  const profileUrls = (resource.data?.meta?.profile || resource.meta?.profile || []) as string[];
+  // Extract profile URLs using utility function
+  const profileUrls = extractProfileUrls(resource);
   console.log('[ResourceDetail] Profile URLs for slice detection:', profileUrls);
 
   return (
@@ -814,7 +406,7 @@ export default function ResourceDetail() {
               onExpandedPathsChange={(paths) => setExpandedPaths(resource.resourceId, paths)}
               highlightPath={highlightedPath}
               onSeverityClick={handleSeverityClick}
-              validationIssues={validationIssues}
+              validationIssues={validationIssues as any}
               profileUrls={profileUrls}
             />
           </div>
@@ -824,7 +416,7 @@ export default function ResourceDetail() {
             <ValidationMessagesPerAspect
               resourceType={resource.resourceType}
               resourceId={resource.resourceId}
-              serverId={activeServer?.id}
+              serverId={typeof activeServer?.id === 'number' ? activeServer.id : undefined}
               highlightSignature={highlightSignature}
               initialSeverity={initialSeverity}
               onPathClick={handlePathClick}
