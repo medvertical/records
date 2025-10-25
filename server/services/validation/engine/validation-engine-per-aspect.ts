@@ -168,6 +168,10 @@ export class ValidationEnginePerAspect {
     settings: ValidationSettingsSnapshot,
     profileUrl?: string
   ): Promise<{ success: boolean; results: PerAspectValidationResult[] }> {
+    console.log(`[ValidationEnginePerAspect] ========== VALIDATE RESOURCE START ==========`);
+    console.log(`[ValidationEnginePerAspect] Resource: ${resourceType}/${fhirId}`);
+    console.log(`[ValidationEnginePerAspect] Profile URL: ${profileUrl || 'none'}`);
+    
     const settingsHash = computeSettingsSnapshotHash(settings);
     const results: PerAspectValidationResult[] = [];
     
@@ -182,10 +186,14 @@ export class ValidationEnginePerAspect {
     ];
     
     // Check if any aspect uses HAPI engine
+    console.log(`[ValidationEnginePerAspect] Checking which aspects need HAPI...`);
     const needsHapiCoordinator = aspects.some(aspect => {
       const aspectSettings = settings.aspects[aspect] as any;
-      return aspectSettings?.enabled && aspectSettings?.engine === 'hapi';
+      const usesHapi = aspectSettings?.enabled && aspectSettings?.engine === 'hapi';
+      console.log(`[ValidationEnginePerAspect]   ${aspect}: enabled=${aspectSettings?.enabled}, engine=${aspectSettings?.engine}, usesHAPI=${usesHapi}`);
+      return usesHapi;
     });
+    console.log(`[ValidationEnginePerAspect] Needs HAPI coordinator: ${needsHapiCoordinator}`);
     
     // Initialize coordinator once if needed
     let coordinator: HapiValidationCoordinator | undefined;
@@ -193,17 +201,26 @@ export class ValidationEnginePerAspect {
       coordinator = getHapiValidationCoordinator();
       const resourceId = `${resourceType}/${fhirId}`;
       
+      console.log(`[ValidationEnginePerAspect] HAPI coordinator needed for ${resourceId}`);
+      console.log(`[ValidationEnginePerAspect] Coordinator initialized: ${coordinator.hasBeenInitialized(resourceId)}`);
+      
       if (!coordinator.hasBeenInitialized(resourceId)) {
-        console.log('[ValidationEnginePerAspect] Initializing HAPI coordinator');
+        console.log(`[ValidationEnginePerAspect] Initializing HAPI coordinator for ${resourceId}`);
+        console.log(`[ValidationEnginePerAspect] Profile URL: ${profileUrl || 'none'}`);
+        console.log(`[ValidationEnginePerAspect] FHIR Version: ${this.fhirVersion}`);
         try {
           await coordinator.initializeForResource(resource, settings as any, profileUrl, this.fhirVersion);
-          console.log('[ValidationEnginePerAspect] HAPI coordinator initialized successfully');
+          console.log(`[ValidationEnginePerAspect] ✓ HAPI coordinator initialized successfully for ${resourceId}`);
         } catch (error) {
-          console.warn('[ValidationEnginePerAspect] HAPI coordinator initialization failed:', error);
+          console.error(`[ValidationEnginePerAspect] ✗ HAPI coordinator initialization failed for ${resourceId}:`, error);
           // Continue without coordinator - validators will fall back to individual calls
           coordinator = undefined;
         }
+      } else {
+        console.log(`[ValidationEnginePerAspect] Using existing coordinator cache for ${resourceId}`);
       }
+    } else {
+      console.log(`[ValidationEnginePerAspect] No HAPI coordinator needed (no HAPI-enabled aspects)`);
     }
     
     for (const aspect of aspects) {
@@ -213,7 +230,9 @@ export class ValidationEnginePerAspect {
       }
       
       try {
+        console.log(`[ValidationEnginePerAspect] Validating aspect: ${aspect} for ${resourceType}/${fhirId}`);
         const result = await this.validateAspect(aspect, resource, settings, profileUrl, coordinator);
+        console.log(`[ValidationEnginePerAspect] Aspect ${aspect} validation complete: ${result.issues.length} issues (errors: ${result.errorCount}, warnings: ${result.warningCount}, info: ${result.informationCount})`);
         results.push(result);
         
         // Persist result
@@ -225,9 +244,11 @@ export class ValidationEnginePerAspect {
           result,
           settingsHash
         );
+        console.log(`[ValidationEnginePerAspect] Persisted ${aspect} result for ${resourceType}/${fhirId}`);
         
         // Persist messages
         if (result.issues.length > 0) {
+          console.log(`[ValidationEnginePerAspect] Persisting ${result.issues.length} messages for ${aspect}`);
           await this.persistMessages(
             serverId,
             resourceType,

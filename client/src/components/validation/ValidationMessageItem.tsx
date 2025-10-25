@@ -7,6 +7,7 @@ import { getShortId } from '@/lib/resource-utils';
 import { ProfileBadge } from '@/components/resources/ProfileBadge';
 import { ResourceBadge } from '@/components/resources/ResourceBadge';
 import { PathBadge } from './PathBadge';
+import { EngineIcon, getEngineName, getEngineDescription } from './EngineIcon';
 
 // ============================================================================
 // Helper Functions
@@ -41,6 +42,26 @@ function getSeverityBadgeClasses(severity: string): string {
   }
 }
 
+/**
+ * Get validation engine for an aspect
+ * Maps aspect to its typical engine
+ */
+function getEngineForAspect(aspect?: string): string | null {
+  if (!aspect) return null;
+  
+  // Map aspects to their typical engines
+  const engineMap: Record<string, string> = {
+    structural: 'hapi',
+    profile: 'hapi',
+    terminology: 'server',
+    reference: 'internal',
+    businessRule: 'fhirpath',
+    metadata: 'schema',
+  };
+  
+  return engineMap[aspect] || null;
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -55,6 +76,7 @@ export interface ValidationMessage {
   resourceType?: string;
   resourceId?: string;
   resources?: Array<{ resourceType: string; resourceId: string; }>;
+  aspect?: string; // Validation source: structural, profile, terminology, etc.
 }
 
 export interface ValidationMessageItemProps {
@@ -78,6 +100,7 @@ export function ValidationMessageItem({
 }: ValidationMessageItemProps) {
   // Extract profile URL from message text if present
   const profileUrl = extractProfileUrl(message.text);
+  const engine = getEngineForAspect(message.aspect);
   
   return (
     <Alert
@@ -90,14 +113,32 @@ export function ValidationMessageItem({
       <div className="flex items-start gap-2 text-left">
         <SeverityIcon severity={message.severity as SeverityLevel} />
         <div className="flex-1 space-y-1 text-left">
-          <div className="flex items-center justify-start gap-2 text-left">
-            {/* Code Badge */}
-            {message.code && (
+          {/* Engine label in top-right corner */}
+          {engine && (
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Code Badge */}
+                {message.code && (
+                  <code className={`text-xs px-2 py-0.5 rounded font-medium ${getSeverityBadgeClasses(message.severity)}`}>
+                    {message.code}
+                  </code>
+                )}
+              </div>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground" title={getEngineDescription(engine)}>
+                <EngineIcon engine={engine} size={14} />
+                <span>{getEngineName(engine)}</span>
+              </div>
+            </div>
+          )}
+          
+          {/* If no engine info, just show code badge if available */}
+          {!engine && message.code && (
+            <div className="flex items-center gap-2 flex-wrap">
               <code className={`text-xs px-2 py-0.5 rounded font-medium ${getSeverityBadgeClasses(message.severity)}`}>
                 {message.code}
               </code>
-            )}
-          </div>
+            </div>
+          )}
           
           {/* Message Text */}
           <AlertDescription className="text-sm text-left">

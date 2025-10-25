@@ -22,6 +22,7 @@ interface ValidationMessage {
   resourceType?: string;
   resourceId?: string;
   resources?: Array<{ resourceType: string; resourceId: string; }>;
+  aspect?: string; // Validation source: structural, profile, terminology, etc.
 }
 
 interface AspectMessages {

@@ -3,6 +3,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { XCircle, AlertTriangle, Info, RefreshCw } from 'lucide-react';
+import { EngineIcon, getEngineName } from '@/components/validation/EngineIcon';
 
 interface AspectCardProps {
   title: string;
@@ -46,12 +47,20 @@ export function AspectCard({
             <Label className="text-sm font-medium mb-1.5">Engine</Label>
             <Select value={engine} onValueChange={onEngineChange} disabled={!enabled}>
               <SelectTrigger className="h-9">
-                <SelectValue />
+                <SelectValue>
+                  <div className="flex items-center gap-2">
+                    <EngineIcon engine={engine} size={14} />
+                    <span>{getEngineName(engine)}</span>
+                  </div>
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {availableEngines.map((eng) => (
                   <SelectItem key={eng} value={eng}>
-                    {eng.charAt(0).toUpperCase() + eng.slice(1)}
+                    <div className="flex items-center gap-2">
+                      <EngineIcon engine={eng} size={14} />
+                      <span>{getEngineName(eng)}</span>
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>

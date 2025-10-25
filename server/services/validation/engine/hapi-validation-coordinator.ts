@@ -113,14 +113,12 @@ class HapiValidationCoordinator {
       console.log(`[HapiValidationCoordinator] Options: bestPractice=${options.enableBestPractice}, level=${options.validationLevel}`);
       
       // Call HAPI validator
+      // NOTE: hapiValidatorClient.validateResource returns ValidationIssue[] directly, NOT OperationOutcome
       const startTime = Date.now();
-      const operationOutcome = await hapiValidatorClient.validateResource(resource, options);
+      const allIssues = await hapiValidatorClient.validateResource(resource, options);
       const duration = Date.now() - startTime;
       
-      console.log(`[HapiValidationCoordinator] HAPI returned in ${duration}ms with ${operationOutcome.issue?.length || 0} issues`);
-      
-      // Map to ValidationIssue format
-      const allIssues = mapOperationOutcomeToIssues(operationOutcome, fhirVersion);
+      console.log(`[HapiValidationCoordinator] HAPI returned in ${duration}ms with ${allIssues.length} issues`);
       
       // Group issues by aspect
       const issuesByAspect = new Map<ValidationAspectType, ValidationIssue[]>();

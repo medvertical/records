@@ -116,11 +116,14 @@ export async function persistEngineResultPerAspect(params: {
   for (const aspectResult of engineResult.aspects) {
     const aspect = aspectResult.aspect as ValidationAspectType;
     console.log(`[persistEngineResultPerAspect] Persisting aspect ${aspect} for ${resourceType}/${fhirId}`);
+    console.log(`[persistEngineResultPerAspect] Total issues for ${aspect}: ${aspectResult.issues.length}`);
 
     // Severity counts
     const errorCount = aspectResult.issues.filter(i => i.severity === 'error').length;
     const warningCount = aspectResult.issues.filter(i => i.severity === 'warning').length;
     const informationCount = aspectResult.issues.filter(i => i.severity === 'info').length;
+    
+    console.log(`[persistEngineResultPerAspect] ${aspect} severity breakdown: errors=${errorCount}, warnings=${warningCount}, information=${informationCount}`);
 
     // Remove existing row for (serverId, resourceType, fhirId, aspect)
     // Note: We delete regardless of settingsHash to avoid duplicate key violations
@@ -167,10 +170,15 @@ export async function persistEngineResultPerAspect(params: {
     );
 
     // Store messages and update groups
+    console.log(`[persistEngineResultPerAspect] Persisting ${aspectResult.issues.length} messages for ${aspect}`);
     for (const issue of aspectResult.issues) {
       const severity = mapSeverity(issue.severity);
       const pathNorm = normalizeCanonicalPath(issue.path || '', 256);
       const textNorm = normalizeMessageText(issue.message || '', 512);
+
+      if (issue.severity === 'info' || severity === 'information') {
+        console.log(`[persistEngineResultPerAspect] Persisting information-level message: ${issue.message.substring(0, 100)}`);
+      }
 
       const signature = computeMessageSignature({
         aspect,

@@ -298,6 +298,7 @@ export async function getResourceMessages(
           createdAt: validationMessages.createdAt,
           resourceType: validationMessages.resourceType,
           fhirId: validationMessages.fhirId,
+          aspect: validationMessages.aspect,
         })
         .from(validationMessages)
         .where(eq(validationMessages.validationResultId, result.id));
@@ -315,6 +316,7 @@ export async function getResourceMessages(
           createdAt: msg.createdAt,
           resourceType: msg.resourceType,
           resourceId: msg.fhirId,
+          aspect: msg.aspect,
         };
       });
       
