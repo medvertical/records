@@ -56,14 +56,31 @@ function getInitialPaginationFromUrl(): PaginationState {
 }
 
 /**
+ * Get initial resource type from URL parameters
+ * Default to "Patient" instead of "all" for better performance
+ */
+function getInitialResourceTypeFromUrl(): string {
+  const urlParams = new URLSearchParams(window.location.search);
+  // Support 'resourceType' (new), 'type' (legacy lowercase), and 'Type' (legacy uppercase)
+  const typeParam = urlParams.get('resourceType') || 
+                    urlParams.get('type') || 
+                    urlParams.get('Type');
+  
+  // Default to "Patient" for better performance (instead of "all")
+  // "all" resource type queries are ~9x slower than specific types
+  return typeParam || "Patient";
+}
+
+/**
  * Core state management for resource browser
  * Handles pagination, filtering, validation state, and search
  */
 export function useResourceBrowserState(): ResourceBrowserState {
   const initialPagination = getInitialPaginationFromUrl();
+  const initialResourceType = getInitialResourceTypeFromUrl();
   
   // Core navigation state
-  const [resourceType, setResourceType] = useState<string>("all");
+  const [resourceType, setResourceType] = useState<string>(initialResourceType);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [page, setPage] = useState(initialPagination.page);
   const [pageSize, setPageSize] = useState(initialPagination.pageSize);

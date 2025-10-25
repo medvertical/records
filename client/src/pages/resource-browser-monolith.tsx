@@ -20,12 +20,23 @@ import { useValidationActivity } from "@/contexts/validation-activity-context";
 import { useGroupNavigation } from "@/hooks/use-group-navigation";
 import { CheckSquare, Edit2, X } from "lucide-react";
 
-// Import validation cache utilities
-import { validatedResourcesCache, onCacheCleared } from "@/lib/validation-cache";
-import { calculateValidationSummaryWithStats } from "@/lib/validation-summary-calculator";
-import { useBatchEdit } from "@/hooks/use-batch-edit";
-import { useResourceBrowserState } from "@/hooks/use-resource-browser-state";
-import { useMessageNavigation } from "@/hooks/use-message-navigation";
+// Simple client-side cache to track validated resources
+const validatedResourcesCache = new Set<string>();
+
+// Cache clearing event system
+let cacheClearedListeners: (() => void)[] = [];
+
+// Make cache accessible globally for other components
+if (typeof window !== 'undefined') {
+  (window as any).validatedResourcesCache = validatedResourcesCache;
+  (window as any).onCacheCleared = (callback: () => void) => {
+    cacheClearedListeners.push(callback);
+  };
+  (window as any).triggerCacheCleared = () => {
+    validatedResourcesCache.clear();
+    cacheClearedListeners.forEach(listener => listener());
+  };
+}
 
 interface ResourcesResponse {
   resources: any[];
@@ -51,43 +62,41 @@ interface ValidationUpdateMessage {
 export default function ResourceBrowser() {
   const [location] = useLocation();
   
-  // Core browser state (using extracted hook)
-  const {
-    resourceType,
-    setResourceType,
-    searchQuery,
-    setSearchQuery,
-    page,
-    setPage,
-    pageSize,
-    setPageSize,
-    sort,
-    setSort,
-    isValidating,
-    setIsValidating,
-    validatingResourceIds,
-    setValidatingResourceIds,
-    validationProgress,
-    setValidationProgress,
-    hasValidatedCurrentPage,
-    setHasValidatedCurrentPage,
-    cacheCleared,
-    setCacheCleared,
-    validationFilters,
-    setValidationFilters,
-  } = useResourceBrowserState();
+  // Initialize pagination from URL parameters
+  const getInitialPaginationFromUrl = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const pageParam = parseInt(urlParams.get('page') || '1'); // 1-based in URL
+    const pageSizeParam = parseInt(urlParams.get('pageSize') || '20');
+    const sortParam = urlParams.get('sort') || '';
+    return {
+      page: Math.max(0, pageParam - 1), // Convert to 0-based for internal use
+      pageSize: Math.max(1, pageSizeParam),
+      sort: sortParam
+    };
+  };
   
-  // Batch editing state (using extracted hook)
-  const {
-    selectionMode,
-    selectedResources,
-    batchEditDialogOpen,
-    toggleSelectionMode,
-    handleSelectionChange,
-    handleBatchEdit,
-    handleBatchEditComplete,
-    setBatchEditDialogOpen,
-  } = useBatchEdit();
+  const initialPagination = getInitialPaginationFromUrl();
+  
+  const [resourceType, setResourceType] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [page, setPage] = useState(initialPagination.page);
+  const [pageSize, setPageSize] = useState(initialPagination.pageSize);
+  const [sort, setSort] = useState<string>(initialPagination.sort);
+  const [isValidating, setIsValidating] = useState(false);
+  const [validatingResourceIds, setValidatingResourceIds] = useState<Set<number>>(new Set());
+  const [validationProgress, setValidationProgress] = useState<Map<number, any>>(new Map());
+  const [hasValidatedCurrentPage, setHasValidatedCurrentPage] = useState(false);
+  const [cacheCleared, setCacheCleared] = useState(false);
+  const [validationFilters, setValidationFilters] = useState<ValidationFilters>({
+    aspects: [],
+    severities: [],
+    hasIssuesOnly: false,
+  });
+
+  // Batch editing state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedResources, setSelectedResources] = useState<Set<string>>(new Set());
+  const [batchEditDialogOpen, setBatchEditDialogOpen] = useState(false);
   
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -247,20 +256,54 @@ export default function ResourceBrowser() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [pageSize, sort, queryClient]);
 
+  // Selection mode handlers
+  const toggleSelectionMode = useCallback(() => {
+    setSelectionMode(!selectionMode);
+    if (selectionMode) {
+      // Clear selection when exiting selection mode
+      setSelectedResources(new Set());
+    }
+  }, [selectionMode]);
+
+  const handleSelectionChange = useCallback((resourceKey: string, selected: boolean) => {
+    setSelectedResources(prev => {
+      const updated = new Set(prev);
+      if (selected) {
+        updated.add(resourceKey);
+      } else {
+        updated.delete(resourceKey);
+      }
+      return updated;
+    });
+  }, []);
+
+  const handleBatchEdit = useCallback(() => {
+    if (selectedResources.size === 0) {
+      toast({
+        title: 'No Resources Selected',
+        description: 'Please select at least one resource to edit.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setBatchEditDialogOpen(true);
+  }, [selectedResources.size, toast]);
+
+  const handleBatchEditComplete = useCallback(() => {
+    setBatchEditDialogOpen(false);
+    setSelectedResources(new Set());
+    setSelectionMode(false);
+    // Refetch resource list to see updated resources
+    queryClient.invalidateQueries({
+      queryKey: ['resources'],
+    });
+  }, [queryClient]);
+
   // Parse URL parameters and update state when location changes
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     // Support 'resourceType' (new), 'type' (legacy lowercase), and 'Type' (legacy uppercase) for backwards compatibility
     const typeParam = urlParams.get('resourceType') || urlParams.get('type') || urlParams.get('Type');
-    
-    console.log('[URL Sync] Raw type param from URL:', {
-      rawTypeParam: typeParam,
-      resourceTypeParam: urlParams.get('resourceType'),
-      typeParamLower: urlParams.get('type'),
-      typeParamUpper: urlParams.get('Type'),
-      fullURL: window.location.href
-    });
-    
     const searchParam = urlParams.get('search');
     const aspectsParam = urlParams.get('aspects');
     const severitiesParam = urlParams.get('severities');
@@ -285,23 +328,11 @@ export default function ResourceBrowser() {
     });
     
     // Only update state if values actually changed to prevent infinite loops
-    // Default to "Patient" instead of "all" for better performance (~9x faster)
-    const normalizedTypeParam = typeParam || "Patient";
+    const normalizedTypeParam = typeParam || "all";
     const normalizedSearchParam = searchParam || "";
     const normalizedSortParam = sortParam;
     const normalizedPageIndex = Math.max(0, pageParam - 1);
     const normalizedPageSize = Math.max(1, pageSizeParam);
-    
-    console.log('[URL Sync] Parsing URL params:', {
-      normalizedTypeParam,
-      normalizedSearchParam,
-      normalizedPageIndex,
-      normalizedPageSize,
-      normalizedSortParam,
-      currentResourceType: resourceType,
-      currentSearchQuery: searchQuery,
-      currentPage: page
-    });
     
     // Check if this is a content change (not just pagination)
     const isContentChange = 
@@ -312,26 +343,11 @@ export default function ResourceBrowser() {
       severitiesParam !== validationFilters.severities.join(',');
     
     // Only update state if something actually changed
-    if (normalizedTypeParam !== resourceType) {
-      console.log('[URL Sync] Updating resourceType:', { from: resourceType, to: normalizedTypeParam });
-      setResourceType(normalizedTypeParam);
-    }
-    if (normalizedSearchParam !== searchQuery) {
-      console.log('[URL Sync] Updating searchQuery:', { from: searchQuery, to: normalizedSearchParam });
-      setSearchQuery(normalizedSearchParam);
-    }
-    if (normalizedPageIndex !== page) {
-      console.log('[URL Sync] Updating page:', { from: page, to: normalizedPageIndex });
-      setPage(normalizedPageIndex);
-    }
-    if (normalizedPageSize !== pageSize) {
-      console.log('[URL Sync] Updating pageSize:', { from: pageSize, to: normalizedPageSize });
-      setPageSize(normalizedPageSize);
-    }
-    if (normalizedSortParam !== sort) {
-      console.log('[URL Sync] Updating sort:', { from: sort, to: normalizedSortParam });
-      setSort(normalizedSortParam);
-    }
+    if (normalizedTypeParam !== resourceType) setResourceType(normalizedTypeParam);
+    if (normalizedSearchParam !== searchQuery) setSearchQuery(normalizedSearchParam);
+    if (normalizedPageIndex !== page) setPage(normalizedPageIndex);
+    if (normalizedPageSize !== pageSize) setPageSize(normalizedPageSize);
+    if (normalizedSortParam !== sort) setSort(normalizedSortParam);
     
     // Always update validation filters (they're objects so simple comparison won't work)
     setValidationFilters({
@@ -381,7 +397,7 @@ export default function ResourceBrowser() {
         }
       });
 
-      setResourceType(typeParam || "Patient"); // Default to Patient for better performance
+      setResourceType(typeParam || "all");
       setSearchQuery(searchParam || "");
       setPage(Math.max(0, pageParam - 1)); // Convert from 1-based to 0-based
       setPageSize(Math.max(1, pageSizeParam));
@@ -490,20 +506,6 @@ export default function ResourceBrowser() {
   const pollingInterval = validationSettingsData?.listViewPollingInterval || 30000;
   const isPollingEnabled = validationSettingsData?.autoRevalidateOnVersionChange !== false; // Default to true
   
-  // Debug logging for query state
-  console.log('[Resource Query] Before query execution:', {
-    apiEndpoint,
-    resourceType,
-    searchQuery,
-    page,
-    pageSize,
-    sort,
-    stableActiveServer,
-    hasValidationFilters,
-    hasTextSearch,
-    validationFilters
-  });
-
   const { data: resourcesData, isLoading, error} = useQuery<ResourcesResponse>({
     queryKey: ['resources', { endpoint: apiEndpoint, resourceType, search: searchQuery, page, pageSize, sort, location, filters: validationFilters }],
     // Only fetch resources when there's an active server (resourceType can be empty for "all types")
@@ -518,8 +520,6 @@ export default function ResourceBrowser() {
     queryFn: async ({ queryKey }) => {
       const [_, params] = queryKey as [string, { endpoint: string; resourceType?: string; search?: string; page: number; pageSize: number; sort?: string; location: string; filters: ValidationFilters }];
       const url = params.endpoint;
-      
-      console.log('[Resource Query] queryFn executing:', { url, params });
       
       const searchParams = new URLSearchParams();
       
@@ -616,11 +616,6 @@ export default function ResourceBrowser() {
         const response = await fetch(fullUrl);
         const fetchTime = Date.now() - startTime;
         
-        console.log('[Resource Query] Fetch completed:', { 
-          status: response.status, 
-          ok: response.ok,
-          fetchTime: `${fetchTime}ms` 
-        });
         
         if (!response.ok) {
           const errorText = await response.text();
@@ -650,13 +645,6 @@ export default function ResourceBrowser() {
           return transformed;
         }
         
-        console.log('[Resource Query] Returning data:', {
-          hasResources: !!data?.resources,
-          resourceCount: data?.resources?.length || 0,
-          total: data?.total,
-          isFilteredEndpoint
-        });
-        
         // Return standard endpoint response as is
         return data;
       } catch (error) {
@@ -664,15 +652,6 @@ export default function ResourceBrowser() {
         throw error;
       }
     }
-  });
-
-  // Debug logging for query results
-  console.log('[Resource Query] After query execution:', {
-    hasResourcesData: !!resourcesData,
-    resourceCount: resourcesData?.resources?.length || 0,
-    total: resourcesData?.total,
-    isLoading,
-    error: error?.message
   });
 
   // Memoize the resources array to prevent infinite loops from creating new array references
@@ -1521,18 +1500,18 @@ export default function ResourceBrowser() {
 
   // Listen for cache clearing events
   useEffect(() => {
-    const cleanup = onCacheCleared(() => {
-      setCacheCleared(true);
-      setHasValidatedCurrentPage(false);
-      // Force revalidation of current page resources
-      if (resourcesData?.resources && resourcesData.resources.length > 0) {
-        setTimeout(() => {
-          validateCurrentPage();
-        }, 100);
-      }
-    });
-    
-    return cleanup;
+    if (typeof window !== 'undefined' && (window as any).onCacheCleared) {
+      (window as any).onCacheCleared(() => {
+        setCacheCleared(true);
+        setHasValidatedCurrentPage(false);
+        // Force revalidation of current page resources
+        if (resourcesData?.resources && resourcesData.resources.length > 0) {
+          setTimeout(() => {
+            validateCurrentPage();
+          }, 100);
+        }
+      });
+    }
   }, [resourcesData?.resources]);
 
   // Auto-validate resources when they're loaded
@@ -1874,7 +1853,115 @@ export default function ResourceBrowser() {
 
   // Calculate validation summary for current page (with stats for filters)
   const validationSummaryWithStats = useMemo(() => {
-    return calculateValidationSummaryWithStats(resourcesData?.resources, currentSettings);
+    if (!resourcesData?.resources) {
+      return {
+        totalResources: 0,
+        validatedCount: 0,
+        errorCount: 0,
+        warningCount: 0,
+        infoCount: 0,
+        aspectStats: {},
+        severityStats: {},
+      };
+    }
+
+    // Count all resources on the current page (backend now loads exactly 20 per page)
+    const totalResources = resourcesData.resources.length;
+    const validatedResources = resourcesData.resources.filter((r: any) => r._validationSummary?.lastValidated);
+    
+    let errorCount = 0;
+    let warningCount = 0;
+    let infoCount = 0;
+
+    // Initialize aspect stats with the aspect IDs expected by the frontend component
+    const aspectStats: { [key: string]: { valid: number; invalid: number; warnings: number; total: number } } = {
+      structural: { valid: 0, invalid: 0, warnings: 0, total: 0 },
+      profile: { valid: 0, invalid: 0, warnings: 0, total: 0 },
+      terminology: { valid: 0, invalid: 0, warnings: 0, total: 0 },
+      reference: { valid: 0, invalid: 0, warnings: 0, total: 0 },
+      businessRule: { valid: 0, invalid: 0, warnings: 0, total: 0 },
+      metadata: { valid: 0, invalid: 0, warnings: 0, total: 0 },
+    };
+
+    // Initialize severity stats
+    const severityStats: { [key: string]: { count: number; resourceCount: number } } = {
+      error: { count: 0, resourceCount: 0 },
+      warning: { count: 0, resourceCount: 0 },
+      information: { count: 0, resourceCount: 0 },
+    };
+
+    validatedResources.forEach((r: any) => {
+      if (r._validationSummary) {
+        // Apply filtering to only count issues from enabled aspects
+        const filteredSummary = getFilteredValidationSummary(r._validationSummary, currentSettings);
+        
+        const resourceErrors = filteredSummary.errorCount || 0;
+        const resourceWarnings = filteredSummary.warningCount || 0;
+        const resourceInfo = filteredSummary.informationCount || 0;
+
+        errorCount += resourceErrors;
+        warningCount += resourceWarnings;
+        infoCount += resourceInfo;
+
+        // Count resources with each severity
+        if (resourceErrors > 0) {
+          severityStats.error.count += resourceErrors;
+          severityStats.error.resourceCount += 1;
+        }
+        if (resourceWarnings > 0) {
+          severityStats.warning.count += resourceWarnings;
+          severityStats.warning.resourceCount += 1;
+        }
+        if (resourceInfo > 0) {
+          severityStats.information.count += resourceInfo;
+          severityStats.information.resourceCount += 1;
+        }
+
+        // Process aspect breakdown for this resource (use filtered data)
+        if (filteredSummary.aspectBreakdown && typeof filteredSummary.aspectBreakdown === 'object') {
+          // Map backend aspect keys to frontend keys
+          const aspectMapping: { [key: string]: string } = {
+            'structural': 'structural',
+            'profile': 'profile',
+            'terminology': 'terminology',
+            'reference': 'reference',
+            'business-rule': 'businessRule',
+            'businessRule': 'businessRule',
+            'metadata': 'metadata',
+          };
+
+          Object.keys(filteredSummary.aspectBreakdown).forEach((backendAspect: string) => {
+            const frontendAspect = aspectMapping[backendAspect] || backendAspect;
+            const aspectData = filteredSummary.aspectBreakdown?.[backendAspect];
+            
+            if (aspectData && typeof aspectData === 'object' && aspectStats[frontendAspect]) {
+              const hasErrors = (Number(aspectData.errorCount) || 0) > 0;
+              const hasWarnings = (Number(aspectData.warningCount) || 0) > 0;
+              
+              aspectStats[frontendAspect].total += 1;
+              
+              if (hasErrors) {
+                aspectStats[frontendAspect].invalid += 1;
+              } else if (hasWarnings) {
+                aspectStats[frontendAspect].warnings += 1;
+              } else {
+                aspectStats[frontendAspect].valid += 1;
+              }
+            }
+          });
+        }
+      }
+    });
+
+    return {
+      totalResources,
+      validatedCount: validatedResources.length,
+      errorCount,
+      warningCount,
+      infoCount,
+      aspectStats,
+      severityStats,
+    };
   }, [resourcesData, currentSettings]);
 
   // Create simplified validation summary for overview (without stats)
@@ -1885,18 +1972,6 @@ export default function ResourceBrowser() {
     warningCount: validationSummaryWithStats.warningCount,
     infoCount: validationSummaryWithStats.infoCount,
   }), [validationSummaryWithStats]);
-
-  // Debug logging before render
-  console.log('[Resource Browser] Before render:', {
-    hasResourcesData: !!resourcesData,
-    resourceCount: resourcesData?.resources?.length || 0,
-    total: resourcesData?.total,
-    enrichedResourcesLength: enrichedResources?.length || 0,
-    isLoading,
-    error: error?.message,
-    resourceType,
-    page
-  });
 
   return (
     <div className="p-6 h-full overflow-y-auto">
