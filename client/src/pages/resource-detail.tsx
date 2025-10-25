@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { FhirResourceWithValidation } from "@shared/schema";
 import { ResourceDetailSkeleton } from "@/components/resources/resource-detail-skeleton";
 import { ArrowLeft, XCircle } from "lucide-react";
+import { CircularProgress } from "@/components/ui/circular-progress";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import ProfileBadge from "@/components/resources/ProfileBadge";
@@ -770,6 +771,13 @@ export default function ResourceDetail() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              {/* Validation Score Circle */}
+              <CircularProgress 
+                value={validationScore} 
+                size="lg"
+                showValue={true}
+                className="flex-shrink-0"
+              />
               <ResourceDetailActions
                 resourceType={resource.resourceType}
                 resourceId={resource.resourceId}
@@ -818,7 +826,6 @@ export default function ResourceDetail() {
               resourceId={resource.resourceId}
               serverId={activeServer?.id}
               highlightSignature={highlightSignature}
-              validationScore={validationScore}
               initialSeverity={initialSeverity}
               onPathClick={handlePathClick}
               onResourceClick={handleResourceClick}

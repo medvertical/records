@@ -5,9 +5,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { CheckCircle, AlertCircle, RefreshCw, Info, X } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { CircularProgress } from '@/components/ui/circular-progress';
 import { ValidationMessageItem } from './ValidationMessageItem';
 import type { ValidationMessage as ValidationMessageType } from './ValidationMessageItem';
+import { AspectBadge } from './AspectBadge';
 import { getSeverityIcon } from '@/components/resources/unified-tree-viewer/utils';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -44,7 +44,6 @@ interface ValidationMessagesPerAspectProps {
   resourceId?: string;
   serverId?: number;
   highlightSignature?: string;
-  validationScore?: number;
   onPathClick?: (path: string) => void;
   onResourceClick?: (resourceType: string, resourceId: string) => void;
   profiles?: string[];
@@ -101,7 +100,6 @@ export function ValidationMessagesPerAspect({
   resourceId,
   serverId = 1,
   highlightSignature,
-  validationScore = 0,
   onPathClick,
   onResourceClick,
   profiles = [],
@@ -358,24 +356,16 @@ export function ValidationMessagesPerAspect({
               )}
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
-            <CircularProgress 
-              value={validationScore} 
-              size="md"
-              showValue={true}
-              className="flex-shrink-0"
-            />
-            {onClose && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onClose}
-                className="h-8 w-8"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="h-8 w-8"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
         
         {/* Badges and metadata section */}
@@ -465,9 +455,7 @@ export function ValidationMessagesPerAspect({
                 <AccordionItem key={`aspect-${index}`} value={`aspect-${index}`} className="text-left">
                   <AccordionTrigger className="hover:no-underline text-left">
                     <div className="flex items-center justify-start gap-2 w-full text-left">
-                      <Badge variant="outline" className="bg-muted/50">
-                        {aspectData.aspect}
-                      </Badge>
+                      <AspectBadge aspect={aspectData.aspect} />
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
