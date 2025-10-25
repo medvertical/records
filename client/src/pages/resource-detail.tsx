@@ -38,6 +38,7 @@ export default function ResourceDetail() {
   const { toast } = useToast();
   const { addResourceValidation, updateResourceValidation, removeResourceValidation } = useValidationActivity();
   const [isRevalidating, setIsRevalidating] = useState(false);
+  const [revalidationTimers, setRevalidationTimers] = useState<number[]>([]);
   
   // Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
@@ -60,12 +61,30 @@ export default function ResourceDetail() {
   
   // Set expanded paths for current resource
   const setExpandedPaths = useCallback((resourceId: string, expandedPaths: Set<string>) => {
-    console.log('[ResourceDetail] setExpandedPaths called:', {
-      resourceId,
-      pathCount: expandedPaths.size,
-      paths: Array.from(expandedPaths)
-    });
     setExpandedPathsMap(prev => {
+      const currentPaths = prev.get(resourceId);
+      
+      // Check if the paths have actually changed
+      if (currentPaths) {
+        // Early return if sizes differ
+        if (currentPaths.size === expandedPaths.size) {
+          const allSame = Array.from(expandedPaths).every(path => currentPaths.has(path));
+          if (allSame) {
+            // No change, don't update state
+            return prev;
+          }
+        }
+      }
+      
+      // Only log when actually updating (helps debug render loops)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[ResourceDetail] setExpandedPaths - paths changed:', {
+          resourceId,
+          pathCount: expandedPaths.size,
+          paths: Array.from(expandedPaths)
+        });
+      }
+      
       const newMap = new Map(prev);
       newMap.set(resourceId, expandedPaths);
       return newMap;
@@ -129,9 +148,20 @@ export default function ResourceDetail() {
     }
   }, [queryClient, id]);
 
+  // Cleanup revalidation timers on unmount
+  useEffect(() => {
+    return () => {
+      revalidationTimers.forEach(timerId => clearTimeout(timerId));
+    };
+  }, [revalidationTimers]);
+
   // Handle revalidation
   const handleRevalidate = async () => {
     if (!resource) return;
+
+    // Clear any existing revalidation timers first
+    revalidationTimers.forEach(timerId => clearTimeout(timerId));
+    setRevalidationTimers([]);
 
     console.log('[Revalidate] Button clicked, resource:', resource);
     console.log('[Revalidate] Resource type:', resource.resourceType);
@@ -297,8 +327,10 @@ export default function ResourceDetail() {
       // Poll for updated validation results multiple times
       // Background validation jobs may take several seconds to complete
       const refetchDelays = [2000, 4000, 6000, 10000]; // 2s, 4s, 6s, 10s
+      const newTimers: number[] = [];
+      
       refetchDelays.forEach((delay) => {
-        setTimeout(() => {
+        const timerId = window.setTimeout(() => {
           // Refetch resource data
           queryClient.refetchQueries({
             queryKey: ['/api/fhir/resources', id],
@@ -314,10 +346,11 @@ export default function ResourceDetail() {
             exact: true,
           });
         }, delay);
+        newTimers.push(timerId);
       });
       
       // Complete validation after 10 seconds
-      setTimeout(() => {
+      const completionTimerId = window.setTimeout(() => {
         if (validationInterval) clearInterval(validationInterval);
         
         updateResourceValidation(numericResourceId, {
@@ -326,10 +359,15 @@ export default function ResourceDetail() {
         });
         
         // Remove from widget after brief delay
-        setTimeout(() => {
+        const removalTimerId = window.setTimeout(() => {
           removeResourceValidation(numericResourceId);
         }, 1000);
+        newTimers.push(removalTimerId);
       }, 10000);
+      newTimers.push(completionTimerId);
+      
+      // Save all timer IDs to state for cleanup
+      setRevalidationTimers(newTimers);
       
     } catch (error) {
       console.error('[Revalidate] Error during revalidation:', error);
