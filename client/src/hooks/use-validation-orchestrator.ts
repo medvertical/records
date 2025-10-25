@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { useValidationActivity } from '@/contexts/validation-activity-context';
@@ -31,6 +31,9 @@ export function useValidationOrchestrator(
     updateResourceValidation,
     removeResourceValidation
   } = useValidationActivity();
+  
+  // Track validated pages across navigations (persists during session)
+  const validatedPagesRef = useRef(new Set<string>());
   
   const {
     isValidating,
@@ -451,10 +454,77 @@ export function useValidationOrchestrator(
   
   // Auto-validate resources when they're loaded
   useEffect(() => {
-    if (resourcesData?.resources && resourcesData.resources.length > 0 && !hasValidatedCurrentPage && !isValidating) {
-      const timer = setTimeout(() => validateUnvalidatedResources(), 500);
-      return () => clearTimeout(timer);
+    // Create a unique key for this page
+    const pageKey = `${resourceType}-page${page}`;
+    
+    // Check if this page was already validated in this session
+    if (validatedPagesRef.current.has(pageKey)) {
+      console.log(`[Auto-Validation] Page ${pageKey} already validated in this session, skipping`);
+      if (!hasValidatedCurrentPage) {
+        setHasValidatedCurrentPage(true);
+      }
+      return;
     }
+    
+    // Skip validation if already validated this page
+    if (hasValidatedCurrentPage) {
+      console.log('[Auto-Validation] Page already validated, skipping');
+      return;
+    }
+    
+    // Skip if already validating
+    if (isValidating) {
+      console.log('[Auto-Validation] Already validating, skipping');
+      return;
+    }
+    
+    // Skip if no resources
+    if (!resourcesData?.resources || resourcesData.resources.length === 0) {
+      console.log('[Auto-Validation] No resources, skipping');
+      return;
+    }
+    
+    // Only validate if we actually have unvalidated resources
+    // Check both database validation data AND client cache
+    const hasUnvalidated = resourcesData.resources.some((resource: any) => {
+      const resourceKey = `${resource.resourceType}/${resource.id || resource.resourceId}`;
+      
+      // Check if already in client cache
+      if (validatedResourcesCache.has(resourceKey)) {
+        return false; // Already validated in this session
+      }
+      
+      // Check database validation data
+      const validationSummary = resource._validationSummary;
+      const hasValidationData = validationSummary?.lastValidated;
+      
+      if (hasValidationData) {
+        const lastValidated = new Date(validationSummary.lastValidated);
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        if (lastValidated > fiveMinutesAgo) {
+          return false; // Recently validated
+        }
+      }
+      
+      return true; // No validation data = needs validation
+    });
+    
+    if (!hasUnvalidated) {
+      console.log('[Auto-Validation] All resources already validated (checked cache + DB), skipping');
+      setHasValidatedCurrentPage(true);
+      validatedPagesRef.current.add(pageKey);
+      return;
+    }
+    
+    console.log(`[Auto-Validation] Scheduling background validation for ${pageKey}...`);
+    const timer = setTimeout(() => {
+      validateUnvalidatedResources().then(() => {
+        // Mark this page as validated after completion
+        validatedPagesRef.current.add(pageKey);
+        console.log(`[Auto-Validation] Page ${pageKey} marked as validated`);
+      });
+    }, 500);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resourceType, page, hasValidatedCurrentPage, isValidating]);
   
