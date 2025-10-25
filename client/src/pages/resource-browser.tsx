@@ -129,14 +129,14 @@ export default function ResourceBrowser() {
         currentMessageIndex,
     aggregatedMessages,
     currentSeverity,
+    currentSeverityIndex,
+    allMessages,
     messagesByAspect,
-    handleNextMessage,
-    handlePreviousMessage,
+    handleMessageIndexChange,
     handleSeverityChange,
+    handleSeverityIndexChange,
     handleToggleMessages,
-    handleNavigateToResource,
-    handleFilterBySeverity,
-    handleFilterByAspect
+    handleFilterBySeverity
   } = messageNav;
 
   // URL synchronization from extracted hook
@@ -150,6 +150,16 @@ export default function ResourceBrowser() {
     navigateToResourceDetail,
     buildGroupMembersUrl
   } = useGroupNavigation();
+
+  // Handle severity badge click from resource cards
+  const handleSeverityBadgeClick = useCallback((severity: 'error' | 'warning' | 'information') => {
+    // Change to the clicked severity
+    handleSeverityChange(severity);
+    // Open the messages panel if it's not already open
+    if (!isMessagesVisible) {
+      handleToggleMessages();
+    }
+  }, [handleSeverityChange, isMessagesVisible, handleToggleMessages]);
 
   // Calculate validation summary with stats
   const validationSummaryWithStats = calculateValidationSummaryWithStats(
@@ -175,36 +185,38 @@ export default function ResourceBrowser() {
         <ResourceSearch 
           resourceTypes={resourceTypes || []}
           onSearch={handleSearch}
-          initialQuery={searchQuery}
-          initialType={resourceType}
-          validationFilters={validationFilters}
+          defaultQuery={searchQuery}
+          defaultResourceType={resourceType}
+          filters={validationFilters}
           onFilterChange={handleFilterChange}
         />
       </div>
 
-      {/* Main content area */}
-      <div className="flex-1 overflow-auto">
-        <div className="p-4">
-          {/* Validation Overview */}
-          {!isLoading && resourcesData?.resources && resourcesData.resources.length > 0 && (
-            <div className="mb-4">
+      {/* Main content area with side panel */}
+      <div className="flex-1 overflow-hidden flex">
+        {/* Main content */}
+        <div className="flex-1 overflow-auto">
+          <div className="p-4">
+            {/* Validation Overview */}
+            {!isLoading && resourcesData?.resources && resourcesData.resources.length > 0 && (
+              <div className="mb-4">
             <ValidationOverview
-                validationSummary={validationSummaryWithStats}
+                  validationSummary={validationSummaryWithStats}
               onRevalidate={handleRevalidate}
               isRevalidating={isValidating}
-              />
-            </div>
-          )}
-
-          {/* Validation Messages Card */}
-          {isMessagesVisible && messagesByAspect.length > 0 && (
-            <div className="mb-4">
-              <ValidationMessagesCard
-                aspects={messagesByAspect}
-                onClose={handleToggleMessages}
-              />
-            </div>
-          )}
+              messages={allMessages}
+              currentMessageIndex={currentMessageIndex}
+              onMessageIndexChange={handleMessageIndexChange}
+              onToggleMessages={handleToggleMessages}
+              isMessagesVisible={isMessagesVisible}
+              currentSeverity={currentSeverity}
+              onSeverityChange={handleSeverityChange}
+              currentSeverityIndex={currentSeverityIndex}
+              onSeverityIndexChange={handleSeverityIndexChange}
+              onFilterBySeverity={handleFilterBySeverity}
+            />
+              </div>
+            )}
 
           {/* Selection Mode Toolbar */}
           {selectionMode && (
@@ -246,33 +258,46 @@ export default function ResourceBrowser() {
           </div>
           )}
 
-          {/* Resource List */}
-          {isLoading ? (
-            <ResourceListSkeleton />
-          ) : error ? (
-            <div className="text-center py-8 text-red-600">
-              Error loading resources: {error.message}
+            {/* Resource List */}
+            {isLoading ? (
+              <ResourceListSkeleton />
+            ) : error ? (
+              <div className="text-center py-8 text-red-600">
+                Error loading resources: {error.message}
+              </div>
+            ) : resourcesData?.resources && resourcesData.resources.length > 0 ? (
+            <ResourceList 
+                resources={enrichedResources || []}
+                total={resourcesData.total || 0}
+              page={page}
+              pageSize={pageSize}
+                onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              validatingResourceIds={validatingResourceIds}
+              validationProgress={validationProgress}
+              selectionMode={selectionMode}
+                selectedResources={selectedResources}
+              onSelectionChange={handleSelectionChange}
+              onSeverityBadgeClick={handleSeverityBadgeClick}
+              />
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                No resources found
             </div>
-          ) : resourcesData?.resources && resourcesData.resources.length > 0 ? (
-          <ResourceList 
-              resources={enrichedResources || []}
-              total={resourcesData.total || 0}
-            page={page}
-            pageSize={pageSize}
-              onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-            validatingResourceIds={validatingResourceIds}
-            validationProgress={validationProgress}
-            selectionMode={selectionMode}
-              selectedResources={selectedResources}
-            onSelectionChange={handleSelectionChange}
+          )}
+          </div>
+        </div>
+
+        {/* Side Panel - Validation Messages */}
+        {isMessagesVisible && (
+          <div className="w-96 border-l bg-white overflow-auto">
+            <ValidationMessagesCard
+              aspects={messagesByAspect}
+              severityFilter={[currentSeverity]}
+              onClose={handleToggleMessages}
             />
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              No resources found
           </div>
         )}
-        </div>
       </div>
 
       {/* Batch Edit Dialog */}
