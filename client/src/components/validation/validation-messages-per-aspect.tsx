@@ -307,13 +307,13 @@ export function ValidationMessagesPerAspect({
         sum + filterMessagesBySeverity(aspect.messages).length, 0
       );
 
-  // Filter aspects to only show those with messages (after filtering by severity)
+  // Show all aspects (even those with 0 messages) to confirm validation ran
+  // Only apply severity filter to messages within each aspect
   const aspectsWithMessages = groupedAspects
     .map(aspect => ({
       ...aspect,
       messages: filterMessagesBySeverity(aspect.messages)
-    }))
-    .filter(aspect => aspect.messages.length > 0);
+    }));
 
   return (
     <Card className="text-left">
@@ -451,21 +451,30 @@ export function ValidationMessagesPerAspect({
                   </AccordionTrigger>
                   <AccordionContent className="text-left">
                     <div className="space-y-3 pt-2 text-left">
-                      {aspectData.messages.map((message, msgIndex) => {
-                        const isHighlighted = (highlightSignature && message.signature === highlightSignature) ||
-                          highlightedSignatures.includes(message.signature);
-                        
-                        return (
-                          <ValidationMessageItem
-                            key={msgIndex}
-                            message={message}
-                            isHighlighted={isHighlighted}
-                            onPathClick={onPathClick}
-                            onResourceClick={onResourceClick}
-                            showResourceInfo={false}
-                          />
-                        );
-                      })}
+                      {aspectData.messages.length === 0 ? (
+                        <Alert className="bg-green-50 border-green-200">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <AlertDescription className="text-green-700">
+                            No issues found. This aspect passed validation successfully.
+                          </AlertDescription>
+                        </Alert>
+                      ) : (
+                        aspectData.messages.map((message, msgIndex) => {
+                          const isHighlighted = (highlightSignature && message.signature === highlightSignature) ||
+                            highlightedSignatures.includes(message.signature);
+                          
+                          return (
+                            <ValidationMessageItem
+                              key={msgIndex}
+                              message={message}
+                              isHighlighted={isHighlighted}
+                              onPathClick={onPathClick}
+                              onResourceClick={onResourceClick}
+                              showResourceInfo={false}
+                            />
+                          );
+                        })
+                      )}
                     </div>
                   </AccordionContent>
                 </AccordionItem>

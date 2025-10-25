@@ -62,41 +62,59 @@ export function mapHapiIssueToValidationIssue(
 export function determineAspectFromCode(code: string): string {
   const lowerCode = code.toLowerCase();
 
-  // Structural validation codes
-  if (lowerCode.includes('structure') || lowerCode.includes('required') || 
-      lowerCode.includes('cardinality') || lowerCode.includes('datatype')) {
-    return 'structural';
-  }
+  // Log for debugging
+  console.log(`[determineAspectFromCode] Mapping code: ${code}`);
 
-  // Profile validation codes
+  // Profile validation codes (check first - most specific)
   if (lowerCode.includes('profile') || lowerCode.includes('constraint') || 
       lowerCode.includes('invariant')) {
+    console.log(`[determineAspectFromCode] Mapped to: profile`);
     return 'profile';
   }
 
-  // Terminology validation codes
-  if (lowerCode.includes('code') || lowerCode.includes('valueset') || 
-      lowerCode.includes('binding') || lowerCode.includes('terminology')) {
+  // Terminology validation codes (before "code" fallback to structural)
+  if (lowerCode.includes('terminology') || lowerCode.includes('valueset') || 
+      lowerCode.includes('binding') || 
+      lowerCode === 'code-invalid' || lowerCode === 'invalid-code') {
+    console.log(`[determineAspectFromCode] Mapped to: terminology`);
     return 'terminology';
+  }
+
+  // Structural validation codes
+  if (lowerCode.includes('structure') || lowerCode.includes('required') || 
+      lowerCode.includes('cardinality') || lowerCode.includes('datatype') ||
+      lowerCode === 'unknown' || lowerCode === 'invalid') {
+    console.log(`[determineAspectFromCode] Mapped to: structural`);
+    return 'structural';
   }
 
   // Reference validation codes
   if (lowerCode.includes('reference') || lowerCode.includes('resolve')) {
+    console.log(`[determineAspectFromCode] Mapped to: reference`);
     return 'reference';
   }
 
   // Business rule codes
   if (lowerCode.includes('business') || lowerCode.includes('rule')) {
+    console.log(`[determineAspectFromCode] Mapped to: businessRule`);
     return 'businessRule';
   }
 
   // Metadata codes
   if (lowerCode.includes('meta') || lowerCode.includes('version') || 
       lowerCode.includes('lastUpdated')) {
+    console.log(`[determineAspectFromCode] Mapped to: metadata`);
     return 'metadata';
   }
 
+  // Catch-all for "code" without more specific context
+  if (lowerCode.includes('code')) {
+    console.log(`[determineAspectFromCode] Generic 'code' mapped to: terminology`);
+    return 'terminology';
+  }
+
   // Default to structural
+  console.log(`[determineAspectFromCode] Default mapped to: structural`);
   return 'structural';
 }
 
