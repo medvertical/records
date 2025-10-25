@@ -504,7 +504,7 @@ export function ValidationMessagesPerAspect({
                             isHighlighted={isHighlighted}
                             onPathClick={onPathClick}
                             onResourceClick={onResourceClick}
-                            showResourceInfo={true}
+                            showResourceInfo={false}
                           />
                         );
                       })
