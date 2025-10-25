@@ -49,6 +49,7 @@ interface ValidationMessagesPerAspectProps {
     resourceType: string;
     resourceId: string;
     severity?: 'error' | 'warning' | 'information'; // Optionally filter by severity
+    timestamp?: number; // Used to force re-render when clicking different badges
   };
   onPathClick?: (path: string) => void;
   onResourceClick?: (resourceType: string, resourceId: string) => void;
@@ -124,6 +125,19 @@ export function ValidationMessagesPerAspect({
     // If initialSeverity is provided, start with it selected
     return initialSeverity ? new Set([initialSeverity]) : new Set();
   });
+
+  // Effect to handle highlight resource changes
+  useEffect(() => {
+    if (highlightResource && aspectsProp) {
+      // Scroll to the first highlighted message after a brief delay
+      setTimeout(() => {
+        const highlightedElement = document.querySelector('[data-signature]')?.parentElement?.parentElement?.querySelector('.ring-blue-500');
+        if (highlightedElement) {
+          highlightedElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 100);
+    }
+  }, [highlightResource, aspectsProp]);
   
   // Toggle severity filter
   const toggleSeverity = (severity: string) => {
@@ -506,16 +520,34 @@ export function ValidationMessagesPerAspect({
                           
                           // Also highlight if this message belongs to the highlighted resource
                           if (highlightResource) {
-                            const matchesResource = message.resourceType === highlightResource.resourceType && 
-                                                   message.resourceId === highlightResource.resourceId;
+                            let matchesResource = false;
+                            
+                            // Check if this is a grouped message
+                            if ((message as any).isGrouped && (message as any).affectedResources) {
+                              // For grouped messages, check if any affected resource matches
+                              matchesResource = (message as any).affectedResources.some((res: any) => 
+                                res.resourceType === highlightResource.resourceType && 
+                                res.resourceId === highlightResource.resourceId
+                              );
+                            } else {
+                              // For non-grouped messages, check directly
+                              matchesResource = (message as any).resourceType === highlightResource.resourceType && 
+                                               (message as any).resourceId === highlightResource.resourceId;
+                            }
+                            
                             const matchesSeverity = !highlightResource.severity || 
-                                                   message.severity.toLowerCase() === highlightResource.severity.toLowerCase();
+                                                   (message as any).severity.toLowerCase() === highlightResource.severity.toLowerCase();
+                            
                             isHighlighted = isHighlighted || (matchesResource && matchesSeverity);
                           }
                           
+                          // Create a truly unique key that includes resource info, not just signature
+                          // This ensures different instances of the same message (for different resources) are treated as separate components
+                          const uniqueKey = `${aspectData.aspect}-${message.resourceType}-${message.resourceId}-${message.signature}-${msgIndex}-${highlightResource?.timestamp || 0}`;
+                          
                           return (
                           <ValidationMessageItem
-                            key={msgIndex}
+                            key={uniqueKey}
                             message={message}
                             isHighlighted={isHighlighted}
                             onPathClick={onPathClick}

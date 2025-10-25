@@ -140,7 +140,8 @@ export default function ResourceBrowser() {
     handleResourceClick
   } = messageNav;
 
-  // Compute highlighted resource when severity navigation is active
+  // Compute highlighted resource when severity NAVIGATOR is active (not badge clicks)
+  // This is ONLY for when user clicks the severity navigator itself and uses arrows
   const highlightedResourceId = useMemo(() => {
     if (!currentSeverity) return undefined;
     
@@ -149,11 +150,22 @@ export default function ResourceBrowser() {
       msg => msg.severity.toLowerCase() === currentSeverity.toLowerCase()
     );
     
-    // Get the current message for this severity
-    const currentMsg = messagesOfSeverity[currentSeverityIndex[currentSeverity]];
+    // Get unique resources with this severity (in order of first appearance)
+    const uniqueResourceKeys = new Set<string>();
+    const resourcesWithSeverity: Array<{ resourceType: string; resourceId: string }> = [];
+    messagesOfSeverity.forEach(msg => {
+      const key = `${msg.resourceType}/${msg.resourceId}`;
+      if (!uniqueResourceKeys.has(key)) {
+        uniqueResourceKeys.add(key);
+        resourcesWithSeverity.push({ resourceType: msg.resourceType, resourceId: msg.resourceId });
+      }
+    });
     
-    if (currentMsg && currentMsg.resourceType && currentMsg.resourceId) {
-      return `${currentMsg.resourceType}/${currentMsg.resourceId}`;
+    // Get the current resource based on the index
+    const currentResource = resourcesWithSeverity[currentSeverityIndex[currentSeverity]];
+    
+    if (currentResource) {
+      return `${currentResource.resourceType}/${currentResource.resourceId}`;
     }
     
     return undefined;
@@ -176,6 +188,7 @@ export default function ResourceBrowser() {
     resourceType: string;
     resourceId: string;
     severity: 'error' | 'warning' | 'information';
+    timestamp: number; // Force re-render when clicking same resource again
   } | null>(null);
 
   // Handle severity badge click from resource cards
@@ -185,13 +198,15 @@ export default function ResourceBrowser() {
       setIsMessagesVisible(true);
     }
     
-    // Set which resource's messages to highlight
-    setHighlightedMessageResource({ resourceType, resourceId, severity });
+    // ONLY set which resource's messages to highlight - nothing else!
+    // Add timestamp to force re-render even if clicking the same resource again
+    setHighlightedMessageResource({ resourceType, resourceId, severity, timestamp: Date.now() });
     
-    // DON'T activate severity navigator - user just wants to see messages for this specific resource
-    // DON'T call handleSeverityChange - this would activate the severity navigator
-    // DON'T call handleSeverityIndexChange - this causes resource item to be focused/scrolled
-    // DON'T call handleFilterBySeverity - we just want to show messages, not filter the list
+    // DON'T activate severity navigator
+    // DON'T change severity index
+    // DON'T filter the list
+    // DON'T scroll to any resource
+    // JUST highlight the validation messages in the sidebar!
   }, [isMessagesVisible, setIsMessagesVisible]);
 
   // Calculate validation summary with stats
