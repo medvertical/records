@@ -7,7 +7,7 @@ export interface MessageNavigationState {
   isMessagesVisible: boolean;
   currentMessageIndex: number;
   aggregatedMessages: any[];
-  currentSeverity: 'error' | 'warning' | 'information';
+  currentSeverity: 'error' | 'warning' | 'information' | null;
   currentSeverityIndex: { error: number; warning: number; information: number };
   currentMessage: any | null;
   currentMessageResource: any | null;
@@ -28,7 +28,7 @@ export interface MessageNavigationState {
   setIsMessagesVisible: (value: boolean) => void;
   setCurrentMessageIndex: (value: number) => void;
   setCurrentSeverityIndex: (value: { error: number; warning: number; information: number }) => void;
-  setCurrentSeverity: (value: 'error' | 'warning' | 'information') => void;
+  setCurrentSeverity: (value: 'error' | 'warning' | 'information' | null) => void;
 }
 
 /**
@@ -41,11 +41,11 @@ export function useMessageNavigation(
   validationFilters: ValidationFilters,
   handleFilterChange: (filters: ValidationFilters) => void
 ): MessageNavigationState {
-  // State - validation sidebar is open by default
+  // State - validation sidebar is open by default, but no severity navigation active initially
   const [isMessagesVisible, setIsMessagesVisible] = useState(true);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [aggregatedMessages, setAggregatedMessages] = useState<any[]>([]);
-  const [currentSeverity, setCurrentSeverity] = useState<'error' | 'warning' | 'information'>('error');
+  const [currentSeverity, setCurrentSeverity] = useState<'error' | 'warning' | 'information' | null>(null);
   const [currentSeverityIndex, setCurrentSeverityIndex] = useState({ error: 0, warning: 0, information: 0 });
   
   const { navigateToResourceDetail } = useGroupNavigation();

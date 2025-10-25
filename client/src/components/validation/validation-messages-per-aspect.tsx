@@ -53,7 +53,7 @@ interface ValidationMessagesPerAspectProps {
   informationCount?: number;
   isRevalidating?: boolean;
   lastValidated?: string;
-  initialSeverity?: 'error' | 'warning' | 'information';
+  initialSeverity?: 'error' | 'warning' | 'information' | null;
   onClose?: () => void;
 }
 
