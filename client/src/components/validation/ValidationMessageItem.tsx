@@ -122,8 +122,10 @@ export function ValidationMessageItem({
       data-signature={message.signature}
     >
       <div className="flex items-start gap-2 text-left">
-        <SeverityIcon severity={message.severity as SeverityLevel} />
-        <div className="flex-1 space-y-1 text-left">
+        <div className="flex-shrink-0">
+          <SeverityIcon severity={message.severity as SeverityLevel} />
+        </div>
+        <div className="flex-1 space-y-1 text-left min-w-0">
           {/* Engine label in top-right corner */}
           {engine && (
             <div className="flex items-start justify-between gap-2">

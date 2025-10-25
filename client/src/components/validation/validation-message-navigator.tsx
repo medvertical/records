@@ -18,6 +18,7 @@ export interface ValidationMessageNavigatorProps {
 
 export interface SeverityNavigatorProps {
   messages: ValidationMessage[];
+  resourceCount?: number; // Number of resources with this severity (optional, if not provided, uses message count)
   currentIndex: number;
   onIndexChange: (index: number) => void;
   onClick?: () => void; // Callback when the badge itself is clicked (for toggle logic)
@@ -248,6 +249,7 @@ export function ValidationMessageNavigator({
 // Individual severity navigator component
 export function SeverityNavigator({
   messages,
+  resourceCount,
   currentIndex,
   onIndexChange,
   onClick,
@@ -264,6 +266,8 @@ export function SeverityNavigator({
   );
 
   const totalMessages = filteredMessages.length;
+  // Use resourceCount if provided, otherwise fall back to message count
+  const displayCount = resourceCount !== undefined ? resourceCount : totalMessages;
   
   // Get the icon for this severity
   const getSeverityIcon = () => {
@@ -318,8 +322,8 @@ export function SeverityNavigator({
   //   }
   // }, [isMessagesVisible, onFilterBySeverity, totalMessages, severity]);
 
-  // Don't render if no messages of this severity
-  if (totalMessages === 0) {
+  // Don't render if no resources with this severity
+  if (displayCount === 0) {
     return null;
   }
 
@@ -343,9 +347,9 @@ export function SeverityNavigator({
             )}
           />
           
-          {/* Total count only */}
+          {/* Total resource count */}
           <span className="text-sm font-medium">
-            {totalMessages}
+            {displayCount}
           </span>
         </div>
 
@@ -372,7 +376,7 @@ export function SeverityNavigator({
         )}
       />
       
-      {/* Current message index / total */}
+      {/* Current message index / total messages (still navigate through messages) */}
       <span className="text-sm font-medium">
         {currentIndex + 1}/{totalMessages}
       </span>

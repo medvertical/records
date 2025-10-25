@@ -8,6 +8,12 @@ export interface ValidationSummary {
   errorCount: number;
   warningCount: number;
   infoCount: number;
+  severityStats?: {
+    [key: string]: {
+      count: number;
+      resourceCount: number;
+    };
+  };
 }
 
 interface ValidationOverviewProps {
@@ -48,74 +54,85 @@ export function ValidationOverview({
   return (
     <div className="flex items-center gap-4">
       {/* Severity Navigators */}
-      {messages.length > 0 && (
+      {(validationSummary.severityStats?.error?.resourceCount || 
+        validationSummary.severityStats?.warning?.resourceCount || 
+        validationSummary.severityStats?.information?.resourceCount) && (
         <div className="flex items-center gap-2">
-          <SeverityNavigator
-            messages={messages}
-            currentIndex={currentSeverityIndex.error}
-            onIndexChange={(index) => {
-              // Just change the index when navigating with arrows
-              onSeverityIndexChange?.('error', index);
-            }}
-            onClick={() => {
-              // Toggle: if already active, deselect; otherwise activate
-              if (currentSeverity === 'error') {
-                onSeverityChange?.(null); // Deselect
-              } else {
-                onSeverityChange?.('error');
-                onSeverityIndexChange?.('error', 0);
-              }
-            }}
-            onToggleMessages={onToggleMessages}
-            isMessagesVisible={isMessagesVisible}
-            isActive={currentSeverity === 'error'}
-            severity="error"
-            onFilterBySeverity={onFilterBySeverity}
-          />
-          <SeverityNavigator
-            messages={messages}
-            currentIndex={currentSeverityIndex.warning}
-            onIndexChange={(index) => {
-              // Just change the index when navigating with arrows
-              onSeverityIndexChange?.('warning', index);
-            }}
-            onClick={() => {
-              // Toggle: if already active, deselect; otherwise activate
-              if (currentSeverity === 'warning') {
-                onSeverityChange?.(null); // Deselect
-              } else {
-                onSeverityChange?.('warning');
-                onSeverityIndexChange?.('warning', 0);
-              }
-            }}
-            onToggleMessages={onToggleMessages}
-            isMessagesVisible={isMessagesVisible}
-            isActive={currentSeverity === 'warning'}
-            severity="warning"
-            onFilterBySeverity={onFilterBySeverity}
-          />
-          <SeverityNavigator
-            messages={messages}
-            currentIndex={currentSeverityIndex.information}
-            onIndexChange={(index) => {
-              // Just change the index when navigating with arrows
-              onSeverityIndexChange?.('information', index);
-            }}
-            onClick={() => {
-              // Toggle: if already active, deselect; otherwise activate
-              if (currentSeverity === 'information') {
-                onSeverityChange?.(null); // Deselect
-              } else {
-                onSeverityChange?.('information');
-                onSeverityIndexChange?.('information', 0);
-              }
-            }}
-            onToggleMessages={onToggleMessages}
-            isMessagesVisible={isMessagesVisible}
-            isActive={currentSeverity === 'information'}
-            severity="information"
-            onFilterBySeverity={onFilterBySeverity}
-          />
+          {validationSummary.severityStats?.error?.resourceCount > 0 && (
+            <SeverityNavigator
+              messages={messages}
+              resourceCount={validationSummary.severityStats.error.resourceCount}
+              currentIndex={currentSeverityIndex.error}
+              onIndexChange={(index) => {
+                // Just change the index when navigating with arrows
+                onSeverityIndexChange?.('error', index);
+              }}
+              onClick={() => {
+                // Toggle: if already active, deselect; otherwise activate
+                if (currentSeverity === 'error') {
+                  onSeverityChange?.(null); // Deselect
+                } else {
+                  onSeverityChange?.('error');
+                  onSeverityIndexChange?.('error', 0);
+                }
+              }}
+              onToggleMessages={onToggleMessages}
+              isMessagesVisible={isMessagesVisible}
+              isActive={currentSeverity === 'error'}
+              severity="error"
+              onFilterBySeverity={onFilterBySeverity}
+            />
+          )}
+          {validationSummary.severityStats?.warning?.resourceCount > 0 && (
+            <SeverityNavigator
+              messages={messages}
+              resourceCount={validationSummary.severityStats.warning.resourceCount}
+              currentIndex={currentSeverityIndex.warning}
+              onIndexChange={(index) => {
+                // Just change the index when navigating with arrows
+                onSeverityIndexChange?.('warning', index);
+              }}
+              onClick={() => {
+                // Toggle: if already active, deselect; otherwise activate
+                if (currentSeverity === 'warning') {
+                  onSeverityChange?.(null); // Deselect
+                } else {
+                  onSeverityChange?.('warning');
+                  onSeverityIndexChange?.('warning', 0);
+                }
+              }}
+              onToggleMessages={onToggleMessages}
+              isMessagesVisible={isMessagesVisible}
+              isActive={currentSeverity === 'warning'}
+              severity="warning"
+              onFilterBySeverity={onFilterBySeverity}
+            />
+          )}
+          {validationSummary.severityStats?.information?.resourceCount > 0 && (
+            <SeverityNavigator
+              messages={messages}
+              resourceCount={validationSummary.severityStats.information.resourceCount}
+              currentIndex={currentSeverityIndex.information}
+              onIndexChange={(index) => {
+                // Just change the index when navigating with arrows
+                onSeverityIndexChange?.('information', index);
+              }}
+              onClick={() => {
+                // Toggle: if already active, deselect; otherwise activate
+                if (currentSeverity === 'information') {
+                  onSeverityChange?.(null); // Deselect
+                } else {
+                  onSeverityChange?.('information');
+                  onSeverityIndexChange?.('information', 0);
+                }
+              }}
+              onToggleMessages={onToggleMessages}
+              isMessagesVisible={isMessagesVisible}
+              isActive={currentSeverity === 'information'}
+              severity="information"
+              onFilterBySeverity={onFilterBySeverity}
+            />
+          )}
         </div>
       )}
       
