@@ -45,6 +45,11 @@ interface ValidationMessagesPerAspectProps {
   resourceId?: string;
   serverId?: number;
   highlightSignature?: string;
+  highlightResource?: { // Highlight all messages from this resource
+    resourceType: string;
+    resourceId: string;
+    severity?: 'error' | 'warning' | 'information'; // Optionally filter by severity
+  };
   onPathClick?: (path: string) => void;
   onResourceClick?: (resourceType: string, resourceId: string) => void;
   profiles?: string[];
@@ -101,6 +106,7 @@ export function ValidationMessagesPerAspect({
   resourceId,
   serverId = 1,
   highlightSignature,
+  highlightResource,
   onPathClick,
   onResourceClick,
   profiles = [],
@@ -494,8 +500,18 @@ export function ValidationMessagesPerAspect({
                         </Alert>
                       ) : (
                         aspectData.messages.map((message: ValidationMessage, msgIndex: number) => {
-                          const isHighlighted = (highlightSignature && message.signature === highlightSignature) ||
+                          // Check if message should be highlighted
+                          let isHighlighted = (highlightSignature && message.signature === highlightSignature) ||
                             highlightedSignatures.includes(message.signature);
+                          
+                          // Also highlight if this message belongs to the highlighted resource
+                          if (highlightResource) {
+                            const matchesResource = message.resourceType === highlightResource.resourceType && 
+                                                   message.resourceId === highlightResource.resourceId;
+                            const matchesSeverity = !highlightResource.severity || 
+                                                   message.severity.toLowerCase() === highlightResource.severity.toLowerCase();
+                            isHighlighted = isHighlighted || (matchesResource && matchesSeverity);
+                          }
                           
                           return (
                           <ValidationMessageItem

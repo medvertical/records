@@ -171,11 +171,28 @@ export default function ResourceBrowser() {
     buildGroupMembersUrl
   } = useGroupNavigation();
 
+  // Track which resource's messages should be highlighted in sidebar
+  const [highlightedMessageResource, setHighlightedMessageResource] = useState<{
+    resourceType: string;
+    resourceId: string;
+    severity: 'error' | 'warning' | 'information';
+  } | null>(null);
+
   // Handle severity badge click from resource cards
-  const handleSeverityBadgeClick = useCallback((severity: 'error' | 'warning' | 'information') => {
-    // Just apply the filter, don't change severity navigation
-    handleFilterBySeverity(severity);
-  }, [handleFilterBySeverity]);
+  const handleSeverityBadgeClick = useCallback((severity: 'error' | 'warning' | 'information', resourceType: string, resourceId: string) => {
+    // Open validation sidebar if not already open
+    if (!isMessagesVisible) {
+      setIsMessagesVisible(true);
+    }
+    
+    // Set which resource's messages to highlight
+    setHighlightedMessageResource({ resourceType, resourceId, severity });
+    
+    // DON'T activate severity navigator - user just wants to see messages for this specific resource
+    // DON'T call handleSeverityChange - this would activate the severity navigator
+    // DON'T call handleSeverityIndexChange - this causes resource item to be focused/scrolled
+    // DON'T call handleFilterBySeverity - we just want to show messages, not filter the list
+  }, [isMessagesVisible, setIsMessagesVisible]);
 
   // Calculate validation summary with stats
   const validationSummaryWithStats = calculateValidationSummaryWithStats(
@@ -314,6 +331,7 @@ export default function ResourceBrowser() {
               <ValidationMessagesPerAspect
                 aspects={messagesByAspect}
                 initialSeverity={currentSeverity}
+                highlightResource={highlightedMessageResource || undefined}
                 onClose={handleToggleMessages}
                 onResourceClick={handleResourceClick}
                 errorCount={validationSummaryWithStats?.errorCount || 0}

@@ -357,7 +357,7 @@ export function SeverityNavigator({
     );
   }
 
-  // Active state: show current index and navigation arrows with blue outline and white bg
+  // Active state: show resource count and navigation arrows with blue outline and white bg
   return (
     <div 
       className={cn(
@@ -376,9 +376,9 @@ export function SeverityNavigator({
         )}
       />
       
-      {/* Current message index / total messages (still navigate through messages) */}
+      {/* Show resource count (same as idle state) */}
       <span className="text-sm font-medium">
-        {currentIndex + 1}/{totalMessages}
+        {displayCount}
       </span>
       
       {/* Separator */}

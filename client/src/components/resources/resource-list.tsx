@@ -88,7 +88,7 @@ export interface ResourceListProps {
   selectedIds?: Set<string>; // Set of selected resource keys (resourceType/id)
   onSelectionChange?: (resourceKey: string, selected: boolean) => void; // Callback for selection changes
   highlightedResourceId?: string; // Resource ID to highlight (resourceType/resourceId)
-  onSeverityBadgeClick?: (severity: 'error' | 'warning' | 'information') => void; // Callback when severity badge is clicked
+  onSeverityBadgeClick?: (severity: 'error' | 'warning' | 'information', resourceType: string, resourceId: string) => void; // Callback when severity badge is clicked
 }
 
 export default function ResourceList({
@@ -124,9 +124,9 @@ export default function ResourceList({
   });
 
   // Helper function to handle severity badge clicks
-  const handleSeverityBadgeClick = (severity: 'error' | 'warning' | 'information') => {
+  const handleSeverityBadgeClick = (severity: 'error' | 'warning' | 'information', resourceType: string, resourceId: string) => {
     if (onSeverityBadgeClick) {
-      onSeverityBadgeClick(severity);
+      onSeverityBadgeClick(severity, resourceType, resourceId);
     }
   };
 
@@ -407,7 +407,7 @@ export default function ResourceList({
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    handleSeverityBadgeClick('information');
+                    handleSeverityBadgeClick('information', resource.resourceType, resource.id || resource.resourceId);
                   }}
                   title="Click to view information messages"
                 >
@@ -469,7 +469,7 @@ export default function ResourceList({
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    handleSeverityBadgeClick('error');
+                    handleSeverityBadgeClick('error', resource.resourceType, resource.id || resource.resourceId);
                   }}
                   title="Click to view error messages"
                 >
@@ -486,7 +486,7 @@ export default function ResourceList({
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    handleSeverityBadgeClick('warning');
+                    handleSeverityBadgeClick('warning', resource.resourceType, resource.id || resource.resourceId);
                   }}
                   title="Click to view warning messages"
                 >
@@ -503,7 +503,7 @@ export default function ResourceList({
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    handleSeverityBadgeClick('information');
+                    handleSeverityBadgeClick('information', resource.resourceType, resource.id || resource.resourceId);
                   }}
                   title="Click to view information messages"
                 >
