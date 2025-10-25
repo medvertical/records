@@ -294,21 +294,29 @@ export default function ResourceBrowser() {
       }
     });
     
+    // Only update state if values actually changed to prevent infinite loops
+    const normalizedTypeParam = typeParam || "all";
+    const normalizedSearchParam = searchParam || "";
+    const normalizedSortParam = sortParam;
+    const normalizedPageIndex = Math.max(0, pageParam - 1);
+    const normalizedPageSize = Math.max(1, pageSizeParam);
+    
     // Check if this is a content change (not just pagination)
     const isContentChange = 
-      typeParam !== resourceType ||
-      searchParam !== searchQuery ||
-      sortParam !== sort ||
+      normalizedTypeParam !== resourceType ||
+      normalizedSearchParam !== searchQuery ||
+      normalizedSortParam !== sort ||
       aspectsParam !== validationFilters.aspects.join(',') ||
       severitiesParam !== validationFilters.severities.join(',');
     
-    // Update state directly - this will trigger the query to re-run
-    // Use "all" when no type is specified to indicate browsing all resources
-    setResourceType(typeParam || "all");
-    setSearchQuery(searchParam || "");
-    setPage(Math.max(0, pageParam - 1)); // Convert from 1-based to 0-based
-    setPageSize(Math.max(1, pageSizeParam));
-    setSort(sortParam);
+    // Only update state if something actually changed
+    if (normalizedTypeParam !== resourceType) setResourceType(normalizedTypeParam);
+    if (normalizedSearchParam !== searchQuery) setSearchQuery(normalizedSearchParam);
+    if (normalizedPageIndex !== page) setPage(normalizedPageIndex);
+    if (normalizedPageSize !== pageSize) setPageSize(normalizedPageSize);
+    if (normalizedSortParam !== sort) setSort(normalizedSortParam);
+    
+    // Always update validation filters (they're objects so simple comparison won't work)
     setValidationFilters({
       aspects: aspectsParam ? aspectsParam.split(',') : [],
       severities: severitiesParam ? severitiesParam.split(',') : [],
@@ -329,7 +337,8 @@ export default function ResourceBrowser() {
     if (isContentChange) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [location]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]); // Keep location as only dependency, state updates are conditional
 
   // Also listen for popstate events to handle programmatic URL changes
   useEffect(() => {
@@ -1406,13 +1415,12 @@ export default function ResourceBrowser() {
       setHasValidatedCurrentPage(true);
 
       // Invalidate validation queries to update badges
-      console.log('[Background Validation] Invalidating validation data...');
+      console.log('[Background Validation] Invalidating validation data (badges only)...');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['validation-messages'] }),
-        queryClient.invalidateQueries({ queryKey: ['validation-summaries-bulk'] }),
-        queryClient.refetchQueries({ queryKey: ['resources'], type: 'active' })
+        queryClient.invalidateQueries({ queryKey: ['validation-summaries-bulk'] })
       ]);
-      console.log('[Background Validation] Validation data invalidated and resources list refetched');
+      console.log('[Background Validation] Validation data invalidated');
       
       // Clear activity widget progress after showing completion briefly
       setTimeout(() => {
@@ -1736,14 +1744,13 @@ export default function ResourceBrowser() {
       setValidatingResourceIds(new Set());
       setIsValidating(false);
 
-      // Invalidate validation queries AND force refetch resources list to show updated validation status
-      console.log('[Manual Revalidation] Invalidating validation data and refetching resource list...');
+      // Invalidate validation queries to update badges
+      console.log('[Manual Revalidation] Invalidating validation data (badges only)...');
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['validation-messages'] }),
-        queryClient.invalidateQueries({ queryKey: ['validation-summaries-bulk'] }),
-        queryClient.refetchQueries({ queryKey: ['resources'], type: 'active' })
+        queryClient.invalidateQueries({ queryKey: ['validation-summaries-bulk'] })
       ]);
-      console.log('[Manual Revalidation] Validation data invalidated and resource list refetched');
+      console.log('[Manual Revalidation] Validation data invalidated');
       
       toast({
         title: "Revalidation complete",
