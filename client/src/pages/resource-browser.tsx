@@ -136,7 +136,8 @@ export default function ResourceBrowser() {
     handleSeverityChange,
     handleSeverityIndexChange,
     handleToggleMessages,
-    handleFilterBySeverity
+    handleFilterBySeverity,
+    handleResourceClick
   } = messageNav;
 
   // Compute highlighted resource when severity navigation is active
@@ -314,6 +315,7 @@ export default function ResourceBrowser() {
                 aspects={messagesByAspect}
                 initialSeverity={currentSeverity}
                 onClose={handleToggleMessages}
+                onResourceClick={handleResourceClick}
                 errorCount={validationSummaryWithStats?.errorCount || 0}
                 warningCount={validationSummaryWithStats?.warningCount || 0}
                 informationCount={validationSummaryWithStats?.infoCount || 0}

@@ -393,10 +393,30 @@ export default function ResourceList({
       case 'valid':
         return (
           <div className="flex items-center gap-2">
-            <Badge className="bg-green-50 text-fhir-success border-green-200 hover:bg-green-50">
-              <CheckCircle className="h-3 w-3 mr-1" />
-              Valid
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-green-50 text-fhir-success border-green-200 hover:bg-green-50">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Valid
+              </Badge>
+              
+              {/* Information badge - show even for valid resources */}
+              {((filteredSummary?.informationCount || filteredSummary?.infoCount || filteredSummary?.summary?.informationCount || 0) > 0) && (
+                <Badge 
+                  data-severity-badge="information"
+                  className="severity-badge h-6 px-2 text-xs flex items-center gap-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 cursor-pointer transition-all"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSeverityBadgeClick('information');
+                  }}
+                  title="Click to view information messages"
+                >
+                  <Info className="h-3 w-3" />
+                  {filteredSummary.informationCount || filteredSummary.infoCount || filteredSummary.summary?.informationCount || 0}
+                </Badge>
+              )}
+            </div>
+            
             {(filteredSummary?.lastValidated || validationScore > 0) && (
               <Tooltip>
                 <TooltipTrigger asChild>

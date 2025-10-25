@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { SeverityIcon, getSeverityVariant } from '@/components/ui/severity-icon';
@@ -8,6 +8,7 @@ import { ProfileBadge } from '@/components/resources/ProfileBadge';
 import { ResourceBadge } from '@/components/resources/ResourceBadge';
 import { PathBadge } from './PathBadge';
 import { EngineIcon, getEngineName, getEngineDescription } from './EngineIcon';
+import { ChevronRight, ChevronDown } from 'lucide-react';
 
 // ============================================================================
 // Helper Functions
@@ -77,6 +78,12 @@ export interface ValidationMessage {
   resourceId?: string;
   resources?: Array<{ resourceType: string; resourceId: string; }>;
   aspect?: string; // Validation source: structural, profile, terminology, etc.
+  isGrouped?: boolean;  // Indicates this is a grouped message
+  affectedResources?: Array<{
+    resourceType: string;
+    resourceId: string;
+    varyingValue?: string;  // Extracted varying part (timestamp, code, etc.)
+  }>;
 }
 
 export interface ValidationMessageItemProps {
@@ -101,6 +108,10 @@ export function ValidationMessageItem({
   // Extract profile URL from message text if present
   const profileUrl = extractProfileUrl(message.text);
   const engine = getEngineForAspect(message.aspect);
+  
+  // State for expand/collapse of grouped messages
+  const [isExpanded, setIsExpanded] = useState(false);
+  const isGrouped = message.isGrouped && message.affectedResources && message.affectedResources.length > 1;
   
   return (
     <Alert
@@ -170,7 +181,38 @@ export function ValidationMessageItem({
             )}
             
             {/* Resource Info - only shown in resource browser context */}
-            {showResourceInfo && ((message.resources && message.resources.length > 0) || (message.resourceType && message.resourceId)) && (
+            {/* Grouped resources display */}
+            {showResourceInfo && isGrouped && (
+              <div className="text-left">
+                <button 
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  <span>{message.affectedResources!.length} resources affected</span>
+                </button>
+                
+                {isExpanded && (
+                  <div className="mt-2 space-y-1 pl-4 border-l-2 border-border">
+                    {message.affectedResources!.map((resource, idx) => (
+                      <div key={idx} className="flex items-center justify-between gap-2 text-xs">
+                        <ResourceBadge
+                          resourceType={resource.resourceType}
+                          resourceId={resource.resourceId}
+                          onClick={onResourceClick ? () => onResourceClick(resource.resourceType, resource.resourceId) : undefined}
+                        />
+                        {resource.varyingValue && (
+                          <code className="text-xs text-muted-foreground">{resource.varyingValue}</code>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Single resource display (non-grouped) */}
+            {showResourceInfo && !isGrouped && ((message.resources && message.resources.length > 0) || (message.resourceType && message.resourceId)) && (
               <div className="text-left">
                 <span className="text-xs text-muted-foreground">Resource{(message.resources && message.resources.length > 1) ? 's' : ''}:</span>
                 <div className="flex flex-wrap items-center gap-1.5 mt-1">

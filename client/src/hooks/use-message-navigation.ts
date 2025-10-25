@@ -114,6 +114,109 @@ export function useMessageNavigation(
       }));
   }, [validationMessagesData]);
   
+  // Helper function to extract varying values from message text or resource data
+  const extractVaryingValue = (message: any): string | undefined => {
+    // Try to extract timestamp pattern from text
+    const timestampMatch = message.text.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[^\s]*/);
+    if (timestampMatch) return timestampMatch[0];
+    
+    // Try to extract quoted values from text
+    const quotedMatch = message.text.match(/"([^"]+)"/);
+    if (quotedMatch) return quotedMatch[1];
+    
+    // Try to extract values after colons from text
+    const colonMatch = message.text.match(/:\s*([^\s,;.]+)$/);
+    if (colonMatch) return colonMatch[1];
+    
+    // If nothing found in text, try to extract from resource data using canonicalPath
+    if (message.canonicalPath && resourcesData?.resources) {
+      const resource = resourcesData.resources.find((r: any) => 
+        r.resourceType === message.resourceType && 
+        (r.id === message.resourceId || r.resourceId === message.resourceId)
+      );
+      
+      if (resource) {
+        // Parse the canonical path to get the field value
+        // e.g., "meta.versionid" -> resource.meta.versionId
+        const pathParts = message.canonicalPath.toLowerCase().split('.');
+        let value: any = resource;
+        
+        for (const part of pathParts) {
+          if (value && typeof value === 'object') {
+            // Try exact match first
+            if (value[part] !== undefined) {
+              value = value[part];
+            } else {
+              // Try case-insensitive match
+              const key = Object.keys(value).find(k => k.toLowerCase() === part);
+              if (key) {
+                value = value[key];
+              } else {
+                value = undefined;
+                break;
+              }
+            }
+          } else {
+            value = undefined;
+            break;
+          }
+        }
+        
+        // Return the extracted value if it's a primitive
+        if (value !== undefined && value !== null && typeof value !== 'object') {
+          return String(value);
+        }
+      }
+    }
+    
+    return undefined;
+  };
+  
+  // Group messages with identical signatures
+  const groupedMessagesByAspect = useMemo(() => {
+    return messagesByAspect.map(aspectData => {
+      const messageMap = new Map<string, any>();
+      
+      aspectData.messages.forEach(msg => {
+        // Create a grouping key based on code + canonicalPath + severity (excluding varying values)
+        // This groups messages that differ only in timestamp or other varying values
+        const groupingKey = `${msg.severity}|${msg.code || 'no-code'}|${msg.canonicalPath}`;
+        
+        if (messageMap.has(groupingKey)) {
+          // Add to existing group
+          const existing = messageMap.get(groupingKey);
+          existing.affectedResources.push({
+            resourceType: msg.resourceType,
+            resourceId: msg.resourceId,
+            varyingValue: extractVaryingValue(msg)
+          });
+        } else {
+          // Create new group
+          // Use the base message text without varying values for display
+          const baseText = msg.text.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[^\s]*/, '[timestamp]')
+                                   .replace(/"([^"]+)"/, '"[value]"')
+                                   .replace(/:\s*([^\s,;.]+)$/, ': [value]');
+          
+          messageMap.set(groupingKey, {
+            ...msg,
+            text: baseText, // Use simplified text for grouped display
+            isGrouped: true,
+            affectedResources: [{
+              resourceType: msg.resourceType,
+              resourceId: msg.resourceId,
+              varyingValue: extractVaryingValue(msg)
+            }]
+          });
+        }
+      });
+      
+      return {
+        aspect: aspectData.aspect,
+        messages: Array.from(messageMap.values())
+      };
+    });
+  }, [messagesByAspect, resourcesData]);
+  
   // Update aggregated messages when allMessages changes
   useEffect(() => {
     setAggregatedMessages(allMessages);
@@ -262,7 +365,7 @@ export function useMessageNavigation(
     currentMessage,
     currentMessageResource,
     allMessages,
-    messagesByAspect,
+    messagesByAspect: groupedMessagesByAspect,
     
     // Handlers
     handleMessageIndexChange,
