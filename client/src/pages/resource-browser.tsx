@@ -1048,22 +1048,34 @@ export default function ResourceBrowser() {
 
     setIsValidating(true);
     
+    // Filter resources to only include those with valid identifiers
+    // The backend will create database entries for resources without _dbId if they have valid resourceType and resourceId
+    const validResources = resourcesData.resources.filter((resource: any) => {
+      return resource.resourceType && (resource.resourceId || resource.id);
+    });
+    
+    if (validResources.length === 0) {
+      console.warn('[Validation] No resources have valid identifiers for validation');
+      setIsValidating(false);
+      return;
+    }
+    
     // Track which resources are being validated
-    const resourceIds = resourcesData.resources.map((resource: any) => resource._dbId || resource.id);
+    const resourceIds = validResources.map((resource: any) => resource._dbId || resource.id);
     setValidatingResourceIds(new Set(resourceIds));
     
     // Start progress simulation
-    const progressCleanup = simulateValidationProgress(resourceIds, resourcesData.resources);
+    const progressCleanup = simulateValidationProgress(resourceIds, validResources);
     
     try {
 
       // Batch validation requests using settings batch size
       const batchSize = currentSettings?.performance?.batchSize || 50;
       const allResults = [];
-      const totalBatches = Math.ceil(resourcesData.resources.length / batchSize);
+      const totalBatches = Math.ceil(validResources.length / batchSize);
       
-      for (let i = 0; i < resourcesData.resources.length; i += batchSize) {
-        const batch = resourcesData.resources.slice(i, i + batchSize);
+      for (let i = 0; i < validResources.length; i += batchSize) {
+        const batch = validResources.slice(i, i + batchSize);
         const batchNumber = Math.floor(i/batchSize) + 1;
         
         console.log(`[Validation] Processing batch ${batchNumber}/${totalBatches} with ${batch.length} resources`);
@@ -1104,7 +1116,7 @@ export default function ResourceBrowser() {
             body: JSON.stringify({
               // Send only the minimal required data to reduce payload size
               resources: batch.map((resource: any) => ({
-                _dbId: resource._dbId || resource.id,
+                _dbId: resource._dbId,
                 resourceType: resource.resourceType,
                 resourceId: resource.resourceId || resource.id
               }))
@@ -1128,7 +1140,7 @@ export default function ResourceBrowser() {
         }
 
         // Add a small delay between batches to reduce server load
-        if (i + batchSize < resourcesData.resources.length) {
+        if (i + batchSize < validResources.length) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
@@ -1137,15 +1149,15 @@ export default function ResourceBrowser() {
       const result = {
         success: true,
         validatedCount: allResults.length,
-        requestedCount: resourcesData.resources.length,
-        message: `Successfully validated ${allResults.length} out of ${resourcesData.resources.length} resources`,
+        requestedCount: validResources.length,
+        message: `Successfully validated ${allResults.length} out of ${validResources.length} resources`,
         detailedResults: allResults
       };
       
 
       // Mark resources as validated in cache
       if (result.validatedCount > 0) {
-        resourcesData.resources.forEach((resource: any) => {
+        validResources.forEach((resource: any) => {
           const cacheKey = `${resource.resourceType}/${resource.id}`;
           validatedResourcesCache.add(cacheKey);
         });
@@ -1240,8 +1252,14 @@ export default function ResourceBrowser() {
       
       return !hasValidationData;
     });
+    
+    // Filter to only include resources with valid identifiers
+    // The backend will create database entries for resources without _dbId if they have valid resourceType and resourceId
+    const validUnvalidatedResources = unvalidatedResources.filter((resource: any) => {
+      return resource.resourceType && (resource.resourceId || resource.id);
+    });
 
-    if (unvalidatedResources.length === 0) {
+    if (validUnvalidatedResources.length === 0) {
       // Show a brief notification that all resources are validated
       // This helps users understand why no validation is happening
       return;
@@ -1249,11 +1267,11 @@ export default function ResourceBrowser() {
 
 
     // Track which resources are being validated
-    const resourceIds = unvalidatedResources.map((resource: any) => resource._dbId || resource.id);
+    const resourceIds = validUnvalidatedResources.map((resource: any) => resource._dbId || resource.id);
     setValidatingResourceIds(new Set(resourceIds));
 
     // Start progress simulation for background validation
-    const progressCleanup = simulateValidationProgress(resourceIds, unvalidatedResources);
+    const progressCleanup = simulateValidationProgress(resourceIds, validUnvalidatedResources);
 
     // Use the new validate-by-ids endpoint with batching for background validation
     try {
@@ -1263,15 +1281,15 @@ export default function ResourceBrowser() {
       
       // Create all batch requests
       const batches = [];
-      for (let i = 0; i < unvalidatedResources.length; i += batchSize) {
-        const batch = unvalidatedResources.slice(i, i + batchSize);
+      for (let i = 0; i < validUnvalidatedResources.length; i += batchSize) {
+        const batch = validUnvalidatedResources.slice(i, i + batchSize);
         batches.push({
           batchNumber: Math.floor(i/batchSize) + 1,
           resources: batch
         });
       }
       
-      console.log(`[Background Validation] Starting parallel validation of ${batches.length} batches (${unvalidatedResources.length} total resources)`);
+      console.log(`[Background Validation] Starting parallel validation of ${batches.length} batches (${validUnvalidatedResources.length} total resources)`);
       const startTime = Date.now();
       
       // Process all batches in parallel
@@ -1289,7 +1307,7 @@ export default function ResourceBrowser() {
               body: JSON.stringify({
                 // Send only the minimal required data to reduce payload size
                 resources: batch.map((resource: any) => ({
-                  _dbId: resource._dbId || resource.id,
+                  _dbId: resource._dbId,
                   resourceType: resource.resourceType,
                   resourceId: resource.resourceId || resource.id
                 }))
@@ -1331,8 +1349,8 @@ export default function ResourceBrowser() {
       const result = {
         success: true,
         validatedCount: allResults.length,
-        requestedCount: unvalidatedResources.length,
-        message: `Successfully validated ${allResults.length} out of ${unvalidatedResources.length} resources`,
+        requestedCount: validUnvalidatedResources.length,
+        message: `Successfully validated ${allResults.length} out of ${validUnvalidatedResources.length} resources`,
         detailedResults: allResults
       };
       
@@ -1340,7 +1358,7 @@ export default function ResourceBrowser() {
       // Only add resources to cache if validation was actually successful
       if (result.validatedCount > 0) {
         // Mark resources as validated in cache
-        unvalidatedResources.forEach((resource: any) => {
+        validUnvalidatedResources.forEach((resource: any) => {
           const cacheKey = `${resource.resourceType}/${resource.id}`;
           validatedResourcesCache.add(cacheKey);
         });
@@ -1607,12 +1625,28 @@ export default function ResourceBrowser() {
 
     setIsValidating(true);
     
+    // Filter resources to only include those with valid database IDs or FHIR IDs
+    // The backend will create database entries for resources without _dbId if they have valid resourceType and resourceId
+    const validResources = resourcesData.resources.filter((resource: any) => {
+      return resource.resourceType && (resource.resourceId || resource.id);
+    });
+    
+    if (validResources.length === 0) {
+      toast({
+        title: "No resources to revalidate",
+        description: "No resources have valid identifiers for validation.",
+        variant: "destructive",
+      });
+      setIsValidating(false);
+      return;
+    }
+    
     // Track which resources are being validated
-    const resourceIds = resourcesData.resources.map((r: any) => r._dbId || r.id);
+    const resourceIds = validResources.map((r: any) => r._dbId || r.id);
     setValidatingResourceIds(new Set(resourceIds));
 
     // Start progress simulation for activity widget
-    const progressCleanup = simulateValidationProgress(resourceIds, resourcesData.resources);
+    const progressCleanup = simulateValidationProgress(resourceIds, validResources);
     
     try {
       // Use the same synchronous validate-by-ids approach as background validation
@@ -1621,15 +1655,15 @@ export default function ResourceBrowser() {
       
       // Create all batch requests
       const batches = [];
-      for (let i = 0; i < resourcesData.resources.length; i += batchSize) {
-        const batch = resourcesData.resources.slice(i, i + batchSize);
+      for (let i = 0; i < validResources.length; i += batchSize) {
+        const batch = validResources.slice(i, i + batchSize);
         batches.push({
           batchNumber: Math.floor(i/batchSize) + 1,
           resources: batch
         });
       }
       
-      console.log(`[Manual Revalidation] Starting parallel validation of ${batches.length} batches (${resourcesData.resources.length} total resources)`);
+      console.log(`[Manual Revalidation] Starting parallel validation of ${batches.length} batches (${validResources.length} total resources)`);
       const startTime = Date.now();
       
       // Process all batches in parallel
@@ -1646,7 +1680,7 @@ export default function ResourceBrowser() {
               },
               body: JSON.stringify({
                 resources: batch.map((resource: any) => ({
-                  _dbId: resource._dbId || resource.id,
+                  _dbId: resource._dbId,
                   resourceType: resource.resourceType,
                   resourceId: resource.resourceId || resource.id
                 }))

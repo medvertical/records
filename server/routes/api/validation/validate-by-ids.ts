@@ -13,18 +13,25 @@ const router = Router();
 // Request validation schema
 const ValidateByIdsRequestSchema = z.object({
   resources: z.array(z.object({
-    _dbId: z.union([z.number(), z.string()]),
-    // Other fields are optional as we only need the _dbId
+    _dbId: z.union([z.number(), z.string()]).optional(),
+    resourceType: z.string(),
+    resourceId: z.string(),
+    // Other fields are optional
   }).passthrough()).min(1).max(100),
 });
 
 /**
  * POST /api/validation/validate-by-ids
- * Validate resources by their database IDs
+ * Validate resources by their database IDs or FHIR IDs
  * 
  * Body:
  * {
- *   resources: Array<{ _dbId: number | string, ...otherFields }>
+ *   resources: Array<{ 
+ *     _dbId?: number | string,      // Optional - will be created if missing
+ *     resourceType: string,          // Required - FHIR resource type
+ *     resourceId: string,            // Required - FHIR resource ID
+ *     ...otherFields                 // Any other fields are passed through
+ *   }>
  * }
  * 
  * Returns:
@@ -51,32 +58,120 @@ router.post('/validate-by-ids', async (req: Request, res: Response) => {
     }
     
     const { resources } = validation.data;
-    const dbIds = resources.map(r => typeof r._dbId === 'string' ? parseInt(r._dbId, 10) : r._dbId);
     
-    logger.info(`[Validate By IDs] Validating ${dbIds.length} resources by database IDs`);
+    // Parse and validate database IDs, filtering out invalid values
+    const dbIds = resources
+      .map(r => typeof r._dbId === 'string' ? parseInt(r._dbId, 10) : r._dbId)
+      .filter(id => !isNaN(id) && id !== undefined && id !== null);
     
-    // 2. Load resources from database
+    logger.info(`[Validate By IDs] Received ${resources.length} resources, ${dbIds.length} have valid database IDs`);
+    
+    // Separate resources with and without database IDs
+    const resourcesWithDbIds = resources.filter((r, i) => {
+      const parsedId = typeof r._dbId === 'string' ? parseInt(r._dbId, 10) : r._dbId;
+      return !isNaN(parsedId) && parsedId !== undefined && parsedId !== null;
+    });
+    const resourcesWithoutDbIds = resources.filter((r, i) => {
+      const parsedId = typeof r._dbId === 'string' ? parseInt(r._dbId, 10) : r._dbId;
+      return isNaN(parsedId) || parsedId === undefined || parsedId === null;
+    });
+    
+    if (resourcesWithoutDbIds.length > 0) {
+      logger.warn(`[Validate By IDs] ${resourcesWithoutDbIds.length} resources don't have database entries yet - they will be created during validation`);
+    }
+    
+    // 2. Load existing resources from database
     const { db } = await import('../../../db');
     const { fhirResources } = await import('@shared/schema');
-    const { inArray } = await import('drizzle-orm');
+    const { inArray, and, eq } = await import('drizzle-orm');
     
-    const dbResources = await db
-      .select()
-      .from(fhirResources)
-      .where(inArray(fhirResources.id, dbIds));
+    let dbResources = [];
+    if (dbIds.length > 0) {
+      dbResources = await db
+        .select()
+        .from(fhirResources)
+        .where(inArray(fhirResources.id, dbIds));
+      
+      logger.info(`[Validate By IDs] Found ${dbResources.length} existing resources in database`);
+    }
+    
+    // 3. Create database entries for resources without them
+    if (resourcesWithoutDbIds.length > 0) {
+      const { FhirClient } = await import('../../../services/fhir/fhir-client');
+      const { storage } = await import('../../../storage');
+      
+      const activeServer = await storage.getActiveFhirServer();
+      if (!activeServer) {
+        logger.error('[Validate By IDs] No active FHIR server found');
+        return res.status(503).json({
+          success: false,
+          error: 'No active FHIR server configured',
+        });
+      }
+      
+      const fhirClient = new FhirClient(activeServer.url, undefined, activeServer.id);
+      
+      logger.info(`[Validate By IDs] Creating database entries for ${resourcesWithoutDbIds.length} new resources`);
+      
+      for (const resource of resourcesWithoutDbIds) {
+        try {
+          // Fetch the resource from FHIR server to ensure it exists
+          const fhirResource = await fhirClient.getResource(resource.resourceType, resource.resourceId);
+          
+          if (!fhirResource) {
+            logger.warn(`[Validate By IDs] Resource ${resource.resourceType}/${resource.resourceId} not found on FHIR server`);
+            continue;
+          }
+          
+          // Check if database entry already exists (by resourceType + resourceId)
+          const [existing] = await db
+            .select()
+            .from(fhirResources)
+            .where(
+              and(
+                eq(fhirResources.serverId, activeServer.id),
+                eq(fhirResources.resourceType, resource.resourceType),
+                eq(fhirResources.resourceId, resource.resourceId)
+              )
+            );
+          
+          if (existing) {
+            logger.info(`[Validate By IDs] Database entry already exists for ${resource.resourceType}/${resource.resourceId} (ID: ${existing.id})`);
+            dbResources.push(existing);
+          } else {
+            // Create new database entry
+            const [newEntry] = await db
+              .insert(fhirResources)
+              .values({
+                serverId: activeServer.id,
+                resourceType: resource.resourceType,
+                resourceId: resource.resourceId,
+                lastFetched: new Date(),
+                versionId: fhirResource.meta?.versionId || '1',
+              })
+              .returning();
+            
+            logger.info(`[Validate By IDs] Created database entry for ${resource.resourceType}/${resource.resourceId} (ID: ${newEntry.id})`);
+            dbResources.push(newEntry);
+          }
+        } catch (error) {
+          logger.error(`[Validate By IDs] Failed to create database entry for ${resource.resourceType}/${resource.resourceId}:`, error);
+        }
+      }
+    }
     
     if (dbResources.length === 0) {
-      logger.warn('[Validate By IDs] No resources found for provided IDs');
+      logger.warn('[Validate By IDs] No resources available for validation');
       return res.status(404).json({
         success: false,
         error: 'No resources found',
-        message: 'None of the provided resource IDs exist in the database',
+        message: 'None of the provided resources exist or could be created',
       });
     }
     
-    logger.info(`[Validate By IDs] Found ${dbResources.length} resources to validate`);
+    logger.info(`[Validate By IDs] Ready to validate ${dbResources.length} resources`);
     
-    // 3. Perform validation using ConsolidatedValidationService
+    // 4. Perform validation using ConsolidatedValidationService
     const { getConsolidatedValidationService } = await import('../../../services/validation');
     const { getValidationSettingsService } = await import('../../../services/validation/settings/validation-settings-service');
     const { getIndividualResourceProgressService, ResourceValidationStatus } = await import('../../../services/validation/features/individual-resource-progress-service');
@@ -131,7 +226,7 @@ router.post('/validate-by-ids', async (req: Request, res: Response) => {
     
     logger.info(`[Validate By IDs] Starting parallel validation with concurrency limit: ${concurrencyLimit}`);
     
-    // Get FHIR client for fetching resources
+    // Get FHIR client for fetching resources (reuse if already created)
     const { FhirClient } = await import('../../../services/fhir/fhir-client');
     const { storage } = await import('../../../storage');
     
@@ -277,7 +372,7 @@ router.post('/validate-by-ids', async (req: Request, res: Response) => {
     logger.info(`[Validate By IDs] Batch completed: ${validatedCount}/${dbResources.length} successful in ${totalDuration}ms (avg: ${avgDuration}ms per resource)`);
 
 
-    // 4. Return response
+    // 5. Return response
     logger.info(`[Validate By IDs] Completed: ${validatedCount}/${resources.length} resources validated successfully`);
     
     res.json({
