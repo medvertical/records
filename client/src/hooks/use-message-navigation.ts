@@ -70,7 +70,8 @@ export function useMessageNavigation(
     });
   }, [validationMessagesData]);
   
-  // Group messages by aspect for the ValidationMessagesCard, filtered by current severity
+  // Group messages by aspect for the ValidationMessagesCard
+  // DO NOT filter by severity here - let the component handle filtering
   const messagesByAspect = useMemo(() => {
     if (!validationMessagesData || !Array.isArray(validationMessagesData)) return [];
     
@@ -79,22 +80,19 @@ export function useMessageNavigation(
     validationMessagesData.forEach(resourceData => {
       if (resourceData.aspects) {
         resourceData.aspects.forEach((aspect: any) => {
+          const aspectKey = aspect.aspect;
+          if (!aspectMap.has(aspectKey)) {
+            aspectMap.set(aspectKey, []);
+          }
+          
+          // Add resource context to each message (include ALL messages, no filtering)
           if (aspect.messages && aspect.messages.length > 0) {
-            const aspectKey = aspect.aspect;
-            if (!aspectMap.has(aspectKey)) {
-              aspectMap.set(aspectKey, []);
-            }
-            
-            // Add resource context to each message and filter by current severity
             aspect.messages.forEach((message: any) => {
-              // Only include messages that match the current severity
-              if (message.severity.toLowerCase() === currentSeverity.toLowerCase()) {
-                aspectMap.get(aspectKey)!.push({
-                  ...message,
-                  resourceType: resourceData.resourceType,
-                  resourceId: resourceData.resourceId
-                });
-              }
+              aspectMap.get(aspectKey)!.push({
+                ...message,
+                resourceType: resourceData.resourceType,
+                resourceId: resourceData.resourceId
+              });
             });
           }
         });
@@ -102,19 +100,19 @@ export function useMessageNavigation(
     });
     
     // Convert map to array and sort aspects
+    // Include ALL aspects (even those with 0 messages) so the sidebar shows "No issues found"
     const aspectOrder = ['structural', 'profile', 'terminology', 'reference', 'businessRule', 'metadata'];
     return aspectOrder
-      .filter(aspect => aspectMap.has(aspect) && aspectMap.get(aspect)!.length > 0)
       .map(aspect => ({
         aspect,
-        messages: aspectMap.get(aspect)!.sort((a, b) => {
+        messages: (aspectMap.get(aspect) || []).sort((a, b) => {
           const severityOrder = { error: 0, warning: 1, information: 2 };
           const aOrder = severityOrder[a.severity.toLowerCase() as keyof typeof severityOrder] ?? 3;
           const bOrder = severityOrder[b.severity.toLowerCase() as keyof typeof severityOrder] ?? 3;
           return aOrder - bOrder;
         })
       }));
-  }, [validationMessagesData, currentSeverity]);
+  }, [validationMessagesData]);
   
   // Update aggregated messages when allMessages changes
   useEffect(() => {

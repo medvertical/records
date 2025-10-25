@@ -2,7 +2,8 @@ import { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { CheckCircle, AlertCircle, RefreshCw, Info } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { CheckCircle, AlertCircle, RefreshCw, Info, X } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { CircularProgress } from '@/components/ui/circular-progress';
 import { ValidationMessageItem } from './ValidationMessageItem';
@@ -37,8 +38,10 @@ interface ResourceMessagesResponse {
 }
 
 interface ValidationMessagesPerAspectProps {
-  resourceType: string;
-  resourceId: string;
+  // Data source: either fetch via API or use provided aspects
+  aspects?: AspectMessages[];
+  resourceType?: string;
+  resourceId?: string;
   serverId?: number;
   highlightSignature?: string;
   validationScore?: number;
@@ -52,6 +55,7 @@ interface ValidationMessagesPerAspectProps {
   isRevalidating?: boolean;
   lastValidated?: string;
   initialSeverity?: 'error' | 'warning' | 'information';
+  onClose?: () => void;
 }
 
 function getAspectDescription(aspect: string): string {
@@ -92,6 +96,7 @@ function getRelativeTime(dateString: string): string {
 }
 
 export function ValidationMessagesPerAspect({
+  aspects: aspectsProp,
   resourceType,
   resourceId,
   serverId = 1,
@@ -107,6 +112,7 @@ export function ValidationMessagesPerAspect({
   isRevalidating = false,
   lastValidated,
   initialSeverity,
+  onClose,
 }: ValidationMessagesPerAspectProps) {
   const [highlightedSignatures, setHighlightedSignatures] = useState<string[]>([]);
   const [selectedSeverities, setSelectedSeverities] = useState<Set<string>>(() => {
@@ -125,17 +131,27 @@ export function ValidationMessagesPerAspect({
     setSelectedSeverities(newSelected);
   };
   
+  // Determine whether to fetch data or use provided aspects
+  const shouldFetch = !aspectsProp && !!resourceType && !!resourceId;
+  
   // Use shared hook for validation messages - automatically uses cached data from list view
-  const { data, isLoading, error } = useValidationMessages(resourceType, resourceId);
+  // Only call when we need to fetch (not when aspects are provided via props)
+  const { data, isLoading, error } = useValidationMessages(
+    resourceType || '',
+    resourceId || '',
+    { enabled: shouldFetch }
+  );
 
   // Group identical messages within each aspect (must be called before any early returns)
   const groupedAspects = useMemo(() => {
-    if (!data || !data.aspects) return [];
+    // Use provided aspects or fetched data
+    const aspectsData = aspectsProp || data?.aspects || [];
+    if (!aspectsData || aspectsData.length === 0) return [];
     
-    return data.aspects.map(aspect => {
+    return aspectsData.map((aspect: AspectMessages) => {
       const messageMap = new Map<string, ValidationMessage>();
       
-      aspect.messages.forEach(msg => {
+      aspect.messages.forEach((msg: ValidationMessage) => {
         // Create a unique key based on message content (excluding resource info)
         const contentKey = `${msg.severity}|${msg.code || ''}|${msg.canonicalPath}|${msg.text}`;
         
@@ -175,7 +191,7 @@ export function ValidationMessagesPerAspect({
         messages: Array.from(messageMap.values())
       };
     });
-  }, [data]);
+  }, [aspectsProp, data]);
   
   // Listen for highlight-messages events from tree badge clicks
   useEffect(() => {
@@ -188,8 +204,8 @@ export function ValidationMessagesPerAspect({
       
       // Find all messages matching the path and severity
       const matchingSignatures: string[] = [];
-      data.aspects.forEach(aspect => {
-        aspect.messages.forEach(message => {
+      data.aspects.forEach((aspect: AspectMessages) => {
+        aspect.messages.forEach((message: ValidationMessage) => {
           // Match by path - case insensitive
           const messagePath = message.canonicalPath.toLowerCase();
           const searchPath = path.toLowerCase();
@@ -245,7 +261,8 @@ export function ValidationMessagesPerAspect({
     };
   }, [data, resourceType]);
 
-  if (isLoading) {
+  // Only show loading state when fetching (not when aspects are provided)
+  if (shouldFetch && isLoading) {
     return (
       <Card>
         <CardHeader>
@@ -256,7 +273,7 @@ export function ValidationMessagesPerAspect({
     );
   }
 
-  if (error) {
+  if (shouldFetch && error) {
     return (
       <Card>
         <CardHeader>
@@ -274,7 +291,9 @@ export function ValidationMessagesPerAspect({
     );
   }
 
-  if (!data || groupedAspects.length === 0) {
+  // Only show "no data" message if we're fetching and have no data
+  // If using props mode, we should always render the full component
+  if (shouldFetch && !data && groupedAspects.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -293,7 +312,7 @@ export function ValidationMessagesPerAspect({
     );
   }
 
-  const totalMessages = groupedAspects.reduce((sum, aspect) => sum + aspect.messages.length, 0);
+  const totalMessages = groupedAspects.reduce((sum: number, aspect: AspectMessages) => sum + aspect.messages.length, 0);
   
   // Filter messages by selected severities
   const filterMessagesBySeverity = (messages: ValidationMessage[]) => {
@@ -304,14 +323,14 @@ export function ValidationMessagesPerAspect({
   // Calculate filtered message count
   const filteredMessageCount = selectedSeverities.size === 0
     ? totalMessages
-    : groupedAspects.reduce((sum, aspect) => 
+    : groupedAspects.reduce((sum: number, aspect: AspectMessages) => 
         sum + filterMessagesBySeverity(aspect.messages).length, 0
       );
 
   // Show all aspects (even those with 0 messages) to confirm validation ran
   // Only apply severity filter to messages within each aspect
   const aspectsWithMessages = groupedAspects
-    .map(aspect => ({
+    .map((aspect: AspectMessages) => ({
       ...aspect,
       messages: filterMessagesBySeverity(aspect.messages)
     }));
@@ -339,12 +358,24 @@ export function ValidationMessagesPerAspect({
               )}
             </CardDescription>
           </div>
-          <CircularProgress 
-            value={validationScore} 
-            size="md"
-            showValue={true}
-            className="flex-shrink-0"
-          />
+          <div className="flex items-center gap-2">
+            <CircularProgress 
+              value={validationScore} 
+              size="md"
+              showValue={true}
+              className="flex-shrink-0"
+            />
+            {onClose && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                className="h-8 w-8"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
         
         {/* Badges and metadata section */}
@@ -429,8 +460,8 @@ export function ValidationMessagesPerAspect({
         <div className="space-y-4">
           {/* Aspects with messages - collapsible */}
           {aspectsWithMessages.length > 0 && (
-            <Accordion type="multiple" className="w-full text-left" defaultValue={aspectsWithMessages.map((_, i) => `aspect-${i}`)}>
-              {aspectsWithMessages.map((aspectData, index) => (
+            <Accordion type="multiple" className="w-full text-left" defaultValue={aspectsWithMessages.map((_: AspectMessages, i: number) => `aspect-${i}`)}>
+              {aspectsWithMessages.map((aspectData: AspectMessages, index: number) => (
                 <AccordionItem key={`aspect-${index}`} value={`aspect-${index}`} className="text-left">
                   <AccordionTrigger className="hover:no-underline text-left">
                     <div className="flex items-center justify-start gap-2 w-full text-left">
@@ -460,7 +491,7 @@ export function ValidationMessagesPerAspect({
                           </AlertDescription>
                         </Alert>
                       ) : (
-                        aspectData.messages.map((message, msgIndex) => {
+                        aspectData.messages.map((message: ValidationMessage, msgIndex: number) => {
                           const isHighlighted = (highlightSignature && message.signature === highlightSignature) ||
                             highlightedSignatures.includes(message.signature);
                           

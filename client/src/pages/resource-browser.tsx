@@ -6,7 +6,7 @@ import { useValidationSettingsPolling } from "@/hooks/use-validation-settings-po
 import ResourceSearch, { type ValidationFilters } from "@/components/resources/resource-search";
 import ResourceList from "@/components/resources/resource-list";
 import { ValidationOverview } from "@/components/resources/validation-overview";
-import { ValidationMessagesCard } from "@/components/validation/validation-messages-card";
+import { ValidationMessagesPerAspect } from "@/components/validation/validation-messages-per-aspect";
 import { BatchEditDialog } from "@/components/resources/BatchEditDialog";
 import { ResourceListSkeleton } from "@/components/resources/resource-list-skeleton";
 import { Button } from "@/components/ui/button";
@@ -260,19 +260,19 @@ export default function ResourceBrowser() {
               </div>
             ) : resourcesData?.resources && resourcesData.resources.length > 0 ? (
             <ResourceList 
-                resources={enrichedResources || []}
-                total={resourcesData.total || 0}
+              resources={enrichedResources || []}
+              total={resourcesData.total || 0}
               page={page}
               pageSize={pageSize}
-                onPageChange={handlePageChange}
+              onPageChange={handlePageChange}
               onPageSizeChange={handlePageSizeChange}
               validatingResourceIds={validatingResourceIds}
               validationProgress={validationProgress}
               selectionMode={selectionMode}
-                selectedResources={selectedResources}
+              selectedIds={selectedResources}
               onSelectionChange={handleSelectionChange}
               onSeverityBadgeClick={handleSeverityBadgeClick}
-              />
+            />
             ) : (
               <div className="text-center py-8 text-gray-500">
                 No resources found
@@ -284,9 +284,9 @@ export default function ResourceBrowser() {
         {/* Side Panel - Validation Messages */}
         {isMessagesVisible && (
           <div className="w-96 border-l bg-white overflow-auto">
-            <ValidationMessagesCard
+            <ValidationMessagesPerAspect
               aspects={messagesByAspect}
-              severityFilter={[currentSeverity]}
+              initialSeverity={currentSeverity}
               onClose={handleToggleMessages}
             />
           </div>
