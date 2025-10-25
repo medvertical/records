@@ -52,7 +52,7 @@ export function useMessageNavigation(
   
   // Aggregate all messages from all resources for navigation
   const allMessages = useMemo(() => {
-    if (!validationMessagesData) return [];
+    if (!validationMessagesData || !Array.isArray(validationMessagesData)) return [];
     
     const messages: any[] = [];
     validationMessagesData.forEach(resourceData => {
@@ -72,7 +72,7 @@ export function useMessageNavigation(
   
   // Group messages by aspect for the ValidationMessagesCard, filtered by current severity
   const messagesByAspect = useMemo(() => {
-    if (!validationMessagesData) return [];
+    if (!validationMessagesData || !Array.isArray(validationMessagesData)) return [];
     
     const aspectMap = new Map<string, any[]>();
     
@@ -107,7 +107,7 @@ export function useMessageNavigation(
       .filter(aspect => aspectMap.has(aspect) && aspectMap.get(aspect)!.length > 0)
       .map(aspect => ({
         aspect,
-        messages: aspectMap.get(aspectKey)!.sort((a, b) => {
+        messages: aspectMap.get(aspect)!.sort((a, b) => {
           const severityOrder = { error: 0, warning: 1, information: 2 };
           const aOrder = severityOrder[a.severity.toLowerCase() as keyof typeof severityOrder] ?? 3;
           const bOrder = severityOrder[b.severity.toLowerCase() as keyof typeof severityOrder] ?? 3;

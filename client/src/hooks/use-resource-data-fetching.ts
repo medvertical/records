@@ -72,10 +72,10 @@ export function useResourceDataFetching(
   });
   
   // Determine API endpoint
-  const hasValidationFilters = validationFilters.aspects.length > 0 || 
-                                validationFilters.severities.length > 0 || 
-                                validationFilters.hasIssuesOnly ||
-                                (validationFilters.issueFilter && Object.keys(validationFilters.issueFilter).length > 0);
+  const hasValidationFilters = validationFilters?.aspects?.length > 0 || 
+                                validationFilters?.severities?.length > 0 || 
+                                validationFilters?.hasIssuesOnly ||
+                                (validationFilters?.issueFilter && Object.keys(validationFilters.issueFilter).length > 0);
   const hasTextSearch = searchQuery && searchQuery.trim().length > 0;
   const apiEndpoint = (hasValidationFilters || hasTextSearch) ? "/api/fhir/resources/filtered" : "/api/fhir/resources";
   
@@ -114,20 +114,20 @@ export function useResourceDataFetching(
         searchParams.set('offset', offset.toString());
         
         if (params?.filters) {
-          if (params.filters.aspects.length > 0) {
+          if (params.filters.aspects?.length > 0) {
             const backendAspects = params.filters.aspects.map((a: string) => 
               a === 'businessRule' ? 'business-rule' : a
             );
             searchParams.set('validationAspects', backendAspects.join(','));
             searchParams.set('hasIssuesInAspects', 'true');
           }
-          if (params.filters.severities.length > 0) {
+          if (params.filters.severities?.length > 0) {
             searchParams.set('severities', params.filters.severities.join(','));
-            if (params.filters.aspects.length === 0) {
+            if (!params.filters.aspects || params.filters.aspects.length === 0) {
               searchParams.set('hasIssuesInAspects', 'true');
             }
           }
-          if (params.filters.hasIssuesOnly && params.filters.aspects.length === 0 && params.filters.severities.length === 0) {
+          if (params.filters.hasIssuesOnly && (!params.filters.aspects || params.filters.aspects.length === 0) && (!params.filters.severities || params.filters.severities.length === 0)) {
             searchParams.set('hasIssuesInAspects', 'true');
           }
           if (params.filters.fhirSearchParams && Object.keys(params.filters.fhirSearchParams).length > 0) {
