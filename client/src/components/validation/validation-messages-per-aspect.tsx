@@ -312,6 +312,22 @@ export function ValidationMessagesPerAspect({
 
   const totalMessages = groupedAspects.reduce((sum: number, aspect: AspectMessages) => sum + aspect.messages.length, 0);
   
+  // Calculate severity counts from messages if not provided
+  const calculatedErrorCount = aspectsProp ? groupedAspects.reduce((sum: number, aspect: AspectMessages) => 
+    sum + aspect.messages.filter(msg => msg.severity.toLowerCase() === 'error').length, 0
+  ) : 0;
+  const calculatedWarningCount = aspectsProp ? groupedAspects.reduce((sum: number, aspect: AspectMessages) => 
+    sum + aspect.messages.filter(msg => msg.severity.toLowerCase() === 'warning').length, 0
+  ) : 0;
+  const calculatedInformationCount = aspectsProp ? groupedAspects.reduce((sum: number, aspect: AspectMessages) => 
+    sum + aspect.messages.filter(msg => msg.severity.toLowerCase() === 'information').length, 0
+  ) : 0;
+  
+  // Use provided counts if available, otherwise calculate from messages
+  const finalErrorCount = errorCount || calculatedErrorCount;
+  const finalWarningCount = warningCount || calculatedWarningCount;
+  const finalInformationCount = informationCount || calculatedInformationCount;
+  
   // Filter messages by selected severities
   const filterMessagesBySeverity = (messages: ValidationMessage[]) => {
     if (selectedSeverities.size === 0) return messages;
@@ -325,13 +341,18 @@ export function ValidationMessagesPerAspect({
         sum + filterMessagesBySeverity(aspect.messages).length, 0
       );
 
-  // Show all aspects (even those with 0 messages) to confirm validation ran
-  // Only apply severity filter to messages within each aspect
+  // Split aspects into those with messages and those without
+  // An aspect has messages if it has ANY messages (regardless of filter)
+  // Only show "Valid" badge if the aspect truly has no messages at all
   const aspectsWithMessages = groupedAspects
+    .filter((aspect: AspectMessages) => aspect.messages.length > 0)
     .map((aspect: AspectMessages) => ({
       ...aspect,
       messages: filterMessagesBySeverity(aspect.messages)
     }));
+
+  const aspectsWithoutMessages = groupedAspects
+    .filter((aspect: AspectMessages) => aspect.messages.length === 0);
 
   return (
     <Card className="text-left">
@@ -379,61 +400,61 @@ export function ValidationMessagesPerAspect({
                   Revalidating...
                 </Badge>
               )}
-              {isValid !== undefined ? (
+              {(isValid !== undefined || finalErrorCount > 0 || finalWarningCount > 0 || finalInformationCount > 0) ? (
                 <>
-                  {isValid ? (
+                  {/* Show "Valid" badge only if no issues at all */}
+                  {isValid && finalErrorCount === 0 && finalWarningCount === 0 && finalInformationCount === 0 && (
                     <Badge className="bg-green-50 text-green-600 border-green-200">
                       <CheckCircle className="h-3 w-3 mr-1" />
                       Valid
                     </Badge>
-                  ) : (
-                    <>
-                      {errorCount > 0 && (
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            "h-6 px-2 text-xs flex items-center gap-1.5 cursor-pointer transition-colors",
-                            selectedSeverities.has('error')
-                              ? "bg-red-600 text-white hover:bg-red-700"
-                              : "bg-red-100 text-red-700 hover:bg-red-200"
-                          )}
-                          onClick={() => toggleSeverity('error')}
-                        >
-                          <span>{getSeverityIcon('error')}</span>
-                          <span>{errorCount}</span>
-                        </Badge>
+                  )}
+                  
+                  {/* Always show severity badges if there are any messages */}
+                  {finalErrorCount > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "h-6 px-2 text-xs flex items-center gap-1.5 cursor-pointer transition-colors",
+                        selectedSeverities.has('error')
+                          ? "bg-red-600 text-white hover:bg-red-700"
+                          : "bg-red-100 text-red-700 hover:bg-red-200"
                       )}
-                      {warningCount > 0 && (
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            "h-6 px-2 text-xs flex items-center gap-1.5 cursor-pointer transition-colors",
-                            selectedSeverities.has('warning')
-                              ? "bg-orange-600 text-white hover:bg-orange-700"
-                              : "bg-orange-100 text-orange-700 hover:bg-orange-200"
-                          )}
-                          onClick={() => toggleSeverity('warning')}
-                        >
-                          <span>{getSeverityIcon('warning')}</span>
-                          <span>{warningCount}</span>
-                        </Badge>
+                      onClick={() => toggleSeverity('error')}
+                    >
+                      <span>{getSeverityIcon('error')}</span>
+                      <span>{finalErrorCount}</span>
+                    </Badge>
+                  )}
+                  {finalWarningCount > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "h-6 px-2 text-xs flex items-center gap-1.5 cursor-pointer transition-colors",
+                        selectedSeverities.has('warning')
+                          ? "bg-orange-600 text-white hover:bg-orange-700"
+                          : "bg-orange-100 text-orange-700 hover:bg-orange-200"
                       )}
-                      {informationCount > 0 && (
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            "h-6 px-2 text-xs flex items-center gap-1.5 cursor-pointer transition-colors",
-                            selectedSeverities.has('information')
-                              ? "bg-blue-600 text-white hover:bg-blue-700"
-                              : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-                          )}
-                          onClick={() => toggleSeverity('information')}
-                        >
-                          <span>{getSeverityIcon('information')}</span>
-                          <span>{informationCount}</span>
-                        </Badge>
+                      onClick={() => toggleSeverity('warning')}
+                    >
+                      <span>{getSeverityIcon('warning')}</span>
+                      <span>{finalWarningCount}</span>
+                    </Badge>
+                  )}
+                  {finalInformationCount > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "h-6 px-2 text-xs flex items-center gap-1.5 cursor-pointer transition-colors",
+                        selectedSeverities.has('information')
+                          ? "bg-blue-600 text-white hover:bg-blue-700"
+                          : "bg-blue-100 text-blue-700 hover:bg-blue-200"
                       )}
-                    </>
+                      onClick={() => toggleSeverity('information')}
+                    >
+                      <span>{getSeverityIcon('information')}</span>
+                      <span>{finalInformationCount}</span>
+                    </Badge>
                   )}
                 </>
               ) : (
@@ -472,10 +493,10 @@ export function ValidationMessagesPerAspect({
                   <AccordionContent className="text-left">
                     <div className="space-y-3 pt-2 text-left">
                       {aspectData.messages.length === 0 ? (
-                        <Alert className="bg-green-50 border-green-200">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <AlertDescription className="text-green-700">
-                            No issues found. This aspect passed validation successfully.
+                        <Alert className="bg-blue-50 border-blue-200">
+                          <Info className="h-4 w-4 text-blue-600" />
+                          <AlertDescription className="text-blue-700">
+                            No messages match the selected severity filter. Adjust the filter to see all messages for this aspect.
                           </AlertDescription>
                         </Alert>
                       ) : (
@@ -484,22 +505,47 @@ export function ValidationMessagesPerAspect({
                             highlightedSignatures.includes(message.signature);
                           
                           return (
-                            <ValidationMessageItem
-                              key={msgIndex}
-                              message={message}
-                              isHighlighted={isHighlighted}
-                              onPathClick={onPathClick}
-                              onResourceClick={onResourceClick}
-                              showResourceInfo={false}
-                            />
-                          );
-                        })
+                          <ValidationMessageItem
+                            key={msgIndex}
+                            message={message}
+                            isHighlighted={isHighlighted}
+                            onPathClick={onPathClick}
+                            onResourceClick={onResourceClick}
+                            showResourceInfo={false}
+                          />
+                        );
+                      })
                       )}
                     </div>
                   </AccordionContent>
                 </AccordionItem>
               ))}
             </Accordion>
+          )}
+
+          {/* Aspects without messages - show as valid badges */}
+          {aspectsWithoutMessages.length > 0 && (
+            <div className="space-y-2">
+              {aspectsWithoutMessages.map((aspectData: AspectMessages, index: number) => (
+                <div key={`valid-${index}`} className="flex items-center justify-between py-2 px-3 rounded-md border bg-card hover:bg-accent/50 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <AspectBadge aspect={aspectData.aspect} />
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p className="text-sm">{getAspectDescription(aspectData.aspect)}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <Badge className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Valid
+                  </Badge>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </CardContent>

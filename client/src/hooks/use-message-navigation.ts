@@ -41,8 +41,8 @@ export function useMessageNavigation(
   validationFilters: ValidationFilters,
   handleFilterChange: (filters: ValidationFilters) => void
 ): MessageNavigationState {
-  // State
-  const [isMessagesVisible, setIsMessagesVisible] = useState(false);
+  // State - validation sidebar is open by default
+  const [isMessagesVisible, setIsMessagesVisible] = useState(true);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [aggregatedMessages, setAggregatedMessages] = useState<any[]>([]);
   const [currentSeverity, setCurrentSeverity] = useState<'error' | 'warning' | 'information'>('error');
@@ -135,7 +135,8 @@ export function useMessageNavigation(
       // Clear message navigation state when no filters are active
       setCurrentMessageIndex(0);
       setCurrentSeverityIndex({ error: 0, warning: 0, information: 0 });
-      setIsMessagesVisible(false);
+      // Don't auto-close the sidebar - let user control it manually
+      // setIsMessagesVisible(false);
     }
   }, [validationFilters]);
   

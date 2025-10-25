@@ -282,15 +282,30 @@ export default function ResourceBrowser() {
         </div>
 
         {/* Side Panel - Validation Messages */}
-        {isMessagesVisible && (
-          <div className="w-96 border-l bg-white overflow-auto">
-            <ValidationMessagesPerAspect
-              aspects={messagesByAspect}
-              initialSeverity={currentSeverity}
-              onClose={handleToggleMessages}
-            />
-          </div>
-        )}
+        {isMessagesVisible && (() => {
+          // Calculate the most recent validation timestamp from resources on current page
+          const mostRecentValidation = enrichedResources?.reduce((latest: string | null, resource: any) => {
+            const validationTimestamp = resource._enhancedValidationSummary?.lastValidated || 
+                                       resource._validationSummary?.lastValidated;
+            if (!validationTimestamp) return latest;
+            if (!latest) return validationTimestamp;
+            return new Date(validationTimestamp) > new Date(latest) ? validationTimestamp : latest;
+          }, null);
+
+          return (
+            <div className="w-96 border-l bg-white overflow-auto">
+              <ValidationMessagesPerAspect
+                aspects={messagesByAspect}
+                initialSeverity={currentSeverity}
+                onClose={handleToggleMessages}
+                errorCount={validationSummaryWithStats?.errorCount || 0}
+                warningCount={validationSummaryWithStats?.warningCount || 0}
+                informationCount={validationSummaryWithStats?.infoCount || 0}
+                lastValidated={mostRecentValidation || undefined}
+              />
+            </div>
+          );
+        })()}
       </div>
 
       {/* Batch Edit Dialog */}
