@@ -625,9 +625,22 @@ export default function ResourceDetail() {
     );
   }
 
-  // Use _validationSummary from the API (matches how list view works)
-  const validationSummary = resource._validationSummary;
+  // Use enhanced validation if available, otherwise fallback to legacy
+  const enhancedValidation = (resource as any)._enhancedValidationSummary;
+  const legacyValidation = (resource as any)._validationSummary;
+  const validationSummary = enhancedValidation || legacyValidation;
   const currentSettings = validationSettingsData?.settings;
+  
+  // Calculate validation score (matching resource list logic)
+  const validationScore = enhancedValidation?.overallScore ?? validationSummary?.validationScore ?? 0;
+  
+  console.log('[ResourceDetail] Validation score calculation:', {
+    hasEnhanced: !!enhancedValidation,
+    hasLegacy: !!legacyValidation,
+    enhancedScore: enhancedValidation?.overallScore,
+    legacyScore: validationSummary?.validationScore,
+    finalScore: validationScore
+  });
   
   // Check if resource has validation data
   const hasValidationData = validationSummary && validationSummary.lastValidated;
@@ -767,7 +780,7 @@ export default function ResourceDetail() {
               resourceId={resource.resourceId}
               serverId={activeServer?.id}
               highlightSignature={highlightSignature}
-              validationScore={validationSummary?.validationScore || 0}
+              validationScore={validationScore}
               initialSeverity={initialSeverity}
               onPathClick={handlePathClick}
               onResourceClick={handleResourceClick}
