@@ -19,8 +19,8 @@ interface ValidationOverviewProps {
   onMessageIndexChange?: (index: number) => void;
   onToggleMessages?: () => void;
   isMessagesVisible?: boolean;
-  currentSeverity?: 'error' | 'warning' | 'information';
-  onSeverityChange?: (severity: 'error' | 'warning' | 'information') => void;
+  currentSeverity?: 'error' | 'warning' | 'information' | null;
+  onSeverityChange?: (severity: 'error' | 'warning' | 'information' | null) => void;
   currentSeverityIndex?: { error: number; warning: number; information: number };
   onSeverityIndexChange?: (severity: 'error' | 'warning' | 'information', index: number) => void;
   /** Callback to filter resources by a specific issue */
@@ -38,7 +38,7 @@ export function ValidationOverview({
   onMessageIndexChange,
   onToggleMessages,
   isMessagesVisible = false,
-  currentSeverity = 'error',
+  currentSeverity,
   onSeverityChange,
   currentSeverityIndex = { error: 0, warning: 0, information: 0 },
   onSeverityIndexChange,
@@ -54,11 +54,17 @@ export function ValidationOverview({
             messages={messages}
             currentIndex={currentSeverityIndex.error}
             onIndexChange={(index) => {
-              onSeverityChange?.('error');
-              onSeverityIndexChange?.('error', index);
+              // Toggle: if already active, deselect; otherwise activate
+              if (currentSeverity === 'error') {
+                onSeverityChange?.(null); // Deselect
+              } else {
+                onSeverityChange?.('error');
+                onSeverityIndexChange?.('error', index);
+              }
             }}
             onToggleMessages={onToggleMessages}
-            isMessagesVisible={isMessagesVisible && currentSeverity === 'error'}
+            isMessagesVisible={isMessagesVisible}
+            isActive={currentSeverity === 'error'}
             severity="error"
             onFilterBySeverity={onFilterBySeverity}
           />
@@ -66,11 +72,17 @@ export function ValidationOverview({
             messages={messages}
             currentIndex={currentSeverityIndex.warning}
             onIndexChange={(index) => {
-              onSeverityChange?.('warning');
-              onSeverityIndexChange?.('warning', index);
+              // Toggle: if already active, deselect; otherwise activate
+              if (currentSeverity === 'warning') {
+                onSeverityChange?.(null); // Deselect
+              } else {
+                onSeverityChange?.('warning');
+                onSeverityIndexChange?.('warning', index);
+              }
             }}
             onToggleMessages={onToggleMessages}
-            isMessagesVisible={isMessagesVisible && currentSeverity === 'warning'}
+            isMessagesVisible={isMessagesVisible}
+            isActive={currentSeverity === 'warning'}
             severity="warning"
             onFilterBySeverity={onFilterBySeverity}
           />
@@ -78,11 +90,17 @@ export function ValidationOverview({
             messages={messages}
             currentIndex={currentSeverityIndex.information}
             onIndexChange={(index) => {
-              onSeverityChange?.('information');
-              onSeverityIndexChange?.('information', index);
+              // Toggle: if already active, deselect; otherwise activate
+              if (currentSeverity === 'information') {
+                onSeverityChange?.(null); // Deselect
+              } else {
+                onSeverityChange?.('information');
+                onSeverityIndexChange?.('information', index);
+              }
             }}
             onToggleMessages={onToggleMessages}
-            isMessagesVisible={isMessagesVisible && currentSeverity === 'information'}
+            isMessagesVisible={isMessagesVisible}
+            isActive={currentSeverity === 'information'}
             severity="information"
             onFilterBySeverity={onFilterBySeverity}
           />

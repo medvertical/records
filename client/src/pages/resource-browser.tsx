@@ -153,13 +153,9 @@ export default function ResourceBrowser() {
 
   // Handle severity badge click from resource cards
   const handleSeverityBadgeClick = useCallback((severity: 'error' | 'warning' | 'information') => {
-    // Change to the clicked severity
-    handleSeverityChange(severity);
-    // Open the messages panel if it's not already open
-    if (!isMessagesVisible) {
-      handleToggleMessages();
-    }
-  }, [handleSeverityChange, isMessagesVisible, handleToggleMessages]);
+    // Just apply the filter, don't change severity navigation
+    handleFilterBySeverity(severity);
+  }, [handleFilterBySeverity]);
 
   // Calculate validation summary with stats
   const validationSummaryWithStats = calculateValidationSummaryWithStats(
@@ -209,7 +205,7 @@ export default function ResourceBrowser() {
                   onMessageIndexChange={handleMessageIndexChange}
                   onToggleMessages={handleToggleMessages}
                   isMessagesVisible={isMessagesVisible}
-                  currentSeverity={currentSeverity}
+                  currentSeverity={currentSeverity || undefined}
                   onSeverityChange={handleSeverityChange}
                   currentSeverityIndex={currentSeverityIndex}
                   onSeverityIndexChange={handleSeverityIndexChange}

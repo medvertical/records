@@ -22,6 +22,7 @@ export interface SeverityNavigatorProps {
   onIndexChange: (index: number) => void;
   onToggleMessages?: () => void;
   isMessagesVisible?: boolean;
+  isActive?: boolean; // Whether this specific severity navigator is currently active
   className?: string;
   severity: 'error' | 'warning' | 'information';
   /** Callback to filter resources by this severity when clicked */
@@ -250,6 +251,7 @@ export function SeverityNavigator({
   onIndexChange,
   onToggleMessages,
   isMessagesVisible = false,
+  isActive = false,
   className,
   severity,
   onFilterBySeverity
@@ -286,11 +288,13 @@ export function SeverityNavigator({
   };
 
   const handleClick = () => {
-    // When clicking on a severity navigator, we need to:
-    // 1. Set the current index to 0 (first message of this severity)
-    // 2. Toggle the messages visibility
+    // Toggle behavior: if already active, deactivate by resetting to index 0
+    // This will trigger the parent to clear currentSeverity (via onIndexChange calling onSeverityChange)
+    // If not active, activate by setting index to 0
     onIndexChange(0);
-    onToggleMessages?.();
+    if (!isMessagesVisible) {
+      onToggleMessages?.();
+    }
   };
 
   const handleFilterBySeverity = () => {
@@ -314,8 +318,8 @@ export function SeverityNavigator({
     return null;
   }
 
-  // Idle state: just icon and total count
-  if (!isMessagesVisible) {
+  // Idle state: just icon and total count (when not active)
+  if (!isActive) {
     return (
       <div className={cn("flex items-center gap-2", className)}>
         <div 

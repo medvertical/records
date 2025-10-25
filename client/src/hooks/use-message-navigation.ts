@@ -239,7 +239,12 @@ export function useMessageNavigation(
       issueFilter: undefined
     };
     handleFilterChange(newFilters);
-  }, [validationFilters, handleFilterChange]);
+    
+    // Open sidebar if it's closed (but don't close it if already open)
+    if (!isMessagesVisible) {
+      setIsMessagesVisible(true);
+    }
+  }, [validationFilters, handleFilterChange, isMessagesVisible]);
   
   return {
     // State

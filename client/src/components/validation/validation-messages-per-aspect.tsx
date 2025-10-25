@@ -8,6 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { ValidationMessageItem } from './ValidationMessageItem';
 import type { ValidationMessage as ValidationMessageType } from './ValidationMessageItem';
 import { AspectBadge } from './AspectBadge';
+import { AspectHeader } from './AspectHeader';
 import { getSeverityIcon } from '@/components/resources/unified-tree-viewer/utils';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -475,20 +476,12 @@ export function ValidationMessagesPerAspect({
               {aspectsWithMessages.map((aspectData: AspectMessages, index: number) => (
                 <AccordionItem key={`aspect-${index}`} value={`aspect-${index}`} className="text-left">
                   <AccordionTrigger className="hover:no-underline text-left">
-                    <div className="flex items-center justify-start gap-2 w-full text-left">
-                      <AspectBadge aspect={aspectData.aspect} />
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
-                          <p className="text-sm">{getAspectDescription(aspectData.aspect)}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                      <span className="ml-auto mr-2 text-sm text-muted-foreground">
-                        {aspectData.messages.length}
-                      </span>
-                    </div>
+                    <AspectHeader
+                      aspect={aspectData.aspect}
+                      messageCount={aspectData.messages.length}
+                      getAspectDescription={getAspectDescription}
+                      className="w-full"
+                    />
                   </AccordionTrigger>
                   <AccordionContent className="text-left">
                     <div className="space-y-3 pt-2 text-left">
@@ -523,26 +516,17 @@ export function ValidationMessagesPerAspect({
             </Accordion>
           )}
 
-          {/* Aspects without messages - show as valid badges */}
+          {/* Aspects without messages - show as valid */}
           {aspectsWithoutMessages.length > 0 && (
-            <div className="space-y-2">
+            <div className="divide-y divide-border">
               {aspectsWithoutMessages.map((aspectData: AspectMessages, index: number) => (
-                <div key={`valid-${index}`} className="flex items-center justify-between py-2 px-3 rounded-md border bg-card hover:bg-accent/50 transition-colors">
-                  <div className="flex items-center gap-2">
-                    <AspectBadge aspect={aspectData.aspect} />
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        <p className="text-sm">{getAspectDescription(aspectData.aspect)}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <Badge className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Valid
-                  </Badge>
+                <div key={`valid-${index}`} className="flex items-center py-4">
+                  <AspectHeader
+                    aspect={aspectData.aspect}
+                    isValid={true}
+                    getAspectDescription={getAspectDescription}
+                    className="w-full"
+                  />
                 </div>
               ))}
             </div>
