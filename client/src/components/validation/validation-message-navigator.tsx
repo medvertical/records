@@ -20,6 +20,7 @@ export interface SeverityNavigatorProps {
   messages: ValidationMessage[];
   currentIndex: number;
   onIndexChange: (index: number) => void;
+  onClick?: () => void; // Callback when the badge itself is clicked (for toggle logic)
   onToggleMessages?: () => void;
   isMessagesVisible?: boolean;
   isActive?: boolean; // Whether this specific severity navigator is currently active
@@ -249,6 +250,7 @@ export function SeverityNavigator({
   messages,
   currentIndex,
   onIndexChange,
+  onClick,
   onToggleMessages,
   isMessagesVisible = false,
   isActive = false,
@@ -288,12 +290,15 @@ export function SeverityNavigator({
   };
 
   const handleClick = () => {
-    // Toggle behavior: if already active, deactivate by resetting to index 0
-    // This will trigger the parent to clear currentSeverity (via onIndexChange calling onSeverityChange)
-    // If not active, activate by setting index to 0
-    onIndexChange(0);
-    if (!isMessagesVisible) {
-      onToggleMessages?.();
+    // If onClick handler provided, use it (for toggle logic)
+    if (onClick) {
+      onClick();
+    } else {
+      // Fallback: just set index to 0 and open sidebar if needed
+      onIndexChange(0);
+      if (!isMessagesVisible) {
+        onToggleMessages?.();
+      }
     }
   };
 

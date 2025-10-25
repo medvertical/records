@@ -54,12 +54,16 @@ export function ValidationOverview({
             messages={messages}
             currentIndex={currentSeverityIndex.error}
             onIndexChange={(index) => {
+              // Just change the index when navigating with arrows
+              onSeverityIndexChange?.('error', index);
+            }}
+            onClick={() => {
               // Toggle: if already active, deselect; otherwise activate
               if (currentSeverity === 'error') {
                 onSeverityChange?.(null); // Deselect
               } else {
                 onSeverityChange?.('error');
-                onSeverityIndexChange?.('error', index);
+                onSeverityIndexChange?.('error', 0);
               }
             }}
             onToggleMessages={onToggleMessages}
@@ -72,12 +76,16 @@ export function ValidationOverview({
             messages={messages}
             currentIndex={currentSeverityIndex.warning}
             onIndexChange={(index) => {
+              // Just change the index when navigating with arrows
+              onSeverityIndexChange?.('warning', index);
+            }}
+            onClick={() => {
               // Toggle: if already active, deselect; otherwise activate
               if (currentSeverity === 'warning') {
                 onSeverityChange?.(null); // Deselect
               } else {
                 onSeverityChange?.('warning');
-                onSeverityIndexChange?.('warning', index);
+                onSeverityIndexChange?.('warning', 0);
               }
             }}
             onToggleMessages={onToggleMessages}
@@ -90,12 +98,16 @@ export function ValidationOverview({
             messages={messages}
             currentIndex={currentSeverityIndex.information}
             onIndexChange={(index) => {
+              // Just change the index when navigating with arrows
+              onSeverityIndexChange?.('information', index);
+            }}
+            onClick={() => {
               // Toggle: if already active, deselect; otherwise activate
               if (currentSeverity === 'information') {
                 onSeverityChange?.(null); // Deselect
               } else {
                 onSeverityChange?.('information');
-                onSeverityIndexChange?.('information', index);
+                onSeverityIndexChange?.('information', 0);
               }
             }}
             onToggleMessages={onToggleMessages}

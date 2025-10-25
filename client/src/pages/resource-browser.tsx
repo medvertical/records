@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useServerData } from "@/hooks/use-server-data";
@@ -139,6 +139,25 @@ export default function ResourceBrowser() {
     handleFilterBySeverity
   } = messageNav;
 
+  // Compute highlighted resource when severity navigation is active
+  const highlightedResourceId = useMemo(() => {
+    if (!currentSeverity) return undefined;
+    
+    // Filter messages by current severity
+    const messagesOfSeverity = allMessages.filter(
+      msg => msg.severity.toLowerCase() === currentSeverity.toLowerCase()
+    );
+    
+    // Get the current message for this severity
+    const currentMsg = messagesOfSeverity[currentSeverityIndex[currentSeverity]];
+    
+    if (currentMsg && currentMsg.resourceType && currentMsg.resourceId) {
+      return `${currentMsg.resourceType}/${currentMsg.resourceId}`;
+    }
+    
+    return undefined;
+  }, [currentSeverity, currentSeverityIndex, allMessages]);
+
   // URL synchronization from extracted hook
   const { handleSearch, handlePageChange, handlePageSizeChange } = useUrlSync(
     browserState,
@@ -268,6 +287,7 @@ export default function ResourceBrowser() {
               selectedIds={selectedResources}
               onSelectionChange={handleSelectionChange}
               onSeverityBadgeClick={handleSeverityBadgeClick}
+              highlightedResourceId={highlightedResourceId}
             />
             ) : (
               <div className="text-center py-8 text-gray-500">

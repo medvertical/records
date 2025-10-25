@@ -17,7 +17,7 @@ export interface MessageNavigationState {
   // Handlers
   handleMessageIndexChange: (index: number) => void;
   handleToggleMessages: () => void;
-  handleSeverityChange: (severity: 'error' | 'warning' | 'information') => void;
+  handleSeverityChange: (severity: 'error' | 'warning' | 'information' | null) => void;
   handleSeverityIndexChange: (severity: 'error' | 'warning' | 'information', index: number) => void;
   handlePathClick: (path: string) => void;
   handleResourceClick: (resourceType: string, resourceId: string) => void;
@@ -176,8 +176,14 @@ export function useMessageNavigation(
     setIsMessagesVisible(!isMessagesVisible);
   }, [isMessagesVisible]);
   
-  const handleSeverityChange = useCallback((severity: 'error' | 'warning' | 'information') => {
+  const handleSeverityChange = useCallback((severity: 'error' | 'warning' | 'information' | null) => {
     setCurrentSeverity(severity);
+    
+    // If null, we're deselecting - just set severity to null
+    if (severity === null) {
+      return;
+    }
+    
     // Update the global message index to match the current severity message
     const messagesOfSeverity = allMessages.filter(msg => msg.severity.toLowerCase() === severity);
     const severityIndex = currentSeverityIndex[severity];
