@@ -476,7 +476,7 @@ export default function ResourceList({
               )}
               
               {/* Information badge */}
-              {(filteredSummary?.informationCount || 0) > 0 && (
+              {((filteredSummary?.informationCount || filteredSummary?.infoCount || 0) > 0) && (
                 <Badge 
                   data-severity-badge="information"
                   className="severity-badge h-6 px-2 text-xs flex items-center gap-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 cursor-pointer transition-all"
@@ -488,7 +488,7 @@ export default function ResourceList({
                   title="Click to view information messages"
                 >
                   <Info className="h-3 w-3" />
-                  {filteredSummary.informationCount}
+                  {filteredSummary.informationCount || filteredSummary.infoCount || 0}
                 </Badge>
               )}
             </div>
@@ -572,10 +572,10 @@ export default function ResourceList({
               
               {/* Info column */}
               <div className="flex flex-col items-center min-w-[3rem]">
-                {(filteredSummary?.informationCount || 0) > 0 && (
+                {((filteredSummary?.informationCount || filteredSummary?.infoCount || 0) > 0) && (
                   <Badge className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50 text-xs">
                     <Info className="h-3 w-3 mr-1" />
-                    {filteredSummary.informationCount}
+                    {filteredSummary.informationCount || filteredSummary.infoCount || 0}
                   </Badge>
                 )}
               </div>
