@@ -197,66 +197,59 @@ export default function ResourceBrowser() {
         {/* Main content */}
         <div className="flex-1 overflow-auto">
           <div className="p-4">
-            {/* Validation Overview */}
+            {/* Validation Overview with Select Resources Button / Selection Toolbar */}
             {!isLoading && resourcesData?.resources && resourcesData.resources.length > 0 && (
-              <div className="mb-4">
-            <ValidationOverview
+              <div className="mb-4 flex items-center justify-between">
+                <ValidationOverview
                   validationSummary={validationSummaryWithStats}
-              onRevalidate={handleRevalidate}
-              isRevalidating={isValidating}
-              messages={allMessages}
-              currentMessageIndex={currentMessageIndex}
-              onMessageIndexChange={handleMessageIndexChange}
-              onToggleMessages={handleToggleMessages}
-              isMessagesVisible={isMessagesVisible}
-              currentSeverity={currentSeverity}
-              onSeverityChange={handleSeverityChange}
-              currentSeverityIndex={currentSeverityIndex}
-              onSeverityIndexChange={handleSeverityIndexChange}
-              onFilterBySeverity={handleFilterBySeverity}
-            />
+                  onRevalidate={handleRevalidate}
+                  isRevalidating={isValidating}
+                  messages={allMessages}
+                  currentMessageIndex={currentMessageIndex}
+                  onMessageIndexChange={handleMessageIndexChange}
+                  onToggleMessages={handleToggleMessages}
+                  isMessagesVisible={isMessagesVisible}
+                  currentSeverity={currentSeverity}
+                  onSeverityChange={handleSeverityChange}
+                  currentSeverityIndex={currentSeverityIndex}
+                  onSeverityIndexChange={handleSeverityIndexChange}
+                  onFilterBySeverity={handleFilterBySeverity}
+                />
+                
+                {/* Right side: Select Resources Button OR Selection Mode Controls */}
+                {!selectionMode ? (
+                  <Button
+                    onClick={toggleSelectionMode}
+                    size="sm"
+                    variant="outline"
+                  >
+                    <CheckSquare className="h-4 w-4 mr-2" />
+                    Select Resources
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-4">
+                    <Badge variant="secondary">{selectedResources.size} selected</Badge>
+                    <Button
+                      onClick={handleBatchEdit}
+                      disabled={selectedResources.size === 0}
+                      size="sm"
+                      variant="default"
+                    >
+                      <Edit2 className="h-4 w-4 mr-2" />
+                      Edit Selected
+                    </Button>
+                    <Button
+                      onClick={toggleSelectionMode}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel Selection
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
-
-          {/* Selection Mode Toolbar */}
-          {selectionMode && (
-            <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Badge variant="secondary">{selectedResources.size} selected</Badge>
-            <Button
-                  onClick={handleBatchEdit}
-                  disabled={selectedResources.size === 0}
-              size="sm"
-                  variant="default"
-                >
-                  <Edit2 className="h-4 w-4 mr-2" />
-                  Edit Selected
-                </Button>
-              </div>
-              <Button
-              onClick={toggleSelectionMode}
-                size="sm"
-                variant="ghost"
-            >
-                <X className="h-4 w-4 mr-2" />
-                Cancel Selection
-            </Button>
-            </div>
-          )}
-
-          {/* Batch Edit Button */}
-          {!selectionMode && resourcesData?.resources && resourcesData.resources.length > 0 && (
-            <div className="mb-4">
-                <Button
-                onClick={toggleSelectionMode}
-                  size="sm"
-                variant="outline"
-                >
-                <CheckSquare className="h-4 w-4 mr-2" />
-                Select Resources
-                </Button>
-          </div>
-          )}
 
             {/* Resource List */}
             {isLoading ? (
